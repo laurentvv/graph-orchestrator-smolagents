@@ -21,24 +21,27 @@ Le but de cette architecture est de sortir d'une exécution IA linéaire basique
 
 - Python 3.10+
 - [Ollama](https://ollama.com/) installé et en cours d'exécution localement.
+- [uv](https://github.com/astral-sh/uv) installé pour la gestion rapide des dépendances.
 
 ## Installation
 
-```bash
-# 1. Installer les dépendances
-pip install "smolagents[openai]" pydantic
+Ce projet utilise `uv` pour gérer les dépendances et l'environnement virtuel.
 
-# 2. Télécharger les modèles via Ollama
+```bash
+# 1. Télécharger les modèles via Ollama (s'assurer qu'Ollama tourne)
 ollama pull qwen2.5:7b
 ollama pull llama3:70b
+
+# 2. Synchroniser les dépendances Python via uv
+uv sync
 ```
 
 ## Utilisation
 
-Assurez-vous que le serveur Ollama tourne en arrière-plan (`ollama serve`), puis exécutez le script :
+Assurez-vous que le serveur Ollama tourne en arrière-plan (`ollama serve`), puis exécutez le script via `uv` :
 
 ```bash
-python agent_graph.py
+uv run agent_graph.py
 ```
 
 ## Structure du Graphe
