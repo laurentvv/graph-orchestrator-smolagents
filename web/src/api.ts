@@ -40,3 +40,8 @@ export function wsRunUrl(runId: string): string {
   // En dev, le proxy Vite route /ws vers le backend ; en prod, même origine.
   return `${proto}//${location.host}/ws/run/${runId}`;
 }
+
+/** Annule un run en cours (tue la tâche backend). */
+export async function cancelRun(runId: string): Promise<void> {
+  await fetchJson(`${BASE}/cancel/${runId}`, { method: "POST" });
+}

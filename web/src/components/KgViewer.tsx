@@ -54,7 +54,7 @@ export function KgViewer() {
         <div className="p-3 overflow-x-auto" style={{ background: "var(--bg-0)" }}>
           {kg.claims.length === 0 ? (
             <p className="text-xs" style={{ color: "var(--text-1)" }}>
-              Graphe vide. Lance un run pour le remplir.
+              Graphe vide. Le Knowledge Graph se remplit avec les runs en mode <strong>Graphe</strong> ou <strong>Exploration</strong> (Fan-out → Adversaire → Synth). Les runs en mode Chat ne tracent pas de claims.
             </p>
           ) : (
             <table className="w-full text-xs">

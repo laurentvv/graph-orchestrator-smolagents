@@ -48,8 +48,8 @@ _app_state: dict = {
     "ollama_reachable": False,
 }
 
-# Runs en cours : {run_id: asyncio.Queue} pour pousser les événements vers le WS
-_runs: Dict[str, asyncio.Queue] = {}
+# Runs en cours : {run_id: {"queue": asyncio.Queue, "task": asyncio.Task}}
+_runs: Dict[str, dict] = {}
 
 
 @asynccontextmanager
@@ -148,12 +148,25 @@ async def start_run(req: RunRequest) -> RunResponse:
     """Lance un run d'agent en arrière-plan. Le résultat vient via /ws/run/{run_id}."""
     run_id = str(uuid.uuid4())[:8]
     queue: asyncio.Queue = asyncio.Queue()
-    _runs[run_id] = queue
-
-    # Lance le run dans une tâche de fond
-    asyncio.create_task(_execute_run(run_id, req, queue))
+    task = asyncio.create_task(_execute_run(run_id, req, queue))
+    _runs[run_id] = {"queue": queue, "task": task}
 
     return RunResponse(run_id=run_id)
+
+
+@app.post("/api/cancel/{run_id}")
+async def cancel_run(run_id: str):
+    """Annule un run en cours (tue la tâche backend + notifie le WS)."""
+    entry = _runs.get(run_id)
+    if entry is None:
+        return {"cancelled": False, "reason": "Run inconnu ou déjà terminé"}
+    task: asyncio.Task = entry["task"]
+    queue: asyncio.Queue = entry["queue"]
+    # Notifie le WS que c'est annulé
+    await queue.put(RunEvent(type="status", run_id=run_id, data={"message": "Annulé par l'utilisateur.", "done": True}))
+    # Tue la tâche backend
+    task.cancel()
+    return {"cancelled": True}
 
 
 async def _execute_run(run_id: str, req: RunRequest, queue: asyncio.Queue) -> None:
@@ -165,15 +178,18 @@ async def _execute_run(run_id: str, req: RunRequest, queue: asyncio.Queue) -> No
         await queue.put(RunEvent(type=event_type, run_id=run_id, data=data))
 
     try:
-        await push("status", {"message": "Construction de l'agent..."})
+        await push("status", {"message": "Initialisation..."})
+
+        # Capture la loop AVANT l'exécution (le callback tourne dans un thread smolagents
+        # où asyncio.get_event_loop() ne retourne PAS la loop principale).
+        main_loop = asyncio.get_running_loop()
 
         # Callback qui pousse chaque step dans la queue
         def on_step(memory_step, agent):
             data = action_step_to_event(memory_step)
-            # push synchrone → schedule sur la loop
+            # push synchrone → schedule sur la loop principale capturée
             try:
-                loop = asyncio.get_event_loop()
-                asyncio.run_coroutine_threadsafe(push("step", data), loop)
+                asyncio.run_coroutine_threadsafe(push("step", data), main_loop)
             except RuntimeError:
                 pass
 
@@ -234,7 +250,9 @@ async def _execute_run(run_id: str, req: RunRequest, queue: asyncio.Queue) -> No
                 })
 
             if final:
-                await push("final", {"output": final.model_dump()})
+                # Sérialise en JSON string (final est un objet Pydantic FinalSynthesis)
+                import json as _json
+                await push("final", {"output": _json.dumps(final.model_dump(), ensure_ascii=False, indent=2)})
             else:
                 await push("final", {"output": "(aucun résultat)"})
 
@@ -254,11 +272,13 @@ async def ws_run(websocket: WebSocket, run_id: str):
     """Streame en live les événements d'un run via WebSocket."""
     await websocket.accept()
 
-    queue = _runs.get(run_id)
-    if queue is None:
+    entry = _runs.get(run_id)
+    if entry is None:
         await websocket.send_text(json.dumps({"type": "error", "run_id": run_id, "data": {"message": "Run inconnu"}}))
         await websocket.close()
         return
+
+    queue: asyncio.Queue = entry["queue"]
 
     try:
         while True:

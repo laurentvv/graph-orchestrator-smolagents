@@ -5,7 +5,7 @@ reconnexion, erreurs, statut (idle/running/done/error).
 */
 
 import { useCallback, useRef, useState } from "react";
-import { startRun, wsRunUrl } from "../api";
+import { cancelRun, startRun, wsRunUrl } from "../api";
 import type { RunEvent, RunMode, StepData } from "../types";
 
 export type RunStatus = "idle" | "running" | "done" | "error";
@@ -29,6 +29,7 @@ const INITIAL: AgentState = {
 export function useAgentStream() {
   const [state, setState] = useState<AgentState>(INITIAL);
   const wsRef = useRef<WebSocket | null>(null);
+  const runIdRef = useRef<string | null>(null);
 
   const reset = useCallback(() => {
     setState(INITIAL);
@@ -54,6 +55,7 @@ export function useAgentStream() {
           skill_name: opts?.skillName,
           max_steps: opts?.maxSteps ?? 20,
         });
+        runIdRef.current = run_id;
 
         // 2. Connecte le WebSocket pour le streaming live
         const ws = new WebSocket(wsRunUrl(run_id));
@@ -69,8 +71,16 @@ export function useAgentStream() {
                   return { ...prev, steps: [...prev.steps, step] };
                 }
                 case "final": {
-                  const output = (event.data.output as string) ?? null;
-                  return { ...prev, finalOutput: output, status: "done" };
+                  // Normalise en string (le backend peut envoyer un objet ou une string)
+                  let output = event.data.output;
+                  if (output != null && typeof output !== "string") {
+                    try {
+                      output = JSON.stringify(output, null, 2);
+                    } catch {
+                      output = String(output);
+                    }
+                  }
+                  return { ...prev, finalOutput: output as string | null, status: "done" };
                 }
                 case "status": {
                   const msg = (event.data.message as string) ?? "";
@@ -119,7 +129,16 @@ export function useAgentStream() {
     []
   );
 
-  const cancel = useCallback(() => {
+  const cancel = useCallback(async () => {
+    // 1. Demande l'annulation côté backend (tue la tâche)
+    if (runIdRef.current) {
+      try {
+        await cancelRun(runIdRef.current);
+      } catch {
+        /* ignore si déjà terminé */
+      }
+    }
+    // 2. Ferme le WS côté client
     wsRef.current?.close();
     setState((prev) => ({ ...prev, status: "idle" }));
   }, []);
