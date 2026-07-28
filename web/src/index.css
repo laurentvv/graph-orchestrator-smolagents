@@ -1,0 +1,42 @@
+@import "tailwindcss";
+
+/* Thème sombre IDE — inspiré Cursor/VS Code */
+:root {
+  --bg-0: #0d1117;      /* fond principal */
+  --bg-1: #161b22;      /* panneaux */
+  --bg-2: #21262d;      /* inputs */
+  --bg-3: #30363d;      /* bordures */
+  --accent: #2f81f7;    /* bleu accent */
+  --accent-2: #3fb950;  /* vert (succès) */
+  --warn: #d29922;      /* jaune (warning) */
+  --err: #f85149;       /* rouge (erreur) */
+  --text-0: #e6edf3;    /* texte principal */
+  --text-1: #8b949e;    /* texte secondaire */
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", "Fira Code", monospace;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  background: var(--bg-0);
+  color: var(--text-0);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+/* Scrollbar sombre */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--bg-0); }
+::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: #484f58; }
+
+/* Monospace pour le code/observations */
+.mono { font-family: var(--mono); }
+
+/* Animations subtiles */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+.pulse-dot { animation: pulse-dot 1.5s ease-in-out infinite; }

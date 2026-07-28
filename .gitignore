@@ -27,3 +27,7 @@ Thumbs.db
 # --- Donnees runtime (Knowledge Graph DuckDB) ---
 *.db
 *.db.wal
+
+# --- Frontend (web/) ---
+web/node_modules/
+web/dist/
