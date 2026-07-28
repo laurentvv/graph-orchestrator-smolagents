@@ -8,10 +8,11 @@ Chaque nœud :
 
 import asyncio
 import json
+import os
 from typing import List, Optional, Tuple
 
-from pydantic import BaseModel
-from smolagents import OpenAIServerModel, ToolCallingAgent
+from pydantic import BaseModel, ValidationError
+from smolagents import OpenAIServerModel, ToolCallingAgent, tool
 
 from .config import Settings
 from .logging_utils import NodeMetrics, resolve_verbosity
@@ -22,9 +23,41 @@ from .models import (
     ReduceOutput,
     TaskAssessment,
     WorkerOutput,
+    CoderOutput,
+    RouterOutput,
+    ArchitectOutput,
+    SecurityOutput,
+    CodeJudgeOutput,
     extract_and_validate,
 )
+from .tools import read_file, write_file, edit_file, bash_command, list_directory
 
+@tool
+def query_duckdb_knowledge_graph(sql_query: str) -> str:
+    """Execute une requête SQL (SELECT) sur le Graphe de Connaissances (DuckDB) pour chercher d'anciens bugs, failles ou feedbacks de l'équipe IA.
+    
+    Schéma de la base :
+    - entity(id VARCHAR, kind VARCHAR, name VARCHAR)
+    - claim(id BIGINT, entity_id VARCHAR, content VARCHAR, kind VARCHAR, status VARCHAR) : contient les bugs (kind='refutation') ou le code (kind='observation')
+    - provenance(claim_id BIGINT, source VARCHAR, model_id VARCHAR, run_id VARCHAR)
+    
+    Exemple: "SELECT content FROM claim WHERE kind = 'refutation' ORDER BY created_at DESC LIMIT 10"
+    
+    Args:
+        sql_query: La requête SQL commençant par SELECT.
+    """
+    import duckdb
+    from graph_orchestrator.config import settings
+    if not sql_query.strip().upper().startswith("SELECT"):
+        return "Erreur: Seules les requêtes SELECT sont autorisées."
+        
+    try:
+        conn = duckdb.connect(settings.kg_path, read_only=True)
+        results = conn.execute(sql_query).df()
+        conn.close()
+        return results.to_markdown(index=False) if not results.empty else "Aucun résultat."
+    except Exception as e:
+        return f"Erreur SQL: {str(e)}"
 
 # ==========================================
 # Modèles (construits une fois depuis la config)
@@ -97,6 +130,14 @@ async def run_with_retry(
             )
         except Exception as e:
             print(f"[-] Erreur interne (Tentative {attempt + 1}/{max_retries}): {e}")
+            
+        # FIX TOKEN EXPLOSION: Si on est arrivé ici (erreur ou JSON invalide),
+        # l'agent a gardé tout son historique d'échec dans sa mémoire interne.
+        # Au prochain tour de la boucle for, si on rappelle agent.run, il va TOUT renvoyer !
+        # On doit purger la mémoire de l'agent avant le prochain essai.
+        if hasattr(agent, "memory") and hasattr(agent.memory, "steps"):
+            agent.memory.steps = []
+
 
     print(f"[-] Échec définitif pour {model_class.__name__} après {max_retries} tentatives.")
     return None, last_metrics
@@ -145,7 +186,7 @@ async def execute_worker_node(
     local_worker = ToolCallingAgent(
         tools=[],
         model=fast_model,
-        name=f"worker_{task['id']}",
+        name=f"worker_{task['id'].replace('-', '_')}",
         description="Analyse une tâche d'infrastructure et produit un summary + score de confiance.",
         verbosity_level=resolve_verbosity(settings.log_level),
     )
@@ -156,6 +197,290 @@ async def execute_worker_node(
     Contenu de la tâche : {task['content']}
     """
     return await run_with_retry(local_worker, prompt, WorkerOutput, settings.worker_max_retries)
+
+async def execute_router_node(
+    task_content: str,
+    fast_model: OpenAIServerModel,
+    settings: Settings,
+) -> Tuple[Optional[RouterOutput], Optional[NodeMetrics]]:
+    """Nœud Routeur : Utilise un petit modèle via l'API Ollama (Structured Outputs) pour classifier la requête."""
+    import requests
+    import time
+    
+    prompt = f"""Tu es un nœud de routage (Router Node) ultra-rapide et hautement spécialisé. Ton unique rôle est d'analyser la requête de l'utilisateur pour déterminer la technologie principale requise.
+
+CONSIGNES DE ROUTAGE (VALEURS AUTORISÉES) :
+- "python" : Si la tâche concerne de l'analyse de données, du script système, du scraping, du traitement de fichiers ou de l'IA.
+- "javascript" : Si la tâche concerne du développement web, des interfaces utilisateur, du frontend, du backend Node.js ou des applications de navigateur.
+
+Requête de l'utilisateur actuelle : {task_content}
+"""
+
+    schema = RouterOutput.model_json_schema()
+    payload = {
+        "model": settings.fast_model_id,
+        "messages": [
+            {"role": "system", "content": "Tu es un routeur technique. Réponds STRICTEMENT en JSON."},
+            {"role": "user", "content": prompt}
+        ],
+        "format": schema,
+        "stream": False,
+        "options": {"temperature": 0.0}
+    }
+    
+    start_time = time.time()
+    try:
+        api_url = settings.ollama_api_base.replace("/v1", "/api/chat")
+        response = await asyncio.to_thread(requests.post, api_url, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        
+        raw_json = data["message"]["content"]
+        validated = RouterOutput.model_validate_json(raw_json)
+        
+        metrics = NodeMetrics(
+            node="router",
+            model=settings.fast_model_id,
+            duration_s=data.get("total_duration", 0) / 1e9 or (time.time() - start_time),
+            input_tokens=data.get("prompt_eval_count", 0),
+            output_tokens=data.get("eval_count", 0),
+        )
+        return validated, metrics
+        
+    except Exception as e:
+        print(f"[-] Erreur de l'API Ollama (Router) : {e}")
+        return None, None
+
+async def execute_architect_node(
+    task: dict,
+    reasoning_model: OpenAIServerModel,
+    settings: Settings,
+) -> Tuple[Optional[ArchitectOutput], Optional[NodeMetrics]]:
+    """Nœud Architecte : planifie et décompose une tâche globale en sous-tâches isolées."""
+    from smolagents import DuckDuckGoSearchTool, CodeAgent
+    local_architect = CodeAgent(
+        tools=[list_directory, read_file, bash_command, DuckDuckGoSearchTool(), query_duckdb_knowledge_graph],
+        model=reasoning_model,
+        name=f"architect_{task['id'].replace('-', '_')}",
+        description="Architecte Logiciel Senior qui analyse le projet et décompose la tâche en modules JSON.",
+        verbosity_level=resolve_verbosity("HIGH"),
+    )
+
+    prompt = f"""Tu es un Architecte Logiciel Senior (Architect Node). Ton rôle n'est PAS de coder, mais de PLANIFIER.
+Contenu de la tâche globale : {task['content']}
+
+MÉTHODOLOGIE :
+1. Recherche sur DuckDB : utilise l'outil 'query_duckdb_knowledge_graph' avec une requête SQL (ex: "SELECT content FROM claim WHERE kind='refutation'") pour lire les bugs/failles (XSS, logique...) rencontrés par l'équipe sur les projets précédents, afin de ne pas refaire les mêmes erreurs d'architecture.
+2. Explore le projet (via 'list_directory' ou 'bash_command').
+3. Cherche sur internet les best practices (via DuckDuckGoSearchTool) si nécessaire.
+4. Réfléchis à l'architecture globale pour accomplir cette tâche.
+5. Découpe la tâche en petites sous-tâches très précises.
+6. Pour chaque sous-tâche, liste les fichiers cibles qui seront modifiés.
+
+Retourne ton plan STRICTEMENT au format JSON via l'outil 'final_answer'.
+Schéma exact attendu: {{"plan_id": "architect_plan", "global_architecture": "Explication de ton choix d'architecture", "subtasks": [{{"task_id": "sub_1", "description": "Créer le fichier index.html avec...", "target_files": ["index.html"]}}]}}
+"""
+    return await run_with_retry(local_architect, prompt, ArchitectOutput, settings.worker_max_retries)
+
+
+async def execute_coder_node(
+    task: dict,
+    fast_model: OpenAIServerModel,
+    settings: Settings,
+) -> Tuple[Optional[CoderOutput], Optional[NodeMetrics]]:
+    """Nœud Coder : utilise des outils pour créer/éditer des fichiers et exécuter des commandes bash."""
+    from smolagents import DuckDuckGoSearchTool, CodeAgent
+    local_coder = CodeAgent(
+        tools=[list_directory, read_file, write_file, edit_file, bash_command, DuckDuckGoSearchTool()],
+        model=fast_model,
+        name=f"coder_{task['id'].replace('-', '_')}",
+        description="Agent développeur capable d'explorer le projet, d'écrire, lire, modifier du code et exécuter des commandes.",
+        verbosity_level=resolve_verbosity("HIGH"),
+        max_steps=4,  # Permet à l'agent de faire quelques actions avant de conclure, mais l'empêche de boucler indéfiniment
+        additional_authorized_imports=["os", "pathlib", "json", "re", "math", "time"], # On donne un peu de liberté Python
+    )
+
+    import os
+    
+    # Load all SKILL.md files from the skills directory to inject into the prompt
+    skills_content = ""
+    skills_dir = "skills"
+    if os.path.exists(skills_dir):
+        for root, dirs, files in os.walk(skills_dir):
+            if "SKILL.md" in files:
+                skill_path = os.path.join(root, "SKILL.md")
+                with open(skill_path, "r", encoding="utf-8") as f:
+                    skill_name = os.path.basename(root)
+                    skills_content += f"\n\n--- SKILL: {skill_name} ---\n{f.read()}"
+
+    prompt = f"""Tu es un Agent Développeur Senior autonome. Ta mission est d'accomplir la tâche suivante en utilisant tes outils de manière itérative.
+
+MÉTHODOLOGIE OBLIGATOIRE :
+1. EXPLORATION : Utilise 'list_directory' ou 'bash_command' pour comprendre la structure du projet avant de coder.
+2. LECTURE : Utilise 'read_file' pour analyser le code existant concerné.
+3. ÉDITION : Préfère 'edit_file' pour modifier chirurgicalement un fichier existant. N'utilise 'write_file' que pour créer de nouveaux fichiers.
+4. VALIDATION : Si la tâche nécessite une exécution, utilise 'bash_command' pour lancer les tests ou le script, et corrige les éventuelles erreurs.
+
+### TES COMPÉTENCES (SKILLS)
+Voici les instructions et compétences que tu DOIS respecter et utiliser selon la situation :
+{skills_content}
+
+Contenu de la tâche : {task['content']}
+
+IMPORTANT : Prends ton temps, tu peux utiliser tes outils autant de fois que nécessaire.
+Une fois que tu as terminé, vérifie ton travail. Puis retourne ton résultat final STRICTEMENT au format JSON via l'outil 'final_answer'.
+Schéma exact attendu: {{"task_id": "{task['id']}", "status": "success", "details": "Un résumé technique détaillé des fichiers modifiés et des actions effectuées."}}
+"""
+    # max_retries can be slightly higher for coding since it involves tool use steps
+    return await run_with_retry(local_coder, prompt, CoderOutput, settings.worker_max_retries)
+
+
+async def execute_tester_node(
+    task: dict,
+    reasoning_model: OpenAIServerModel,
+    settings: Settings,
+) -> Tuple[Optional[CoderOutput], Optional[NodeMetrics]]:
+    """Nœud Testeur : utilise Chrome DevTools via MCP pour tester les applications web."""
+    import os
+    from mcp import StdioServerParameters
+    from smolagents import ToolCollection
+
+    # Configure the MCP server for Chrome DevTools
+    server_parameters = StdioServerParameters(
+        command="npx",
+        args=["-y", "@modelcontextprotocol/server-puppeteer"],
+        env=os.environ.copy()
+    )
+
+    # Note: Using the context manager ensures the MCP server is properly closed after the run
+    # For now, we load tools inside the execution loop
+    with ToolCollection.from_mcp(server_parameters, trust_remote_code=True) as tool_collection:
+        local_tester = ToolCallingAgent(
+            tools=[*tool_collection.tools],
+            model=reasoning_model,
+            name=f"tester_{task['id'].replace('-', '_')}",
+            description="Agent QA chargé de tester les interfaces web avec le MCP Chrome DevTools.",
+            verbosity_level=resolve_verbosity("HIGH"),
+        )
+
+        skill_path = os.path.join("skills", "web-tester", "SKILL.md")
+        skill_content = ""
+        if os.path.exists(skill_path):
+            with open(skill_path, "r", encoding="utf-8") as f:
+                skill_content = f.read()
+
+        prompt = f"""Tu es un agent QA autonome (Web Tester Node).
+        
+Voici tes instructions obligatoires (Skill) :
+{skill_content}
+
+Contenu de la tâche d'origine : {task['content']}
+
+Vérifie l'application web générée. Utilise tes outils MCP pour naviguer, inspecter et interagir.
+Une fois terminé, retourne ton résultat final STRICTEMENT au format JSON via l'outil 'final_answer'.
+Schéma exact attendu: {{"task_id": "{task['id']}", "status": "success ou error", "details": "Un résumé détaillé de tes tests visuels et interactifs."}}
+"""
+        return await run_with_retry(local_tester, prompt, CoderOutput, settings.worker_max_retries)
+
+
+async def execute_security_reviewer_node(
+    task: dict,
+    reasoning_model: OpenAIServerModel,
+    settings: Settings,
+) -> Tuple[Optional[SecurityOutput], Optional[NodeMetrics]]:
+    """Nœud Auditeur de Sécurité : paranoïaque, inspecte le code à la recherche de failles."""
+    local_security = ToolCallingAgent(
+        tools=[read_file, bash_command], # Peut lire le code et lancer des linters de sécurité
+        model=reasoning_model,
+        name=f"security_{task['id'].replace('-', '_')}",
+        description="Auditeur de sécurité paranoïaque qui cherche des vulnérabilités dans le code.",
+        verbosity_level=resolve_verbosity("HIGH"),
+    )
+
+    prompt = f"""Tu es un Auditeur de Sécurité (Security Reviewer Agent). Tu es PARANOÏAQUE.
+Ton seul but est de prouver que le code écrit par le Coder n'est pas sécurisé.
+
+Contenu de la tâche d'origine : {task['content']}
+
+MÉTHODOLOGIE :
+1. Utilise 'read_file' pour lire les fichiers qui ont été modifiés ou créés.
+2. Traque les vulnérabilités classiques (injections, XSS, authentification manquante, données exposées, etc.).
+3. N'hésite pas à être très strict.
+
+Retourne ton verdict STRICTEMENT au format JSON via l'outil 'final_answer'.
+Schéma exact attendu: {{"task_id": "{task['id']}", "is_secure": true/false, "vulnerabilities": ["faille 1 expliquée", "faille 2 expliquée"]}}
+"""
+    return await run_with_retry(local_security, prompt, SecurityOutput, settings.worker_max_retries)
+
+
+async def execute_code_judge_node(
+    task: dict,
+    tester_result: Optional[CoderOutput],
+    security_result: Optional[SecurityOutput],
+    fast_model: OpenAIServerModel,
+    settings: Settings,
+) -> Tuple[Optional[CodeJudgeOutput], Optional[NodeMetrics]]:
+    """Nœud Juge de Code (Fan-in) : utilise l'API Ollama native avec Structured Outputs pour garantir un JSON parfait."""
+    import requests
+    import json
+    import time
+    
+    tester_data = tester_result.model_dump() if tester_result else {"status": "skipped", "details": "Pas de tests."}
+    security_data = security_result.model_dump() if security_result else {"is_secure": True, "vulnerabilities": []}
+
+    prompt = f"""Tu es le Juge Suprême de la Pull Request (Judge Panel). 
+Tu te trouves à une barrière de convergence (Fan-in). Tu dois lire les rapports du Testeur et de l'Auditeur de Sécurité, et prendre une décision finale.
+
+Contenu de la tâche d'origine : {task['content']}
+
+Rapport du Testeur : {json.dumps(tester_data, ensure_ascii=False)}
+Rapport de Sécurité : {json.dumps(security_data, ensure_ascii=False)}
+
+RÈGLES DE JUGEMENT :
+- Si le Testeur signale une erreur ("status": "error") -> REJET (is_approved=false).
+- Si la Sécurité signale une faille (is_secure=false) -> REJET (is_approved=false).
+- Sinon -> APPROBATION (is_approved=true).
+
+Explique ta décision dans final_feedback.
+"""
+    
+    # Payload natif pour Ollama API (bypass smolagents)
+    schema = CodeJudgeOutput.model_json_schema()
+    payload = {
+        "model": settings.fast_model_id,
+        "messages": [
+            {"role": "system", "content": "Tu es un juge impitoyable. Réponds STRICTEMENT en JSON."},
+            {"role": "user", "content": prompt}
+        ],
+        "format": schema,
+        "stream": False,
+        "options": {"temperature": 0.0}
+    }
+    
+    start_time = time.time()
+    try:
+        # Appel direct à Ollama (on remplace /v1 par /api/chat pour l'API native)
+        api_url = settings.ollama_api_base.replace("/v1", "/api/chat")
+        response = await asyncio.to_thread(requests.post, api_url, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        
+        raw_json = data["message"]["content"]
+        validated = CodeJudgeOutput.model_validate_json(raw_json)
+        
+        # Extraction manuelle des métriques Ollama
+        metrics = NodeMetrics(
+            node=f"code_judge_{task['id']}",
+            model=settings.fast_model_id,
+            duration_s=data.get("total_duration", 0) / 1e9 or (time.time() - start_time),
+            input_tokens=data.get("prompt_eval_count", 0),
+            output_tokens=data.get("eval_count", 0),
+        )
+        return validated, metrics
+        
+    except Exception as e:
+        print(f"[-] Erreur de l'API Ollama (Code Judge) : {e}")
+        return None, None
 
 
 # ==========================================

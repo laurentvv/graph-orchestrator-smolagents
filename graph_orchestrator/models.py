@@ -23,6 +23,45 @@ class WorkerOutput(BaseModel):
     confidence_score: float
 
 
+class ArchitectTask(BaseModel):
+    """Une sous-tâche de codage isolée générée par l'Architecte."""
+    task_id: str
+    description: str
+    target_files: List[str]
+
+
+class RouterOutput(BaseModel):
+    """Contrat JSON strict et minimaliste pour le routage par le petit modèle."""
+    language: str
+
+class ArchitectOutput(BaseModel):
+    """Le plan global généré par l'Architecte."""
+    plan_id: str
+    global_architecture: str
+    subtasks: List[ArchitectTask]
+
+
+class CoderOutput(BaseModel):
+    """Résultat d'un nœud Coder (exécution de code / modification de fichiers)."""
+    task_id: str
+    status: Literal["success", "failure"]
+    details: str
+
+
+class SecurityOutput(BaseModel):
+    """Verdict du noeud d'audit de sécurité sur le code généré."""
+    task_id: str
+    is_secure: bool
+    vulnerabilities: List[str]
+
+
+class CodeJudgeOutput(BaseModel):
+    """Verdict final de la Pull Request par le Juge du code."""
+    task_id: str
+    is_approved: bool
+    final_feedback: str
+
+
 class AdversaryVerdict(BaseModel):
     """Verdict d'un sceptique sur UNE tâche (§5 : vérification adversaire)."""
     task_id: str

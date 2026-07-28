@@ -30,6 +30,7 @@ from .nodes import (
     execute_reduce_node,
     execute_synth_node,
     execute_worker_node,
+    execute_coder_node,
 )
 
 console = Console()
@@ -187,6 +188,155 @@ async def run_exploration_workflow(
     return final_result, all_metrics
 
 
+async def run_coding_workflow(
+    seed_tasks: List[dict],
+    settings: Settings = default_settings,
+) -> Tuple[Optional[dict], List[NodeMetrics]]:
+    """Mode coding : Architect -> Fan-out Coder -> Parallel Validation -> Judge (loop)."""
+    reasoning_model = build_reasoning_model(settings)
+    fast_model = build_fast_model(settings)
+    all_metrics: List[NodeMetrics] = []
+
+    # Knowledge Graph persistant : Phase 5 appliquée au codage
+    kg = KnowledgeGraph(settings.kg_path)
+    run_id = f"coding_{id(kg)}"
+    print(f"[*] Knowledge Graph branché : {settings.kg_path}")
+
+    print(f"\n{'='*60}")
+    print(f"  CODING WORKFLOW (Multi-Agent Playbook)")
+    print(f"{'='*60}")
+    
+    results = []
+    from .nodes import execute_tester_node, execute_coder_node
+    from .dspy_nodes import (
+        execute_architect_node,
+        execute_security_reviewer_node, 
+        execute_code_judge_node, 
+        execute_router_node
+    )
+    
+    # Routine initiale de routage
+    task_content = seed_tasks[0]['content'] if seed_tasks else ""
+    print(f"[*] Analyse de la requête par le routeur ultra-rapide (Qwen2B)...")
+    router_res, m0 = await execute_router_node(task_content, fast_model, settings)
+    if m0: all_metrics.append(m0)
+    
+    if router_res:
+        print(f"[*] Le routeur a classifié la technologie principale : {router_res.language.upper()}")
+        if seed_tasks:
+            seed_tasks[0]['content'] += f"\n\n[ROUTER DIRECTIVE : The primary technology to use is {router_res.language.upper()}]"
+    
+    async def process_subtask_loop(subtask) -> Tuple[dict, List[NodeMetrics]]:
+        sub_metrics = []
+        entity_id = f"file:{subtask.task_id}"
+        kg.add_entity(entity_id, kind="file", name=subtask.task_id)
+        
+        max_iter = 3
+        
+        for iteration in range(1, max_iter + 1):
+            print(f"    [>] Itération {iteration}/{max_iter} pour {subtask.task_id} (Coder)...")
+            
+            # Reconstruction du prompt en lisant l'historique de DuckDB
+            # Au lieu d'accumuler dans le contexte, on fait une requête "Bug Tracker" propre
+            historique = ""
+            if iteration > 1:
+                refutations = kg.get_claims(entity_id, kind="refutation")
+                if refutations:
+                    historique = "\n\n[TICKETS DE BUGS ACTIFS (LU DEPUIS DUCKDB)] :\n"
+                    for ref in refutations:
+                        historique += f"- {ref['content']}\n"
+            
+            sub_dict = {
+                "id": subtask.task_id, 
+                "content": subtask.description + historique,
+                "target_files": subtask.target_files
+            }
+            
+            # 1. Coder (Qwen-2B)
+            coder_res, m1 = await execute_coder_node(sub_dict, fast_model, settings)
+            if m1: sub_metrics.append(m1)
+            
+            if not coder_res or coder_res.status == "failure":
+                print(f"    [-] Le Coder a échoué techniquement sur {subtask.task_id}.")
+                return {"status": "failure", "reason": "Coder crash"}, sub_metrics
+                
+            print(f"    [>] Coder terminé. Déclenchement des Audits parallèles (Tester & Sécurité)...")
+            
+            # On enregistre l'observation du Coder dans DuckDB
+            obs_id = kg.add_claim(
+                entity_id=entity_id,
+                content=f"Code généré (Itération {iteration}): {coder_res.details}",
+                kind="observation",
+                confidence=1.0,
+                source="coder",
+                model_id=settings.reasoning_model_id,
+                run_id=run_id,
+            )
+            
+            # 2. Vérifications Contradictoires (Parallèle)
+            t_task = execute_tester_node(sub_dict, reasoning_model, settings)
+            s_task = execute_security_reviewer_node(sub_dict, reasoning_model, settings)
+            
+            (test_res, m2), (sec_res, m3) = await asyncio.gather(t_task, s_task)
+            if m2: sub_metrics.append(m2)
+            if m3: sub_metrics.append(m3)
+            
+            # 3. Judge Panel (Fan-in)
+            print(f"    [>] Audits terminés. Juge (Qwen-2B JSON) en cours d'évaluation...")
+            judge_res, m4 = await execute_code_judge_node(sub_dict, test_res, sec_res, fast_model, settings)
+            if m4: sub_metrics.append(m4)
+            
+            if judge_res and judge_res.is_approved:
+                print(f"    [+] {subtask.task_id} APPROUVÉ par le Juge ! 🚀")
+                if obs_id: kg.mark_status(obs_id, "approved")
+                return {"status": "success", "task_id": subtask.task_id}, sub_metrics
+            else:
+                feedback = judge_res.final_feedback if judge_res else "Erreur système du juge."
+                print(f"    [-] {subtask.task_id} REJETÉ. Sauvegarde du bug dans DuckDB...")
+                if obs_id: kg.mark_status(obs_id, "rejected")
+                
+                # Le Juge écrit la faille ou le bug dans DuckDB (le Knowledge Graph)
+                ref_id = kg.add_claim(
+                    entity_id=entity_id, 
+                    content=feedback, 
+                    kind="refutation",
+                    confidence=None, 
+                    source="judge_panel",
+                    model_id=settings.reasoning_model_id, 
+                    run_id=run_id
+                )
+                if ref_id and obs_id:
+                    kg.add_edge(ref_id, obs_id, "REFUTES")
+                
+        print(f"    [!] Max itérations atteintes pour {subtask.task_id}.")
+        return {"status": "max_iterations_reached", "task_id": subtask.task_id}, sub_metrics
+
+    for task in seed_tasks:
+        print(f"\n[*] 1. Exécution de l'Architecte pour la tâche globale : {task['id']}")
+        architect_result, arch_metrics = await execute_architect_node(task, reasoning_model, settings)
+        if arch_metrics:
+            all_metrics.append(arch_metrics)
+            
+        if architect_result is None:
+            print(f"[-] L'Architecte a échoué à planifier la tâche {task['id']}.")
+            continue
+            
+        print(f"[+] Plan de l'Architecte reçu : {architect_result.global_architecture}")
+        print(f"[*] 2. Fan-out : Lancement des boucles d'ingénierie parallèles sur {len(architect_result.subtasks)} sous-tâches...\n")
+        
+        # Fan-out : Lancement des boucles de validation complètes en parallèle
+        subtask_coroutines = [process_subtask_loop(st) for st in architect_result.subtasks]
+        loop_results = await asyncio.gather(*subtask_coroutines)
+        
+        for res, metrics in loop_results:
+            all_metrics.extend(metrics)
+            results.append(res)
+            
+        print(f"\n[*] 3. Fusion des sous-tâches terminée pour {task['id']}.")
+
+    return {"architect_plans": len(seed_tasks), "final_results": results}, all_metrics
+
+
 # ==========================================
 # Tâches d'exemple selon le mode
 # ==========================================
@@ -216,12 +366,28 @@ EXPLORATION_SEED_TASKS = [
     },
 ]
 
+CODING_SEED_TASKS = [
+    {
+        "id": "tetris",
+        "content": (
+            "Développe un jeu Tetris complet et fonctionnel en HTML/JS/CSS dans un dossier 'tetris_game'. "
+            "Crée un fichier index.html, un style.css et un script.js. "
+            "Le jeu doit pouvoir être joué avec les flèches du clavier, avoir un score, et détecter le game over. "
+            "Vérifie que tout fonctionne correctement."
+        ),
+    }
+]
+
 
 def run_workflow(mode: str, settings: Settings = default_settings) -> None:
-    """Lance le workflow selon le mode (one_shot / exploration)."""
+    """Lance le workflow selon le mode (one_shot / exploration / coding)."""
     if mode == "exploration":
         final_output, metrics = asyncio.run(
             run_exploration_workflow(EXPLORATION_SEED_TASKS, settings)
+        )
+    elif mode == "coding":
+        final_output, metrics = asyncio.run(
+            run_coding_workflow(CODING_SEED_TASKS, settings)
         )
     else:
         from .runner import run_graph_workflow
@@ -231,8 +397,9 @@ def run_workflow(mode: str, settings: Settings = default_settings) -> None:
         render_observability_table(metrics, console)
 
     if final_output:
+        data = final_output.model_dump() if hasattr(final_output, "model_dump") else final_output
         console.print(Panel(
-            json.dumps(final_output.model_dump(), indent=4, ensure_ascii=False),
+            json.dumps(data, indent=4, ensure_ascii=False),
             title="[bold green]RÉSULTAT FINAL DU GRAPHE[/bold green]",
             border_style="green",
         ))

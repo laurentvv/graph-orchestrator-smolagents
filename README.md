@@ -1,179 +1,137 @@
-# Agent Graph Architecture with Smolagents & Asyncio
+<div align="center">
+  <img src="docs/orchestrator_banner.jpg" alt="Autonomous AI Agent Team Graph Orchestrator" width="100%" />
+  
+  <h1>Graph Orchestrator with DSPy & smolagents</h1>
+  <p><strong>A production-ready Hybrid Multi-Agent Architecture for Software Engineering and Data Processing</strong></p>
+  
+  [![Python 3.12+](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/downloads/)
+  [![DSPy](https://img.shields.io/badge/DSPy-3.0_enabled-purple.svg)](https://dspy.ai/)
+  [![Smolagents](https://img.shields.io/badge/smolagents-enabled-orange.svg)](https://github.com/huggingface/smolagents)
+  [![DuckDB](https://img.shields.io/badge/DuckDB-enabled-yellow.svg)](https://duckdb.org/)
+</div>
 
-Ce dépôt implémente une architecture de **Graph Engineering** pour agents IA en utilisant le framework [`smolagents`](https://github.com/huggingface/smolagents) et `asyncio`.
+---
 
-Le but de cette architecture est de sortir d'une exécution IA linéaire basique (souvent fragile) pour aller vers un modèle distribué, parallèle et vérifiable (pattern *Fan-out -> Reduce -> Adversaire -> Synth*).
+This repository implements a highly advanced **Hybrid Graph Engineering** architecture for AI agents. It leverages the mathematical rigor of **DSPy 3.0** (for declarative reasoning and structural JSON generation) and the pragmatic execution engine of **smolagents** (for tool-calling and sandboxed environment interaction).
 
-> 📖 Ce projet implémente le [Guide de Standardisation : Architecture de Systèmes Agentiques en Graphes](docs/guide-graphes.md). Le manifeste y est archivé avec un mappage d'écart concept ↔ implémentation.
+Moving away from fragile, linear AI execution loops, this orchestrator embraces a **distributed, parallel, and verifiable** model with distinct roles: **The Brains** (DSPy) and **The Hands** (smolagents).
 
-## Fonctionnalités clés
+> 📖 **Architecture Manifesto:** See [DOC_DSPY_ARCHITECTURE.md](DOC_DSPY_ARCHITECTURE.md) for a deep dive into the DSPy migration, Signatures, and ChainOfThought implementations.
 
-1. **Topologie Diamant (§3)** : *Fan-out → Reduce → Adversaire → (HITL) → Synth*
-   - **Fan-out** : les tâches indépendantes sont distribuées en asynchrone via `asyncio.gather()`, chaque tâche gérée par son propre agent (stateless).
-   - **Reduce** : nœud de code pur (`flatten + dedupe + filter`) — 0 token, isole les échecs.
-2. **Vérification Adversaire (§5)** :
-   - Une **flotte de N "sceptiques"** indépendants tourne en parallèle pour tenter de réfuter chaque résultat (personas divergents : hallucinations, contre-sens, omissions…).
-   - Vote à la majorité : une tâche est rejetée si `>= threshold × N` sceptiques la réfutent. *« La confiance naît de l'examen contradictoire »*.
-3. **Cycles de Convergence loop-until-dry (§5)** :
-   - Mode `exploration` : le graphe boucle tant que de nouveaux insights émergent, avec **3 garanties anti-boucle-infinie** (hard cap, critère "dry", dédup contre le déjà-vu **y compris les rejets**).
-4. **Knowledge Graph persistant (Phase 5)** :
-   - État partagé externalisé dans DuckDB : entités, claims (observations/réfutations/insights), arêtes typées (`REFUTES`, `SUPPORTS`).
-   - **Provenance absolue** : chaque claim sait qui l'a produite (agent + modèle + run). Survit à l'effacement du contexte et aux redémarrages.
-5. **Human-in-the-loop stratégique (Phase 6)** :
-   - Checkpoint bloquant **conditionnel** (`HITL_ENABLED` + `HITL_NODES`) : se déclenche seulement sur les nœuds à enjeu (ex. `synth`), pas sur les workers. Affiche la provenance pour décision éclairée.
-6. **Contrats de Données Stricts (Pydantic)** :
-   - Chaque nœud a une entrée/sortie strictement typées. **Retry automatique** si le LLM échoue à générer un JSON valide.
-7. **Tiering des Modèles (§4)** :
-   - Fan-out sur modèle léger (`qwen3.5:2b`), raisonnement (adversaire + synthèse) sur modèle costaud (`hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL`).
+## 🌟 Key Features & Hybrid Architecture
 
-   > ⚠️ **Contrainte tool-calling** : `smolagents.ToolCallingAgent` s'appuie sur le *function-calling* natif de l'API. Tous les modèles ne le supportent pas correctement via Ollama (`lfm2.5` finit en `finish_reason: length` sans `tool_calls`). Les deux modèles ci-dessus ont été testés et validés via `/v1/chat/completions`. Le `max_tokens=8192` sur le modèle de raisonnement est **obligatoire** pour Gemma (sinon il n'émet jamais son `tool_call`).
-8. **Configuration externalisée & Observabilité** :
-   - Tous les paramètres sont surchargeables via `.env` (voir [`.env.example`](.env.example)). Une table récapitulative (tokens in/out, durée par nœud) est affichée en fin de run.
+### 1. "Brains vs Hands" Topology
+- **The Brains (DSPy 3.0)**: Cognitive nodes (Router, Architect, Security Reviewer, Code Judge) use DSPy `Signatures` and `ChainOfThought` to strictly map open-ended reasoning into guaranteed `Pydantic` JSON schemas. No more fragile manual prompting or regex hacking.
+- **The Hands (smolagents)**: Execution nodes (Fan-out Coders, Testers) take the deterministic JSON orders from the Brains and execute them in reality using local tool collections (Chrome DevTools MCP, bash commands, file system access).
 
-## Pré-requis
+### 2. The Coding Playbook (Autonomous Engineering Team)
+Instead of letting a single agent write and evaluate its own code, this system simulates an entire engineering team:
+- **DSPy Architect Node**: A heavy reasoning model that takes a complex prompt, designs the global architecture, and breaks it down into granular JSON subtasks using strict Pydantic constraints.
+- **Fan-out Coder Nodes (smolagents)**: For each subtask, a Coder agent is spawned asynchronously to write code using precise tools.
+- **Parallel Validation**: 
+  - *Tester Node (smolagents)*: Uses **Chrome DevTools MCP** to visually and functionally test web code.
+  - *Security Reviewer (DSPy)*: Audits the code against vulnerabilities (XSS, injections, etc.) and returns a typed list of flaws.
+- **DSPy Judge Node**: Acts as the ultimate PR reviewer. Analyzes tester/security reports, outputting a deterministic `approved: bool` verdict to either merge the code or trigger a feedback loop.
+
+### 3. Persistent Knowledge Graph (DuckDB)
+Context windows are limited. Instead of passing massive conversation histories between the agents, **all agents read and write to a shared, persistent DuckDB Knowledge Graph**.
+- Tracks entities, observations, refutations, and typed edges (`REFUTES`, `SUPPORTS`).
+- Absolute provenance: every claim knows which agent, model, and run produced it.
+- **Agentic SQL Querying**: Agents are equipped with a `query_duckdb_knowledge_graph` tool to actively query historical bugs across past projects to avoid repeating mistakes.
+
+### 4. Smart Model Tiering
+Save costs and boost speed by dynamically routing tasks to the right brain:
+- **Light Models** (`qwen3.5:2b`): Used for fan-out execution workers and rapid localized routing.
+- **Heavy Models** (`gemma-4-E4B`): Reserved for the Architect, Code Judge, and Synthesis where deep reasoning and ChainOfThought is required.
+
+---
+
+## 🛠 Prerequisites
 
 - Python 3.12+
-- [Ollama](https://ollama.com/) installé et en cours d'exécution localement.
-- [uv](https://github.com/astral-sh/uv) installé pour la gestion rapide des dépendances.
+- [Ollama](https://ollama.com/) installed and running locally.
+- [uv](https://github.com/astral-sh/uv) installed for blazing fast dependency management.
+- DuckDB (`uv pip install duckdb`)
+- DSPy (`uv add dspy-ai`)
 
-## Installation
+## 🚀 Installation
 
-Ce projet utilise `uv` pour gérer les dépendances et l'environnement virtuel.
+This project uses `uv` for seamless dependency and virtual environment management.
 
 ```bash
-# 1. Télécharger les modèles via Ollama (s'assurer qu'Ollama tourne)
-#    - Fan-out (léger) :
+# 1. Pull the required local models via Ollama
+#    - Fast model (Fan-out / Workers / Router) :
 ollama pull qwen3.5:2b
-#    - Adversaire + Synthèse (raisonnement) :
+#    - Heavy reasoning model (Architect / Coder / Judge) :
 ollama pull hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL
 
-# 2. Synchroniser les dépendances Python via uv (inclut le groupe dev : pytest)
+# 2. Sync Python dependencies via uv (including DSPy, smolagents, etc.)
 uv sync
 
-# 3. (Optionnel) Copier le template de configuration
+# 3. Copy the configuration template
 cp .env.example .env
 ```
 
-## Utilisation
+## 🎮 Usage
 
-Assurez-vous que le serveur Ollama tourne en arrière-plan (`ollama serve`).
+Ensure your Ollama server is running in the background (`ollama serve`).
 
-### Mode one-shot (défaut) : Fan-out → Reduce → Adversaire → Synth
+### Software Engineering Mode (Coding Workflow)
+Unleash the full multi-agent hybrid team (DSPy Architect ➔ smolagents Coders ➔ Testers ➔ DSPy Judge):
+```bash
+$env:WORKFLOW_MODE="coding"
+$env:PYTHONIOENCODING="utf-8"
+uv run python -m graph_orchestrator.workflows
+```
 
+### Data Processing: One-shot Mode (Default)
+Executes the standard Fan-out → Reduce → Adversary → Synth flow:
 ```bash
 uv run agent_graph.py
 ```
 
-### Mode exploration : loop-until-dry (§5)
+### Data Processing: Exploration Mode (Loop-until-dry)
+```bash
+$env:WORKFLOW_MODE="exploration"
+uv run python -m graph_orchestrator.workflows
+```
 
-Le mode exploration boucle tant que de nouveaux insights émergent. On l'active via `WORKFLOW_MODE` ou directement :
+## 🧪 Testing
+
+The unit tests (Pydantic schemas, JSON extraction, adversarial voting logic, loop termination) execute **without LLM calls** and run in < 1 second:
 
 ```bash
-# Via le module workflows (définit sur WORKFLOW_MODE=exploration dans .env)
-WORKFLOW_MODE=exploration uv run python -m graph_orchestrator.workflows
+uv run pytest tests/ -v
 ```
 
-### Tests
+## ⚙️ Configuration
 
-Les tests unitaires (schémas, extraction JSON, vote adversaire, terminaison des cycles, config) ne font **aucun appel LLM** et tournent en <1s :
+All parameters can be customized via environment variables or the `.env` file:
 
-```bash
-uv run pytest tests/ -v   # 86 tests, <1s, aucun appel LLM
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OLLAMA_API_BASE` | `http://localhost:11434/v1` | OpenAI-compatible endpoint |
+| `FAST_MODEL_ID` | `qwen3.5:2b` | Light model for fan-out workers and routers |
+| `REASONING_MODEL_ID` | `hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL` | Heavy model for ChainOfThought |
+| `ADVERSARY_COUNT` | `3` | Number of independent skeptics for validation |
+| `MAX_ITERATIONS` | `3` | Feedback loop limit for Coders and Exploration |
+| `KG_PATH` | `graph_orchestrator.db` | DuckDB database path |
+| `WORKFLOW_MODE` | `one_shot` | `one_shot`, `exploration`, or `coding` |
 
-## Exemple de sortie
+## 📁 Project Structure
 
-À la fin de chaque run, le graphe affiche les verdicts adversaires par tâche puis une **table d'observabilité** (tokens et durée par nœud) :
-
-```
-[+] Verdict adversaire : Vote adversaire : 3/3 approuvées.
-    ✓ t1 — 0/3 réfutations (sous le seuil 0.5).
-    ✓ t2 — 0/3 réfutations (sous le seuil 0.5).
-    ✓ t3 — 0/3 réfutations (sous le seuil 0.5).
-
-┌───────────┬────────────────┬────────┬─────────────────┬────────┐
-│ Nœud      │ Modèle         │  Durée │ Tokens (in/out) │  Total │
-├───────────┼────────────────┼────────┼─────────────────┼────────┤
-│ worker_t1 │ qwen3.5        │  38.0s │     1 274 / 648 │  1 922 │
-│ worker_t2 │ qwen3.5        │  56.0s │   6 422 / 1 905 │  8 327 │
-│ worker_t3 │ qwen3.5        │  31.4s │     1 270 / 538 │  1 808 │
-│ skeptic_0 │ gemma-4-E4B-it │  71.5s │     1 393 / 760 │  2 153 │
-│ skeptic_1 │ gemma-4-E4B-it │  80.7s │   3 036 / 1 906 │  4 942 │
-│ skeptic_2 │ gemma-4-E4B-it │  34.2s │     1 392 / 921 │  2 313 │
-│ synth     │ gemma-4-E4B-it │  29.3s │   2 457 / 1 538 │  3 995 │
-│ TOTAL     │                │ 341.1s │                 │ 25 460 │
-└───────────┴────────────────┴────────┴─────────────────┴────────┘
-```
-
-> 💡 **Coût de la fiabilité** : la flotte de N sceptiques multiplie le coût de la vérification (~13k → ~25k tokens pour 3 sceptiques). C'est le trade-off assumé du §5 du guide (« la confiance naît de l'examen contradictoire »). Il se pilote via `ADVERSARY_COUNT`.
-
-## Configuration
-
-Tous les paramètres sont optionnels (des valeurs par défaut s'appliquent) et surchargeables via des variables d'environnement ou un fichier `.env` :
-
-| Variable | Défaut | Rôle |
-|----------|--------|------|
-| `OLLAMA_API_BASE` | `http://localhost:11434/v1` | endpoint OpenAI-compatible (le `/v1` est ajouté auto si manquant) |
-| `OLLAMA_API_KEY` | `sk-local` | clé (factice locale) |
-| `FAST_MODEL_ID` | `qwen3.5:2b` | Fan-out (workers) |
-| `REASONING_MODEL_ID` | `hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL` | Adversaire + Synthèse |
-| `REASONING_MAX_TOKENS` | `8192` | obligatoire pour Gemma |
-| `JUDGE_CONFIDENCE_THRESHOLD` | `0.7` | seuil de confiance du worker |
-| `WORKER_MAX_RETRIES` | `3` | tentatives de parsing JSON |
-| `ADVERSARY_COUNT` | `3` | nombre de sceptiques (vérification adversaire) |
-| `ADVERSARY_THRESHOLD` | `0.5` | fraction de sceptiques requise pour réfuter |
-| `MAX_ITERATIONS` | `3` | hard cap du mode exploration (anti-boucle) |
-| `HITL_ENABLED` | `false` | active le checkpoint humain (master switch) |
-| `HITL_NODES` | `synth` | nœuds déclenchant le HITL (CSV, ex `synth,transaction`) — routage stratégique |
-| `KG_PATH` | `graph_orchestrator.db` | chemin du Knowledge Graph DuckDB (`:memory:` = volatil) |
-| `WORKFLOW_MODE` | `one_shot` | `one_shot` ou `exploration` |
-| `LOG_LEVEL` | `LOW` | verbosité workers (`LOW`/`MEDIUM`/`HIGH`) |
-
-## Structure du projet
-
-```
-agent_graph.py                 ← entry point one-shot (uv run agent_graph.py)
+```text
+agent_graph.py                 ← Entry point for one-shot data processing
+DOC_DSPY_ARCHITECTURE.md       ← 📖 DSPy v3 Hybrid Architecture Manifesto
 graph_orchestrator/
-  __init__.py                  ← exports publics du package
-  config.py                    ← chargement config (.env + defaults)
-  models.py                    ← contrats Pydantic + extraction JSON robuste
-  logging_utils.py             ← verbosité + table d'observabilité rich
-  nodes.py                     ← nœuds worker / reduce / adversaire / synth + retry
-  knowledge_graph.py           ← Knowledge Graph DuckDB (entités/claims/provenance/arêtes) — Phase 5
-  hitl.py                      ← HITL stratégique (routage conditionnel + provenance) — Phase 6
-  runner.py                    ← orchestration one-shot async + récap + main()
-  workflows.py                 ← mode exploration (loop-until-dry) + sample tasks
+  ├── config.py                ← Env variables & defaults
+  ├── models.py                ← Pydantic schemas (ArchitectOutput, SecurityOutput, etc.)
+  ├── dspy_nodes.py            ← 🧠 The Brains: DSPy 3.0 Signatures & Predictors (Router, Architect, Judge)
+  ├── nodes.py                 ← 🖐️ The Hands: smolagents CodeAgents (Coders, Testers)
+  ├── workflows.py             ← Complex orchestrations integrating DSPy and smolagents
+  ├── knowledge_graph.py       ← DuckDB integration
+  └── hitl.py                  ← Human-In-The-Loop logic
 docs/
-  guide-graphes.md             ← manifeste de référence (§1-6) + mappage d'écart
-.env.example                   ← template de configuration
-tests/
-  test_models.py               ← validation des schémas Pydantic
-  test_extract.py              ← robustesse de l'extraction JSON
-  test_judge_logic.py          ← logique de filtrage approuvés/rejetés
-  test_config.py               ← defaults + override par env
-  test_reduce.py               ← nœud Reduce (flatten+dedupe+filter)
-  test_adversary.py            ← vote adversaire (table de vérité)
-  test_cycles.py               ← terminaison loop-until-dry + dédup persistante
-  test_knowledge_graph.py      ← CRUD DuckDB, provenance, arêtes, dédup
-  test_hitl.py                 ← routage stratégique conditionnel
+  ├── orchestrator_banner.jpg  ← README Banner
+  └── guide-graphes.md         ← Reference legacy manifest
 ```
-
-## Structure du Graphe
-
-1. **`execute_worker_node`** : Prend une tâche brute, l'analyse et retourne un `WorkerOutput`. Exécuté en parallèle via `asyncio.gather`.
-2. **`execute_reduce_node`** : Déduplique (sur `task_id`) et filtre les `None`/doublons. Code pur, 0 token.
-3. **`execute_adversary_node`** : Lance N sceptiques en parallèle (personas divergents) qui votent pour réfuter/approuver chaque tâche.
-4. **`hitl_checkpoint`** *(optionnel, Phase 6)* : approbation humaine **stratégique** (seulement sur les nœuds `HITL_NODES`), affichant la provenance.
-5. **`execute_synth_node`** : Rédige le `FinalSynthesis` à partir des données approuvées.
-
-Parallèlement, **chaque claim est tracée dans le Knowledge Graph** (Phase 5) : les workers écrivent leurs observations, les adversaires leurs réfutations (+arêtes `REFUTES`), le vote marque les statuts (`approved`/`rejected`). L'état survit dans DuckDB entre les runs.
-
-```
-        ┌── worker_t1 ──┐
-tasks ──┼── worker_t2 ──┼──→ Reduce ──→ Adversaires (N sceptiques) ──→ [HITL] ──→ Synth
-        └── worker_t3 ──┘   (dedup)      (vote majorité)                        │
-                                                                                ▼
-                                                                         FinalSynthesis
-```
-
-En mode `exploration`, ce graphe est encapsulé dans une boucle loop-until-dry avec déduplication du déjà-vu.
