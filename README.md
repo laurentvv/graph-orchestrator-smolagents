@@ -16,15 +16,18 @@ Le but de cette architecture est de sortir d'une exécution IA linéaire basique
    - Vote à la majorité : une tâche est rejetée si `>= threshold × N` sceptiques la réfutent. *« La confiance naît de l'examen contradictoire »*.
 3. **Cycles de Convergence loop-until-dry (§5)** :
    - Mode `exploration` : le graphe boucle tant que de nouveaux insights émergent, avec **3 garanties anti-boucle-infinie** (hard cap, critère "dry", dédup contre le déjà-vu **y compris les rejets**).
-4. **Human-in-the-loop (§5)** :
-   - Checkpoint bloquant optionnel (`HITL_ENABLED=true`) avant la synthèse, pour les points à haut risque.
-5. **Contrats de Données Stricts (Pydantic)** :
+4. **Knowledge Graph persistant (Phase 5)** :
+   - État partagé externalisé dans DuckDB : entités, claims (observations/réfutations/insights), arêtes typées (`REFUTES`, `SUPPORTS`).
+   - **Provenance absolue** : chaque claim sait qui l'a produite (agent + modèle + run). Survit à l'effacement du contexte et aux redémarrages.
+5. **Human-in-the-loop stratégique (Phase 6)** :
+   - Checkpoint bloquant **conditionnel** (`HITL_ENABLED` + `HITL_NODES`) : se déclenche seulement sur les nœuds à enjeu (ex. `synth`), pas sur les workers. Affiche la provenance pour décision éclairée.
+6. **Contrats de Données Stricts (Pydantic)** :
    - Chaque nœud a une entrée/sortie strictement typées. **Retry automatique** si le LLM échoue à générer un JSON valide.
-6. **Tiering des Modèles (§4)** :
+7. **Tiering des Modèles (§4)** :
    - Fan-out sur modèle léger (`qwen3.5:2b`), raisonnement (adversaire + synthèse) sur modèle costaud (`hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL`).
 
    > ⚠️ **Contrainte tool-calling** : `smolagents.ToolCallingAgent` s'appuie sur le *function-calling* natif de l'API. Tous les modèles ne le supportent pas correctement via Ollama (`lfm2.5` finit en `finish_reason: length` sans `tool_calls`). Les deux modèles ci-dessus ont été testés et validés via `/v1/chat/completions`. Le `max_tokens=8192` sur le modèle de raisonnement est **obligatoire** pour Gemma (sinon il n'émet jamais son `tool_call`).
-7. **Configuration externalisée & Observabilité** :
+8. **Configuration externalisée & Observabilité** :
    - Tous les paramètres sont surchargeables via `.env` (voir [`.env.example`](.env.example)). Une table récapitulative (tokens in/out, durée par nœud) est affichée en fin de run.
 
 ## Pré-requis
@@ -75,7 +78,7 @@ WORKFLOW_MODE=exploration uv run python -m graph_orchestrator.workflows
 Les tests unitaires (schémas, extraction JSON, vote adversaire, terminaison des cycles, config) ne font **aucun appel LLM** et tournent en <1s :
 
 ```bash
-uv run pytest tests/ -v   # 57 tests, <1s, aucun appel LLM
+uv run pytest tests/ -v   # 86 tests, <1s, aucun appel LLM
 ```
 
 ## Exemple de sortie
@@ -120,7 +123,9 @@ Tous les paramètres sont optionnels (des valeurs par défaut s'appliquent) et s
 | `ADVERSARY_COUNT` | `3` | nombre de sceptiques (vérification adversaire) |
 | `ADVERSARY_THRESHOLD` | `0.5` | fraction de sceptiques requise pour réfuter |
 | `MAX_ITERATIONS` | `3` | hard cap du mode exploration (anti-boucle) |
-| `HITL_ENABLED` | `false` | checkpoint humain bloquant avant synthèse |
+| `HITL_ENABLED` | `false` | active le checkpoint humain (master switch) |
+| `HITL_NODES` | `synth` | nœuds déclenchant le HITL (CSV, ex `synth,transaction`) — routage stratégique |
+| `KG_PATH` | `graph_orchestrator.db` | chemin du Knowledge Graph DuckDB (`:memory:` = volatil) |
 | `WORKFLOW_MODE` | `one_shot` | `one_shot` ou `exploration` |
 | `LOG_LEVEL` | `LOW` | verbosité workers (`LOW`/`MEDIUM`/`HIGH`) |
 
@@ -133,7 +138,9 @@ graph_orchestrator/
   config.py                    ← chargement config (.env + defaults)
   models.py                    ← contrats Pydantic + extraction JSON robuste
   logging_utils.py             ← verbosité + table d'observabilité rich
-  nodes.py                     ← nœuds worker / reduce / adversaire / synth / hitl + retry
+  nodes.py                     ← nœuds worker / reduce / adversaire / synth + retry
+  knowledge_graph.py           ← Knowledge Graph DuckDB (entités/claims/provenance/arêtes) — Phase 5
+  hitl.py                      ← HITL stratégique (routage conditionnel + provenance) — Phase 6
   runner.py                    ← orchestration one-shot async + récap + main()
   workflows.py                 ← mode exploration (loop-until-dry) + sample tasks
 docs/
@@ -146,7 +153,9 @@ tests/
   test_config.py               ← defaults + override par env
   test_reduce.py               ← nœud Reduce (flatten+dedupe+filter)
   test_adversary.py            ← vote adversaire (table de vérité)
-  test_cycles.py               ← terminaison loop-until-dry + dédup déjà-vu
+  test_cycles.py               ← terminaison loop-until-dry + dédup persistante
+  test_knowledge_graph.py      ← CRUD DuckDB, provenance, arêtes, dédup
+  test_hitl.py                 ← routage stratégique conditionnel
 ```
 
 ## Structure du Graphe
@@ -154,8 +163,10 @@ tests/
 1. **`execute_worker_node`** : Prend une tâche brute, l'analyse et retourne un `WorkerOutput`. Exécuté en parallèle via `asyncio.gather`.
 2. **`execute_reduce_node`** : Déduplique (sur `task_id`) et filtre les `None`/doublons. Code pur, 0 token.
 3. **`execute_adversary_node`** : Lance N sceptiques en parallèle (personas divergents) qui votent pour réfuter/approuver chaque tâche.
-4. **`hitl_checkpoint`** *(optionnel)* : approbation humaine bloquante avant la synthèse.
+4. **`hitl_checkpoint`** *(optionnel, Phase 6)* : approbation humaine **stratégique** (seulement sur les nœuds `HITL_NODES`), affichant la provenance.
 5. **`execute_synth_node`** : Rédige le `FinalSynthesis` à partir des données approuvées.
+
+Parallèlement, **chaque claim est tracée dans le Knowledge Graph** (Phase 5) : les workers écrivent leurs observations, les adversaires leurs réfutations (+arêtes `REFUTES`), le vote marque les statuts (`approved`/`rejected`). L'état survit dans DuckDB entre les runs.
 
 ```
         ┌── worker_t1 ──┐

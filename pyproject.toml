@@ -5,6 +5,7 @@ description = "Architecture de Graph Engineering (Fan-out -> Judge -> Synthesize
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "duckdb>=1.5.5",
     "pydantic>=2.13.4",
     "python-dotenv>=1.0",
     "rich>=13.0",

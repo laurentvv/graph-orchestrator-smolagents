@@ -158,6 +158,34 @@ async def execute_worker_node(
     return await run_with_retry(local_worker, prompt, WorkerOutput, settings.worker_max_retries)
 
 
+# ==========================================
+# Nœud Reduce (§3 : flatten + dedupe + filter, code pur, 0 token)
+# ==========================================
+
+def execute_reduce_node(
+    worker_results: List[WorkerOutput],
+) -> ReduceOutput:
+    """Nœud Reduce : déduplique sur task_id et filtre les None/doublons.
+
+    Code déterministe, aucun appel LLM. Implémente le pattern du guide §3 :
+    on garde la première occurrence de chaque task_id, on jette le reste.
+    """
+    seen_ids: set[str] = set()
+    kept: List[WorkerOutput] = []
+    dropped = 0
+    for r in worker_results:
+        if r is None or r.task_id in seen_ids:
+            dropped += 1
+            continue
+        seen_ids.add(r.task_id)
+        kept.append(r)
+    return ReduceOutput(
+        kept=kept,
+        dropped_count=dropped,
+        reason=f"Dédupliqué sur task_id ; {dropped} doublon(s)/None écarté(s).",
+    )
+
+
 async def execute_judge_node(
     worker_results: List[WorkerOutput],
     original_tasks: List[dict],
@@ -226,34 +254,6 @@ Schéma exact attendu : {{"global_summary": "ton résumé global des problèmes"
 Données validées : {json.dumps([r.model_dump() for r in approved_data], ensure_ascii=False)}
 """
     return await run_with_retry(local_synth, prompt, FinalSynthesis, settings.worker_max_retries)
-
-
-# ==========================================
-# Nœud Reduce (§3 : flatten + dedupe + filter, code pur, 0 token)
-# ==========================================
-
-def execute_reduce_node(
-    worker_results: List[WorkerOutput],
-) -> ReduceOutput:
-    """Nœud Reduce : déduplique sur task_id et filtre les None/doublons.
-
-    Code déterministe, aucun appel LLM. Implémente le pattern du guide §3 :
-    on garde la première occurrence de chaque task_id, on jette le reste.
-    """
-    seen_ids: set[str] = set()
-    kept: List[WorkerOutput] = []
-    dropped = 0
-    for r in worker_results:
-        if r is None or r.task_id in seen_ids:
-            dropped += 1
-            continue
-        seen_ids.add(r.task_id)
-        kept.append(r)
-    return ReduceOutput(
-        kept=kept,
-        dropped_count=dropped,
-        reason=f"Dédupliqué sur task_id ; {dropped} doublon(s)/None écarté(s).",
-    )
 
 
 # ==========================================
@@ -382,24 +382,5 @@ def aggregate_adversary_verdicts(
     )
 
 
-# ==========================================
-# Human-in-the-loop (§5 : checkpoint bloquant, désactivable)
-# ==========================================
-
-def hitl_checkpoint(approved_data: List[WorkerOutput]) -> bool:
-    """Point d'approbation humaine avant la synthèse. Retourne True si validé.
-
-    Affiche les tâches approuvées et demande une confirmation (y/n) en console.
-    Nœud purement synchrone ; à appeler uniquement si settings.hitl_enabled.
-    """
-    print("\n" + "=" * 50)
-    print("  HUMAN-IN-THE-LOOP : validation requise")
-    print("=" * 50)
-    for w in approved_data:
-        print(f"  • [{w.task_id}] (conf={w.confidence_score:.2f}) {w.summary}")
-    print("=" * 50)
-    try:
-        answer = input("Approuver la synthèse de ces tâches ? [y/N] : ").strip().lower()
-    except (EOFError, KeyboardInterrupt):
-        return False
-    return answer in {"y", "yes", "o", "oui"}
+# NOTE: hitl_checkpoint a été déplacé vers graph_orchestrator/hitl.py (HITL stratégique,
+# Phase 6) avec un routage conditionnel (should_trigger_hitl) et un affichage de provenance.

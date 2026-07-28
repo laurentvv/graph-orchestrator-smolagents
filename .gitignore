@@ -23,3 +23,7 @@ venv/
 # --- OS ---
 .DS_Store
 Thumbs.db
+
+# --- Donnees runtime (Knowledge Graph DuckDB) ---
+*.db
+*.db.wal

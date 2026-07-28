@@ -5,16 +5,21 @@ Trois garanties anti-boucle-infinie :
   1. MAX_ITERATIONS — hard cap, sortie forcée.
   2. Critère "dry" — un tour n'apporte aucun nouvel insight (après dédup) => arrêt.
   3. Dédup contre TOUT le déjà-vu, y compris rejets — sinon on reboucle sur les dead-ends.
+
+Phase 5 : la dédup est désormais PERSISTANTE via le Knowledge Graph (DuckDB) — l'état
+des insights déjà vus survit à l'effacement du contexte et aux redémarrages.
 """
 
 import asyncio
 import json
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional, Tuple
 
 from rich.console import Console
 from rich.panel import Panel
 
 from .config import Settings, settings as default_settings
+from .hitl import hitl_checkpoint, should_trigger_hitl
+from .knowledge_graph import KnowledgeGraph
 from .logging_utils import NodeMetrics, render_observability_table
 from .models import FinalSynthesis, WorkerOutput
 from .nodes import (
@@ -25,17 +30,9 @@ from .nodes import (
     execute_reduce_node,
     execute_synth_node,
     execute_worker_node,
-    hitl_checkpoint,
 )
 
 console = Console()
-
-
-def _hash_summary(w: WorkerOutput) -> str:
-    """Empreinte stable d'un summary pour la dédup (normalisée)."""
-    import hashlib
-    norm = (w.summary or "").strip().lower()
-    return hashlib.sha1(norm.encode("utf-8")).hexdigest()[:16]
 
 
 async def run_exploration_workflow(
@@ -47,18 +44,23 @@ async def run_exploration_workflow(
     À chaque itération :
       - Fan-out sur les tâches de l'itération courante
       - Reduce + adversaires
-      - On ne conserve que les insights NOUVEAUX (non vus)
+      - On ne conserve que les insights NOUVEAUX (non vus dans le KG)
       - Si rien de nouveau => "dry" => on s'arrête et on synthétise
+
+    La dédup est persistante : le KG (DuckDB) garde trace de TOUT ce qui a été vu,
+    y compris les rejets (règle d'or §5). L'état survit aux redémarrages.
     """
     fast_model = build_fast_model(settings)
     reasoning_model = build_reasoning_model(settings)
     all_metrics: List[NodeMetrics] = []
 
-    # État du cycle : accumule TOUT ce qui a été vu (règle d'or §5 : y compris rejets)
-    seen_ids: Set[str] = set()
-    seen_summaries: Set[str] = set()
-    accumulated: List[WorkerOutput] = []
+    # Knowledge Graph persistant : remplace les Set en mémoire (seen_ids/seen_summaries).
+    # L'état de dédup survit désormais entre runs (Phase 5).
+    kg = KnowledgeGraph(settings.kg_path)
+    run_id = f"exploration_{id(kg)}"
+    print(f"[*] Knowledge Graph : {settings.kg_path}")
 
+    accumulated: List[WorkerOutput] = []
     current_tasks = seed_tasks
     iteration = 0
 
@@ -84,16 +86,24 @@ async def run_exploration_workflow(
         reduced = execute_reduce_node(raw)
         candidates = reduced.kept
 
-        # --- Dédup contre le déjà-vu (y compris les summaries rejetés auparavant) ---
+        # --- Dédup persistante via le KG (remplace les Set en mémoire) ---
+        # On écrit chaque observation dans le KG ; add_claim() renvoie None si doublon.
         new_outputs: List[WorkerOutput] = []
         for w in candidates:
-            h = _hash_summary(w)
-            if w.task_id in seen_ids or h in seen_summaries:
-                # dead-end : on marque comme vu MAIS on ne l'ajoute pas (règle d'or)
-                continue
-            new_outputs.append(w)
-            seen_ids.add(w.task_id)
-            seen_summaries.add(h)
+            entity_id = f"task:{w.task_id}"
+            kg.add_entity(entity_id, kind="task", name=None)
+            claim_id = kg.add_claim(
+                entity_id=entity_id,
+                content=w.summary,
+                kind="observation",
+                confidence=w.confidence_score,
+                source=f"worker_{w.task_id}",
+                model_id=settings.fast_model_id,
+                run_id=run_id,
+            )
+            if claim_id is not None:
+                # Nouveau (non vu) => on le garde pour la suite
+                new_outputs.append(w)
 
         if not new_outputs:
             print(f"\n[*] Itération {iteration} : RIEN de nouveau (dry). Fin de l'exploration.")
@@ -114,7 +124,29 @@ async def run_exploration_workflow(
                 tag = "[green]✓[/green]" if a.verdict == "approved" else "[red]✗[/red]"
                 console.print(f"    {tag} [bold]{a.task_id}[/bold] — {a.reason[:100]}")
 
-            # On accumule seulement les approuvés ; MAIS les rejets sont déjà marqués vus
+            # Marque le statut dans le KG + trace les réfutations
+            for w in new_outputs:
+                entity_id = f"task:{w.task_id}"
+                claims = kg.get_claims(entity_id, status="open")
+                if not claims:
+                    continue
+                obs_id = claims[-1]["id"]
+                assessment = next((a for a in judge.assessments if a.task_id == w.task_id), None)
+                if assessment is None:
+                    continue
+                if assessment.verdict == "approved":
+                    kg.mark_status(obs_id, "approved")
+                else:
+                    # Rejet : on marque l'obs rejetée MAIS elle reste vue (règle d'or)
+                    kg.mark_status(obs_id, "rejected")
+                    ref_id = kg.add_claim(
+                        entity_id=entity_id, content=assessment.reason, kind="refutation",
+                        confidence=None, source="adversary_panel",
+                        model_id=settings.reasoning_model_id, run_id=run_id,
+                    )
+                    if ref_id is not None:
+                        kg.add_edge(ref_id, obs_id, "REFUTES")
+
             approved_this_round = [w for w in new_outputs if w.task_id in judge.approved_tasks]
             accumulated.extend(approved_this_round)
         else:
@@ -131,9 +163,9 @@ async def run_exploration_workflow(
         print("[-] Aucun insight accumulé au cours de l'exploration.")
         return None, all_metrics
 
-    # --- HITL optionnel ---
-    if settings.hitl_enabled:
-        if not hitl_checkpoint(accumulated):
+    # --- HITL stratégique (Phase 6) ---
+    if should_trigger_hitl("synth", settings):
+        if not hitl_checkpoint(accumulated, node_name="synth"):
             print("[-] Synthèse refusée par l'opérateur. Arrêt propre.")
             return None, all_metrics
 
@@ -142,6 +174,15 @@ async def run_exploration_workflow(
     final_result, synth_metrics = await execute_synth_node(accumulated, reasoning_model, settings)
     if synth_metrics is not None:
         all_metrics.append(synth_metrics)
+
+    # Trace les insights finaux dans le KG
+    if final_result is not None:
+        for insight in final_result.key_insights:
+            kg.add_claim(
+                entity_id="synthesis", content=insight, kind="insight",
+                confidence=None, source="synth",
+                model_id=settings.reasoning_model_id, run_id=run_id,
+            )
 
     return final_result, all_metrics
 

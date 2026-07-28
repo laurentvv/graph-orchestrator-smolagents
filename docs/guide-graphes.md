@@ -24,7 +24,11 @@ Tableau d'écart entre les concepts du guide et leur couverture actuelle dans `g
 | 5 | **Cycles de Convergence** (loop-until-dry + dédup vs déjà-vu) | ✅ | `run_exploration_workflow` : dédup contre approuvés **et** rejets |
 | 5 | Isolation des échecs (erreur = donnée manquante) | ✅ | `execute_reduce_node` filtre les `None`/doublons sans crash |
 | 5 | Isolation par Worktrees | ➖ | N/A (pas de manipulation de fichiers) |
-| 5 | **Human-in-the-loop** (nœud d'approbation) | ✅ | `hitl_checkpoint` (prompt console, désactivable) |
+| 5 | **Human-in-the-loop** (nœud d'approbation) | ✅ | `hitl.py` : `hitl_checkpoint` + routage stratégique (`should_trigger_hitl`) |
+| 5b | **Mémoire Persistante** (Knowledge Graph + provenance) | ✅ | `knowledge_graph.py` : DuckDB, entités/claims/provenance/arêtes typées |
+| 5b | Survie à l'effacement du contexte | ✅ | Persistance fichier DuckDB (`KG_PATH`), état durable entre runs |
+| 5b | Traçabilité absolue (provenance de chaque info) | ✅ | Table `provenance` : source + modèle + run par claim |
+| 6 | **Intégration Humaine Stratégique** (routage conditionnel) | ✅ | `HITL_NODES` : HITL déclenché seulement sur les nœuds à enjeu + affiche la provenance |
 
 ---
 

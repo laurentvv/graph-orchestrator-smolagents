@@ -80,6 +80,10 @@ class Settings:
 
     # --- Human-in-the-loop (§5) ---
     hitl_enabled: bool  # si True, checkpoint bloquant avant la synthèse
+    hitl_nodes: str  # nœuds déclenchant le HITL (CSV, ex "synth") — routage stratégique
+
+    # --- Knowledge Graph persistant (Phase 5) ---
+    kg_path: str  # chemin du fichier DuckDB (ou ":memory:")
 
     # --- Mode de workflow ---
     workflow_mode: str  # "one_shot" (défaut) ou "exploration"
@@ -107,6 +111,8 @@ def load_settings() -> Settings:
         adversary_threshold=_get_float("ADVERSARY_THRESHOLD", 0.5),
         max_iterations=_get_int("MAX_ITERATIONS", 3),
         hitl_enabled=_get_bool("HITL_ENABLED", False),
+        hitl_nodes=_get_str("HITL_NODES", "synth"),
+        kg_path=_get_str("KG_PATH", "graph_orchestrator.db"),
         workflow_mode=_get_str("WORKFLOW_MODE", "one_shot"),
         log_level=_get_str("LOG_LEVEL", "LOW"),
     )
