@@ -1,15 +1,20 @@
 [project]
 name = "graph-orchestrator-smolagents"
-version = "0.2.0"
+version = "0.5.0"
 description = "Architecture de Graph Engineering (Fan-out -> Judge -> Synthesize) pour agents IA avec smolagents et asyncio"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "ddgs>=9.0",
     "duckdb>=1.5.5",
+    "fastapi>=0.115",
+    "markdownify>=1.0",
     "pydantic>=2.13.4",
     "python-dotenv>=1.0",
     "rich>=13.0",
-    "smolagents[openai]>=1.26.0",
+    "smolagents[mcp,openai]>=1.26.0",
+    "uvicorn[standard]>=0.30",
+    "websockets>=13.0",
 ]
 
 [dependency-groups]
@@ -22,7 +27,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["graph_orchestrator"]
+packages = ["graph_orchestrator", "agent_server"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
