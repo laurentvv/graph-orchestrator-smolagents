@@ -1,0 +1,25 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+build/
+
+# --- Environnement virtuel ---
+.venv/
+venv/
+
+# --- Configuration locale (ne pas committer les secrets) ---
+.env
+
+# --- IDE ---
+.vscode/
+.idea/
+.zcode/
+
+# --- OS ---
+.DS_Store
+Thumbs.db
