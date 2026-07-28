@@ -41,7 +41,7 @@ Ce projet utilise `uv` pour gérer les dépendances et l'environnement virtuel.
 # 1. Télécharger les modèles via Ollama (s'assurer qu'Ollama tourne)
 #    - Fan-out (léger) :
 ollama pull qwen3.5:2b
-#    - Juge + Synthèse (raisonnement) :
+#    - Adversaire + Synthèse (raisonnement) :
 ollama pull hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL
 
 # 2. Synchroniser les dépendances Python via uv (inclut le groupe dev : pytest)
@@ -75,8 +75,34 @@ WORKFLOW_MODE=exploration uv run python -m graph_orchestrator.workflows
 Les tests unitaires (schémas, extraction JSON, vote adversaire, terminaison des cycles, config) ne font **aucun appel LLM** et tournent en <1s :
 
 ```bash
-uv run pytest tests/ -v
+uv run pytest tests/ -v   # 57 tests, <1s, aucun appel LLM
 ```
+
+## Exemple de sortie
+
+À la fin de chaque run, le graphe affiche les verdicts adversaires par tâche puis une **table d'observabilité** (tokens et durée par nœud) :
+
+```
+[+] Verdict adversaire : Vote adversaire : 3/3 approuvées.
+    ✓ t1 — 0/3 réfutations (sous le seuil 0.5).
+    ✓ t2 — 0/3 réfutations (sous le seuil 0.5).
+    ✓ t3 — 0/3 réfutations (sous le seuil 0.5).
+
+┌───────────┬────────────────┬────────┬─────────────────┬────────┐
+│ Nœud      │ Modèle         │  Durée │ Tokens (in/out) │  Total │
+├───────────┼────────────────┼────────┼─────────────────┼────────┤
+│ worker_t1 │ qwen3.5        │  38.0s │     1 274 / 648 │  1 922 │
+│ worker_t2 │ qwen3.5        │  56.0s │   6 422 / 1 905 │  8 327 │
+│ worker_t3 │ qwen3.5        │  31.4s │     1 270 / 538 │  1 808 │
+│ skeptic_0 │ gemma-4-E4B-it │  71.5s │     1 393 / 760 │  2 153 │
+│ skeptic_1 │ gemma-4-E4B-it │  80.7s │   3 036 / 1 906 │  4 942 │
+│ skeptic_2 │ gemma-4-E4B-it │  34.2s │     1 392 / 921 │  2 313 │
+│ synth     │ gemma-4-E4B-it │  29.3s │   2 457 / 1 538 │  3 995 │
+│ TOTAL     │                │ 341.1s │                 │ 25 460 │
+└───────────┴────────────────┴────────┴─────────────────┴────────┘
+```
+
+> 💡 **Coût de la fiabilité** : la flotte de N sceptiques multiplie le coût de la vérification (~13k → ~25k tokens pour 3 sceptiques). C'est le trade-off assumé du §5 du guide (« la confiance naît de l'examen contradictoire »). Il se pilote via `ADVERSARY_COUNT`.
 
 ## Configuration
 
@@ -140,6 +166,3 @@ tasks ──┼── worker_t2 ──┼──→ Reduce ──→ Adversaires 
 ```
 
 En mode `exploration`, ce graphe est encapsulé dans une boucle loop-until-dry avec déduplication du déjà-vu.
-        └── worker_t3 ──┘   (LLM)     (LLM)
-         (Fan-out async)
-```
