@@ -20,6 +20,7 @@ def _settings(**overrides) -> Settings:
         reasoning_model_id="gemma",
         reasoning_max_tokens=8192,
         fast_max_tokens=6000,
+        coder_temperature=0.2,
         llm_timeout_s=600.0,
         judge_confidence_threshold=0.7,
         worker_max_retries=3,

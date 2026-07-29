@@ -73,11 +73,16 @@ def build_fast_model(settings: Settings) -> OpenAIServerModel:
     # on le laisse activé (aide au raisonnement tool-calling) mais le budget haut
     # garantit qu'il reste assez de tokens pour le contenu réel du fichier.
     # Timeout : sans lui, un endpoint Ollama distant muet fige le workflow.
+    # Température BASSE (0.2) : CRITIQUE pour le code. Le défaut serveur de
+    # qwen3.5:4b est temperature=1.0 (chat créatif) → choix de tokens aléatoires
+    # qui corrompent la syntaxe HTML/JSON. Une température basse rend le Coder
+    # quasi-déterministe : code cohérent, moins d'hallucinations de format.
     return OpenAIServerModel(
         model_id=settings.fast_model_id,
         api_base=settings.ollama_api_base,
         api_key=settings.ollama_api_key,
         max_tokens=settings.fast_max_tokens,
+        temperature=settings.coder_temperature,
         client_kwargs={"timeout": settings.llm_timeout_s},
     )
 

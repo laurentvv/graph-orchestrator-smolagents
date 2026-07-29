@@ -33,6 +33,12 @@ PARAMETER num_predict 12000
 # (pas logiques/HT) car l'inférence LLM est limitée par la bande passante mémoire.
 PARAMETER num_thread 16
 
+# --- Température : CRITIQUE pour le code ---
+# Le défaut de qwen3.5:4b est temperature=1.0 (chat créatif) → corruption aléatoire
+# de la syntaxe (HTML/JSON cassés). 0.2 = quasi-déterministe, idéal pour coder.
+# Aussi piloté côté Python via CODER_TEMPERATURE (prioritaire sur le serveur).
+PARAMETER temperature 0.2
+
 # NOTE sur mlock : "use_mlock" provoque un "unexpected EOF" sur Ollama 0.32 lors
 # du `ollama create`, et "mlock" (nouvelle syntaxe) n'y est pas reconnu. On
 # n'active donc AUCUN lock. Avec 64 Go de RAM et un modèle ~5 Go, le swap n'a
