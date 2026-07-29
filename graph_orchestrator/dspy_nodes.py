@@ -45,14 +45,21 @@ class RouterSignature(dspy.Signature):
 
 
 class ArchitectSignature(dspy.Signature):
-    """Analyse une tâche complexe et génère un plan d'architecture logicielle modulaire.
-    
-    L'Architecte est responsable du 'Fan-out' : il doit prendre un gros problème (ex: faire un jeu complet)
-    et le découper en plusieurs sous-tâches unitaires (ex: setup de l'UI, moteur physique, gestion des scores)
-    qui pourront être exécutées en parallèle par les CodeAgents.
+    """Analyse une tâche et génère un plan d'architecture en sous-tâches UNITAIRES (1 fichier = 1 sous-tâche).
+
+    RÈGLE DE DÉCOUPAGE (très important) :
+    - Une sous-tâche = UN seul fichier cible à créer de façon autonome et complète.
+    - N'invente PAS de sous-tâches redondantes (ex: une sous-tâche "setup" + une "structure" pour
+      le même fichier). Chaque fichier = exactement UNE sous-tâche.
+    - Vise le MINIMUM de sous-tâches : si la tâche mentionne 3 fichiers (index.html, styles.css,
+      script.js), génère EXACTEMENT 3 sous-tâches (une par fichier), pas 5.
+    - Le découpage granulaire (5+ sous-tâches) est contre-productif : chaque sous-tâche déclenche
+      un agent Coder complet (coûteux). Privilégie 2-4 sous-tâches cohérentes par fichier.
+
+    L'Architecte planifie, il ne code pas.
     """
     task_content: str = dspy.InputField(desc="Le cahier des charges global de la fonctionnalité ou du projet à développer")
-    output: ArchitectOutput = dspy.OutputField(desc="Plan de bataille sous forme de liste de sous-tâches JSON (ArchitectPlanItem)")
+    output: ArchitectOutput = dspy.OutputField(desc="Plan : liste de sous-tâches (1 par fichier cible, 2-4 max). Chaque ArchitectPlanItem a un target_files=[fichier_unique].")
 
 
 class SecuritySignature(dspy.Signature):
@@ -86,14 +93,20 @@ class CodeJudgeSignature(dspy.Signature):
 # ==========================================
 
 def _configure_dspy(settings: Settings, model_id: str):
-    """Configure dynamiquement DSPy pour pointer vers une instance locale Ollama."""
+    """Configure dynamiquement DSPy pour pointer vers une instance locale Ollama.
+
+    Timeout appliqué : sans lui, un endpoint Ollama distant muet fige le nœud DSPy
+    (bug observé sur le serveur distant 10.201.12.50 qui répond au /api/tags mais
+    timeout sur l'inférence). Le timeout permet à l'appel d'échouer proprement.
+    """
     api_base = settings.ollama_reasoning_api_base if model_id == settings.reasoning_model_id else settings.ollama_api_base
     lm = dspy.LM(
-        f"openai/{model_id}", 
-        api_base=api_base, 
+        f"openai/{model_id}",
+        api_base=api_base,
         api_key="sk-none",
         max_tokens=8192,
         temperature=0.3,
+        timeout=settings.llm_timeout_s,
     )
     return lm
 

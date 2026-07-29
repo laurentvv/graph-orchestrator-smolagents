@@ -12,7 +12,21 @@ des insights déjà vus survit à l'effacement du contexte et aux redémarrages.
 
 import asyncio
 import json
+import sys
 from typing import List, Optional, Tuple
+
+# --- Flushing temps-réel (observabilité) -------------------------------------
+# En contexte non-TTY (pipe, redirection, serveur, agent), Python bufferise stdout
+# et les print() n'apparaissent qu'à la fin du process — impossible d'observer la
+# progression d'un workflow qui peut durer plusieurs minutes. On force le mode
+# line-buffered pour que chaque print() soit visible immédiatement.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(line_buffering=True)
+    except Exception:
+        # Fallback : si reconfigure() n'est pas dispo, on force l'unbuffered via
+        # write+flush à l'ancienne n'est pas trivial sans wrapper ; on ignore.
+        pass
 
 from rich.console import Console
 from rich.panel import Panel

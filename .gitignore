@@ -27,6 +27,13 @@ Thumbs.db
 # --- Donnees runtime (Knowledge Graph DuckDB) ---
 *.db
 *.db.wal
+graph_orchestrator.db.bak.*
+
+# --- Code source externe de référence (volumineux, sous-repos git) ---
+references/
+
+# --- Artefacts générés par le graphe (régénérables) ---
+landing_page/
 
 # --- Frontend (web/) ---
 web/node_modules/

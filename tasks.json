@@ -12,8 +12,8 @@
   "coding": [
     {
       "id": "T004",
-      "content": "Crée un jeu de Tetris simple mais complet en HTML, CSS et JavaScript pur. Le jeu doit être jouable directement dans le navigateur, avec des flèches directionnelles. Avant de définir les fichiers, l'Architecte DOIT décider d'un nom de répertoire approprié (par exemple 'tetris_app/' ou 'jeu_tetris/') et l'inclure dans les chemins de tous les fichiers cibles (ex: 'tetris_app/index.html'). L'architecture doit comporter au moins 3 fichiers.",
-      "target_files": []
+      "content": "Crée une landing page premium et professionnelle pour une startup fictive nommée « Nimbus » (une plateforme SaaS d'automatisation de workflows par IA). La page doit être visuellement moderne, soignée et de qualité « agence web » : un hero percutant avec titre accrocheur, sous-titre et bouton call-to-action ; une section « Fonctionnalités » avec au moins 3 cartes d'icônes/features ; une section « Comment ça marche » en 3 étapes ; une section témoignages (quotes de clients) ; et un footer complet avec liens. Utilise du HTML5 sémantique (header, main, section, article, footer) et du CSS3 professionnel : design moderne, palette de couleurs cohérente, typographie soignée (police sans-serif du système), animations CSS subtiles (transitions, hover effects, animation d'apparition), layout responsive (mobile-first avec media queries), et utilisation de Flexbox/CSS Grid. Ajoute un peu de JavaScript vanilla pur (pas de framework ni CDN externe) pour des interactions légères : un menu burger responsive, un défilement doux (smooth scroll) vers les sections, et une animation d'apparition au scroll (intersection observer). Tous les fichiers DOIVENT être placés dans un sous-répertoire dédié nommé « landing_page/ ». L'architecture doit comporter au moins 3 fichiers : landing_page/index.html, landing_page/styles.css et landing_page/script.js.",
+      "target_files": ["landing_page/index.html", "landing_page/styles.css", "landing_page/script.js"]
     }
   ],
   "one_shot": [

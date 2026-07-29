@@ -1,0 +1,47 @@
+# ============================================================
+# Modelfile : qwen-3.5-bigctx — Modèle FAST du Graph Orchestrator
+# ============================================================
+# Rôle : Fan-out (workers) + Coder (smolagents ToolCallingAgent).
+# C'est le modèle qui ÉCRIT le code. Il doit avoir :
+#   - un grand contexte (num_ctx) pour ne pas tronquer l'historique des tools,
+#   - un budget de génération suffisant (num_predict) pour écrire des fichiers complets,
+#   - un system prompt spécialisé "développeur" pour produire du code de qualité.
+#
+# CRÉATION (sur le serveur Ollama, distant 10.201.12.50 OU localhost) :
+#   ollama create qwen-3.5-bigctx -f docs/Modelfile.qwen-3.5-bigctx
+#
+# Ce Modelfile est basé sur qwen3.5:4b (parent de l'ancien qwen-3.4-bigctx),
+# qui supporte nativement le tool-calling (validé).
+# ============================================================
+
+FROM qwen3.5:4b
+
+# --- Contexte & génération ---
+# Grand contexte (32k) : le Coder accumule l'historique des appels d'outils
+# (prompt + skills injectés + N tours). Sans contexte large, Ollama tronque
+# l'historique -> le modèle perd le fil -> corruption des fichiers générés.
+# (bug observé : 45k tokens d'entrée écrasés dans num_ctx=2048 par défaut).
+PARAMETER num_ctx 32768
+
+# Budget de génération généreux : un fichier HTML/CSS/JS complet fait 2-4k tokens.
+# Trop bas = génération coupée en plein tool_call JSON = contenu corrompu/tronqué.
+# NOTE : ce paramètre est aussi piloté côté Python via FAST_MAX_TOKENS=12000.
+PARAMETER num_predict 12000
+
+# --- Optimisation CPU (serveur 16 cœurs physiques, 64 Go RAM) ---
+# Utilise les 16 cœurs physiques. Important : mettre le nombre de cœurs PHYSIQUES
+# (pas logiques/HT) car l'inférence LLM est limitée par la bande passante mémoire.
+PARAMETER num_thread 16
+
+# NOTE sur mlock : "use_mlock" provoque un "unexpected EOF" sur Ollama 0.32 lors
+# du `ollama create`, et "mlock" (nouvelle syntaxe) n'y est pas reconnu. On
+# n'active donc AUCUN lock. Avec 64 Go de RAM et un modèle ~5 Go, le swap n'a
+# de toute façon pas lieu. (Si fiabilité requise, passer à Ollama >=0.34 qui
+# supporte "mlock" correctement.)
+
+# --- Spécialisation "développeur" ---
+# System prompt qui cadre le modèle sur son rôle. smolagents ajoute ses propres
+# instructions par-dessus, mais ce socle oriente déjà vers la production de code.
+SYSTEM """
+Tu es un développeur expert et autonome. Tu écris du code complet, réel et fonctionnel — jamais de placeholders, mocks ou TODO. Quand tu utilises un outil d'écriture de fichier, tu passes le CONTENU COMPLET dans l'argument prévu, jamais vide. Ton code est optimisé, idiomatique et prêt à l'emploi. Tu ne donnes pas de longues explications sauf si demandé : la concision s'applique à ta prose, PAS au contenu des fichiers.
+"""

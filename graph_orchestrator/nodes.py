@@ -31,6 +31,7 @@ from .models import (
     extract_and_validate,
 )
 from .tools import read_file, write_file, edit_file, bash_command, list_directory
+from .skills_loader import build_skills_block
 
 @tool
 def query_duckdb_knowledge_graph(sql_query: str) -> str:
@@ -64,10 +65,20 @@ def query_duckdb_knowledge_graph(sql_query: str) -> str:
 # ==========================================
 
 def build_fast_model(settings: Settings) -> OpenAIServerModel:
+    # max_tokens généreux OBLIGATOIRE pour le Coder : un fichier HTML/CSS/JS complet
+    # dépasse facilement 2000-4000 tokens. Sans budget suffisant, Ollama coupe la
+    # génération en plein milieu d'un tool_call JSON (finish_reason=length) et le
+    # contenu du fichier est corrompu/tronqué (cf. bug run #3 : garbage échappé).
+    # NOTE : les Qwen3.5 ont un mode "thinking" qui consomme une partie du budget ;
+    # on le laisse activé (aide au raisonnement tool-calling) mais le budget haut
+    # garantit qu'il reste assez de tokens pour le contenu réel du fichier.
+    # Timeout : sans lui, un endpoint Ollama distant muet fige le workflow.
     return OpenAIServerModel(
         model_id=settings.fast_model_id,
         api_base=settings.ollama_api_base,
         api_key=settings.ollama_api_key,
+        max_tokens=settings.fast_max_tokens,
+        client_kwargs={"timeout": settings.llm_timeout_s},
     )
 
 
@@ -79,6 +90,7 @@ def build_reasoning_model(settings: Settings) -> OpenAIServerModel:
         api_base=settings.ollama_reasoning_api_base,
         api_key=settings.ollama_api_key,
         max_tokens=settings.reasoning_max_tokens,
+        client_kwargs={"timeout": settings.llm_timeout_s},
     )
 
 
@@ -208,6 +220,12 @@ async def execute_worker_node(
     """
     return await run_with_retry(local_worker, prompt, WorkerOutput, settings.worker_max_retries)
 
+# ---------------------------------------------------------------------------
+# DEPRECATED (mode coding) : les versions DSPy dans dspy_nodes.py sont désormais
+# utilisées par run_coding_workflow (import local). Ces versions smolagents/
+# API-Ollama-native sont conservées pour référence mais ne sont plus appelées
+# dans le workflow coding. Ne pas supprimer sans vérifier les autres modes.
+# ---------------------------------------------------------------------------
 async def execute_router_node(
     task_content: str,
     fast_model: OpenAIServerModel,
@@ -316,7 +334,10 @@ async def execute_coder_node(
         name=f"coder_{task['id'].replace('-', '_')}",
         description="Agent développeur capable d'explorer le projet, d'écrire, lire, modifier du code.",
         verbosity_level=resolve_verbosity("HIGH"),
-        max_steps=10,  # Augmenté à 10 pour laisser le temps de lire, écrire et tester
+        # 12 steps : borne le temps total. Avec "un write_file par fichier + final_answer"
+        # (cf. prompt), 12 steps couvrent 3-5 fichiers + marge. 24 encourageait la boucle
+        # de re-écriture (bug run #7 : le Coder re-génère le même fichier indéfiniment).
+        max_steps=12,
     )
 
     import sys
@@ -327,45 +348,60 @@ async def execute_coder_node(
         except Exception:
             pass
 
-    import os
-    
-    # Liste uniquement les chemins des SKILL.md pour éviter de surcharger le contexte du LLM
-    skills_content = ""
-    skills_dir = "skills"
-    if os.path.exists(skills_dir):
-        skills_content += "Tu peux utiliser l'outil 'read_file' pour lire les instructions détaillées de ces compétences si tu en as besoin :\n"
-        for root, dirs, files in os.walk(skills_dir):
-            if "SKILL.md" in files:
-                skill_path = os.path.join(root, "SKILL.md").replace("\\", "/")
-                skills_content += f"- {skill_path}\n"
-
     target_files_instruction = ""
     if "target_files" in task and task["target_files"]:
         files_list = "\n".join([f"- {f}" for f in task["target_files"]])
-        target_files_instruction = f"\nFICHIERS CIBLES (TU DOIS IMPÉRATIVEMENT CRÉER/MODIFIER CES FICHIERS) :\n{files_list}\n"
+        target_files_instruction = f"""
+### ⚠️ FICHIERS CIBLES — TU DOIS CRÉER CES FICHIERS (priorité absolue)
+{files_list}
 
-    prompt = f"""Tu es un Agent Développeur Senior autonome. Ta mission est d'accomplir la tâche suivante en utilisant tes outils de manière itérative.
+- 'write_file' crée automatiquement les sous-répertoires manquants : tu peux appeler
+  'write_file' avec le chemin complet (ex: "landing_page/index.html") MÊME SI le dossier
+  n'existe pas encore. N'essaie PAS de lister un dossier qui n'existe pas.
+- Chaque fichier cible DOIT être créé via 'write_file'. Ne passe pas au reste avant."""
 
-MÉTHODOLOGIE OBLIGATOIRE :
-1. ÉDITION : Préfère 'edit_file' pour modifier chirurgicalement un fichier existant. N'utilise 'write_file' que pour créer de nouveaux fichiers.
-2. AUCUN MOCK OU PLACEHOLDER : Tu dois écrire une implémentation COMPLÈTE, RÉELLE et FONCTIONNELLE. Il est strictement interdit d'écrire des simulations (mocks), des carrés vides ou des commentaires du type "Logique ici". Si on te demande un Tetris, code un vrai Tetris avec les vraies règles.
+    # Skills ciblés pour cette tâche (socle coder + spécialisés selon le contenu).
+    # Le contenu des SKILL.md est injecté directement (pas une liste de chemins à
+    # explorer), pour éviter la dispersion stérile du Coder vers les fichiers .md.
+    skills_block = build_skills_block(task.get("content", ""))
+
+    prompt = f"""Tu es un Agent Développeur Senior autonome. Ta mission est d'accomplir la tâche ci-dessous en utilisant tes outils.
+
+### PLAN D'ACTION STRICT (UNE PASSE UNIQUE — ne boucle pas)
+1. ÉCRIRE : appelle 'write_file' UNE SEULE FOIS par fichier cible. Écris le contenu complet et définitif du fichier dès le premier appel.
+2. TERMINER : dès que chaque fichier cible a été écrit une fois, appelle IMMÉDIATEMENT 'final_answer'. Ne re-écris PAS un fichier déjà créé.
 {target_files_instruction}
-### TES COMPÉTENCES (SKILLS)
-Voici les instructions et compétences que tu DOIS respecter et utiliser selon la situation :
-{skills_content}
 
-Contenu de la tâche : {task['content']}
+### ⚠️ RÈGLE ANTI-BOUCLE (très important)
+- UN fichier = UN seul 'write_file'. Si write_file répond "Successfully wrote", le fichier est FAIT. Passe au fichier suivant, ou si c'était le dernier, appelle 'final_answer'.
+- NE RE-ÉCRIS JAMAIS un fichier que tu viens de créer "pour l'améliorer" ou "pour vérifier". Ton premier jet est ton jet final.
+- NE RELIS PAS les fichiers après écriture (ça gaspille des étapes et tente de re-générer). La validation est faite plus tard par d'autres agents.
+- Objectif : le moins d'étapes possible. Idéalement : N appels write_file (un par fichier) + 1 final_answer.
 
-IMPORTANT : Prends ton temps, tu peux utiliser tes outils autant de fois que nécessaire.
-Une fois que tu as terminé, vérifie ton travail. Puis retourne ton résultat final STRICTEMENT en utilisant l'outil 'final_answer'.
-Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_answer :
+### RÈGLES D'OUTILS
+- 'write_file' (path, content) : crée un fichier complet. Sous-dossiers créés automatiquement. UN SEUL APPEL par fichier.
+- 'edit_file' (path, old_string, new_string) : modifie un fichier EXISTANT. Inutile pour une création.
+- 'read_file' (path) : lis le CONTENU d'un fichier. Ne l'utilise qu'avant un edit, pas après un write.
+- 'list_directory' (path) : liste un dossier EXISTANT. Ne l'appelle pas sur un fichier ni un dossier inexistant.
+- NE FAIS PAS de recherche web ni d'exploration de skills. Ton expertise suffit.
+
+### EXIGENCE DE QUALITÉ
+AUCUN MOCK OU PLACEHOLDER : implémentation COMPLÈTE, RÉELLE et FONCTIONNELLE. Interdiction absolue de placeholders ("TODO", "Logique ici"), fonctions vides, ou mocks. Code prêt pour la production, respectant les conventions du langage.
+
+{skills_block}
+
+### Contenu de la tâche
+{task['content']}
+
+### Pour terminer
+Quand tous les fichiers cibles sont créés et vérifiés, retourne ton résultat STRICTEMENT via l'outil 'final_answer'. Ton JSON DOIT respecter EXACTEMENT ce format :
 {{
   "name": "final_answer",
   "arguments": {{
     "answer": {{
       "task_id": "{task['id']}",
-      "status": "success ou failure",
-      "details": "Un résumé technique détaillé des fichiers modifiés et des actions effectuées."
+      "status": "success",
+      "details": "Résumé technique détaillé des fichiers créés/modifiés."
     }}
   }}
 }}
@@ -488,6 +524,8 @@ Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_an
     return await run_with_retry(local_security, prompt, SecurityOutput, settings.worker_max_retries)
 
 
+# DEPRECATED (mode coding) : voir la note ci-dessus. Version dspy_nodes utilisée
+# par run_coding_workflow. Conservée pour référence.
 async def execute_code_judge_node(
     task: dict,
     tester_result: Optional[CoderOutput],

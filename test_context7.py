@@ -10,10 +10,12 @@ load_dotenv()
 async def test_mcp():
     print("Testing Context7 MCP connection...")
     
-    # Configure the MCP server for Context7
+    # Configure the MCP server for Context7.
+    # NOTE : le package npm historique @context7/mcp n'existe plus (404).
+    # Le serveur officiel est désormais publié par Upstash sous @upstash/context7-mcp.
     server_parameters = StdioServerParameters(
         command="npx",
-        args=["-y", "@context7/mcp"],
+        args=["-y", "@upstash/context7-mcp"],
         env=os.environ.copy()
     )
 
