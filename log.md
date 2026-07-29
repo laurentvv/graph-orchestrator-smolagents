@@ -226,3 +226,42 @@ curl http://10.201.12.50:11434/api/show -d '{"name":"nanbeige-bigctx"}'
 - Objectif : éliminer la corruption des gros contenus JSON (le Coder ne génère plus
   qu'un fragment, pas tout le fichier).
 
+## [2026-07-29] fix | Température du Coder : 1.0 (chat créatif) → 0.2 (code)
+- DÉCOUVERTE CRITIQUE : le modèle distant qwen-3.5-bigctx héritait de temperature=1.0
+  (défaut qwen3.5:4b) + top_p 0.95. Le Coder (smolagents) ne fixait aucune température
+  → héritait du 1.0 serveur → choix de tokens aléatoires = cause MAJEURE de corruption
+  de la syntaxe HTML/JSON.
+- FIX double couche : (1) Modelfile PARAMETER temperature 0.2 (le plus sûr, tous appels),
+  (2) config CODER_TEMPERATURE=0.2 appliqué dans build_fast_model (prioritaire serveur).
+- Router/Judge (API native) déjà à 0.0. DSPy déjà à 0.3. Le Coder était le seul orphelin.
+- Suite complète : 127 PASS.
+
+## [2026-07-29] pr | PR #3 créée → Kilo review (crash puis relance SUCCESS) → MERGED
+- Branche feat/search-replace-edit → squash merge → main (commit e295919).
+- Contenu : search_replace + Mutex + température 0.2 + tests (127 PASS) + docs plan.
+- Kilo Code Review : 1er run FAILURE (crash Kilo, pas lié à la PR), relance SUCCESS.
+- Branche locale + remote supprimées après merge.
+
+## 🎯 RÉPARTITION MODÈLES PAR NŒUD (workflow coding, état actuel)
+- Coder/Router/Judge → qwen-3.5-bigctx sur DISTANT CPU (10.201.12.50). temp 0.2.
+- Architect/Tester/Security → gemma-4-E4B sur LOCALHOST GPU. temp 0.3 (DSPy).
+- Décision : garder cette config pour valider search_replace + température à conditions
+  égales. Coder → Gemma4 GPU = évolution future (1 seul modèle en VRAM 6 Go, séquentiel OK).
+
+## [2026-07-30] run12 | RUN FINAL VALIDÉ : HTML PROPRE ET COMPLET 🎉🎉
+- Modèle distant recréé avec température 0.2 (vérifié via /api/show).
+- Run avec search_replace + température 0.2 sur qwen-3.5-bigctx distant CPU.
+- RÉSULTAT DÉCISIF : index.html = 10248 chars / 203 lignes, HTML5 PROPRE ET COMPLET.
+  * 0 séquence corrompue \u003c (vs garbage total au run #11).
+  * Toutes balises équilibrées : <!DOCTYPE>×1, <html></html>, <head></head>,
+    <body></body>, <header></header>, <nav></nav>×2, <main></main>,
+    <footer></footer>, <section></section>×5, <div></div>×12.
+  * Liens CSS/JS corrects, texte français réel ("Nimbus", "Comment ça marche").
+  * Coder finalise par final_answer (anti-boucle OK).
+- LE BLOCAGE QUALITÉ EST RÉSOLU. Les 2 leviers combinés (température 0.2 +
+  search_replace) ont éliminé la corruption des gros contenus.
+- Process complet de bout en bout : Router→Architect→Coder(write_file propre)→
+  Tester(MCP)→Judge, avec index.html complet. Validation ATTEINTE.
+
+
+
