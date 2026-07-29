@@ -67,25 +67,34 @@ class Tetromino {
     } 
 
     // Checks a hypothetical position for collision against the board *state* and walls
-    checkCollisionAt(board) {
-        return this.shape.some(offset => {
-            const nextRow = this.position.row + offset.r;
-            const nextCol = this.position.col + offset.c;
+    checkCollisionAt(board, shapeToTest = this.shape, posToTest = this.position) {
+        return shapeToTest.some(offset => {
+            const nextRow = posToTest.row + offset.r;
+            const nextCol = posToTest.col + offset.c;
 
             // 1. Check Bounds Collision (Walls and Floor)
-            if (nextRow < 0 || nextCol < 0 || nextCol >= board.width) {
-                return true; // Wall or ceiling collision
+            if (nextCol < 0 || nextCol >= board.width) {
+                return true; // Wall collision
             }
             const floorReached = nextRow >= board.height;
             if (floorReached) return true;
 
-            // 2. Check Occupancy Collision (Settled Blocks) - only if not past the bottom
-            if (nextRow < board.height && board.grid[nextRow] && board.grid[nextRow][nextCol] !== 'empty') {
+            // 2. Check Occupancy Collision (Settled Blocks)
+            if (nextRow >= 0 && nextRow < board.height && board.grid[nextRow] && board.grid[nextRow][nextCol] !== 'empty') {
                  return true; // Bump into settled block
             }
 
             return false;
         });
+    }
+
+    // Generate a new rotated shape array (90 degrees clockwise)
+    getRotatedShape() {
+        if (this.type === 'O') return this.shape; // O piece doesn't rotate
+        return this.shape.map(offset => ({
+            r: offset.c,
+            c: -offset.r
+        }));
     }
 }
 
@@ -192,29 +201,44 @@ const GameState = {
 
     // --- MOVEMENT LOGIC (Simplified) ---
     tryMovePiece(offset) {
-         if (this.currentPiece.checkCollisionAt(this.board)) {
-            // Collision detected: lock piece and spawn new one if not game over
-            const crashed = !!offset || this.gravityTimer >= 500; // Did it crash/settle?
+        const nextPos = {
+            row: this.currentPiece.position.row + offset.r,
+            col: this.currentPiece.position.col + offset.c
+        };
 
-             if (crashed) {
-                this.currentPiece.position.row += offset.r;
-                this.currentPiece.position.col += offset.c;
+         if (this.currentPiece.checkCollisionAt(this.board, this.currentPiece.shape, nextPos)) {
+            // Collision detected: lock piece and spawn new one if not game over
+            const crashed = !!offset.r || this.gravityTimer >= 500; // Did it crash downwards?
+
+             if (crashed && offset.r > 0) {
                  this.board.lockPiece(this.currentPiece);
                  this.spawnNewPiece(); // Move to the next piece
-             } else {
-                // Successful move (e.g., player input)
-                this.currentPiece.position.row += offset.r;
-                this.currentPiece.position.col += offset.c;
-            }
+             } 
+             // If we crashed horizontally, do nothing
 
+        } else {
+            // Successful move
+            this.currentPiece.position = nextPos;
         }
     }, 
 
-     handlePlayerInput(direction) { // direction: 'left' | 'right' | 'down'
-        let move = { row: 0, col: 0 };
-        if (direction === 'left') move = { row: 0, col: -1 };
-        else if (direction === 'right') move = { row: 0, col: 1 };
-        else if (direction === 'down') move = { row: 1, col: 0 }; // Soft drop
+    rotatePiece() {
+        if (!this.currentPiece) return;
+        const rotatedShape = this.currentPiece.getRotatedShape();
+        if (!this.currentPiece.checkCollisionAt(this.board, rotatedShape, this.currentPiece.position)) {
+            this.currentPiece.shape = rotatedShape;
+        }
+    }, 
+
+     handlePlayerInput(direction) { // direction: 'left' | 'right' | 'down' | 'rotate'
+        let move = { r: 0, c: 0 };
+        if (direction === 'left') move = { r: 0, c: -1 };
+        else if (direction === 'right') move = { r: 0, c: 1 };
+        else if (direction === 'down') move = { r: 1, c: 0 }; // Soft drop
+        else if (direction === 'rotate') {
+            this.rotatePiece();
+            return;
+        }
 
         this.tryMovePiece(move);
     },
@@ -308,6 +332,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case 'ArrowDown': // Soft drop
                 GameState.handlePlayerInput('down'); 
+                break;
+            case 'ArrowUp': // Rotate
+                GameState.handlePlayerInput('rotate');
                 break;
         }
     });

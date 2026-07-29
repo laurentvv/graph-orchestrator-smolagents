@@ -13,8 +13,8 @@ from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
-# Charge un éventuel .env à la racine du projet (silencieux s'il n'existe pas).
-load_dotenv()
+# Charge un éventuel .env à la racine du projet, et écrase les variables d'environnement système existantes.
+load_dotenv(override=True)
 
 
 def _get_bool(key: str, default: bool) -> bool:
@@ -60,6 +60,7 @@ class Settings:
 
     # --- Connexion Ollama (endpoint OpenAI-compatible) ---
     ollama_api_base: str
+    ollama_reasoning_api_base: str
     ollama_api_key: str
 
     # --- Tiering des modèles ---
@@ -97,6 +98,9 @@ def load_settings() -> Settings:
     return Settings(
         ollama_api_base=_normalize_api_base(
             _get_str("OLLAMA_API_BASE", "http://localhost:11434/v1")
+        ),
+        ollama_reasoning_api_base=_normalize_api_base(
+            _get_str("OLLAMA_REASONING_API_BASE", _get_str("OLLAMA_API_BASE", "http://localhost:11434/v1"))
         ),
         ollama_api_key=_get_str("OLLAMA_API_KEY", "sk-local"),
         fast_model_id=_get_str("FAST_MODEL_ID", "qwen3.5:2b"),

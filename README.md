@@ -76,8 +76,23 @@ cp .env.example .env
 
 Ensure your Ollama server is running in the background (`ollama serve`).
 
+### Managing Prompts and Tasks (`tasks.json`)
+You don't need to touch Python code to give orders to the orchestrator. Simply modify the `tasks.json` file in the root directory. This file dictates what tasks are run depending on the active `WORKFLOW_MODE`.
+
+```json
+{
+  "coding": [
+    {
+      "id": "T004",
+      "content": "Crée un jeu de Tetris simple...",
+      "target_files": ["index.html", "style.css", "tetris.js"]
+    }
+  ]
+}
+```
+
 ### Software Engineering Mode (Coding Workflow)
-Unleash the full multi-agent hybrid team (DSPy Architect ➔ smolagents Coders ➔ Testers ➔ DSPy Judge):
+Unleash the full multi-agent hybrid team (DSPy Architect ➔ smolagents Coders ➔ Testers ➔ DSPy Judge) using the tasks defined in your `tasks.json`:
 ```bash
 $env:WORKFLOW_MODE="coding"
 $env:PYTHONIOENCODING="utf-8"
@@ -110,8 +125,9 @@ All parameters can be customized via environment variables or the `.env` file:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OLLAMA_API_BASE` | `http://localhost:11434/v1` | OpenAI-compatible endpoint |
-| `FAST_MODEL_ID` | `qwen3.5:2b` | Light model for fan-out workers and routers |
+| `OLLAMA_API_BASE` | `http://localhost:11434/v1` | OpenAI-compatible endpoint (Target for FAST_MODEL_ID, can be remote e.g., AlmaLinux) |
+| `OLLAMA_REASONING_API_BASE` | `http://localhost:11434/v1` | Endpoint specifically for the heavy reasoning model |
+| `FAST_MODEL_ID` | `qwen2.5-coder:3b` | Light model for fan-out workers and routers |
 | `REASONING_MODEL_ID` | `hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL` | Heavy model for ChainOfThought |
 | `ADVERSARY_COUNT` | `3` | Number of independent skeptics for validation |
 | `MAX_ITERATIONS` | `3` | Feedback loop limit for Coders and Exploration |
@@ -131,6 +147,7 @@ graph_orchestrator/
   ├── workflows.py             ← Complex orchestrations integrating DSPy and smolagents
   ├── knowledge_graph.py       ← DuckDB integration
   └── hitl.py                  ← Human-In-The-Loop logic
+tasks.json                     ← 📝 User task definitions and prompts (auto-loaded)
 docs/
   ├── orchestrator_banner.jpg  ← README Banner
   └── guide-graphes.md         ← Reference legacy manifest

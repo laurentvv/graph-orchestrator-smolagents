@@ -132,5 +132,24 @@ def extract_and_validate(response: Any, model_class: type[BaseModel]) -> Optiona
 
         return model_class.model_validate_json(raw_json)
     except (ValidationError, json.JSONDecodeError) as e:
-        print(f"[-] Échec de validation du contrat de données pour {model_class.__name__} : {e}")
-        return None
+        print(f"[-] Pydantic a échoué. Tentative de sauvetage avec DSPy pour {model_class.__name__}...")
+        try:
+            import dspy
+            from graph_orchestrator.config import settings
+            import logging
+            logging.getLogger("dspy").setLevel(logging.CRITICAL)
+            
+            # Utilisation du petit modèle (très rapide) via Ollama Guided Decoding ou DSPy typed
+            lm = dspy.LM(f"ollama_chat/{settings.fast_model_id}", api_base=settings.ollama_api_base.replace("/v1", ""), api_key=settings.ollama_api_key)
+            with dspy.context(lm=lm):
+                class JSONFixSignature(dspy.Signature):
+                    """Extract the exact JSON fields from the broken text into the correct schema."""
+                    broken_text: str = dspy.InputField()
+                    fixed_data: model_class = dspy.OutputField()
+                
+                predictor = dspy.Predict(JSONFixSignature)
+                result = predictor(broken_text=str(response))
+                return result.fixed_data
+        except Exception as dspy_e:
+            print(f"[-] Le sauvetage DSPy a échoué : {dspy_e}")
+            return None

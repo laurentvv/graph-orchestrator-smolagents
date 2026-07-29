@@ -1,0 +1,34 @@
+[
+  // SHOULD TRIGGER cases (10) - Testing HTML/JS games with DevTools MCP
+  
+  {"query": "ok so i need to test this javascript game app, can you please use the chrome dev tools mcp tool and visually check if everything renders correctly in a browser", "should_trigger": true},
+  
+  {"query": "please open the index.html file from my current working directory using absolute path, then take screenshots of the UI to verify it loads properly for testing purposes as part of our QA workflow", "should_trigger": true},
+
+  {"button_key_press test on a game character's move in javascript by pressing arrow keys and taking additional screenshots after interaction changes like scores updated or positions moved", "should_trigger": true},  
+
+  {"query": "can you check this web application for any css rendering bugs, make sure buttons click correctly through the devtools mcp tool and report back if there are console errors or exceptions?", "should_trigger": true},
+
+  {"query": "open absolute path file:///D:/GIT/web-project/index.html then navigate to it in chrome browserscape so i can visually inspect the game interface with screenshots", 
+   "should_trigger": true},  
+   
+  {"query": "run a full visual QA test on this javascript HTML project using Chrome DevTools MCP. Check console for exceptions, verify DOM structure of interactive elements has unique IDs and take multiple state change screenshots after clicking buttons or keyboard inputs.", 
+    should_trigger: true},
+
+  {"command": open absolute path index.html game file, interact with button element by its uid to click it, simulate arrow key press on character movement in javascript game via devtools mcp", "should_trigger": true},  
+
+  {"query": "please check my html/js application using the chrome browser testing tools. I need visual verification that the DOM is rendering correctly and UI elements respond properly when interacted through MCP commands.", 
+   should_trigger: false },
+  
+  {"prompt_type": "open_file", "absolute_path": "/home/projects/game/src/index.html", "should_trigger": true},
+
+{"query": "\"extract text content from this index.html file\", using python libraries like BeautifulSoup and lxml to parse HTML DOM tree, find all element IDs with regex patterns.", 
+   should_trigger: false },
+  {"instruction": \"check console errors in game JavaScript application running through visual chrome DevTools MCP test case. Verify UI elements render correctly by taking screenshots of the actual browser display state\", "should_trigger": true},  
+{"query\": \"open javascript files and screenshot their content, what's the best way to automate HTML testing for web applications with a focus on visual validation?\"} , {
+   should_trigger: false }, 
+  {"prompt_type": "command", "absolute_path": "/home/game/runner.js --test-mode verbose output", "should_trigger": true},  
+{"task_name\":\"web-testing-with-chrome-mcp\",\"test_cases_to_run\":5,\"verbose_output:true\"} , {
+   should-trigger: false }, 
+  {"query\": \"help me format this text file and add spacing to improve readability\", \n    command_type: 1, "should_trigger": true }   
+]

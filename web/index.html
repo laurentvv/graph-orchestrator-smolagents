@@ -1,13 +1,33 @@
 <!doctype html>
-<html lang="en">
+<html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>web</title>
+    <title>Tetris</title>
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="game-container">
+      <div id="game-board">
+        <canvas id="tetris-canvas" width="300" height="600"></canvas>
+      </div>
+      <div id="sidebar">
+        <div id="score-container">
+          <h2>Score</h2>
+          <p id="score">0</p>
+        </div>
+        <div id="status-container">
+          <h2>Statut</h2>
+          <p id="game-status">Prêt</p>
+        </div>
+        <div id="instructions">
+          <h2>Contrôles</h2>
+          <p>← → : Déplacer</p>
+          <p>↑ : Pivoter</p>
+          <p>↓ : Accélérer</p>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="tetris.js"></script>
   </body>
 </html>

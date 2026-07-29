@@ -86,25 +86,15 @@ class CodeJudgeSignature(dspy.Signature):
 # ==========================================
 
 def _configure_dspy(settings: Settings, model_id: str):
-    """Configure dynamiquement DSPy pour pointer vers une instance locale Ollama.
-    
-    Args:
-        settings: L'objet de configuration contenant l'API Base de l'Ollama.
-        model_id: Le nom du modèle local à utiliser (ex: 'qwen3.5:2b' ou 'gemma-4').
-        
-    Note:
-        La `temperature` est forcée à 0.3 pour éviter le problème de boucle de répétition (infinite looping) 
-        souvent observé sur les petits modèles lors de la phase de 'reasoning' du ChainOfThought.
-        Le `max_tokens` est élevé à 8192 pour accommoder la pensée étendue suivie de la génération JSON.
-    """
+    """Configure dynamiquement DSPy pour pointer vers une instance locale Ollama."""
+    api_base = settings.ollama_reasoning_api_base if model_id == settings.reasoning_model_id else settings.ollama_api_base
     lm = dspy.LM(
         f"openai/{model_id}", 
-        api_base=settings.ollama_api_base, 
+        api_base=api_base, 
         api_key="sk-none",
         max_tokens=8192,
         temperature=0.3,
     )
-    dspy.settings.configure(lm=lm)
     return lm
 
 
@@ -124,12 +114,13 @@ async def execute_router_node(task_content: str, fast_model, settings: Settings)
         Un tuple contenant l'objet Pydantic RouterOutput (ou None si échec) et les métriques du nœud.
     """
     print("[*] DSPy Routeur en cours...")
-    _configure_dspy(settings, settings.fast_model_id)
+    lm = _configure_dspy(settings, settings.fast_model_id)
     start_time = time.time()
     try:
-        predictor = dspy.ChainOfThought(RouterSignature)
-        # Exécution dans un thread séparé pour ne pas bloquer la boucle asynchrone (Event Loop) de smolagents
-        result = await asyncio.to_thread(predictor, task_content=task_content)
+        with dspy.context(lm=lm):
+            predictor = dspy.ChainOfThought(RouterSignature)
+            # Exécution dans un thread séparé pour ne pas bloquer la boucle asynchrone (Event Loop) de smolagents
+            result = await asyncio.to_thread(predictor, task_content=task_content)
         
         metrics = NodeMetrics(
             node="router_dspy", 
@@ -156,11 +147,12 @@ async def execute_architect_node(task: dict, reasoning_model, settings: Settings
         ArchitectOutput contenant la liste des sous-tâches pour le Fan-out des codeurs.
     """
     print("[*] DSPy Architecte en cours d'élaboration du plan...")
-    _configure_dspy(settings, settings.reasoning_model_id)
+    lm = _configure_dspy(settings, settings.reasoning_model_id)
     start_time = time.time()
     try:
-        predictor = dspy.ChainOfThought(ArchitectSignature)
-        result = await asyncio.to_thread(predictor, task_content=task.get("content", ""))
+        with dspy.context(lm=lm):
+            predictor = dspy.ChainOfThought(ArchitectSignature)
+            result = await asyncio.to_thread(predictor, task_content=task.get("content", ""))
         
         metrics = NodeMetrics(
             node="architect_dspy", 
@@ -184,7 +176,7 @@ async def execute_security_reviewer_node(subtask: dict, reasoning_model, setting
         settings (Settings): Configuration globale.
     """
     print(f"[*] DSPy Security Reviewer sur la tâche {subtask.get('id')}...")
-    _configure_dspy(settings, settings.reasoning_model_id)
+    lm = _configure_dspy(settings, settings.reasoning_model_id)
     
     # Lecture du code depuis le disque
     code_content = ""
@@ -197,8 +189,9 @@ async def execute_security_reviewer_node(subtask: dict, reasoning_model, setting
             
     start_time = time.time()
     try:
-        predictor = dspy.ChainOfThought(SecuritySignature)
-        result = await asyncio.to_thread(predictor, task_id=subtask.get("id", "unknown"), code=code_content or "Code manquant")
+        with dspy.context(lm=lm):
+            predictor = dspy.ChainOfThought(SecuritySignature)
+            result = await asyncio.to_thread(predictor, task_id=subtask.get("id", "unknown"), code=code_content or "Code manquant")
         
         metrics = NodeMetrics(
             node="security_dspy", 
@@ -227,7 +220,7 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
         CodeJudgeOutput dictant si le code est 'approved' ou s'il nécessite un feedback.
     """
     print(f"[*] DSPy Code Judge sur la tâche {subtask.get('id')}...")
-    _configure_dspy(settings, settings.reasoning_model_id)
+    lm = _configure_dspy(settings, settings.reasoning_model_id)
     
     # Lecture du code depuis le disque
     code_content = ""
@@ -245,14 +238,15 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
     tests = str(test_res) if test_res else "Aucun résultat de test."
     
     try:
-        predictor = dspy.ChainOfThought(CodeJudgeSignature)
-        result = await asyncio.to_thread(
-            predictor, 
-            task_id=subtask.get("id", "unknown"), 
-            code=code_content or "Code manquant", 
-            security_vulnerabilities=vulns, 
-            test_results=tests
-        )
+        with dspy.context(lm=lm):
+            predictor = dspy.ChainOfThought(CodeJudgeSignature)
+            result = await asyncio.to_thread(
+                predictor, 
+                task_id=subtask.get("id", "unknown"), 
+                code=code_content or "Code manquant", 
+                security_vulnerabilities=vulns, 
+                test_results=tests
+            )
         
         metrics = NodeMetrics(
             node="code_judge_dspy", 

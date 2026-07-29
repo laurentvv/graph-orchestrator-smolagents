@@ -122,7 +122,7 @@ async def run_exploration_workflow(
             )
             print(f"[+] Itération {iteration} : {judge.reason}")
             for a in judge.assessments:
-                tag = "[green]✓[/green]" if a.verdict == "approved" else "[red]✗[/red]"
+                tag = "[green][OK][/green]" if a.verdict == "approved" else "[red][FAIL][/red]"
                 console.print(f"    {tag} [bold]{a.task_id}[/bold] — {a.reason[:100]}")
 
             # Marque le statut dans le KG + trace les réfutations
@@ -217,7 +217,7 @@ async def run_coding_workflow(
     
     # Routine initiale de routage
     task_content = seed_tasks[0]['content'] if seed_tasks else ""
-    print(f"[*] Analyse de la requête par le routeur ultra-rapide (Qwen2B)...")
+    print(f"[*] Analyse de la requête par le routeur ultra-rapide ({settings.fast_model_id})...")
     router_res, m0 = await execute_router_node(task_content, fast_model, settings)
     if m0: all_metrics.append(m0)
     
@@ -240,7 +240,8 @@ async def run_coding_workflow(
             # Au lieu d'accumuler dans le contexte, on fait une requête "Bug Tracker" propre
             historique = ""
             if iteration > 1:
-                refutations = kg.get_claims(entity_id, kind="refutation")
+                claims = kg.get_claims(entity_id)
+                refutations = [c for c in claims if c.get('kind') == 'refutation']
                 if refutations:
                     historique = "\n\n[TICKETS DE BUGS ACTIFS (LU DEPUIS DUCKDB)] :\n"
                     for ref in refutations:
@@ -324,11 +325,10 @@ async def run_coding_workflow(
         print(f"[+] Plan de l'Architecte reçu : {architect_result.global_architecture}")
         print(f"[*] 2. Fan-out : Lancement des boucles d'ingénierie parallèles sur {len(architect_result.subtasks)} sous-tâches...\n")
         
-        # Fan-out : Lancement des boucles de validation complètes en parallèle
-        subtask_coroutines = [process_subtask_loop(st) for st in architect_result.subtasks]
-        loop_results = await asyncio.gather(*subtask_coroutines)
-        
-        for res, metrics in loop_results:
+        # Exécution Séquentielle (Pipeline) pour éviter les Race Conditions sur les fichiers
+        for i, st in enumerate(architect_result.subtasks):
+            print(f"[*] Traitement de la sous-tâche {i+1}/{len(architect_result.subtasks)}...")
+            res, metrics = await process_subtask_loop(st)
             all_metrics.extend(metrics)
             results.append(res)
             
@@ -368,30 +368,39 @@ EXPLORATION_SEED_TASKS = [
 
 CODING_SEED_TASKS = [
     {
-        "id": "tetris",
-        "content": (
-            "Développe un jeu Tetris complet et fonctionnel en HTML/JS/CSS dans un dossier 'tetris_game'. "
-            "Crée un fichier index.html, un style.css et un script.js. "
-            "Le jeu doit pouvoir être joué avec les flèches du clavier, avoir un score, et détecter le game over. "
-            "Vérifie que tout fonctionne correctement."
-        ),
+        "id": "T004",
+        "content": "Crée un jeu de Tetris simple mais complet en HTML, CSS et JavaScript pur (pas de framework). Le jeu doit être jouable directement dans le navigateur, avec des flèches directionnelles. L'architecture doit comporter au moins 3 fichiers : index.html, style.css et tetris.js.",
+        "target_files": ["index.html", "style.css", "tetris.js"]
     }
 ]
 
 
+def load_tasks_from_json(mode: str, fallback_tasks: List[dict]) -> List[dict]:
+    import os
+    tasks_file = "tasks.json"
+    if os.path.exists(tasks_file):
+        try:
+            with open(tasks_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if mode in data and isinstance(data[mode], list):
+                    print(f"[*] Chargement des tâches '{mode}' depuis {tasks_file}")
+                    return data[mode]
+        except Exception as e:
+            print(f"[!] Erreur lors de la lecture de {tasks_file}: {e}")
+    return fallback_tasks
+
 def run_workflow(mode: str, settings: Settings = default_settings) -> None:
     """Lance le workflow selon le mode (one_shot / exploration / coding)."""
     if mode == "exploration":
-        final_output, metrics = asyncio.run(
-            run_exploration_workflow(EXPLORATION_SEED_TASKS, settings)
-        )
+        tasks = load_tasks_from_json(mode, EXPLORATION_SEED_TASKS)
+        final_output, metrics = asyncio.run(run_exploration_workflow(tasks, settings))
     elif mode == "coding":
-        final_output, metrics = asyncio.run(
-            run_coding_workflow(CODING_SEED_TASKS, settings)
-        )
+        tasks = load_tasks_from_json(mode, CODING_SEED_TASKS)
+        final_output, metrics = asyncio.run(run_coding_workflow(tasks, settings))
     else:
         from .runner import run_graph_workflow
-        final_output, metrics = asyncio.run(run_graph_workflow(ONE_SHOT_TASKS, settings))
+        tasks = load_tasks_from_json(mode, ONE_SHOT_TASKS)
+        final_output, metrics = asyncio.run(run_graph_workflow(tasks, settings))
 
     if metrics:
         render_observability_table(metrics, console)

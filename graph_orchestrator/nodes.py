@@ -76,7 +76,7 @@ def build_reasoning_model(settings: Settings) -> OpenAIServerModel:
     # finish_reason=length sans tool_calls (le raisonnement interne consomme tout).
     return OpenAIServerModel(
         model_id=settings.reasoning_model_id,
-        api_base=settings.ollama_api_base,
+        api_base=settings.ollama_reasoning_api_base,
         api_key=settings.ollama_api_key,
         max_tokens=settings.reasoning_max_tokens,
     )
@@ -191,9 +191,19 @@ async def execute_worker_node(
         verbosity_level=resolve_verbosity(settings.log_level),
     )
 
-    prompt = f"""Analyse cette tâche et retourne le résultat STRICTEMENT au format JSON via l'outil 'final_answer'.
+    prompt = f"""Analyse cette tâche et retourne le résultat STRICTEMENT en utilisant l'outil 'final_answer'.
     N'ajoute AUCUN texte avant ou après le JSON.
-    Schéma exact attendu: {{"task_id": "{task['id']}", "summary": "ton résumé de la tache", "confidence_score": 0.95}}
+    Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_answer :
+    {{
+      "name": "final_answer",
+      "arguments": {{
+        "answer": {{
+          "task_id": "{task['id']}",
+          "summary": "ton résumé détaillé de la tache",
+          "confidence_score": 0.95
+        }}
+      }}
+    }}
     Contenu de la tâche : {task['content']}
     """
     return await run_with_retry(local_worker, prompt, WorkerOutput, settings.worker_max_retries)
@@ -277,8 +287,18 @@ MÉTHODOLOGIE :
 5. Découpe la tâche en petites sous-tâches très précises.
 6. Pour chaque sous-tâche, liste les fichiers cibles qui seront modifiés.
 
-Retourne ton plan STRICTEMENT au format JSON via l'outil 'final_answer'.
-Schéma exact attendu: {{"plan_id": "architect_plan", "global_architecture": "Explication de ton choix d'architecture", "subtasks": [{{"task_id": "sub_1", "description": "Créer le fichier index.html avec...", "target_files": ["index.html"]}}]}}
+Retourne ton plan STRICTEMENT en utilisant l'outil 'final_answer'.
+Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_answer :
+{{
+  "name": "final_answer",
+  "arguments": {{
+    "answer": {{
+      "plan_id": "architect_plan",
+      "global_architecture": "Explication de ton choix d'architecture",
+      "subtasks": [{{"task_id": "sub_1", "description": "Créer le fichier index.html avec...", "target_files": ["index.html"]}}]
+    }}
+  }}
+}}
 """
     return await run_with_retry(local_architect, prompt, ArchitectOutput, settings.worker_max_retries)
 
@@ -290,37 +310,46 @@ async def execute_coder_node(
 ) -> Tuple[Optional[CoderOutput], Optional[NodeMetrics]]:
     """Nœud Coder : utilise des outils pour créer/éditer des fichiers et exécuter des commandes bash."""
     from smolagents import DuckDuckGoSearchTool, CodeAgent
-    local_coder = CodeAgent(
-        tools=[list_directory, read_file, write_file, edit_file, bash_command, DuckDuckGoSearchTool()],
+    local_coder = ToolCallingAgent(
+        tools=[list_directory, read_file, write_file, edit_file, DuckDuckGoSearchTool()],
         model=fast_model,
         name=f"coder_{task['id'].replace('-', '_')}",
-        description="Agent développeur capable d'explorer le projet, d'écrire, lire, modifier du code et exécuter des commandes.",
+        description="Agent développeur capable d'explorer le projet, d'écrire, lire, modifier du code.",
         verbosity_level=resolve_verbosity("HIGH"),
-        max_steps=4,  # Permet à l'agent de faire quelques actions avant de conclure, mais l'empêche de boucler indéfiniment
-        additional_authorized_imports=["os", "pathlib", "json", "re", "math", "time"], # On donne un peu de liberté Python
+        max_steps=10,  # Augmenté à 10 pour laisser le temps de lire, écrire et tester
     )
+
+    import sys
+    if sys.stdout.encoding.lower() != 'utf-8':
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+            sys.stderr.reconfigure(encoding='utf-8')
+        except Exception:
+            pass
 
     import os
     
-    # Load all SKILL.md files from the skills directory to inject into the prompt
+    # Liste uniquement les chemins des SKILL.md pour éviter de surcharger le contexte du LLM
     skills_content = ""
     skills_dir = "skills"
     if os.path.exists(skills_dir):
+        skills_content += "Tu peux utiliser l'outil 'read_file' pour lire les instructions détaillées de ces compétences si tu en as besoin :\n"
         for root, dirs, files in os.walk(skills_dir):
             if "SKILL.md" in files:
-                skill_path = os.path.join(root, "SKILL.md")
-                with open(skill_path, "r", encoding="utf-8") as f:
-                    skill_name = os.path.basename(root)
-                    skills_content += f"\n\n--- SKILL: {skill_name} ---\n{f.read()}"
+                skill_path = os.path.join(root, "SKILL.md").replace("\\", "/")
+                skills_content += f"- {skill_path}\n"
+
+    target_files_instruction = ""
+    if "target_files" in task and task["target_files"]:
+        files_list = "\n".join([f"- {f}" for f in task["target_files"]])
+        target_files_instruction = f"\nFICHIERS CIBLES (TU DOIS IMPÉRATIVEMENT CRÉER/MODIFIER CES FICHIERS) :\n{files_list}\n"
 
     prompt = f"""Tu es un Agent Développeur Senior autonome. Ta mission est d'accomplir la tâche suivante en utilisant tes outils de manière itérative.
 
 MÉTHODOLOGIE OBLIGATOIRE :
-1. EXPLORATION : Utilise 'list_directory' ou 'bash_command' pour comprendre la structure du projet avant de coder.
-2. LECTURE : Utilise 'read_file' pour analyser le code existant concerné.
-3. ÉDITION : Préfère 'edit_file' pour modifier chirurgicalement un fichier existant. N'utilise 'write_file' que pour créer de nouveaux fichiers.
-4. VALIDATION : Si la tâche nécessite une exécution, utilise 'bash_command' pour lancer les tests ou le script, et corrige les éventuelles erreurs.
-
+1. ÉDITION : Préfère 'edit_file' pour modifier chirurgicalement un fichier existant. N'utilise 'write_file' que pour créer de nouveaux fichiers.
+2. AUCUN MOCK OU PLACEHOLDER : Tu dois écrire une implémentation COMPLÈTE, RÉELLE et FONCTIONNELLE. Il est strictement interdit d'écrire des simulations (mocks), des carrés vides ou des commentaires du type "Logique ici". Si on te demande un Tetris, code un vrai Tetris avec les vraies règles.
+{target_files_instruction}
 ### TES COMPÉTENCES (SKILLS)
 Voici les instructions et compétences que tu DOIS respecter et utiliser selon la situation :
 {skills_content}
@@ -328,8 +357,18 @@ Voici les instructions et compétences que tu DOIS respecter et utiliser selon l
 Contenu de la tâche : {task['content']}
 
 IMPORTANT : Prends ton temps, tu peux utiliser tes outils autant de fois que nécessaire.
-Une fois que tu as terminé, vérifie ton travail. Puis retourne ton résultat final STRICTEMENT au format JSON via l'outil 'final_answer'.
-Schéma exact attendu: {{"task_id": "{task['id']}", "status": "success", "details": "Un résumé technique détaillé des fichiers modifiés et des actions effectuées."}}
+Une fois que tu as terminé, vérifie ton travail. Puis retourne ton résultat final STRICTEMENT en utilisant l'outil 'final_answer'.
+Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_answer :
+{{
+  "name": "final_answer",
+  "arguments": {{
+    "answer": {{
+      "task_id": "{task['id']}",
+      "status": "success ou failure",
+      "details": "Un résumé technique détaillé des fichiers modifiés et des actions effectuées."
+    }}
+  }}
+}}
 """
     # max_retries can be slightly higher for coding since it involves tool use steps
     return await run_with_retry(local_coder, prompt, CoderOutput, settings.worker_max_retries)
@@ -346,10 +385,13 @@ async def execute_tester_node(
     from smolagents import ToolCollection
 
     # Configure the MCP server for Chrome DevTools
+    env = os.environ.copy()
+    env["PUPPETEER_EXECUTABLE_PATH"] = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+    
     server_parameters = StdioServerParameters(
         command="npx",
         args=["-y", "@modelcontextprotocol/server-puppeteer"],
-        env=os.environ.copy()
+        env=env
     )
 
     # Note: Using the context manager ensures the MCP server is properly closed after the run
@@ -369,6 +411,15 @@ async def execute_tester_node(
             with open(skill_path, "r", encoding="utf-8") as f:
                 skill_content = f.read()
 
+        workspace_url = "file:///" + os.path.abspath(os.getcwd()).replace("\\", "/")
+        
+        target_files_urls = ""
+        if "target_files" in task and task["target_files"]:
+            target_files_urls = "Les fichiers cibles de cette tâche se trouvent aux adresses suivantes :\n"
+            for fpath in task["target_files"]:
+                file_url = f"{workspace_url}/{fpath.replace('\\', '/')}"
+                target_files_urls += f"- {file_url}\n"
+        
         prompt = f"""Tu es un agent QA autonome (Web Tester Node).
         
 Voici tes instructions obligatoires (Skill) :
@@ -376,9 +427,23 @@ Voici tes instructions obligatoires (Skill) :
 
 Contenu de la tâche d'origine : {task['content']}
 
+ATTENTION - Le dossier de travail absolu est : {workspace_url}
+{target_files_urls}
+Pour utiliser 'puppeteer_navigate', tu dois lui passer l'URL complète du fichier principal, par exemple : {workspace_url}/index.html ou l'une des adresses ci-dessus.
+
 Vérifie l'application web générée. Utilise tes outils MCP pour naviguer, inspecter et interagir.
-Une fois terminé, retourne ton résultat final STRICTEMENT au format JSON via l'outil 'final_answer'.
-Schéma exact attendu: {{"task_id": "{task['id']}", "status": "success ou error", "details": "Un résumé détaillé de tes tests visuels et interactifs."}}
+Une fois terminé, retourne ton résultat final STRICTEMENT en utilisant l'outil 'final_answer'.
+Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_answer :
+{{
+  "name": "final_answer",
+  "arguments": {{
+    "answer": {{
+      "task_id": "{task['id']}",
+      "status": "success ou failure",
+      "details": "Un résumé détaillé de tes tests visuels et interactifs."
+    }}
+  }}
+}}
 """
         return await run_with_retry(local_tester, prompt, CoderOutput, settings.worker_max_retries)
 
@@ -407,8 +472,18 @@ MÉTHODOLOGIE :
 2. Traque les vulnérabilités classiques (injections, XSS, authentification manquante, données exposées, etc.).
 3. N'hésite pas à être très strict.
 
-Retourne ton verdict STRICTEMENT au format JSON via l'outil 'final_answer'.
-Schéma exact attendu: {{"task_id": "{task['id']}", "is_secure": true/false, "vulnerabilities": ["faille 1 expliquée", "faille 2 expliquée"]}}
+Retourne ton verdict STRICTEMENT en utilisant l'outil 'final_answer'.
+Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_answer :
+{{
+  "name": "final_answer",
+  "arguments": {{
+    "answer": {{
+      "task_id": "{task['id']}",
+      "is_secure": true,
+      "vulnerabilities": ["faille 1 expliquée", "faille 2 expliquée"]
+    }}
+  }}
+}}
 """
     return await run_with_retry(local_security, prompt, SecurityOutput, settings.worker_max_retries)
 
@@ -625,12 +700,19 @@ async def execute_adversary_node(
 Pour chaque résultat de worker ci-dessous, décide si tu PEUX le réfuter (refuted=true) ou non (refuted=false).
 Un summary est réfutable s'il contient une hallucination, un contre-sens, une omission clé, ou manque d'actionnabilité.
 
-Retourne ton verdict STRICTEMENT au format JSON via l'outil 'final_answer'.
-Schéma : un objet avec une clé "verdicts" contenant la liste :
-{{"verdicts": [
-  {{"task_id": "t1", "refuted": false, "reason": "fidèle au contenu"}},
-  {{"task_id": "t2", "refuted": true, "reason": "hallucination : chiffre inventé"}}
-]}}
+Retourne ton verdict STRICTEMENT en utilisant l'outil 'final_answer'.
+Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_answer :
+{{
+  "name": "final_answer",
+  "arguments": {{
+    "answer": {{
+      "verdicts": [
+        {{"task_id": "t1", "refuted": false, "reason": "fidèle au contenu"}},
+        {{"task_id": "t2", "refuted": true, "reason": "hallucination : chiffre inventé"}}
+      ]
+    }}
+  }}
+}}
 
 Résultats des workers : {json.dumps([r.model_dump() for r in worker_results], ensure_ascii=False)}
 Contenus originaux : {json.dumps(original_by_id, ensure_ascii=False)}

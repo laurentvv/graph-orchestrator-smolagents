@@ -15,7 +15,7 @@ If the project contains web files (`index.html`, `script.js`, etc.), **you MUST 
 To test a web application, strictly follow this workflow using your MCP tools:
 
 1. **Launch & Navigate**:
-   - Use `new_page` or `navigate_page` to open the local `index.html` file (e.g., `file:///path/to/index.html`).
+   - Use `new_page` or `navigate_page` to open the local HTML file using its ABSOLUTE path. You must construct the absolute file path yourself (e.g. `file:///D:/GIT/graph-orchestrator-smolagents/index.html`). DO NOT just use `file:///index.html` as it will fail.
    
 2. **Visual Inspection**:
    - Use `take_screenshot` to verify that the UI renders correctly.

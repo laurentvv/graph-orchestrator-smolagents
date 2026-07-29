@@ -1,0 +1,25 @@
+{
+  "exploration": [
+    {
+      "id": "e1",
+      "content": "Identifie TOUTES les causes possibles d'une charge CPU à 95% sur un serveur de base de données. Explore chaque piste : requêtes, locks, index manquants, paramétrage, concurrence, fuites."
+    },
+    {
+      "id": "e2",
+      "content": "Identifie TOUTES les causes possibles de 45 erreurs HTTP 502 sur un reverse proxy. Explore chaque piste : backend down, timeouts, saturation de connexions, DNS, TLS, config."
+    }
+  ],
+  "coding": [
+    {
+      "id": "T004",
+      "content": "Crée un jeu de Tetris simple mais complet en HTML, CSS et JavaScript pur. Le jeu doit être jouable directement dans le navigateur, avec des flèches directionnelles. Avant de définir les fichiers, l'Architecte DOIT décider d'un nom de répertoire approprié (par exemple 'tetris_app/' ou 'jeu_tetris/') et l'inclure dans les chemins de tous les fichiers cibles (ex: 'tetris_app/index.html'). L'architecture doit comporter au moins 3 fichiers.",
+      "target_files": []
+    }
+  ],
+  "one_shot": [
+    {
+      "id": "os1",
+      "content": "Tâche simple de test."
+    }
+  ]
+}
