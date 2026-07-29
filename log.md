@@ -231,7 +231,7 @@ curl http://10.201.12.50:11434/api/show -d '{"name":"nanbeige-bigctx"}'
   (défaut qwen3.5:4b) + top_p 0.95. Le Coder (smolagents) ne fixait aucune température
   → héritait du 1.0 serveur → choix de tokens aléatoires = cause MAJEURE de corruption
   de la syntaxe HTML/JSON.
-- FIX double couche : (1) Modelfile PARAMETER temperature 0.2 (le plus sûr, tous appels),
+- FIX double couche : (1) Modelfile PARAMETER temperature 0.2 (le plus sûr, tous les appels),
   (2) config CODER_TEMPERATURE=0.2 appliqué dans build_fast_model (prioritaire serveur).
 - Router/Judge (API native) déjà à 0.0. DSPy déjà à 0.3. Le Coder était le seul orphelin.
 - Suite complète : 127 PASS.
