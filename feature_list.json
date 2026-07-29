@@ -125,6 +125,62 @@
       "description": "PISTE : évaluer un nœud dédié (recherche pré-architecte) vs DuckDuckGoSearchTool injecté actuellement. À évaluer.",
       "status": "pending",
       "dependencies": []
+    },
+    {
+      "id": "F-19",
+      "name": "Édition textuelle SEARCH/REPLACE",
+      "description": "Remplacer l'édition JSON par un parser texte brut (<<<< ==== >>>>) dans tools.py pour éviter la corruption par les LLMs locaux. IMPLÉMENTÉ : search_replace_utils.py (portage Aider) + outil @tool search_replace (matching tolérant, garde anti-placeholder, feedback didactique). Coder équipé. 11 tests PASS.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-20",
+      "name": "Mutex sur les fichiers",
+      "description": "Système de verrou par fichier pour éviter l'édition concurrente et les corruptions croisées. IMPLÉMENTÉ : threading.Lock via _FILE_LOCKS dans tools.py (inspiré openfox).",
+      "status": "completed",
+      "dependencies": ["F-19"]
+    },
+    {
+      "id": "F-21",
+      "name": "Capture robuste du stderr et Troncature",
+      "description": "Le nœud Tester capture le stderr, le tronque (Context Overflow) et le renvoie proprement au Coder.",
+      "status": "pending",
+      "dependencies": []
+    },
+    {
+      "id": "F-22",
+      "name": "Circuit Breaker (max_retries)",
+      "description": "Limiter la boucle Coder <-> Tester à 3 itérations dans GraphState pour éviter les boucles infinies coûteuses.",
+      "status": "pending",
+      "dependencies": ["F-21"]
+    },
+    {
+      "id": "F-23",
+      "name": "Nœud d'Escalade (Judge / Summarizer)",
+      "description": "Action de secours quand le Circuit Breaker s'active (résumé du contexte ou appel API distante).",
+      "status": "pending",
+      "dependencies": ["F-22"]
+    },
+    {
+      "id": "F-24",
+      "name": "Persistance d'État (Checkpoints SQLite/DuckDB)",
+      "description": "Sauvegarde du GraphState à chaque transition pour permettre la reprise sur erreur (Crash recovery).",
+      "status": "pending",
+      "dependencies": ["F-03"]
+    },
+    {
+      "id": "F-25",
+      "name": "Générateur de Repo Map (Tree-sitter)",
+      "description": "Parser le code source et injecter l'arborescence structurelle dans le prompt Architect.",
+      "status": "pending",
+      "dependencies": []
+    },
+    {
+      "id": "F-26",
+      "name": "Auto-Installation des Dépendances",
+      "description": "Le Tester capte les ModuleNotFoundError et lance automatiquement pip install/uv add.",
+      "status": "pending",
+      "dependencies": ["F-21"]
     }
   ]
 }

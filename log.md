@@ -178,9 +178,51 @@ curl http://10.201.12.50:11434/api/show -d '{"name":"nanbeige-bigctx"}'
   FAST_MAX_TOKENS, LLM_TIMEOUT_S, Architect 1-fichier-1-sous-tâche, flushing stdout,
   Context7 corrigé, doublons router/judge clarifiés, Modelfiles versionnés.
 
+## [2026-07-29] pr | PR #2 créée → Kilo Code Review SUCCESS → MERGED dans main
+- Branche feat/coding-workflow-validation → squash merge → main (commit 1ca7a88).
+- Kilo Code Review : SUCCESS, merge state CLEAN.
+- Branche locale + remote supprimées après merge.
+
+## [2026-07-29] strat | NOUVEAU CAP : résoudre la qualité via GPU + stratégie modèles
+- DIAGNOSTIC CONFIRMÉ : le blocage qualité est le modèle Coder (qwen3.5:4b corrompt
+  le JSON long), pas le process (validé).
+- INFRA DÉCOUVERTE : localhost a un GPU (RTX 3060 Laptop, 6 Go VRAM). Le distant
+  est CPU-only (16 cœurs, 64 Go RAM).
+- NOUVELLE STRATÉGIE :
+  * Coder (besoin lourd, gros contenus) → Gemma4 E4B sur localhost GPU (rapide, costaud).
+  * Distant CPU → multi-petits-modèles spécialisés (rôles légers : router, security, etc.).
+- Sources à explorer : huggingface.co/models (gguf, <6B, trending) + ollama.com/search?c=tools
 
 
 
+## [2026-07-29] audit | Audit des projets references (crush, nanocode, openfox) pour idées Graph Engineering
+## [2026-07-29] audit | Lecture approfondie du code source (crush/internal, openfox/src, nanocode)
+## [2026-07-29] audit | Ajout des stratégies d'outillage internes d'Antigravity (mes propres capacités) à references_audit.md
+## [2026-07-29] audit | Clone du dépôt Aider depuis GitHub et analyse des implémentations de tools (crush, openfox, aider)
+## [2026-07-29] audit | Recherche web sur les architectures d'agents open source basées sur les graphes (LangGraph, Code Knowledge Graph) et mise à jour de l'audit
+## [2026-07-29] arch | Rédaction de l'architecture Circuit Breaker pour graphes d'états dans circuit_breaker_architecture.md
 
+## [2026-07-29] plan | Planification usine logicielle (cycle SEARCH/REPLACE)
+- Étude des docs plan_usine_logicielle.md / circuit_breaker_architecture.md / references_audit.md.
+- DÉCISION : cycle focalisé SEARCH/REPLACE (Priorité 1) — résout DIRECTEMENT la
+  corruption JSON sans changer le type d'agent. CodeAgent/repo-map = cycles suivants.
+  Architect DSPy conservé (la version CodeAgent de nodes.py est du code mort).
+- Aider trouvé dans references/aider/ : parser SEARCH/REPLACE + logique tolérante
+  (match exact → indentation → ellipses) directement portable.
 
+## [2026-07-29] feat | Outil search_replace tolérant + Mutex par fichier (Priorité 1)
+- Nouveau module search_replace_utils.py : portage allégé d'Aider.
+  replace_most_similar_chunk (match exact → tolérant indentation → ellipses),
+  find_similar_lines (feedback didactique "Did you mean..." en cas d'échec).
+- Nouvel outil @tool search_replace dans tools.py : (path, search, replace),
+  matching tolérant, garde anti-placeholder, garde anti-effacement, feedback avec
+  lignes proches si non trouvé.
+- Mutex par fichier (threading.Lock, inspiré openfox) : sérialise les écritures
+  concurrentes sur un même fichier (défense ceinture+bretelles).
+- Coder équipé (nodes.py) : search_replace ajouté aux tools + prompt adapté
+  ("préfère search_replace pour modifier un fichier existant").
+- 11 tests unitaires (tests/test_search_replace.py) : 11/11 PASS, y compris le cas
+  critique d'indentation tolérante de bout en bout.
+- Objectif : éliminer la corruption des gros contenus JSON (le Coder ne génère plus
+  qu'un fragment, pas tout le fichier).
 

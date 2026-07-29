@@ -17,6 +17,13 @@
 - [ ] Critère 12 : Le Judge émet un verdict (is_approved booléen) à la fin.
 - [ ] Critère 13 : Le Knowledge Graph trace les observations/refutations du run.
 
+## Critères de l'édition sécurisée SEARCH/REPLACE (cycle en cours)
+- [ ] Critère 14 : Le Coder peut éditer un fichier existant via search_replace sans corruption (matching tolérant).
+- [ ] Critère 15 : search_replace rejette les placeholders (TODO, '...') dans le bloc replace.
+- [ ] Critère 16 : search_replace renvoie un feedback didactique (lignes proches) quand le bloc search n'est pas trouvé.
+- [ ] Critère 17 : Le Mutex par fichier sérialise les écritures concurrentes (tests test_search_replace.py PASS).
+- [ ] Critère 18 : La suite pytest complète passe (0 régression, 11 nouveaux tests inclus).
+
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.
 * Validation process : `uv run python -m graph_orchestrator.workflows` (WORKFLOW_MODE=coding) →

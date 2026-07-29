@@ -1,0 +1,33 @@
+# ============================================================
+# Modelfile : gemma4-e4b-coder — Coder/Architect/Judge (tier costaud) sur GPU local
+# ============================================================
+# Rôle : modèle costaud pour les nœuds à fort besoin cognitif (Architect, Coder,
+# Tester, Judge). Tournent en SÉQUENTIEL → un seul modèle partagé suffit (pas de
+# conflit VRAM). Gemma4 E4B génère du code complet et propre via tool-call (validé),
+# là où qwen3.5:4b corrompait les gros contenus JSON.
+#
+# INFRA : GPU RTX 3060 Laptop (6 Go VRAM). num_ctx limité à 16384 (vs 32768 pour
+# le CPU) pour laisser de la VRAM au KV-cache et permettre un offload GPU maximal.
+#
+# CRÉATION :
+#   ollama create gemma4-e4b-coder -f docs/Modelfile.gemma4-e4b-gpu
+# Puis .env : REASONING_MODEL_ID=gemma4-e4b-coder (et FAST_MODEL_ID si Coder dessus)
+# ============================================================
+
+FROM hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL
+
+# --- Contexte & génération ---
+# 16384 (vs 32768 CPU) : compromis pour le GPU 6 Go. Assez pour le Coder
+# (prompt + skills + historique tools), tout en laissant de la VRAM au KV-cache.
+PARAMETER num_ctx 16384
+PARAMETER num_predict 6000
+
+# --- Offload GPU maximal ---
+# Force TOUTES les layers sur le GPU (le modèle fait ~5 Go, tient en 6 Go VRAM).
+# Sans ça, Ollama ne met que ~57% sur GPU par défaut → plus lent.
+PARAMETER num_gpu 99
+
+# --- Spécialisation "développeur expert" ---
+SYSTEM """
+Tu es un développeur expert et autonome. Tu écris du code complet, réel et fonctionnel — jamais de placeholders, mocks ou TODO. Quand tu utilises un outil d'écriture de fichier, tu passes le CONTENU COMPLET dans l'argument prévu, jamais vide. Ton code est optimisé, idiomatique et prêt à l'emploi. Tu ne donnes pas de longues explications sauf si demandé : la concision s'applique à ta prose, PAS au contenu des fichiers.
+"""

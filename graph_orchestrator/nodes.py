@@ -30,7 +30,7 @@ from .models import (
     CodeJudgeOutput,
     extract_and_validate,
 )
-from .tools import read_file, write_file, edit_file, bash_command, list_directory
+from .tools import read_file, write_file, edit_file, bash_command, list_directory, search_replace
 from .skills_loader import build_skills_block
 
 @tool
@@ -73,11 +73,16 @@ def build_fast_model(settings: Settings) -> OpenAIServerModel:
     # on le laisse activé (aide au raisonnement tool-calling) mais le budget haut
     # garantit qu'il reste assez de tokens pour le contenu réel du fichier.
     # Timeout : sans lui, un endpoint Ollama distant muet fige le workflow.
+    # Température BASSE (0.2) : CRITIQUE pour le code. Le défaut serveur de
+    # qwen3.5:4b est temperature=1.0 (chat créatif) → choix de tokens aléatoires
+    # qui corrompent la syntaxe HTML/JSON. Une température basse rend le Coder
+    # quasi-déterministe : code cohérent, moins d'hallucinations de format.
     return OpenAIServerModel(
         model_id=settings.fast_model_id,
         api_base=settings.ollama_api_base,
         api_key=settings.ollama_api_key,
         max_tokens=settings.fast_max_tokens,
+        temperature=settings.coder_temperature,
         client_kwargs={"timeout": settings.llm_timeout_s},
     )
 
@@ -329,7 +334,7 @@ async def execute_coder_node(
     """Nœud Coder : utilise des outils pour créer/éditer des fichiers et exécuter des commandes bash."""
     from smolagents import DuckDuckGoSearchTool, CodeAgent
     local_coder = ToolCallingAgent(
-        tools=[list_directory, read_file, write_file, edit_file, DuckDuckGoSearchTool()],
+        tools=[list_directory, read_file, write_file, edit_file, search_replace, DuckDuckGoSearchTool()],
         model=fast_model,
         name=f"coder_{task['id'].replace('-', '_')}",
         description="Agent développeur capable d'explorer le projet, d'écrire, lire, modifier du code.",
@@ -378,12 +383,18 @@ async def execute_coder_node(
 - NE RELIS PAS les fichiers après écriture (ça gaspille des étapes et tente de re-générer). La validation est faite plus tard par d'autres agents.
 - Objectif : le moins d'étapes possible. Idéalement : N appels write_file (un par fichier) + 1 final_answer.
 
-### RÈGLES D'OUTILS
-- 'write_file' (path, content) : crée un fichier complet. Sous-dossiers créés automatiquement. UN SEUL APPEL par fichier.
-- 'edit_file' (path, old_string, new_string) : modifie un fichier EXISTANT. Inutile pour une création.
-- 'read_file' (path) : lis le CONTENU d'un fichier. Ne l'utilise qu'avant un edit, pas après un write.
+### RÈGLES D'OUTILS (édition de fichiers)
+- 'write_file' (path, content) : CRÉE un fichier complet de zéro. Sous-dossiers créés automatiquement. UN SEUL APPEL par fichier. À éviter pour modifier un fichier existant (génère tout le contenu = long, risque de troncature).
+- 'search_replace' (path, search, replace) : MODIFIE un fichier EXISTANT en remplaçant le bloc 'search' par 'replace'. C'est l'outil À PRIVILÉGIER pour éditer/corriger/compléter un fichier existant : tu ne fournis que le fragment concerné, pas tout le fichier. Le matching est tolérant (indentation, ellipses '...' acceptées). Copie le bloc 'search' EXACTEMENT tel qu'il est dans le fichier (utilise read_file d'abord).
+- 'edit_file' : ancien outil de remplacement strict ; préfère 'search_replace' (plus tolérant).
+- 'read_file' (path) : lis le CONTENU d'un fichier. À utiliser AVANT un search_replace pour copier le texte exact.
 - 'list_directory' (path) : liste un dossier EXISTANT. Ne l'appelle pas sur un fichier ni un dossier inexistant.
 - NE FAIS PAS de recherche web ni d'exploration de skills. Ton expertise suffit.
+
+### WORKFLOW D'ÉDITION RECOMMANDÉ
+1. Pour CRÉER un nouveau fichier → 'write_file' une seule fois.
+2. Pour CORRIGER/COMPLÉTER un fichier existant → 'read_file' (copie le bloc exact) puis 'search_replace'. N'utilise PAS write_file pour réécrire tout le fichier : ça gaspille des tokens et risque de le tronquer.
+3. 'final_answer' quand c'est terminé.
 
 ### EXIGENCE DE QUALITÉ
 AUCUN MOCK OU PLACEHOLDER : implémentation COMPLÈTE, RÉELLE et FONCTIONNELLE. Interdiction absolue de placeholders ("TODO", "Logique ici"), fonctions vides, ou mocks. Code prêt pour la production, respectant les conventions du langage.

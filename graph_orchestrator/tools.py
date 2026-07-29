@@ -1,6 +1,31 @@
+import asyncio
 import os
 import subprocess
 from smolagents import tool
+
+from .search_replace_utils import find_similar_lines, replace_most_similar_chunk
+
+# --- Mutex par fichier (anti race-condition) ---------------------------------
+# Sérialise les écritures concurrentes sur un MÊME fichier. Inspiré d'openfox
+# (src/server/tools/edit.ts : fileLocks Map). Le workflow coding est déjà
+# séquentiel, mais bash_command peut écrire hors contrôle Python : ce verrou est
+# une défense ceinture+bretelles. Les @tool smolagents sont synchrones et tournent
+# dans des threads (asyncio.to_thread) ; on utilise un verrou asynchrone qu'on
+# acquiert via asyncio.run / nesté, ou un simple threading.Lock synchrone robuste.
+import threading
+
+_FILE_LOCKS: dict[str, threading.Lock] = {}
+_FILE_LOCKS_GUARD = threading.Lock()
+
+
+def _file_lock(path: str) -> threading.Lock:
+    """Renvoie (et crée si besoin) le verrou associé à un chemin de fichier normalisé."""
+    norm = os.path.normpath(os.path.abspath(path))
+    with _FILE_LOCKS_GUARD:
+        if norm not in _FILE_LOCKS:
+            _FILE_LOCKS[norm] = threading.Lock()
+        return _FILE_LOCKS[norm]
+
 
 @tool
 def read_file(path: str, offset: int = 0, limit: int = -1) -> str:
@@ -130,3 +155,100 @@ def bash_command(cmd: str) -> str:
         return "Error: Command timed out after 30 seconds."
     except Exception as e:
         return f"Error executing command: {str(e)}"
+
+
+# ===========================================================================
+# Outil SEARCH/REPLACE tolérant (Priorité 1 du plan usine logicielle)
+# ===========================================================================
+# Solution au bug de corruption des gros contenus JSON inline : au lieu de faire
+# générer au LLM un fichier ENTIER dans un argument JSON (ce que les petits
+# modèles corrompent), on lui demande juste le fragment à remplacer (search) et
+# son substitut (replace). La logique tolérante (portée d'Aider) accepte les
+# imprécisions classiques : indentation différente, lignes vides, ellipses.
+# ===========================================================================
+
+# Placeholders interdits dans un bloc replace (garde anti-paresse, Priorité 1).
+_PLACEHOLDER_TOKENS = {"...", "todo", "todoreplace", "// code here", "# code here",
+                       "placeholder", "<your code>", "<!-- code -->"}
+
+
+def _is_placeholder(text: str) -> bool:
+    """Vrai si le texte de remplacement est un placeholder (placeholder uniquement)."""
+    stripped = (text or "").strip().lower()
+    if not stripped:
+        return True
+    # Un replace constitué d'un seul token placeholder, ou d'un commentaire
+    # `// ...` / `# ...` / `/* ... */` sans réel contenu.
+    return stripped in _PLACEHOLDER_TOKENS
+
+
+@tool
+def search_replace(path: str, search: str, replace: str) -> str:
+    """Surgically edits a file by replacing the 'search' block with the 'replace' block.
+
+    PREFER this tool over write_file when modifying an EXISTING file: you only need to
+    provide the exact code to find and its replacement, NOT the whole file. This avoids
+    truncation/corruption on long files.
+
+    The matching is TOLERANT: minor leading-whitespace differences and `...` ellipses
+    in the 'search' block are accepted. If 'search' appears multiple times, the edit fails
+    (provide more surrounding lines to make it unique). If it cannot be found, the tool
+    returns the closest lines found so you can correct your 'search' block.
+
+    Args:
+        path: The file path to edit. Must exist.
+        search: The exact block of text to find in the file (copy it verbatim from the file,
+            including indentation). Use `...` on its own line to elide unchanged code in the
+            middle of the block.
+        replace: The new block of text that replaces 'search'. Must be real code, never a
+            placeholder like 'TODO' or '// code here'.
+    """
+    try:
+        # Garde anti-placeholder : un replace qui vide/placeholderise le code est refusé.
+        if _is_placeholder(replace):
+            return ("ERROR: 'replace' looks like a placeholder (TODO, '...', '// code here', "
+                    "empty). Provide the COMPLETE real replacement code. File NOT modified.")
+
+        lock = _file_lock(path)
+        with lock:
+            with open(path, "r", encoding="utf-8") as f:
+                original = f.read()
+
+            # 'search' vide = ajout en fin de fichier (utile pour compléter un fichier).
+            if not search.strip():
+                new_content = original
+                if new_content and not new_content.endswith("\n"):
+                    new_content += "\n"
+                new_content += replace
+            else:
+                new_content = replace_most_similar_chunk(original, search, replace)
+
+            if new_content is None:
+                # Échec : feedback pédagogique avec les lignes les plus proches.
+                hint = find_similar_lines(search, original)
+                msg = (
+                    "ERROR: the 'search' block was NOT found in the file (even with tolerant "
+                    "matching). The file was NOT modified. Copy the exact text FROM the file "
+                    "(use read_file first), including indentation."
+                )
+                if hint:
+                    msg += (
+                        "\n\nClosest lines found in the file (use these verbatim as your "
+                        "'search' block):\n" + hint
+                    )
+                return msg
+
+            # Refus d'écrire si le résultat est vide (sécurité anti-effacement).
+            if not new_content.strip():
+                return ("ERROR: the edit would empty the file. Aborting. File NOT modified.")
+
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(new_content)
+
+        return f"Successfully edited {path} via SEARCH/REPLACE."
+    except FileNotFoundError:
+        return (f"ERROR: file '{path}' does not exist. Use write_file to CREATE a new file, "
+                "or check the path.")
+    except Exception as e:
+        return f"Error editing file {path}: {str(e)}"
+

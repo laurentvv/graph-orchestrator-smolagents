@@ -70,6 +70,9 @@ class Settings:
     fast_max_tokens: int  # obligatoire pour le Coder : un fichier HTML/CSS/JS complet
     # peut dépasser 2000 tokens ; sans max_tokens généreux, la génération est coupée
     # en plein milieu d'un tool_call JSON -> corruption du contenu du fichier.
+    coder_temperature: float  # CRITIQUE pour le code : température basse (déterministe)
+    # pour éviter la corruption aléatoire de la syntaxe. Le défaut serveur de qwen3.5:4b
+    # est 1.0 (chat créatif) — inadapté au code. 0.2 = quasi-déterministe, idéal.
 
     # --- Robustesse (tolérance aux pauses d'un endpoint Ollama distant) ---
     # Timeout (secondes) d'un appel LLM. Au-delà, l'appel échoue (et peut être
@@ -119,6 +122,7 @@ def load_settings() -> Settings:
         ),
         reasoning_max_tokens=_get_int("REASONING_MAX_TOKENS", 8192),
         fast_max_tokens=_get_int("FAST_MAX_TOKENS", 12000),
+        coder_temperature=_get_float("CODER_TEMPERATURE", 0.2),
         llm_timeout_s=_get_float("LLM_TIMEOUT_S", 600.0),
         judge_confidence_threshold=_get_float("JUDGE_CONFIDENCE_THRESHOLD", 0.7),
         worker_max_retries=_get_int("WORKER_MAX_RETRIES", 3),
