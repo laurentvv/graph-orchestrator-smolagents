@@ -41,16 +41,39 @@ def list_directory(path: str = ".") -> str:
 @tool
 def write_file(path: str, content: str) -> str:
     """Creates or overwrites a file with new content.
-    
+
+    The FULL, real file content MUST go in the `content` argument — never empty,
+    never a placeholder. If you describe the content in your reasoning instead of
+    passing it here, the file will be created empty and the task will fail.
+
     Args:
-        path: The absolute or relative path to the file.
-        content: The complete content to write into the file.
+        path: The absolute or relative path to the file. Parent directories are created automatically.
+        content: The COMPLETE content to write into the file. Must NOT be empty.
     """
     try:
+        # Garde anti-contenu-vide (bug critique des petits modèles : le contenu
+        # réel finit dans le raisonnement/prose, pas dans l'argument content).
+        # On rejette explicitement et on renvoie un message pédagogique au modèle
+        # pour qu'il re-appelle write_file avec le vrai contenu. (gap non couvert
+        # par crush/openfox/nanocode, inspiré du pattern openfox FORMAT_CORRECTION.)
+        if content is None or not str(content).strip():
+            return (
+                "ERROR: write_file was called with an EMPTY 'content' argument. "
+                "You put the file content in your reasoning/prose instead of in the "
+                "'content' argument. Re-call write_file with the COMPLETE, real file "
+                "content in the 'content' argument. The file was NOT created."
+            )
+        # Garde anti-placeholder : un content quasi vide de type "TODO" / "..." est refusé.
+        stripped = str(content).strip()
+        if len(stripped) < 5 or stripped.lower() in {"...", "todo", "placeholder", "// code here"}:
+            return (
+                "ERROR: write_file 'content' looks like a placeholder, not real code. "
+                "Provide the COMPLETE implementation. The file was NOT created."
+            )
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
-        return f"Successfully wrote to {path}"
+        return f"Successfully wrote to {path} ({len(content)} chars)"
     except Exception as e:
         return f"Error writing to file {path}: {str(e)}"
 

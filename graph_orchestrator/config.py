@@ -67,6 +67,15 @@ class Settings:
     fast_model_id: str  # Fan-out (workers)
     reasoning_model_id: str  # Juge + Synthèse
     reasoning_max_tokens: int  # obligatoire pour Gemma (sinon finish_reason=length)
+    fast_max_tokens: int  # obligatoire pour le Coder : un fichier HTML/CSS/JS complet
+    # peut dépasser 2000 tokens ; sans max_tokens généreux, la génération est coupée
+    # en plein milieu d'un tool_call JSON -> corruption du contenu du fichier.
+
+    # --- Robustesse (tolérance aux pauses d'un endpoint Ollama distant) ---
+    # Timeout (secondes) d'un appel LLM. Au-delà, l'appel échoue (et peut être
+    # retryé par smolagents). Sans timeout, un endpoint distant muet fige le
+    # workflow indéfiniment (bug observé sur le serveur distant 10.201.12.50).
+    llm_timeout_s: float
 
     # --- Règles métier ---
     judge_confidence_threshold: float  # seuil de qualité du juge
@@ -109,6 +118,8 @@ def load_settings() -> Settings:
             "hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL",
         ),
         reasoning_max_tokens=_get_int("REASONING_MAX_TOKENS", 8192),
+        fast_max_tokens=_get_int("FAST_MAX_TOKENS", 12000),
+        llm_timeout_s=_get_float("LLM_TIMEOUT_S", 600.0),
         judge_confidence_threshold=_get_float("JUDGE_CONFIDENCE_THRESHOLD", 0.7),
         worker_max_retries=_get_int("WORKER_MAX_RETRIES", 3),
         adversary_count=_get_int("ADVERSARY_COUNT", 3),

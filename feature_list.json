@@ -1,0 +1,131 @@
+{
+  "features": [
+    {
+      "id": "F-01",
+      "name": "Intégration DSPy 3.0",
+      "description": "Utilisation de DSPy pour le routage, l'architecte et le juge de code.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-02",
+      "name": "Intégration smolagents",
+      "description": "Utilisation de smolagents pour les agents d'exécution (codeurs et testeurs).",
+      "status": "completed",
+      "dependencies": ["F-01"]
+    },
+    {
+      "id": "F-03",
+      "name": "Knowledge Graph (DuckDB)",
+      "description": "Mise en place d'une base de données DuckDB partagée entre les agents.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-04",
+      "name": "Mise en place de la boucle d'état sur disque",
+      "description": "Gestion de l'état déterministe via feature_list.json, contract.md, progress.md et log.md.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-05",
+      "name": "Prompt de test landing page premium (tasks.json)",
+      "description": "Remplacement du prompt Tetris par une landing page SaaS 'Nimbus' (HTML5/CSS3/JS vanilla, responsive, animations) pour valider le coding workflow. target_files = landing_page/{index.html,styles.css,script.js}.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-06",
+      "name": "Correction Context7 MCP (package npm)",
+      "description": "@context7/mcp (404 npm) → @upstash/context7-mcp (v3.2.5). Dans test_context7.py.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-07",
+      "name": "Clarification duplication router/judge",
+      "description": "execute_router_node et execute_code_judge_node définis 2x (nodes.py + dspy_nodes.py). Marquage # DEPRECATED sur versions nodes.py (code mort pour le mode coding).",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-08",
+      "name": "Flushing stdout temps-réel (observabilité)",
+      "description": "workflows.py : line_buffering. Évite le buffering en contexte non-TTY (pipe/serveur) — essentiel pour observer un workflow long.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-09",
+      "name": "Réécriture prompt Coder (anti-boucle + guidance write_file)",
+      "description": "Plan 'UNE PASSE UNIQUE' (un write_file par fichier puis final_answer), règle anti-boucle, max_steps 24→12, suppression pollution chemins SKILL.md.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-10",
+      "name": "Garde anti-contenu-vide dans write_file",
+      "description": "tools.py : write_file rejette content vide/placeholder avec message pédagogique. Gap non couvert par crush/openfox/nanocode.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-11",
+      "name": "Système de skills ciblés (skills_loader, 2 couches)",
+      "description": "Couche 1 statique : BASE_SKILLS_BY_NODE (coder→[file-creation, coding]). Couche 2 dynamique (regex) : frontend-design pour web, python-health-audit pour python. Injection du CONTENU, pas des chemins.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-12",
+      "name": "Nouveaux skills : file-creation, frontend-design",
+      "description": "skills/file-creation/SKILL.md + skills/frontend-design/SKILL.md (design pro condensé).",
+      "status": "completed",
+      "dependencies": ["F-11"]
+    },
+    {
+      "id": "F-13",
+      "name": "FAST_MAX_TOKENS (anti-troncature) + LLM_TIMEOUT_S (CPU lent)",
+      "description": "fast_max_tokens (défaut 4000) évite la génération coupée en plein tool_call JSON. llm_timeout_s (défaut 600) tolère un endpoint CPU-only lent au lieu de figer.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-14",
+      "name": "Modelfile qwen-3.5-bigctx + paramétrage serveur",
+      "description": "docs/Modelfile.qwen-3.5-bigctx : qwen3.5:4b + num_ctx 32768, num_thread 16, system prompt dev. use_mlock retiré (EOF error). Créé sur distant + localhost.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-15",
+      "name": "Architect limité à 1 sous-tâche par fichier",
+      "description": "dspy_nodes.py ArchitectSignature : contrainte '1 fichier = 1 sous-tâche, 2-4 max'. Avant : 5 sous-tâches pour 3 fichiers = surcoût.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-16",
+      "name": "Validation run coding workflow de bout en bout",
+      "description": "Run #11 sur localhost (qwen-3.5-bigctx) : voir le workflow aboutir (Architect→Coder→Tester→Judge→verdict). Objectif : démontrer le process complet au moins une fois.",
+      "status": "in_progress",
+      "dependencies": ["F-09","F-10","F-11","F-13","F-15"]
+    },
+    {
+      "id": "F-17",
+      "name": "Nœud dédié Context7 (docs lookup)",
+      "description": "PISTE : nœud execute_docs_lookup_node piloté par CONTEXT7_API_KEY (@upstash/context7-mcp) pour fournir de la doc à jour à l'Architect/Coder. Non implémenté.",
+      "status": "pending",
+      "dependencies": ["F-06"]
+    },
+    {
+      "id": "F-18",
+      "name": "Nœud dédié recherche web",
+      "description": "PISTE : évaluer un nœud dédié (recherche pré-architecte) vs DuckDuckGoSearchTool injecté actuellement. À évaluer.",
+      "status": "pending",
+      "dependencies": []
+    }
+  ]
+}
+

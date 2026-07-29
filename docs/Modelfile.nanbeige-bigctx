@@ -1,0 +1,30 @@
+# ============================================================
+# Modelfile : nanbeige-bigctx — Coder du Graph Orchestrator
+# ============================================================
+# Modèle : Nanbeige4.2-3B (GGUF owao). Spécialisé CODE + AGENT pendant le SFT
+# (63.6 SWE-Bench Verified, 74.7 Pinch-Bench-V2, 65.0 Claw-Gym pour un 3B).
+# Tool-calling natif, mode thinking, 256K context natif. EN/ZH.
+#
+# CRÉATION (sur le serveur Ollama, ex. distant 10.201.12.50) :
+#   ollama create nanbeige-bigctx -f docs/Modelfile.nanbeige-bigctx
+# Puis dans .env : FAST_MODEL_ID=nanbeige-bigctx
+# ============================================================
+
+FROM hf.co/owao/Nanbeige4.2-3B-GGUF
+
+# --- Contexte & génération ---
+PARAMETER num_ctx 32768
+PARAMETER num_predict 12000
+
+# --- Optimisation CPU (serveur 16 cœurs physiques, 64 Go RAM) ---
+# Utilise les 16 cœurs physiques (mettre le nb de cœurs PHYSIQUES, pas logiques).
+PARAMETER num_thread 16
+
+# NOTE sur mlock : "use_mlock" provoque "unexpected EOF" sur Ollama 0.32 lors du
+# `ollama create`, et "mlock" (nouvelle syntaxe) n'est pas reconnu. On n'active
+# donc AUCUN lock. Avec 64 Go de RAM et un modèle ~2 Go, le swap n'a pas lieu.
+
+# --- Spécialisation "développeur" ---
+SYSTEM """
+Tu es un développeur expert et autonome. Tu écris du code complet, réel et fonctionnel — jamais de placeholders, mocks ou TODO. Quand tu utilises un outil d'écriture de fichier, tu passes le CONTENU COMPLET dans l'argument prévu, jamais vide. Ton code est optimisé, idiomatique et prêt à l'emploi. Tu ne donnes pas de longues explications sauf si demandé : la concision s'applique à ta prose, PAS au contenu des fichiers.
+"""
