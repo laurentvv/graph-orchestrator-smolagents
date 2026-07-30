@@ -263,5 +263,37 @@ curl http://10.201.12.50:11434/api/show -d '{"name":"nanbeige-bigctx"}'
 - Process complet de bout en bout : Router→Architect→Coder(write_file propre)→
   Tester(MCP)→Judge, avec index.html complet. Validation ATTEINTE.
 
+## [2026-07-30] doc  | Intégration des principes d'ingénierie des graphes (Andrew Ng, Anthropic, Google) dans docs/guide-graphes.md
+
+## [2026-07-30] plan | Planification cycle CHECKPOINTS (Priorité 3 — Persistance d'État)
+- Constat critique (exploration) : AUCUNE classe GraphState n'existe — l'état est porté
+  par des variables locales dans run_coding_workflow / process_subtask_loop. De plus le
+  run_id (`f"coding_{id(kg)}"`) changeait à chaque processus → impossible de reprendre.
+- Décisions utilisateur : (1) reprise AUTO par hash du contenu de tâche (FRESH_START=1
+  pour repartir de zéro), (2) granularité "début d'itération" (sûre/idempotente).
+- Constat réutilisable : les bugs/feedback sont DÉJÀ persistés (claims kind="refutation"
+  relus via kg.get_claims). Il ne restait à sauvegarder que : le plan de l'Architect
+  (nœud LLM coûteux) + la position de progression (sous-tâche, itération) + les
+  sous-tâches complétées.
+
+## [2026-07-30] feat | Persistance d'État (Checkpoints) implémentée
+- knowledge_graph.py : table `checkpoint(run_id, payload, status, updated_at)` + 3 méthodes
+  (save_checkpoint upsert, load_checkpoint → dict|None, clear_checkpoint).
+- workflows.py (run_coding_workflow) : run_id STABLE = hash SHA1 du contenu de tâche
+  (avant annotation routeur). Hydratation de coding_state depuis le checkpoint au
+  démarrage. save_coding_state au DÉBUT de chaque itération (granularité sûre).
+  Reprise : skip de l'Architect (plan rechargé via ArchitectOutput(**dict)) + skip des
+  sous-tâches completed (résultat replayed=True) + reprise à la bonne itération.
+  Effacement du checkpoint en fin de run (run "terminé"). Bonus : max_iter 3 codé en
+  dur → settings.max_iterations (cohérence config).
+- config.py + .env.example : FRESH_START (bool, défaut False).
+- tests/test_checkpoint.py : 12 tests déterministes (sans LLM, nœuds monkeypatchés) —
+  couche stockage DuckDB (round-trip, upsert, clear, absence→None), run_id stable
+  (déterministe, diffère si contenu diffère, insensible casse/espaces), sérialisation
+  ArchitectOutput (Pydantic round-trip), reprise bout-en-bout (skip Architect + skip
+  sous-tâche, checkpoint effacé en fin de run, granularité début d'itération).
+- Résultat : 12/12 PASS test_checkpoint.py + 84 tests ciblés PASS (knowledge_graph,
+  config, models, search_replace, tools, tools_registry, reduce, judge_logic). 0 régression.
+
 
 

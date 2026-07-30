@@ -8,7 +8,7 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 > | 🔴 0. Cadre système & prompts | **Partiel** (Coder autonome ✅, Architect Read-Only ✅ via DSPy, CodeAgent ❌) |
 > | 🔴 1. Édition sécurisée | **✅ TERMINÉE** (PR #3) — la plus critique, validée au run #12 |
 > | 🟠 2. Auto-correction (stderr) | ❌ à faire |
-> | 🟡 3. Graphe autonome (breaker/checkpoints) | **Partiel** (`max_iter=3` ✅, checkpoints ❌) |
+> | 🟡 3. Graphe autonome (breaker/checkpoints) | **Partiel** (`max_iter=3` ✅, checkpoints ✅, nœud d'escalade ❌) |
 > | 🟢 4. Repo Map (tree-sitter) | ❌ à faire |
 > | 🔵 5. Auto-dépendances | ❌ à faire |
 >
@@ -54,7 +54,7 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 
 - [x] **Le Coupe-Circuit (Circuit Breaker)** : Renforcer le compteur `retry_count` existant dans l'état global du graphe (`GraphState`). — *FAIT (préexistant) : `max_iterations=3` dans le workflow coding, la boucle s'arrête et passe à la sous-tâche suivante.*
 - [ ] **Nœud d'Escalade (Judge/Summarizer)** : Si le Coupe-Circuit s'active au bout de 3 essais, router vers un nouveau nœud qui résume les échecs ou fait appel à une API distante (modèle lourd) pour corriger l'erreur vicieuse.
-- [ ] **Persistance d'État (Checkpoints)** : Connecter la base `DuckDB` existante au cycle de vie du graphe pour écrire l'état d'exécution à chaque changement de nœud (Reprise sur erreur). — **PRIORITÉ n°1 du prochain cycle** : avec un système CPU-only lent (~10-15 min/fichier), la reprise après coupure est un VRAI BESOIN CRITIQUE. Sans ça, une coupure = perte de 40 min de génération.
+- [x] **Persistance d'État (Checkpoints)** : Connecter la base `DuckDB` existante au cycle de vie du graphe pour écrire l'état d'exécution à chaque changement de nœud (Reprise sur erreur). — *FAIT : table `checkpoint` dans knowledge_graph.py (save/load/clear) + run_id stable (hash du contenu de tâche) + branchement dans run_coding_workflow (skip Architect + skip sous-tâches completed + reprise à l'itération). Granularité "début d'itération" (sûre/idempotente). Config FRESH_START. 12 tests PASS.* **Besoin critique résolu** : avec ~10-15 min/fichier en CPU-only, une coupure ne perd plus 40 min — la reprise est automatique.
 
 ## 🟢 Priorité 4 : L'Intelligence Contextuelle (Repo Map)
 *Sans cela, l'architecte navigue à l'aveugle dans les gros dépôts.*
