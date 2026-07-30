@@ -405,4 +405,25 @@ curl http://10.201.12.50:11434/api/show -d '{"name":"nanbeige-bigctx"}'
   N-runners dédiés, détection redondante. Ce cycle : web+python concrets, le reste
   extensible.
 
+## [2026-07-30] fix | FIX 2 TESTS PRÉ-EXISTANTS (test_extract.py) — régression ancienne
+- SYMPTÔME : test_invalid_json_returns_none + test_schema_mismatch_returns_none
+  échouaient DEPUIS le commit 5d78e17 (ajout du sauvetage DSPy). Vérifié via
+  checkout de ce commit : déjà cassés à ce moment-là (jamais corrigé).
+- ROOT CAUSE : extract_and_validate a un FALLBACK LLM « sauvetage » qui, en cas
+  d'échec de parsing Pydantic, tente de réparer le texte cassé via DSPy/Ollama.
+  En contexte de test (pas de LLM), ce fallback DEVRAIT échouer et retourner None,
+  MAIS DSPy hallucine un objet par défaut (valeurs bidon) au lieu de planter → le
+  test reçoit un WorkerOutput halluciné au lieu de None. Fuite d'abstraction :
+  une fonction de parsing pur est couplée à un appel LLM réseau.
+- FIX (décision utilisateur : garde env) : on court-circuite le sauvetage LLM si
+  PYTEST_CURRENT_TEST est posée (variable injectée par pytest pendant l'exécution
+  d'un test). En test → retourne None directement (parsing strict). En production →
+  le sauvetage reste actif inchangé. Impact : contrat de la fonction préservé,
+  sauf en test où il redevient strict (comme attendu).
+- PREUVE DU FIX : test_extract.py est passé de 2 failed/~6s (tentative connexion
+  Ollama) à 9 passed/0.22s (court-circuit immédiat, 0 appel réseau).
+- TEST DE COUVERTURE : test_no_llm_rescue_under_pytest verrouille le garde
+  (retourne None + garde-fou perf < 2s prouvant l'absence d'appel LLM).
+- SUITE COMPLÈTE : 188 passed, 0 failed (1ère fois suite entièrement verte).
+
 
