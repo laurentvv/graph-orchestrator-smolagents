@@ -689,6 +689,51 @@ curl http://10.201.12.50:11434/api/show -d '{"name":"nanbeige-bigctx"}'
 - AMÉLIORATION SKILL ce cycle : patterns sélecteurs CSS valides (anti :has-text
   Playwright) + résolution 1280×800 + syntaxe IIFE.
 
+## [2026-07-31] plan | Planification cycle NŒUD D'ESCALADE (Priorité 3 — F-23)
+- CONSTAT : quand le Circuit Breaker s'active (3 itérations Coder↔Tester↔Judge
+  toutes rejetées), workflows.py:405-406 retourne brutalement
+  {"status": "max_iterations_reached"} SANS diagnostic ni récupération. Le
+  post-mortem de l'échec est perdu.
+- EXPLORATION : aucun mécanisme d'escalade/fallback n'existe dans le code (run_with_retry
+  = retry parsing JSON ponctuel, pas de l'escalade ; runner.py "fallback" = approbation
+  auto si sceptiques crashent, opposé). On construit nouveau.
+- DÉCISIONS UTILISATEUR : (1) stratégie "Diagnostic seul" (pas de retry avec modèle
+  lourd, pas de modèle distant — abandonné en cours de plan), (2) persister le diagnostic
+  dans le KG (kind='escalation' + arêtes ESCALATES vers les réfutations), (3) réutiliser
+  le modèle de raisonnement local (gemma-4-12B) via le même path DSPy que Judge/Architect.
+- RÉUTILISATION : lecture des réfutations via kg.get_claims (déjà fait workflows.py:322-325
+  pour l'historique du Coder) + truncate_history/truncate_output (feedback_utils.py).
+- F-22 (Circuit Breaker) marqué COMPLETED : déjà codé via settings.max_iterations.
+
+## [2026-07-31] feat | NŒUD D'ESCALADE IMPLÉMENTÉ (Priorité 3 — F-23)
+- MODÈLE (models.py) : EscalationOutput (task_id, root_cause, attempted_fixes,
+  lesson, severity low/medium/high). Diagnostic post-mortem structuré.
+- NŒUD DSPy (dspy_nodes.py) : EscalationSignature + execute_escalation_node.
+  Entrées : task_id, task_description, failure_history (réfutations tronquées),
+  current_code (sur disque, tronqué). Sortie : EscalationOutput. Même pattern que
+  Judge (_configure_dspy + ChainOfThought + asyncio.to_thread, échec gracieux → None).
+  metrics.node = "escalation_dspy".
+- BRANCHEMENT (workflows.py) : remplace le return max_iterations_reached (hors boucle
+  for). Lit les réfutations du KG (kg.get_claims kind='refutation'), tronque via
+  truncate_history, appelle le nœud. Si succès : persiste le diagnostic (kind='escalation',
+  source='escalation_node') + arêtes ESCALATES vers chaque réfutation, retourne
+  status='escalated' + diagnostic. DÉFENSE EN PROFONDEUR : try/except autour de
+  l'appel au nœud → le post-mortem ne plante JAMAIS le run (repli statut brut).
+- CONFIG (config.py + .env.example) : ESCALATION_ENABLED (bool, défaut True, opt-out).
+  Champ avec valeur par défaut dans la dataclass frozen=True (sinon cassait les 28
+  helpers de test qui construisent Settings(...) à la main — fix appliqué).
+- TESTS (tests/test_escalation.py, 8 tests, 0 LLM) :
+  * Nœud isolé : succès (metrics.node correct), échec gracieux (LLM down → None),
+    troncature historique énorme (pas de crash), historique vide (fallback texte).
+  * E2E workflow : déclenchement (approve=False → status='escalated'), persistance KG
+    (claim kind='escalation' + arête ESCALATES vérifiées en relisant le KG sur disque),
+    toggle off (status='max_iterations_reached', pas de diagnostic), repli sur échec LLM.
+- SUITE COMPLÈTE : 220 passed / 0 failed (212 avant + 8 nouveaux). 0 régression.
+- DOCS : contract.md (+6 critères 33-38), plan_usine_logicielle.md (case cochée +
+  état P3 → TERMINÉE), README (post-mortem automatique dans le Coding Playbook).
+- PRIORITÉ 3 (Graphe autonome) → TERMINÉE. Reste : P4 Repo Map, P5 Auto-dépendances,
+  P0 CodeAgent (reporté).
+
 ## [2026-07-30] dec | DÉCISION : gemma-4-12B-it-qat-q4_0 = REASONING officiel (figé)
 - VALIDÉ en réel : tourne sur le GPU local (6 Go VRAM), donne des résultats FIABLES
   (tester : 3 assertions PASS, async bien géré, raisonnement structuré).

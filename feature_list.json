@@ -150,15 +150,15 @@
     {
       "id": "F-22",
       "name": "Circuit Breaker (max_retries)",
-      "description": "Limiter la boucle Coder <-> Tester à 3 itérations dans GraphState pour éviter les boucles infinies coûteuses.",
-      "status": "pending",
+      "description": "Limiter la boucle Coder <-> Tester à 3 itérations dans GraphState pour éviter les boucles infinies coûteuses. IMPLÉMENTÉ (préexistant) : settings.max_iterations (défaut 3) borne process_subtask_loop dans run_coding_workflow ; au-delà, la sous-tâche sort sans approval.",
+      "status": "completed",
       "dependencies": ["F-21"]
     },
     {
       "id": "F-23",
       "name": "Nœud d'Escalade (Judge / Summarizer)",
-      "description": "Action de secours quand le Circuit Breaker s'active (résumé du contexte ou appel API distante).",
-      "status": "pending",
+      "description": "Action de secours quand le Circuit Breaker s'active (résumé du contexte ou appel API distante). IMPLÉMENTÉ : nœud DSPy execute_escalation_node qui synthétise les réfutations accumulées dans le Knowledge Graph en un diagnostic post-mortem structuré (cause racine + tentatives + leçon + severity), le persiste (kind='escalation') et relie aux réfutations via arêtes ESCALATES (traçabilité, requêtable). Stratégie 'diagnostic seul' : pas de retry, pas de modèle distant — réutilise le modèle de raisonnement local (gemma-4-12B) via le même path DSPy que Judge/Architect. Marque la sous-tâche 'escalated' au lieu de 'max_iterations_reached'. Dégradation gracieuse (repli sur statut brut si désactivé via ESCALATION_ENABLED=false ou LLM down). 8 tests PASS (nœud isolé + E2E workflow).",
+      "status": "completed",
       "dependencies": ["F-22"]
     },
     {
