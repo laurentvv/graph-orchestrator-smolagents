@@ -24,22 +24,25 @@ Tableau d'écart entre les concepts du guide et leur couverture actuelle dans `g
 
 ---
 
-# 1. Introduction : Le Continuum de l'Intelligence
+# 1. Introduction : La Théorie de l'Externalisation Cognitive
 
-L'architecture de l'IA n'est pas passée directement d'un script linéaire au graphe complexe. Le graphe n'est pas le point de départ, mais l'aboutissement d'un besoin croissant de mémoire et de spécialisation. Voici l'évolution fondamentale :
+L'architecture de l'IA n'est pas passée directement d'un script linéaire au graphe complexe. Selon le manuel d'Andrew Ng (juillet 2026), le graphe n'est pas le point de départ, mais l'aboutissement d'un besoin croissant de mémoire et de spécialisation. Chaque étape de ce cheminement externalise une fonction différente de la pensée humaine :
 
-1. **La Boucle (Loop) externalise la révision :** Elle permet à un agent d'itérer sur son propre travail. Une boucle robuste nécessite 6 blocs : automatisation, contexte, action, vérification, état persistant, et surtout, une condition d'arrêt (sinon, c'est la boucle infinie).
-2. **La Chaîne (Chain) externalise l'ordre :** Elle fixe la séquence de travail (A → B → C) via le code de manière déterministe.
-3. **Le Réseau (Network) externalise la spécialisation :** Il orchestre plusieurs agents spécialisés (ex: un Coder, un Testeur).
-4. **Le Graphe (Graph) externalise l'état partagé :** Il devient indispensable lorsque l'historique conversationnel sature le système et que les agents doivent raisonner de manière distribuée avec une base de données de connaissances partagée.
+1. **La Boucle (Loop) externalise la révision :** Elle permet à un agent d'itérer sur son propre travail.
+   > **Les 4 "Questions d'Or" de Google :** Avant de créer une boucle agentique, validez ces 4 critères stricts : (1) Est-ce répétitif ? (Un prompt manuel est plus rapide pour une tâche unique). (2) La vérification est-elle automatique ? (3) L'agent peut-il agir de bout en bout sans permission humaine constante ? (4) Le critère de réussite est-il "objectif" (ex: "Les tests passent") ?
+2. **La Chaîne (Chain) externalise l'ordre des tâches :** Elle fixe la séquence de travail (le flux de contrôle via le code) de manière déterministe.
+3. **Le Réseau (Network) externalise la spécialisation des rôles :** Il orchestre plusieurs agents spécialisés (ex: l'orchestrateur et les sous-agents).
+4. **Le Graphe (Graph) externalise l'état partagé et les relations :** Il justifie son coût d'infrastructure *uniquement* lorsque les agents doivent partager des faits (mémoire persistante) d'une session à l'autre sans copier des historiques de conversation entiers.
 
 # 2. Les Nouveaux Anti-Patterns (Erreurs d'Architecture)
 
 Pour maintenir la pureté de ce Graphe, nous fuyons ces modèles toxiques documentés par les leaders de l'industrie :
 
 - **La Chambre d'écho (Echo Chamber) :** Lancer plusieurs agents en parallèle avec le même prompt et le même modèle n'apporte rien, si ce n'est de multiplier l'erreur par trois à un coût exorbitant. Chaque agent doit avoir une grille d'évaluation distincte (Sécurité vs Logique vs Performance).
+- **La "Missing Baseline" (L'absence de référence) :** Déployer un système d'agents complexe sans avoir d'abord mesuré le taux de réussite d'un simple "prompt zero-shot". Sans cela, il est impossible de savoir si le surcoût de l'architecture est justifié.
+- **L'Agent Prématuré (Premature Agent) :** Créer un système multi-agents pour une tâche qu'un seul appel de modèle bien prompté pourrait résoudre.
 - **Le Goulot d'étranglement conversationnel :** Si l'orchestrateur lit le *transcript complet* de tous ses agents, sa fenêtre de contexte implose. Les agents doivent communiquer via des **contrats structurés (JSON)** ou des états réduits dans DuckDB.
-- **Le Graphe Fantôme (Phantom Graph) :** Créer un Knowledge Graph d'une complexité folle qu'aucun agent ne lit. Si on stocke, il faut que le LLM puisse faire des requêtes (`query_duckdb_knowledge_graph`).
+- **Le Graphe Fantôme (Phantom Graph) :** Créer une ontologie de graphe complexe que finalement aucun agent ne vient jamais interroger (un coût d'infrastructure sans valeur). Si on stocke, il faut que le LLM puisse faire des requêtes (`query_duckdb_knowledge_graph`).
 - **L'Agent "À tout faire" (Everything-Agent) :** Un agent avec 20 outils et un prompt de 50 pages est intraçable. Son échec est impossible à déboguer. Le maître mot est **l'atomicité du rôle**.
 
 # 3. Le Piège de la "Dette de Compréhension" (Comprehension Debt)
@@ -62,7 +65,7 @@ L'architecture système est le levier premier de réduction des coûts et d'augm
 
 - **Compter les tokens, pas les agents :** Un système de trois agents consommant chacun 20 000 tokens coûte le même prix qu'un seul Everything-Agent à 60 000 tokens. Diviser pour régner !
 - **Vitesse d'inférence (Fast Tokens) :** Un petit modèle rapide (`qwen3.5:2b`) inséré dans une boucle de vérification robuste est souvent supérieur à un modèle ultra-lourd (`gemma-4`) utilisé en *one-shot*. L'architecture compense la puissance brute.
-- **Pipeline vs Barrière :** Lors de la parallélisation (Fan-out), privilégier le "pipeline streaming" (traitement au fil de l'eau) pour éviter qu'un agent rapide n'attende l'agent le plus lent. La barrière d'attente (comme `asyncio.gather`) n'est justifiée que pour le Fan-In, où un Juge doit consolider *toutes* les données avant de statuer.
+- **Pipeline vs Barrière (Optimisation de Latence Anthropic) :** Lors de la parallélisation (Fan-out), il faut privilégier le streaming continu (`pipeline()`) par défaut. Cela permet aux éléments rapides de passer à l'étape suivante (ex: la synthèse) sans attendre l'agent le plus lent du lot. La barrière d'attente (`parallel()`, comme `asyncio.gather`) ne doit être utilisée que lorsqu'une étape requiert absolument de voir *tous* les résultats en même temps (comme une déduplication croisée ou le Fan-In d'un Juge).
 
 # 5. L'impératif de Traçabilité Absolue et de Fiabilité
 
@@ -74,8 +77,8 @@ Si cette affirmation est fausse, ajouter de l'autonomie ne fera qu'augmenter le 
 - **Cycles de Convergence :** Pattern "loop-until-dry" (boucler jusqu'à épuisement). Le système boucle tant que de nouveaux éléments sont découverts (déduplication stricte contre les succès ET les rejets stockés dans DuckDB).
 - **Human-in-the-loop :** Insérer des nœuds d'approbation humaine sur les points critiques, garantissant une sécurité de niveau entreprise grâce à la lecture de la provenance DuckDB.
 
-# 6. Conclusion : Vers des Flux de Travail Dynamiques
+# 6. Conclusion : Les Graphes Dynamiques (Self-Routing par l'IA)
 
-L'Architecte Principal ne conçoit plus des scripts, mais des écosystèmes. L'avenir appartient aux workflows où l'IA, face à un objectif complexe, écrit elle-même son script d'orchestration, choisit son fan-out et interroge la mémoire globale de l'entreprise.
+L'Architecte Principal ne conçoit plus des scripts, mais des écosystèmes. Selon l'avancée technologique majeure d'Anthropic (comme dans *Claude Code*), il n'est plus nécessaire de dessiner le graphe à la main. En utilisant les "workflows dynamiques", vous fournissez l'objectif, et **c'est le modèle d'IA lui-même qui écrit le script d'orchestration JavaScript**. L'IA décide de la parallélisation, lance une flotte de sous-agents coordonnés, et synthétise le résultat pour cette exécution spécifique.
 
 > **Appel à l'action technique :** Cessez de construire des files d'attente. Construisez des graphes traçables. Adoptez des structures capables de créer du désaccord avant de converger. C'est ainsi que l'IA devient une infrastructure de production robuste.
