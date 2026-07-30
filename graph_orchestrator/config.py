@@ -104,6 +104,11 @@ class Settings:
     # --- Observabilité / logs ---
     log_level: str  # verbosité des workers (LOW / MEDIUM / HIGH)
 
+    # --- Reprise après crash (Priorité 3 : Checkpoints) ---
+    # Si True, ignore tout checkpoint existant et repart de zéro (nouvelle exécution
+    # fraîche même si le contenu de la tâche correspond à un run interrompu).
+    fresh_start: bool
+
 
 def load_settings() -> Settings:
     """Construit les settings depuis l'environnement (avec valeurs par défaut)."""
@@ -134,6 +139,7 @@ def load_settings() -> Settings:
         kg_path=_get_str("KG_PATH", "graph_orchestrator.db"),
         workflow_mode=_get_str("WORKFLOW_MODE", "one_shot"),
         log_level=_get_str("LOG_LEVEL", "LOW"),
+        fresh_start=_get_bool("FRESH_START", False),
     )
 
 

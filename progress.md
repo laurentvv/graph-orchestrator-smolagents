@@ -17,8 +17,14 @@
 - [x] Étape 9 : PR #2 mergée (Kilo review SUCCESS). Stratégie modèles définie (Gemma4 GPU / distant CPU).
 - [x] Étape 10 (cycle SEARCH/REPLACE) : outil search_replace tolérant (portage Aider) + Mutex par fichier.
   search_replace_utils.py + tools.py + Coder équipé + 11 tests unitaires PASS.
-- [ ] Étape 11 : Run validation (Coder utilise search_replace → HTML non corrompu).
-- [ ] Étape 12 : Cycle suivant (CodeAgent ou repo-map ou circuit breaker).
+- [x] Étape 11 : Run validation (Coder utilise search_replace → HTML non corrompu) — Run #12 VALIDÉ.
+- [x] Étape 11.5 : Mise à jour de l'architecture avec les principes de juillet 2026 (Ng, Anthropic, Google).
+- [x] Étape 12 (cycle CHECKPOINTS) : Persistance d'État (Priorité 3). Table `checkpoint`
+  dans DuckDB + run_id stable (hash du contenu de tâche) + branchement save/load dans
+  run_coding_workflow (skip Architect + skip sous-tâches completed + reprise à l'itération).
+  Granularité "début d'itération" (sûre/idempotente). Config FRESH_START. 12 tests PASS.
+- [ ] Étape 13 : Run validation reprise (interrompre un run CPU-only, relancer → reprise).
+- [ ] Étape 14 : Cycle suivant (CodeAgent, repo-map, ou Nœud d'Escalade).
 
 ## Jalons bootstrap (faits)
 - [x] Création agent.md (specs gestion d'état).

@@ -164,8 +164,8 @@
     {
       "id": "F-24",
       "name": "Persistance d'État (Checkpoints SQLite/DuckDB)",
-      "description": "Sauvegarde du GraphState à chaque transition pour permettre la reprise sur erreur (Crash recovery).",
-      "status": "pending",
+      "description": "Sauvegarde du GraphState à chaque transition pour permettre la reprise sur erreur (Crash recovery). IMPLÉMENTÉ : table `checkpoint` dans knowledge_graph.py (save/load/clear), run_id stable dérivé du hash du contenu de tâche, branchement save/load dans run_coding_workflow (skip Architect + skip sous-tâches completed + reprise à la bonne itération), config FRESH_START. Granularité 'début d'itération' (sûre/idempotente). 12 tests PASS.",
+      "status": "completed",
       "dependencies": ["F-03"]
     },
     {

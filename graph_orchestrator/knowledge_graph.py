@@ -90,6 +90,19 @@ class KnowledgeGraph:
                 PRIMARY KEY (id)
             )
         """)
+        # Checkpoints de reprise (Priorité 3) : un état sérialisé par run_id stable.
+        # Permet de reprendre une exécution CPU-only longue (~15 min/fichier) après
+        # un crash, sans perdre le plan de l'Architect ni la progression (sous-tâche,
+        # itération). Payload = JSON dict construit par le workflow coding.
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS checkpoint (
+                run_id     VARCHAR NOT NULL,
+                payload    VARCHAR NOT NULL,
+                status     VARCHAR DEFAULT 'in_progress',
+                updated_at TIMESTAMP DEFAULT now(),
+                PRIMARY KEY (run_id)
+            )
+        """)
         c.commit()
 
     # ==========================================
@@ -154,6 +167,41 @@ class KnowledgeGraph:
             "UPDATE claim SET status = ? WHERE id = ?",
             [status, claim_id],
         )
+        self.conn.commit()
+
+    # ==========================================
+    # Checkpoints (Persistance d'État — Priorité 3)
+    # ==========================================
+
+    def save_checkpoint(self, run_id: str, payload: dict) -> None:
+        """Persiste (upsert) l'état d'exécution d'un run.
+
+        Un run_id donné n'a qu'un seul checkpoint : on écrase le précédent
+        (INSERT OR REPLACE). Le payload est sérialisé en JSON (supporte le
+        plan de l'Architect via model_dump, les listes de sous-tâches, etc.).
+        Granularité "début d'itération" : on ne persistera que des états
+        cohérents (jamais un Judge en cours), garantissant une reprise sûre.
+        """
+        self.conn.execute(
+            "INSERT OR REPLACE INTO checkpoint(run_id, payload, status, updated_at) "
+            "VALUES (?, ?, 'in_progress', now())",
+            [run_id, json.dumps(payload, ensure_ascii=False)],
+        )
+        self.conn.commit()
+
+    def load_checkpoint(self, run_id: str) -> Optional[dict]:
+        """Retourne le payload d'un run, ou None si absent/explicitement effacé."""
+        row = self.conn.execute(
+            "SELECT payload FROM checkpoint WHERE run_id = ?",
+            [run_id],
+        ).fetchone()
+        if row is None:
+            return None
+        return json.loads(row[0])
+
+    def clear_checkpoint(self, run_id: str) -> None:
+        """Efface le checkpoint d'un run (FRESH_START=1)."""
+        self.conn.execute("DELETE FROM checkpoint WHERE run_id = ?", [run_id])
         self.conn.commit()
 
     # ==========================================

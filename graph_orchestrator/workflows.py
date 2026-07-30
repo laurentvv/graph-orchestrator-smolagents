@@ -11,6 +11,7 @@ des insights déjà vus survit à l'effacement du contexte et aux redémarrages.
 """
 
 import asyncio
+import hashlib
 import json
 import sys
 from typing import List, Optional, Tuple
@@ -35,7 +36,7 @@ from .config import Settings, settings as default_settings
 from .hitl import hitl_checkpoint, should_trigger_hitl
 from .knowledge_graph import KnowledgeGraph
 from .logging_utils import NodeMetrics, render_observability_table
-from .models import FinalSynthesis, WorkerOutput
+from .models import ArchitectOutput, FinalSynthesis, WorkerOutput
 from .nodes import (
     aggregate_adversary_verdicts,
     build_fast_model,
@@ -213,12 +214,30 @@ async def run_coding_workflow(
 
     # Knowledge Graph persistant : Phase 5 appliquée au codage
     kg = KnowledgeGraph(settings.kg_path)
-    run_id = f"coding_{id(kg)}"
+    # run_id STABLE dérivé du contenu de tâche (avant annotation du routeur).
+    # id(kg) changeait à chaque processus → impossible de reprendre. Avec ce hash,
+    # relancer la même tâche (même tasks.json) reprend exactement où c'était arrêté.
+    _run_key = (seed_tasks[0].get("content", "") if seed_tasks else "").strip().lower()
+    run_id = f"coding_{hashlib.sha1(_run_key.encode('utf-8')).hexdigest()[:16]}"
     print(f"[*] Knowledge Graph branché : {settings.kg_path}")
 
     print(f"\n{'='*60}")
-    print(f"  CODING WORKFLOW (Multi-Agent Playbook)")
+    print(f"  CODING WORKFLOW (Multi-Agent Playbook) — run {run_id}")
     print(f"{'='*60}")
+
+    # --- Reprise après crash (Priorité 3 : Checkpoints) -----------------------
+    # FRESH_START=1 → on efface tout checkpoint existant et repart de zéro.
+    # Sinon, on tente de recharger l'état d'une exécution interrompue.
+    checkpoint = None
+    if settings.fresh_start:
+        kg.clear_checkpoint(run_id)
+        print(f"[*] FRESH_START=1 : checkpoint existant effacé, exécution fraîche.")
+    else:
+        checkpoint = kg.load_checkpoint(run_id)
+        if checkpoint:
+            print(f"[↩] Checkpoint trouvé — reprise de l'exécution {run_id}")
+        else:
+            print(f"[*] Nouvelle exécution {run_id} (aucun checkpoint)")
     
     results = []
     from .nodes import execute_tester_node, execute_coder_node
@@ -239,15 +258,45 @@ async def run_coding_workflow(
         print(f"[*] Le routeur a classifié la technologie principale : {router_res.language.upper()}")
         if seed_tasks:
             seed_tasks[0]['content'] += f"\n\n[ROUTER DIRECTIVE : The primary technology to use is {router_res.language.upper()}]"
-    
-    async def process_subtask_loop(subtask) -> Tuple[dict, List[NodeMetrics]]:
+
+    # --- État de progression (Persistance d'État — Priorité 3 : Checkpoints) --
+    # Holder mutable partagé entre les scopes de la fonction. Contient le plan de
+    # l'Architect sérialisé (évite de relancer ce nœud LLM coûteux à la reprise) +
+    # la liste des sous-tâches déjà approuvées + la position (sous-tâche, itération).
+    # À la reprise (checkpoint trouvé), on HYDRATE ces champs depuis le checkpoint
+    # pour que les skips (sous-tâches complétées) et la position prennent effet.
+    coding_state = {
+        "architect_result": checkpoint.get("architect_result") if checkpoint else None,
+        "completed_subtasks": (checkpoint or {}).get("completed_subtasks", []),
+        "current_subtask_idx": 0,
+        "current_iteration": 0,
+    }
+
+    def save_coding_state(subtask_idx: int, iteration: int) -> None:
+        """Persiste l'état courant dans DuckDB (granularité "début d'itération").
+
+        On ne sauvegarde qu'à des points COHÉRENTS : le Coder n'a pas encore tourné
+        pour cette itération. À la reprise, on rejoue donc l'itération complète
+        (Coder écrase le fichier = idempotent), sans risque de reprendre sur un
+        état intermédiaire (ex: Judge en cours) qui serait incohérent.
+        """
+        kg.save_checkpoint(run_id, {
+            "architect_result": coding_state["architect_result"],
+            "completed_subtasks": list(coding_state["completed_subtasks"]),
+            "current_subtask_idx": subtask_idx,
+            "current_iteration": iteration,
+        })
+
+    async def process_subtask_loop(subtask, start_iteration: int = 1) -> Tuple[dict, List[NodeMetrics]]:
         sub_metrics = []
         entity_id = f"file:{subtask.task_id}"
         kg.add_entity(entity_id, kind="file", name=subtask.task_id)
-        
-        max_iter = 3
-        
-        for iteration in range(1, max_iter + 1):
+
+        max_iter = settings.max_iterations  # avant : codé en dur à 3 (ignorait la config)
+
+        for iteration in range(start_iteration, max_iter + 1):
+            # Checkpoint au DÉBUT de chaque itération (point de sauvegarde sûr).
+            save_coding_state(coding_state["current_subtask_idx"], iteration)
             print(f"    [>] Itération {iteration}/{max_iter} pour {subtask.task_id} (Coder)...")
             
             # Reconstruction du prompt en lisant l'historique de DuckDB
@@ -304,6 +353,10 @@ async def run_coding_workflow(
             if judge_res and judge_res.is_approved:
                 print(f"    [+] {subtask.task_id} APPROUVÉ par le Juge ! 🚀")
                 if obs_id: kg.mark_status(obs_id, "approved")
+                # Sous-tâche validée → on la marque comme complétée pour le checkpoint
+                # (à la reprise, elle sera sautée sans ré-exécuter le Coder).
+                coding_state["completed_subtasks"].append(subtask.task_id)
+                save_coding_state(coding_state["current_subtask_idx"], iteration)
                 return {"status": "success", "task_id": subtask.task_id}, sub_metrics
             else:
                 feedback = judge_res.final_feedback if judge_res else "Erreur système du juge."
@@ -327,26 +380,56 @@ async def run_coding_workflow(
         return {"status": "max_iterations_reached", "task_id": subtask.task_id}, sub_metrics
 
     for task in seed_tasks:
-        print(f"\n[*] 1. Exécution de l'Architecte pour la tâche globale : {task['id']}")
-        architect_result, arch_metrics = await execute_architect_node(task, reasoning_model, settings)
-        if arch_metrics:
-            all_metrics.append(arch_metrics)
-            
+        # --- Reprise : l'Architect est-il déjà en checkpoint ? ----------------
+        # À la reprise, on évite de relancer ce nœud de raisonnement coûteux en
+        # rechargeant le plan sérialisé. Sinon, appel normal + persistance du plan.
+        if checkpoint and checkpoint.get("architect_result"):
+            architect_result = ArchitectOutput(**checkpoint["architect_result"])
+            print(f"\n[*] 1. Plan de l'Architecte RECHARGÉ depuis le checkpoint (économise un appel LLM).")
+        else:
+            print(f"\n[*] 1. Exécution de l'Architecte pour la tâche globale : {task['id']}")
+            architect_result, arch_metrics = await execute_architect_node(task, reasoning_model, settings)
+            if arch_metrics:
+                all_metrics.append(arch_metrics)
+
         if architect_result is None:
             print(f"[-] L'Architecte a échoué à planifier la tâche {task['id']}.")
             continue
-            
+
+        # Persiste le plan (premier checkpoint utile : sauve l'appel Architect).
+        coding_state["architect_result"] = architect_result.model_dump()
+
         print(f"[+] Plan de l'Architecte reçu : {architect_result.global_architecture}")
         print(f"[*] 2. Fan-out : Lancement des boucles d'ingénierie parallèles sur {len(architect_result.subtasks)} sous-tâches...\n")
-        
+
         # Exécution Séquentielle (Pipeline) pour éviter les Race Conditions sur les fichiers
         for i, st in enumerate(architect_result.subtasks):
+            coding_state["current_subtask_idx"] = i
+
+            # --- Reprise : sous-tâche déjà approuvée ? On la saute ----------------
+            if st.task_id in coding_state["completed_subtasks"]:
+                print(f"[*] Sous-tâche {i+1}/{len(architect_result.subtasks)} ({st.task_id}) déjà APPROUVÉE — skip.")
+                results.append({"status": "success", "task_id": st.task_id, "replayed": True})
+                continue
+
+            # --- Reprise : itération de départ pour cette sous-tâche ---------------
+            # Si le checkpoint pointe exactement sur (i, iteration), on reprend là.
+            start_iter = 1
+            if checkpoint and checkpoint.get("current_subtask_idx") == i and checkpoint.get("current_iteration"):
+                start_iter = checkpoint["current_iteration"]
+                print(f"[*] Reprise de la sous-tâche {i+1}/{len(architect_result.subtasks)} à l'itération {start_iter}...")
+                checkpoint = None  # le checkpoint n'est consommé qu'une fois
+
             print(f"[*] Traitement de la sous-tâche {i+1}/{len(architect_result.subtasks)}...")
-            res, metrics = await process_subtask_loop(st)
+            res, metrics = await process_subtask_loop(st, start_iteration=start_iter)
             all_metrics.extend(metrics)
             results.append(res)
-            
+
         print(f"\n[*] 3. Fusion des sous-tâches terminée pour {task['id']}.")
+
+    # Toutes les sous-tâches sont traitées : on marque le run comme terminé.
+    kg.clear_checkpoint(run_id)
+    print(f"\n[*] Run {run_id} terminé — checkpoint effacé.")
 
     return {"architect_plans": len(seed_tasks), "final_results": results}, all_metrics
 
