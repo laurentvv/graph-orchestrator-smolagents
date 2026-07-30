@@ -2,6 +2,18 @@
 
 Ce document traduit l'audit des références (`references_audit.md`) en une feuille de route concrète, triée par ordre d'importance critique. L'objectif est d'atteindre le "Fire and Forget" complet.
 
+> **📊 ÉTAT D'AVANCEMENT (2026-07-30)**
+> | Priorité | Statut |
+> |---|---|
+> | 🔴 0. Cadre système & prompts | **Partiel** (Coder autonome ✅, Architect Read-Only ✅ via DSPy, CodeAgent ❌) |
+> | 🔴 1. Édition sécurisée | **✅ TERMINÉE** (PR #3) — la plus critique, validée au run #12 |
+> | 🟠 2. Auto-correction (stderr) | ❌ à faire |
+> | 🟡 3. Graphe autonome (breaker/checkpoints) | **Partiel** (`max_iter=3` ✅, checkpoints ❌) |
+> | 🟢 4. Repo Map (tree-sitter) | ❌ à faire |
+> | 🔵 5. Auto-dépendances | ❌ à faire |
+>
+> **Levier hors-plan majeur découvert et appliqué** : température du Coder 0.2 (vs 1.0 serveur) — a éliminé la moitié de la corruption.
+
 ---
 
 ## 🔴 Priorité 0 : Le Cadre Système & L'État d'Esprit (La Fondation)
@@ -10,19 +22,20 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 > **🔎 État Actuel :** Le prompt du Coder a été amélioré, mais l'Architecte utilise la même base d'outils et peut être tenté d'écrire du code. On utilise probablement l'agent par défaut de smolagents.
 > **🚀 Pourquoi ce sera mieux :** En interdisant à l'Architecte d'écrire via ses prompts système (Read-Only) et en forçant le format `CodeAgent` (génération de scripts Python pour appeler les outils au lieu de JSON), on gagne massivement en précision avec les petits LLM locaux.
 
-- [ ] **Prompts Read-Only (Architecte)** : Mettre à jour le prompt système de l'Architecte avec une directive absolue : interdiction d'utiliser des outils d'édition. Son unique livrable est le `contract.md` (TDD).
-- [ ] **Directive d'Autonomie Pure (Coder)** : Ajouter au prompt du Coder : "Ne t'arrête jamais pour poser une question. Effectue l'action suivante."
-- [ ] **Transition vers `CodeAgent`** : S'assurer que tous les agents dans `dspy_nodes.py`/`nodes.py` instancient un `CodeAgent` de *smolagents* (beaucoup plus robuste que le `ToolCallingAgent` JSON classique).
+- [x] **Prompts Read-Only (Architecte)** : Mettre à jour le prompt système de l'Architecte avec une directive absolue : interdiction d'utiliser des outils d'édition. Son unique livrable est le `contract.md` (TDD). — *FAIT via DSPy : l'Architect (dspy_nodes.py) n'a aucun tool d'écriture, il ne fait que planifier en JSON (ArchitectOutput).*
+- [x] **Directive d'Autonomie Pure (Coder)** : Ajouter au prompt du Coder : "Ne t'arrête jamais pour poser une question. Effectue l'action suivante." — *FAIT : prompt Coder avec plan d'action strict + règle anti-boucle ("une passe unique").*
+- [ ] **Transition vers `CodeAgent`** : S'assurer que tous les agents dans `dspy_nodes.py`/`nodes.py` instancient un `CodeAgent` de *smolagents* (beaucoup plus robuste que le `ToolCallingAgent` JSON classique). — *REPORTÉ : 7 agents en ToolCallingAgent. CodeAgent exécute du Python (risque bash_command non-sandboxé), nécessite réécriture des prompts JSON→Python. Cycle suivant.*
 
-## 🔴 Priorité 1 : L'Édition Sécurisée des Fichiers (Le socle critique)
+## 🔴 Priorité 1 : L'Édition Sécurisée des Fichiers (Le socle critique) ✅ TERMINÉE
 *Si l'agent corrompt les fichiers, tout le reste de la boucle plantera. C'est l'urgence absolue pour les petits modèles locaux.*
 
 > **🔎 État Actuel (`tools.py`) :** L'outil `edit_file` exige une correspondance exacte (`content.replace(old, new)`) au caractère et à l'espace près. De plus, il n'y a aucun verrou lors du Fan-out asynchrone (`asyncio.gather` dans `workflows.py`).
 > **🚀 Pourquoi ce sera mieux :** Les petits LLMs échouent constamment sur l'indentation stricte. Un format `SEARCH/REPLACE` tolérant résout ce problème d'hallucination de format. Le Mutex (verrou) évitera que deux sous-tâches n'écrasent le même fichier en même temps.
 
-- [ ] **Outil "SEARCH/REPLACE" textuel** : Supprimer l'édition basée sur le remplacement strict/JSON. Créer un outil Python qui parse le format texte brut `<<<< ==== >>>>` (inspiré de `aider`).
-- [ ] **Verrou d'accès (Mutex)** : Implémenter un verrou asynchrone par fichier (inspiré de `openfox`) dans `tools.py` pour empêcher l'exécution en parallèle de deux opérations d'écriture sur le même fichier.
-- [ ] **Validation Anti-Vide** : Rejeter immédiatement toute édition qui remplace le code par des placeholders (`// ... code ici ...`).
+- [x] **Outil "SEARCH/REPLACE" textuel** : Supprimer l'édition basée sur le remplacement strict/JSON. Créer un outil Python qui parse le format texte brut `<<<< ==== >>>>` (inspiré de `aider`). — *FAIT (PR #3) : `search_replace_utils.py` (portage Aider) + outil `@tool search_replace(path, search, replace)` avec matching tolérant (exact → indentation → ellipses).*
+- [x] **Verrou d'accès (Mutex)** : Implémenter un verrou asynchrone par fichier (inspiré de `openfox`) dans `tools.py` pour empêcher l'exécution en parallèle de deux opérations d'écriture sur le même fichier. — *FAIT : `_FILE_LOCKS` (threading.Lock) dans tools.py.*
+- [x] **Validation Anti-Vide** : Rejeter immédiatement toute édition qui remplace le code par des placeholders (`// ... code ici ...`). — *FAIT : garde anti-placeholder + anti-effacement dans `search_replace` ET `write_file`.*
+- [x] *(bonus hors-plan)* **Température du Coder 0.2** — *FAIT (PR #3) : le défaut serveur était 1.0 (chat créatif) → corruption aléatoire. Config `CODER_TEMPERATURE=0.2` + Modelfile. Levier découvert par l'utilisateur, a éliminé la moitié du problème de corruption.*
 
 ## 🟠 Priorité 2 : La Boucle d'Auto-Correction (Le feedback)
 *Un modèle fera toujours des erreurs de syntaxe. L'autonomie passe par sa capacité à se réparer seul.*
@@ -39,9 +52,9 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 > **🔎 État Actuel (`workflows.py`) :** Il y a déjà un concept de `max_iter = 3` (bravo !), et les découvertes sont stockées dans `DuckDB`. Cependant, l'exécution elle-même reste une boucle Python en RAM.
 > **🚀 Pourquoi ce sera mieux :** En cas de micro-coupure réseau (API) ou de plantage inattendu, une boucle Python en RAM est détruite. L'ajout de Checkpoints (comme dans *LangGraph*) permet de sauvegarder l'état sur disque à chaque nœud et de reprendre l'usine exactement là où elle a planté, économisant du temps et de l'argent.
 
-- [ ] **Le Coupe-Circuit (Circuit Breaker)** : Renforcer le compteur `retry_count` existant dans l'état global du graphe (`GraphState`).
+- [x] **Le Coupe-Circuit (Circuit Breaker)** : Renforcer le compteur `retry_count` existant dans l'état global du graphe (`GraphState`). — *FAIT (préexistant) : `max_iterations=3` dans le workflow coding, la boucle s'arrête et passe à la sous-tâche suivante.*
 - [ ] **Nœud d'Escalade (Judge/Summarizer)** : Si le Coupe-Circuit s'active au bout de 3 essais, router vers un nouveau nœud qui résume les échecs ou fait appel à une API distante (modèle lourd) pour corriger l'erreur vicieuse.
-- [ ] **Persistance d'État (Checkpoints)** : Connecter la base `DuckDB` existante au cycle de vie du graphe pour écrire l'état d'exécution à chaque changement de nœud (Reprise sur erreur).
+- [ ] **Persistance d'État (Checkpoints)** : Connecter la base `DuckDB` existante au cycle de vie du graphe pour écrire l'état d'exécution à chaque changement de nœud (Reprise sur erreur). — **PRIORITÉ n°1 du prochain cycle** : avec un système CPU-only lent (~10-15 min/fichier), la reprise après coupure est un VRAI BESOIN CRITIQUE. Sans ça, une coupure = perte de 40 min de génération.
 
 ## 🟢 Priorité 4 : L'Intelligence Contextuelle (Repo Map)
 *Sans cela, l'architecte navigue à l'aveugle dans les gros dépôts.*
@@ -53,3 +66,4 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 
 ## 🔵 Priorité 5 : L'Automatisation de l'Environnement
 - [ ] **Auto-Résolution des Dépendances** : Si le nœud `Tester` détecte un `ModuleNotFoundError`, lancer automatiquement un `uv add <package>` ou `pip install` avant de relancer les tests, évitant de gâcher un cycle LLM pour ça.
+
