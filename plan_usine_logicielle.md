@@ -8,7 +8,7 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 > | 🔴 0. Cadre système & prompts | **Partiel** (Coder autonome ✅, Architect Read-Only ✅ via DSPy, CodeAgent ❌) |
 > | 🔴 1. Édition sécurisée | **✅ TERMINÉE** (PR #3) — la plus critique, validée au run #12 |
 > | 🟠 2. Auto-correction (stderr) | **✅ TERMINÉE** (PR en cours) — troncature + Tester polyvalent multi-techno (web+python) |
-> | 🟡 3. Graphe autonome (breaker/checkpoints) | **Partiel** (`max_iter=3` ✅, checkpoints ✅, nœud d'escalade ❌) |
+> | 🟡 3. Graphe autonome (breaker/checkpoints) | **✅ TERMINÉE** — `max_iter=3` ✅, checkpoints ✅, nœud d'escalade ✅ (F-23) |
 > | 🟢 4. Repo Map (tree-sitter) | ❌ à faire |
 > | 🔵 5. Auto-dépendances | ❌ à faire |
 >
@@ -54,7 +54,7 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 > **🚀 Pourquoi ce sera mieux :** En cas de micro-coupure réseau (API) ou de plantage inattendu, une boucle Python en RAM est détruite. L'ajout de Checkpoints (comme dans *LangGraph*) permet de sauvegarder l'état sur disque à chaque nœud et de reprendre l'usine exactement là où elle a planté, économisant du temps et de l'argent.
 
 - [x] **Le Coupe-Circuit (Circuit Breaker)** : Renforcer le compteur `retry_count` existant dans l'état global du graphe (`GraphState`). — *FAIT (préexistant) : `max_iterations=3` dans le workflow coding, la boucle s'arrête et passe à la sous-tâche suivante.*
-- [ ] **Nœud d'Escalade (Judge/Summarizer)** : Si le Coupe-Circuit s'active au bout de 3 essais, router vers un nouveau nœud qui résume les échecs ou fait appel à une API distante (modèle lourd) pour corriger l'erreur vicieuse.
+- [x] **Nœud d'Escalade (Judge/Summarizer)** : Si le Coupe-Circuit s'active au bout de 3 essais, router vers un nouveau nœud qui résume les échecs ou fait appel à une API distante (modèle lourd) pour corriger l'erreur vicieuse. — *FAIT (F-23) : nœud DSPy `execute_escalation_node` qui synthétise les réfutations accumulées dans le KG en un diagnostic post-mortem structuré (cause racine + leçon + severity), le persiste (kind="escalation" + arêtes ESCALATES vers les réfutations), marque la sous-tâche "escalated". Stratégie "diagnostic seul" (pas de retry/modèle distant — réutilise le modèle de raisonnement local). Dégradation gracieuse (repli "max_iterations_reached" si désactivé ou LLM down). 8 tests PASS.*
 - [x] **Persistance d'État (Checkpoints)** : Connecter la base `DuckDB` existante au cycle de vie du graphe pour écrire l'état d'exécution à chaque changement de nœud (Reprise sur erreur). — *FAIT : table `checkpoint` dans knowledge_graph.py (save/load/clear) + run_id stable (hash du contenu de tâche) + branchement dans run_coding_workflow (skip Architect + skip sous-tâches completed + reprise à l'itération). Granularité "début d'itération" (sûre/idempotente). Config FRESH_START. 12 tests PASS.* **Besoin critique résolu** : avec ~10-15 min/fichier en CPU-only, une coupure ne perd plus 40 min — la reprise est automatique.
 
 ## 🟢 Priorité 4 : L'Intelligence Contextuelle (Repo Map)

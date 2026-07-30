@@ -25,6 +25,7 @@ from .logging_utils import NodeMetrics
 from .models import (
     ArchitectOutput,
     CodeJudgeOutput,
+    EscalationOutput,
     RouterOutput,
     SecurityOutput,
 )
@@ -89,6 +90,27 @@ class CodeJudgeSignature(dspy.Signature):
     test_results: str = dspy.InputField(desc="Sortie brute des tests fonctionnels exécutés par l'agent QA")
     task_requirements: str = dspy.InputField(desc="Le cahier des charges complet (comportements attendus). Sert à vérifier que le test_results couvre bien les comportements clés et que le code les implémente — pas seulement qu'il ne crash pas.")
     output: CodeJudgeOutput = dspy.OutputField(desc="Le verdict final, approuvant ou rejetant le code avec justifications")
+
+
+class EscalationSignature(dspy.Signature):
+    """Post-mortem d'une sous-tâche qui a épuisé le Circuit Breaker (3 itérations
+    Coder↔Tester↔Judge toutes rejetées).
+
+    Tu es un ingénieur principal menant une rétrospective d'incident. Tu reçois
+    l'historique COMPLET des réfutations émises par le Juge (les bugs récurrents
+    qui n'ont pas pu être résolus) et l'état actuel du code sur disque. Tu dois
+    produire un diagnostic STRUCTURÉ et ACTIONNABLE — pas une simple description.
+
+    Ton diagnostic doit permettre à un run futur (ou à un humain) de ne pas
+    répéter les mêmes erreurs. Identifie la cause racine profonde (pas le
+    symptôme de surface), liste objectivement ce qui a été tenté (anti-répétition),
+    et formule une leçon concrète.
+    """
+    task_id: str = dspy.InputField(desc="Identifiant de la sous-tâche en échec")
+    task_description: str = dspy.InputField(desc="Le cahier des charges / description de la sous-tâche")
+    failure_history: str = dspy.InputField(desc="Historique concaténé des réfutations du Juge (bugs non résolus sur les 3 itérations). C'est la matière première du diagnostic.")
+    current_code: str = dspy.InputField(desc="L'état actuel du code sur disque après le dernier échec")
+    output: EscalationOutput = dspy.OutputField(desc="Diagnostic post-mortem structuré : cause racine, tentatives, leçon, gravité")
 
 
 # ==========================================
@@ -312,13 +334,81 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
             )
         
         metrics = NodeMetrics(
-            node="code_judge_dspy", 
-            model=settings.reasoning_model_id, 
-            duration_s=time.time() - start_time, 
-            input_tokens=0, 
+            node="code_judge_dspy",
+            model=settings.reasoning_model_id,
+            duration_s=time.time() - start_time,
+            input_tokens=0,
             output_tokens=0
         )
         return result.output, metrics
     except Exception as e:
         print(f"[-] Erreur critique DSPy (CodeJudge) : {e}")
+        return None, None
+
+
+async def execute_escalation_node(subtask: dict, failure_history: str, reasoning_model, settings: Settings) -> Tuple[Optional[EscalationOutput], Optional[NodeMetrics]]:
+    """Exécute le nœud d'escalade : post-mortem d'une sous-tâche en échec répété.
+
+    Déclenché quand le Circuit Breaker s'active (3 itérations Coder↔Tester↔Judge
+    toutes rejetées). Au lieu d'abandonner la sous-tâche sans retour, ce nœud
+    synthétise les réfutations accumulées dans le Knowledge Graph en un diagnostic
+    structuré (cause racine + leçon + gravité), persisté dans le KG et exploitable
+    par un run futur (un agent peut interroger ces post-mortem via
+    query_duckdb_knowledge_graph, comme les bugs existants).
+
+    Args:
+        subtask (dict): La sous-tâche en échec (doit contenir 'id', 'description'
+            optionnelle, 'target_files').
+        failure_history (str): Historique des réfutations concaténé et tronqué
+            (déjà borné par truncate_history côté appelant pour protéger le contexte).
+        reasoning_model: Modèle de raisonnement (pour le logging — le nœud config
+            DSPy pointe sur settings.reasoning_model_id).
+        settings (Settings): Configuration globale.
+
+    Returns:
+        Un tuple (EscalationOutput | None, NodeMetrics | None). En cas d'échec
+        LLM, retourne (None, None) — l'appelant retombe alors sur le comportement
+        historique 'max_iterations_reached' (dégradation gracieuse).
+    """
+    print(f"[*] DSPy Nœud d'Escalade sur la tâche {subtask.get('id')} (circuit breaker activé)...")
+    lm = _configure_dspy(settings, settings.reasoning_model_id)
+
+    # Lecture du code courant sur disque (état final après le dernier échec).
+    # Comme pour le Judge, on tronque pour protéger le contexte.
+    code_content = ""
+    for file_path in subtask.get("target_files", []):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                code_content += f"--- {file_path} ---\n{f.read()}\n\n"
+        except Exception:
+            pass
+    current_code = truncate_output(
+        code_content or "Code manquant",
+        head_lines=settings.stderr_head_lines,
+        tail_lines=settings.stderr_tail_lines,
+        max_chars=settings.feedback_max_chars,
+    )
+
+    start_time = time.time()
+    try:
+        with dspy.context(lm=lm):
+            predictor = dspy.ChainOfThought(EscalationSignature)
+            result = await asyncio.to_thread(
+                predictor,
+                task_id=subtask.get("id", "unknown"),
+                task_description=subtask.get("description") or subtask.get("content") or "Description non disponible.",
+                failure_history=failure_history or "Aucun historique de réfutation enregistré.",
+                current_code=current_code,
+            )
+
+        metrics = NodeMetrics(
+            node="escalation_dspy",
+            model=settings.reasoning_model_id,
+            duration_s=time.time() - start_time,
+            input_tokens=0,
+            output_tokens=0
+        )
+        return result.output, metrics
+    except Exception as e:
+        print(f"[-] Erreur critique DSPy (Escalation) : {e}")
         return None, None

@@ -42,6 +42,14 @@
 - [ ] Critère 31 : Le skill `web-tester` exige désormais un rapport structuré (section « ERREURS CONSOLE JS » = le « stderr » du web) ; le skill `python-tester` documente le verdict pytest (exit code) et la lecture d'un échec.
 - [ ] Critère 32 : La suite pytest complète passe (0 régression, nouveaux tests inclus : feedback_utils, tech_detection, python_runner, tester_dispatch, feedback_integration).
 
+## Critères du Nœud d'Escalade (Priorité 3 — F-23)
+- [ ] Critère 33 : Quand une sous-tâche épuise le Circuit Breaker (3 itérations Coder↔Tester↔Judge toutes rejetées) et que `ESCALATION_ENABLED` est vrai (défaut), le workflow appelle `execute_escalation_node` et la sous-tâche ressort avec le statut `"escalated"` (et non `"max_iterations_reached"`).
+- [ ] Critère 34 : `execute_escalation_node` (nœud DSPy, modèle de raisonnement local) produit un `EscalationOutput` structuré (root_cause, attempted_fixes, lesson, severity) à partir de l'historique des réfutations du Juge + du code courant sur disque ; `metrics.node == "escalation_dspy"`.
+- [ ] Critère 35 : Le diagnostic est persisté dans le Knowledge Graph (`kind="escalation"`, `source="escalation_node"`) et relié aux réfutations qu'il synthétise via des arêtes `ESCALATES` (traçabilité, requêtable par `query_duckdb_knowledge_graph` comme les bugs existants).
+- [ ] Critère 36 : Dégradation gracieuse — si `ESCALATION_ENABLED=false` OU si le nœud d'escalade échoue (LLM indisponible / exception non prévue), le workflow ne plante pas et retombe sur le statut historique `"max_iterations_reached"` (le post-mortem ne fait jamais planter le run).
+- [ ] Critère 37 : L'historique des échecs injecté est tronqué (`truncate_history`, `feedback_max_chars`) — un gros historique ne fait pas exploser le contexte ni crasher le nœud.
+- [ ] Critère 38 : La suite pytest complète passe (0 régression, 8 nouveaux tests `test_escalation.py` inclus : nœud isolé succès/échec/troncature/vide, E2E déclenchement/persistance/toggle-off/repli).
+
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.
 * Validation process : `uv run python -m graph_orchestrator.workflows` (WORKFLOW_MODE=coding) →

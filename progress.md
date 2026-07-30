@@ -77,6 +77,16 @@
   (index.html 12 533 o, styles.css 14 033 o, script.js 7 285 o). Checkpoint effacé en fin.
 - [ ] Étape 14 : Cycle suivant (Priorité 2 stderr / Nœud d'Escalade / Repo Map / CodeAgent).
 
+## Jalons de l'Itération (cycle Nœud d'Escalade — F-23)
+- [x] Étape ESC-1 : Planification approuvée (stratégie Diagnostic seul + persistance KG).
+- [x] Étape ESC-2 : Modèle EscalationOutput (models.py).
+- [x] Étape ESC-3 : Signature DSPy + execute_escalation_node (dspy_nodes.py).
+- [x] Étape ESC-4 : Config escalation_enabled (config.py + .env.example).
+- [x] Étape ESC-5 : Branchement workflows.py (remplacer max_iterations_reached).
+- [x] Étape ESC-6 : Tests tests/test_escalation.py (8 tests, 0 LLM).
+- [x] Étape ESC-7 : Suite pytest complète (220 passed / 0 failed).
+- [x] Étape ESC-8 : Docs (contract.md, plan, README) + finalisation état disque.
+
 ## Jalons bootstrap (faits)
 - [x] Création agent.md (specs gestion d'état).
 - [x] Initialisation feature_list.json, contract.md, progress.md, log.md.

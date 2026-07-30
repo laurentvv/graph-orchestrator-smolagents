@@ -243,8 +243,9 @@ async def run_coding_workflow(
     from .nodes import execute_tester_node, execute_coder_node
     from .dspy_nodes import (
         execute_architect_node,
-        execute_security_reviewer_node, 
-        execute_code_judge_node, 
+        execute_security_reviewer_node,
+        execute_code_judge_node,
+        execute_escalation_node,
         execute_router_node
     )
     
@@ -403,6 +404,70 @@ async def run_coding_workflow(
                     kg.add_edge(ref_id, obs_id, "REFUTES")
                 
         print(f"    [!] Max itérations atteintes pour {subtask.task_id}.")
+
+        # --- Nœud d'Escalade (Priorité 3, F-23) --------------------------------
+        # Le Circuit Breaker s'est activé : la sous-tâche a épuisé ses itérations
+        # sans approval. Au lieu d'abandonner sans retour, on synthétise les
+        # réfutations accumulées dans le KG en un diagnostic post-mortem, persisté
+        # et exploitable par un run futur. Dégradation gracieuse : si l'escalade
+        # est désactivée (ESCALATION_ENABLED=false) ou si le nœud LLM échoue, on
+        # retombe sur le statut historique 'max_iterations_reached'.
+        if settings.escalation_enabled:
+            from .feedback_utils import truncate_history
+            # Lecture de TOUTES les réfutations accumulées pour cette sous-tâche.
+            refutations = [c for c in kg.get_claims(entity_id) if c.get('kind') == 'refutation']
+            failure_history = truncate_history(
+                [c.get('content', '') for c in refutations],
+                max_chars=settings.feedback_max_chars,
+                header="[HISTORIQUE DES ÉCHECS (RÉFUTATIONS DU JUGE)] :",
+            )
+            escalation_sub = {
+                "id": subtask.task_id,
+                "description": subtask.description,
+                "target_files": subtask.target_files,
+            }
+            print(f"    [↗] Activation du Nœud d'Escalade (post-mortem) pour {subtask.task_id}...")
+            try:
+                esc_res, m5 = await execute_escalation_node(escalation_sub, failure_history, reasoning_model, settings)
+                if m5: sub_metrics.append(m5)
+            except Exception as esc_err:
+                # Défense en profondeur : le nœud attrape déjà ses erreurs LLM en
+                # interne (→ None), mais on protège aussi contre toute exception
+                # non prévue. Le post-mortem ne doit JAMAIS faire planter le run —
+                # on replie sur le statut historique.
+                print(f"    [-] Nœud d'Escalade en erreur ({esc_err}) — repli sur le statut brut.")
+                esc_res = None
+
+            if esc_res:
+                # Persistance du diagnostic dans le KG (kind="escalation").
+                diag_text = (
+                    f"CAUSE RACINE: {esc_res.root_cause}\n"
+                    f"TENTATIVES: {', '.join(esc_res.attempted_fixes) or 'non documentées'}\n"
+                    f"LEÇON: {esc_res.lesson}\n"
+                    f"GRAVITÉ: {esc_res.severity}"
+                )
+                esc_id = kg.add_claim(
+                    entity_id=entity_id,
+                    content=diag_text,
+                    kind="escalation",
+                    confidence=None,
+                    source="escalation_node",
+                    model_id=settings.reasoning_model_id,
+                    run_id=run_id,
+                )
+                # Relie le diagnostic aux réfutations qu'il synthétise (traçabilité).
+                if esc_id is not None:
+                    for ref in refutations:
+                        kg.add_edge(esc_id, ref['id'], "ESCALATES")
+                print(f"    [⚠] {subtask.task_id} ESCALADÉ — diagnostic persisté (gravité: {esc_res.severity}).")
+                return {
+                    "status": "escalated",
+                    "task_id": subtask.task_id,
+                    "diagnostic": esc_res.model_dump(),
+                }, sub_metrics
+
+            print(f"    [-] Nœud d'Escalade indisponible/échoué pour {subtask.task_id} — repli sur le statut brut.")
+
         return {"status": "max_iterations_reached", "task_id": subtask.task_id}, sub_metrics
 
     for task in seed_tasks:

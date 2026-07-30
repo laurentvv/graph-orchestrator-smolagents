@@ -63,6 +63,22 @@ class CodeJudgeOutput(BaseModel):
     final_feedback: str
 
 
+class EscalationOutput(BaseModel):
+    """Diagnostic post-mortem produit par le nœud d'escalade (Priorité 3, F-23).
+
+    Quand le Circuit Breaker s'active (3 itérations Coder↔Tester↔Judge toutes
+    rejetées), ce nœud synthétise les réfutations accumulées dans le Knowledge
+    Graph en un diagnostic actionnable, plutôt que d'abandonner la sous-tâche
+    sans retour exploitable. Le diagnostic est persisté dans le KG
+    (kind="escalation") et relié aux réfutations via des arêtes ESCALATES.
+    """
+    task_id: str
+    root_cause: str  # cause racine la plus probable de l'échec répété
+    attempted_fixes: List[str]  # résumé de ce qui a été tenté (anti-répétition future)
+    lesson: str  # recommandation actionnable / leçon apprise pour un run futur
+    severity: Literal["low", "medium", "high"]  # gravité de l'échec
+
+
 class AdversaryVerdict(BaseModel):
     """Verdict d'un sceptique sur UNE tâche (§5 : vérification adversaire)."""
     task_id: str

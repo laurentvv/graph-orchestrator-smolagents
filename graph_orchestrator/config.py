@@ -118,6 +118,17 @@ class Settings:
     stderr_tail_lines: int  # lignes de queue à garder (la cause racine, en bas)
     feedback_max_chars: int  # plafond global du feedback injecté au Coder
 
+    # --- Nœud d'Escalade (Priorité 3 : post-mortem sur circuit breaker) ---
+    # Quand une sous-tâche épuise le Circuit Breaker (3 itérations toutes rejetées),
+    # un nœud DSPy synthétise les réfutations accumulées en un diagnostic post-mortem
+    # (cause racine + leçon), le persiste dans le KG (kind="escalation"). Si False,
+    # on retombe sur le comportement historique : la sous-tâche sort avec le statut
+    # brut "max_iterations_reached" sans diagnostic. Opt-out utile pour A/B ou tests.
+    # Valeur par défaut dans la dataclass : évite de casser les helpers de test qui
+    # construisent Settings(...) à la main à chaque ajout de champ (load_settings()
+    # passe toujours la vraie valeur lue depuis l'env en production).
+    escalation_enabled: bool = True
+
 
 def load_settings() -> Settings:
     """Construit les settings depuis l'environnement (avec valeurs par défaut)."""
@@ -153,6 +164,7 @@ def load_settings() -> Settings:
         stderr_head_lines=_get_int("STDERR_HEAD_LINES", 20),
         stderr_tail_lines=_get_int("STDERR_TAIL_LINES", 20),
         feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),
+        escalation_enabled=_get_bool("ESCALATION_ENABLED", True),
     )
 
 
