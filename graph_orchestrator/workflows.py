@@ -277,6 +277,11 @@ async def run_coding_workflow(
         "completed_subtasks": (checkpoint or {}).get("completed_subtasks", []),
         "current_subtask_idx": 0,
         "current_iteration": 0,
+        # Spec racine complète (cahier des charges d'origine). Propagée jusqu'au
+        # Tester (via sub_dict["original_content"]) pour qu'il connaisse le
+        # comportement attendu global et écrive des assertions fonctionnelles,
+        # pas seulement un smoke-test. Aussi passée au Judge (task_requirements).
+        "seed_content": task_content,
     }
 
     def save_coding_state(subtask_idx: int, iteration: int) -> None:
@@ -331,9 +336,13 @@ async def run_coding_workflow(
                 # Propagation de la techno détectée par le routeur vers le Tester
                 # polyvalent (détection redondante : ce signal + les extensions).
                 "router_lang": coding_router_lang,
+                # Spec racine complète (cahier des charges d'origine). Le Tester en
+                # a besoin pour identifier les comportements attendus à valider via
+                # assertions fonctionnelles (sinon il ne teste que l'absence de crash).
+                "original_content": coding_state.get("seed_content", ""),
             }
             
-            # 1. Coder (Qwen-2B)
+            # 1. Coder (smolagents, modèle FAST)
             coder_res, m1 = await execute_coder_node(sub_dict, fast_model, settings)
             if m1: sub_metrics.append(m1)
             
@@ -362,8 +371,8 @@ async def run_coding_workflow(
             if m2: sub_metrics.append(m2)
             if m3: sub_metrics.append(m3)
             
-            # 3. Judge Panel (Fan-in)
-            print(f"    [>] Audits terminés. Juge (Qwen-2B JSON) en cours d'évaluation...")
+            # 3. Judge Panel (Fan-in) — DSPy ChainOfThought (Pydantic force le JSON Mode)
+            print(f"    [>] Audits terminés. Juge ({settings.reasoning_model_id}) en cours d'évaluation...")
             judge_res, m4 = await execute_code_judge_node(sub_dict, test_res, sec_res, fast_model, settings)
             if m4: sub_metrics.append(m4)
             

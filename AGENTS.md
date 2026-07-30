@@ -76,3 +76,30 @@ Tu ne dois jamais te fier uniquement à ta fenêtre de contexte pour suivre l'av
 3. **Phase de Synchronisation** : Après chaque écriture de fichier ou test, mets à jour le fichier de statut associé (`progress.md` ou `feature_list.json`).
 4. **Gestion des Erreurs** : Si une exception survient ou si le processus s'interrompt, l'état valide est celui extrait de la dernière ligne du `log.md` combiné aux assertions de `progress.md`.
 5. **`README.md`** : PUSH = mise à jour `README.md` si nouvelle fonctionnalité ou modification importante.
+
+## 4. Banque de Prompts de Test (Prompt-Vault)
+
+**Où trouver les prompts** : `references/Prompt-Vault/` (sous-module git). Classés par difficulté :
+- `Easy/` — Bubble_Sort_Visualizer, Color_Palette_Generator, ToDo_List
+- `Medium/` — Sorting_Visualization, Pixel_Art_Editor
+- `Hard/` — Kanban_Board, Markdown_Editor_Desktop, Local_OCR
+- `Advanced/` — LLM_Speedometer, Feed_Aggregator, Hantavirus_Simulation, File_Listing
+
+Chaque `.md` est un cahier des charges structuré (souvent "1 fichier `index.html`, HTML+CSS+JS vanilla"). Voir `references/Prompt-Vault/README.md` pour le tableau récapitulatif.
+
+**Comment brancher un prompt dans le système graph** (pour tester le coding workflow) :
+1. Ouvrir le `.md` du prompt choisi et copier son contenu (la partie "requirements").
+2. Éditer `tasks.json` → section `"coding"` → y coller le prompt dans `"content"`.
+   - Adapter `"target_files"` au prompt (souvent `["index.html"]` ; si le prompt impose une arborescence, la lister explicitement, ex. `["index.html", "styles.css", "script.js"]`).
+3. S'assurer que `.env` a `WORKFLOW_MODE=coding`.
+4. Lancer : `uv run agent_graph.py` (équivalent : `uv run python -m graph_orchestrator.workflows`). En contexte pipe/non-TTY, préfixer par `PYTHONUNBUFFERED=1` pour le flush temps réel.
+   `agent_graph.py` délègue à `graph_orchestrator.workflows.main()`, qui dispatche selon `WORKFLOW_MODE`. (Historique : avant correction, il pointait sur `runner.main()` = one-shot hardcodé qui ignorait `WORKFLOW_MODE`.)
+5. Le workflow exécute : Routeur → Architect → Coder → Tester → Judge (jusqu'à `MAX_ITERATIONS`, défaut 3), avec persistance DuckDB + checkpoints. Signatures distinctives dans les logs : `CODING WORKFLOW` = coding OK ; `Démarrage du graphe avec N tâches` + `Fan-out asynchrone` = mode one-shot.
+
+**Recommandations (ordre de difficulté croissante pour valider le graphe)** :
+1. **Bubble_Sort_Visualizer** (Easy) — le plus borné : 1 fichier, algo déterministe, périmètre fixe. **Point d'entrée idéal pour tester le graphe.**
+2. Color_Palette_Generator (Easy) — clipboard + calcul de luminance.
+3. ToDo_List (Easy) — 7 étapes + localStorage (génération plus large).
+4. Puis Medium/Hard/Advanced selon besoin de monter en charge.
+
+**Avant un run réel** : vérifier la disponibilité des endpoints LLM (`curl http://<host>:11434/api/tags`) — FAST sur `OLLAMA_API_BASE`, REASONING sur `OLLAMA_REASONING_API_BASE`. Run CPU-only distant = plusieurs minutes, prévenir l'utilisateur.

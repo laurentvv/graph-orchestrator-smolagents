@@ -1,0 +1,42 @@
+# ============================================================
+# Modelfile : gemma-4-E4B — Modèle FAST (Coder / Routeur / workers) — DISTANT CPU
+# ============================================================
+# Rôle : nœuds d'exécution (Coder smolagents, Routeur, Fan-out workers).
+# Tourne sur le SERVEUR DISTANT (10.201.12.50) en CPU-only : 16 cœurs physiques
+# / 32 threads, 64 Go RAM (10 utilisés → large). Pas de contrainte VRAM ici.
+#
+# CRÉE le tag `gemma-4-e4b_CPU` À PARTIR du parent UD-Q4_K_XL (pull brut présent
+# sur le serveur) en lui ajoutant les paramètres d'inférence (ctx, temp, threads)
+# et un system prompt "développeur". Le tag `_CPU` identifie clairement où il
+# tourne (vs le `_GPU` / brut local). Gemma-4-E4B génère du code complet propre +
+# du tool-call valide, là où qwen3.5:4b corrompait les gros contenus JSON/HTML.
+#
+# PRÉREQUIS : le parent UD-Q4_K_XL doit exister sur le serveur :
+#   ollama pull hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL
+#
+# CRÉATION (sur le serveur distant) :
+#   ollama create hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:gemma-4-e4b_CPU -f docs/Modelfile.gemma4-e4b-distant-cpu
+# Puis .env :
+#   OLLAMA_API_BASE=http://10.201.12.50:11434/v1
+#   FAST_MODEL_ID=hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:gemma-4-e4b_CPU
+# ============================================================
+
+FROM hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL
+
+# --- Contexte & génération ---
+PARAMETER num_ctx 32768
+PARAMETER num_predict 12000
+
+# --- Température : CRITIQUE pour le code ---
+# Le défaut de qwen3.5:4b est temperature=1.0 (chat créatif) → corruption aléatoire
+# de la syntaxe (HTML/JSON cassés). 0.2 = quasi-déterministe, idéal pour coder.
+PARAMETER temperature 0.2
+
+# --- Optimisation CPU (serveur 16 cœurs physiques, 64 Go RAM) ---
+# Utilise les 16 cœurs physiques (mettre le nb de cœurs PHYSIQUES, pas logiques).
+PARAMETER num_thread 20
+
+# --- Spécialisation "développeur" ---
+SYSTEM """
+Tu es un développeur expert et autonome. Tu écris du code complet, réel et fonctionnel — jamais de placeholders, mocks ou TODO. Quand tu utilises un outil d'écriture de fichier, tu passes le CONTENU COMPLET dans l'argument prévu, jamais vide. Ton code est optimisé, idiomatique et prêt à l'emploi. Tu ne donnes pas de longues explications sauf si demandé : la concision s'applique à ta prose, PAS au contenu des fichiers.
+"""

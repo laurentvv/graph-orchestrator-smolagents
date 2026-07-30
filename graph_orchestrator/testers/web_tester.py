@@ -42,47 +42,73 @@ class WebTestRunner:
 
         # Le context manager assure la fermeture propre du serveur MCP après le run.
         with ToolCollection.from_mcp(server_parameters, trust_remote_code=True) as tool_collection:
-            local_tester = ToolCallingAgent(
-                tools=[*tool_collection.tools],
-                model=model,
-                name=f"tester_{task['id'].replace('-', '_')}",
-                description="Agent QA chargé de tester les interfaces web avec le MCP Chrome DevTools.",
-                verbosity_level=resolve_verbosity("HIGH"),
-            )
+            # Outils Chrome DevTools (navigation, clics, console...) + Context7
+            # (doc de libs à jour). context7_tools() → [] si pas de clé
+            # (backward-compat : le tester tourne sans Context7). Imbriqué dans un
+            # `with` car la connexion MCP doit rester ouverte pendant le run du tester.
+            from ..context7_tool import context7_tools
+            with context7_tools() as c7_tools:
+                tester_tools = [*tool_collection.tools]
+                tester_tools.extend(c7_tools)
+                local_tester = ToolCallingAgent(
+                    tools=tester_tools,
+                    model=model,
+                    name=f"tester_{task['id'].replace('-', '_')}",
+                    description="Agent QA chargé de tester les interfaces web avec le MCP Puppeteer.",
+                    verbosity_level=resolve_verbosity("HIGH"),
+                    # 24 steps (vs défaut 20) : les tests fonctionnels assertionnels
+                    # (puppeteer_evaluate × 2-4 comportements) consomment des steps en
+                    # plus du smoke-test (navigate/screenshot/console). Sans marge, le
+                    # tester épuise son budget avant d'arriver aux assertions clés.
+                    max_steps=24,
+                )
 
-            # Skill chargé via le loader centralisé (cohérent avec les autres nœuds) ;
-            # le frontmatter est nettoyé pour économiser le contexte du LLM.
-            skill_content = load_skill_body("web-tester")
+                # Skill chargé via le loader centralisé (cohérent avec les autres nœuds) ;
+                # le frontmatter est nettoyé pour économiser le contexte du LLM.
+                skill_content = load_skill_body("web-tester")
 
-            workspace_url = "file:///" + os.path.abspath(os.getcwd()).replace("\\", "/")
+                workspace_url = "file:///" + os.path.abspath(os.getcwd()).replace("\\", "/")
 
-            target_files_urls = ""
-            if "target_files" in task and task["target_files"]:
-                target_files_urls = "Les fichiers cibles de cette tâche se trouvent aux adresses suivantes :\n"
-                for fpath in task["target_files"]:
-                    file_url = f"{workspace_url}/{fpath.replace('\\', '/')}"
-                    target_files_urls += f"- {file_url}\n"
+                target_files_urls = ""
+                if "target_files" in task and task["target_files"]:
+                    target_files_urls = "Les fichiers cibles de cette tâche se trouvent aux adresses suivantes :\n"
+                    for fpath in task["target_files"]:
+                        file_url = f"{workspace_url}/{fpath.replace('\\', '/')}"
+                        target_files_urls += f"- {file_url}\n"
 
-            # Premier fichier cible (typiquement le HTML principal à ouvrir dans le navigateur).
-            # On l'utilise comme EXEMPLE concret dans le prompt : un petit LLM suit littéralement
-            # l'exemple, donc il DOIT pointer sur le vrai fichier (ex: landing_page/index.html)
-            # et non sur la racine du projet (bug : navigateur s'ouvrait à la racine).
-            primary_target = (task.get("target_files") or ["index.html"])[0]
-            primary_url = f"{workspace_url}/{primary_target.replace(chr(92), '/')}"
+                # Premier fichier cible (typiquement le HTML principal à ouvrir dans le navigateur).
+                # On l'utilise comme EXEMPLE concret dans le prompt : un petit LLM suit littéralement
+                # l'exemple, donc il DOIT pointer sur le vrai fichier (ex: landing_page/index.html)
+                # et non sur la racine du projet (bug : navigateur s'ouvrait à la racine).
+                primary_target = (task.get("target_files") or ["index.html"])[0]
+                primary_url = f"{workspace_url}/{primary_target.replace(chr(92), '/')}"
 
-            prompt = f"""Tu es un agent QA autonome (Web Tester Node).
+                # Cahier des charges COMPLET (spec racine), distinct de la sous-tâche.
+                # Indispensable pour les tests fonctionnels : le tester doit connaître
+                # le comportement attendu global pour écrire des assertions pertinentes
+                # (ex: "le tri doit produire un tableau ordonné"), pas juste vérifier
+                # que la page s'affiche. Fallback sur content si non propagé.
+                full_requirements = task.get("original_content") or task.get("content", "")
+
+                prompt = f"""Tu es un agent QA autonome (Web Tester Node).
 
 Voici tes instructions obligatoires (Skill) :
 {skill_content}
 
-Contenu de la tâche d'origine : {task['content']}
+### CAHIER DES CHARGES COMPLET (comportements attendus à vérifier)
+{full_requirements}
+
+### Description de la sous-tâche testée
+{task['content']}
 
 ATTENTION - Le dossier de travail absolu est : {workspace_url}
 {target_files_urls}
 Pour utiliser 'puppeteer_navigate', tu dois ouvrir le fichier HTML principal à cette URL EXACTE : {primary_url}
 (N'utilise PAS {workspace_url}/index.html à la racine — le fichier est dans un sous-répertoire.)
 
-Vérifie l'application web générée. Utilise tes outils MCP pour naviguer, inspecter et interagir.
+Vérifie l'application web générée. N'oublie PAS l'étape 4 du skill (Functional Logic Testing) :
+identifie les comportements clés du cahier des charges ci-dessus et écris des assertions via
+'puppeteer_evaluate' pour vérifier qu'ils fonctionnent — pas seulement que la page ne crash pas.
 Une fois terminé, retourne ton résultat final STRICTEMENT en utilisant l'outil 'final_answer'.
 Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_answer :
 {{
@@ -91,9 +117,9 @@ Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_an
     "answer": {{
       "task_id": "{task['id']}",
       "status": "success ou failure",
-      "details": "Un résumé détaillé de tes tests visuels et interactifs."
+      "details": "Un résumé détaillé de tes tests visuels, console ET assertions fonctionnelles."
     }}
   }}
 }}
 """
-            return await run_with_retry(local_tester, prompt, CoderOutput, settings.worker_max_retries)
+                return await run_with_retry(local_tester, prompt, CoderOutput, settings.worker_max_retries)

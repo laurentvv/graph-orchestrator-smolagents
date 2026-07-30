@@ -30,9 +30,10 @@ SKILLS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file
 # (méthodo). windows-file-management retiré du socle (verbeux, peu utile au
 # Coder qui crée des fichiers via write_file auto-mkdir).
 BASE_SKILLS_BY_NODE: dict[str, List[str]] = {
-    "coder": ["file-creation", "coding"],
+    "coder": ["file-creation", "coding", "context7-research"],
     "tester": ["web-tester"],
-    # architect : pas de skill socle (il planifie, ne code pas)
+    # architect : pas de skill socle (il planifie, ne code pas). Il reçoit
+    # néanmoins un brief Context7 pré-fetché via fetch_context7_brief (dspy_nodes).
     "architect": [],
 }
 
@@ -40,6 +41,17 @@ BASE_SKILLS_BY_NODE: dict[str, List[str]] = {
 # ==========================================
 # Couche 2 — Sélection dynamique de skills spécialisés
 # ==========================================
+# Pattern des libs/frameworks externes — SOURCE UNIQUE DE VÉRITÉ.
+# Utilisé à 2 endroits : (1) règle dynamique context7-research ci-dessous,
+# (2) garde-fou _mentions_external_lib dans dspy_nodes (pré-fetch Architect).
+# Centralisé ici pour éviter la dérive (Kilo review : éviter la duplication).
+EXTERNAL_LIB_PATTERN = (
+    r"\b(chart\.?js|d3\.?js|three\.?js|vue\.?js|react|svelte|solid\.?js|angular|"
+    r"tailwind|bootstrap|material[- ]ui|antd|next\.?js|tauri|electron|"
+    r"pandas|numpy|scipy|requests|fastapi|django|flask|sqlalchemy|"
+    r"pytest|beautifulsoup|selenium|playwright)\b"
+)
+
 # Mots-clés dans le contenu de la tâche → skills à valeur conditionnelle.
 # Cette sélection est déterministe (regex), pas LLM — un DSPy SkillRouter serait
 # pertinent si le catalogue de skills grossissait, mais pour ~5 skills la
@@ -49,6 +61,11 @@ DYNAMIC_SKILL_RULES: List[tuple] = [
     (r"\b(html5?|css|landing\s*page|front[- ]?end|landing|portfolio|interface web|page web|responsive)\b",
      "frontend-design"),
     (r"\bpython\b", "python-health-audit"),
+    # Libs/frameworks externes → force le skill context7-research (double sécurité
+    # avec le socle). Le skill lui-même dit "ne cherche PAS pour du vanilla" : ces
+    # libs sont précisément les cas où il FAUT consulter la doc (signature API).
+    # Ponctuation officielle gérée (Chart.js, Three.js, Vue.js...).
+    (EXTERNAL_LIB_PATTERN, "context7-research"),
 ]
 
 

@@ -333,17 +333,7 @@ async def execute_coder_node(
 ) -> Tuple[Optional[CoderOutput], Optional[NodeMetrics]]:
     """Nœud Coder : utilise des outils pour créer/éditer des fichiers et exécuter des commandes bash."""
     from smolagents import DuckDuckGoSearchTool, CodeAgent
-    local_coder = ToolCallingAgent(
-        tools=[list_directory, read_file, write_file, edit_file, search_replace, DuckDuckGoSearchTool()],
-        model=fast_model,
-        name=f"coder_{task['id'].replace('-', '_')}",
-        description="Agent développeur capable d'explorer le projet, d'écrire, lire, modifier du code.",
-        verbosity_level=resolve_verbosity("HIGH"),
-        # 12 steps : borne le temps total. Avec "un write_file par fichier + final_answer"
-        # (cf. prompt), 12 steps couvrent 3-5 fichiers + marge. 24 encourageait la boucle
-        # de re-écriture (bug run #7 : le Coder re-génère le même fichier indéfiniment).
-        max_steps=12,
-    )
+    from .context7_tool import context7_tools
 
     import sys
     if sys.stdout.encoding.lower() != 'utf-8':
@@ -353,10 +343,32 @@ async def execute_coder_node(
         except Exception:
             pass
 
-    target_files_instruction = ""
-    if "target_files" in task and task["target_files"]:
-        files_list = "\n".join([f"- {f}" for f in task["target_files"]])
-        target_files_instruction = f"""
+    # La connexion Context7 (MCP) doit rester ouverte PENDANT tout le run de
+    # l'agent (sinon les outils deviennent inertes). On englobe donc la création
+    # ET l'exécution de l'agent dans le `with`. Tolérance aux pannes : si pas de
+    # clé ou connexion échouée, c7 = [] et le Coder tourne sans doc (backward-compat).
+    with context7_tools() as c7_tools:
+        # Outils fichiers + recherche. Context7 (doc de libs à jour) est ajouté si
+        # CONTEXT7_API_KEY est configurée. Le Coder décide QUAND l'utiliser via le
+        # skill context7-research (dormant sur vanilla, actif sur libs externes).
+        coder_tools = [list_directory, read_file, write_file, edit_file, search_replace, DuckDuckGoSearchTool()]
+        coder_tools.extend(c7_tools)
+        local_coder = ToolCallingAgent(
+            tools=coder_tools,
+            model=fast_model,
+            name=f"coder_{task['id'].replace('-', '_')}",
+            description="Agent développeur capable d'explorer le projet, d'écrire, lire, modifier du code.",
+            verbosity_level=resolve_verbosity("HIGH"),
+            # 12 steps : borne le temps total. Avec "un write_file par fichier + final_answer"
+            # (cf. prompt), 12 steps couvrent 3-5 fichiers + marge. 24 encourageait la boucle
+            # de re-écriture (bug run #7 : le Coder re-génère le même fichier indéfiniment).
+            max_steps=12,
+        )
+
+        target_files_instruction = ""
+        if "target_files" in task and task["target_files"]:
+            files_list = "\n".join([f"- {f}" for f in task["target_files"]])
+            target_files_instruction = f"""
 ### ⚠️ FICHIERS CIBLES — TU DOIS CRÉER CES FICHIERS (priorité absolue)
 {files_list}
 
@@ -365,12 +377,12 @@ async def execute_coder_node(
   n'existe pas encore. N'essaie PAS de lister un dossier qui n'existe pas.
 - Chaque fichier cible DOIT être créé via 'write_file'. Ne passe pas au reste avant."""
 
-    # Skills ciblés pour cette tâche (socle coder + spécialisés selon le contenu).
-    # Le contenu des SKILL.md est injecté directement (pas une liste de chemins à
-    # explorer), pour éviter la dispersion stérile du Coder vers les fichiers .md.
-    skills_block = build_skills_block(task.get("content", ""))
+        # Skills ciblés pour cette tâche (socle coder + spécialisés selon le contenu).
+        # Le contenu des SKILL.md est injecté directement (pas une liste de chemins à
+        # explorer), pour éviter la dispersion stérile du Coder vers les fichiers .md.
+        skills_block = build_skills_block(task.get("content", ""))
 
-    prompt = f"""Tu es un Agent Développeur Senior autonome. Ta mission est d'accomplir la tâche ci-dessous en utilisant tes outils.
+        prompt = f"""Tu es un Agent Développeur Senior autonome. Ta mission est d'accomplir la tâche ci-dessous en utilisant tes outils.
 
 ### PLAN D'ACTION STRICT (UNE PASSE UNIQUE — ne boucle pas)
 1. ÉCRIRE : appelle 'write_file' UNE SEULE FOIS par fichier cible. Écris le contenu complet et définitif du fichier dès le premier appel.
@@ -389,7 +401,10 @@ async def execute_coder_node(
 - 'edit_file' : ancien outil de remplacement strict ; préfère 'search_replace' (plus tolérant).
 - 'read_file' (path) : lis le CONTENU d'un fichier. À utiliser AVANT un search_replace pour copier le texte exact.
 - 'list_directory' (path) : liste un dossier EXISTANT. Ne l'appelle pas sur un fichier ni un dossier inexistant.
-- NE FAIS PAS de recherche web ni d'exploration de skills. Ton expertise suffit.
+- 'context7' (resolve_library_id / query_docs) : UNIQUEMENT si la tâche utilise une lib/framework EXTERNE
+  (React, Chart.js, pandas...) dont tu doutes de l'API exacte. Consulte le skill 'context7-research'
+  pour le workflow. NE CHERCHE PAS pour du HTML/CSS/JS vanilla, du CSS, ou un algorithme de base (gaspillage d'étapes).
+- N'utilise PAS DuckDuckGoSearchTool (trop lent/imprécis). Préfère Context7 pour la doc de libs.
 
 ### WORKFLOW D'ÉDITION RECOMMANDÉ
 1. Pour CRÉER un nouveau fichier → 'write_file' une seule fois.
@@ -417,8 +432,8 @@ Quand tous les fichiers cibles sont créés et vérifiés, retourne ton résulta
   }}
 }}
 """
-    # max_retries can be slightly higher for coding since it involves tool use steps
-    return await run_with_retry(local_coder, prompt, CoderOutput, settings.worker_max_retries)
+        # max_retries can be slightly higher for coding since it involves tool use steps
+        return await run_with_retry(local_coder, prompt, CoderOutput, settings.worker_max_retries)
 
 
 async def execute_tester_node(

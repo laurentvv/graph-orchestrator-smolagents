@@ -28,9 +28,12 @@ PARAMETER num_ctx 32768
 # NOTE : ce paramètre est aussi piloté côté Python via FAST_MAX_TOKENS=12000.
 PARAMETER num_predict 12000
 
-# --- Optimisation CPU (serveur 16 cœurs physiques, 64 Go RAM) ---
-# Utilise les 16 cœurs physiques. Important : mettre le nombre de cœurs PHYSIQUES
-# (pas logiques/HT) car l'inférence LLM est limitée par la bande passante mémoire.
+# --- Optimisation CPU (serveur 16 cœurs physiques / 32 threads, 64 Go RAM) ---
+# num_thread : nombre de cœurs PHYSIQUES (16), pas logiques. L'inférence LLM est
+# memory-bound : l'hyperthreading (32 threads) apporte peu et peut ajouter de
+# l'overhead. 16 = valeur sûre et cohérente avec le Modelfile gemma-4-E4B.
+# (Test A/B possible : si 32 donne un gain mesurable sur la durée des Steps,
+#  on peut monter — la RAM 64 Go permet de tester sans risque de swap.)
 PARAMETER num_thread 16
 
 # --- Température : CRITIQUE pour le code ---
