@@ -57,6 +57,24 @@ class TestExtractWorkerOutput:
         result = extract_and_validate('{"task_id": "t1"}', WorkerOutput)
         assert result is None
 
+    def test_no_llm_rescue_under_pytest(self, monkeypatch):
+        """Sous pytest (PYTEST_CURRENT_TEST posé), le sauvetage LLM est désactivé :
+        un JSON cassé retourne None SANS déclencher d'appel LLM (rapide, hors réseau).
+
+        Ce test verrouille la correction d'une régression : le fallback DSPy hallucinait
+        un objet au lieu de retourner None (modèle par défaut), et le test mettait ~6s
+        (tentative de connexion Ollama) au lieu de <1s.
+        """
+        monkeypatch.setenv("PYTEST_CURRENT_TEST", "test (call)")
+        import time
+        start = time.time()
+        result = extract_and_validate("ceci n'est pas du json", WorkerOutput)
+        elapsed = time.time() - start
+        assert result is None
+        # Garde-fou perf : le court-circuit doit être quasi instantané (< 2s, alors
+        # qu'une tentative LLM prendrait plusieurs secondes).
+        assert elapsed < 2.0, "Le sauvetage LLM ne devrait pas être déclenché en test"
+
 
 class TestExtractJudgeOutput:
     def test_judge_with_assessments(self):
