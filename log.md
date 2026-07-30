@@ -295,5 +295,59 @@ curl http://10.201.12.50:11434/api/show -d '{"name":"nanbeige-bigctx"}'
 - Résultat : 12/12 PASS test_checkpoint.py + 84 tests ciblés PASS (knowledge_graph,
   config, models, search_replace, tools, tools_registry, reduce, judge_logic). 0 régression.
 
+## [2026-07-30] pr | PR #6 créée → Kilo Code Review SUCCESS → MERGED dans main
+- Branche feat/checkpoints → squash merge → main (commit 9b867a2).
+- Kilo Code Review : SUCCESS. Merge state CLEAN.
+- Branche locale + remote supprimées après merge.
+- Priorité 3 (Checkpoints) TERMINÉE. Prochain besoin critique résolu : une coupure
+  en génération CPU-only ne perd plus 40 min — la reprise est automatique.
+
+## [2026-07-30] run13 | RUN VALIDATION REPRISE : CHECKPOINTS VALIDÉS EN CONDITIONS RÉELLES 🎉
+- Scénario : FRESH_START=1 → run coding complet. index.html généré (12 521 octets,
+  HTML5 sémantique) puis APPROUVÉ par le Juge (Tester Puppeteer : header/footer OK,
+  4 sections détectées). Workflow passe à la sous-tâche CSS (css-design-nimbus).
+- CRASH SIMULÉ : process tué (kill) pendant le Step 1 du Coder CSS.
+- État du checkpoint après crash (lu dans DuckDB) — PARFAIT :
+  * architect_result : plan complet (3 sous-tâches) préservé.
+  * completed_subtasks : ["html-structure-nimbus"] — index.html marqué validé.
+  * current_subtask_idx : 1 — pointe sur le CSS.
+  * current_iteration : 1.
+- REPRISE (relance SANS FRESH_START) — 4 validations confirmées en conditions réelles :
+  1. ✅ Détection : "[↩] Checkpoint trouvé — reprise de l'exécution coding_5432cb01441e64e6".
+  2. ✅ Skip Architect : "Plan de l'Architecte RECHARGÉ depuis le checkpoint
+     (économise un appel LLM)".
+  3. ✅ Skip index.html : "Sous-tâche 1/3 (html-structure-nimbus) déjà APPROUVÉE — skip".
+  4. ✅ Reprise CSS : "Reprise de la sous-tâche 2/3 à l'itération 1" → Coder lancé
+     sur css-design-nimbus.
+- BÉNÉFICE MESURÉ : ~10-15 min économisées (index.html non régénéré) + 1 appel LLM
+  d'Architect économisé. La reprise après crash fonctionne EXACTEMENT comme conçue.
+- Feature Persistance d'État (Priorité 3) : VALIDATION RÉELLE ATTEINTE.
+
+## [2026-07-30] run13 | CYCLE COMPLET TERMINÉ (avec reprise multi-crash) 🎉
+- Plusieurs crashs intermédiaires (coupures manuelles pendant CSS) → reprises itératives.
+- Dernier lancement : ST1 (html) ET ST2 (css) SKIPPÉES (déjà approuvées), reprise
+  directe sur ST3 (js) à l'itération 2 (bugs précédents lus depuis DuckDB).
+- RÉSULTAT FINAL : 3 fichiers complets dans landing_page/ :
+  * index.html (12 533 octets) — HTML5 sémantique, header/nav/main/footer, 3 sections.
+  * styles.css (14 033 octets) — design premium, Flexbox/Grid, responsive, animations.
+  * script.js (7 285 octets) — burger menu, smooth scroll, IntersectionObserver.
+- Checkpoint final EFFACÉ (clear_checkpoint en fin de run = run "terminé" propre).
+- VERDICT : la reprise après crash est validée sur un cycle COMPLET de bout en bout,
+  y compris avec des crashs répétés (chaque reprise skippe ce qui est déjà validé).
+
+## [2026-07-30] fix | BUG Tester : navigateur s'ouvrait à la racine au lieu de landing_page/
+- SYMPTÔME (run #13) : le navigateur Puppeteer (Tester) chargeait index.html à la RACINE
+  du projet au lieu de landing_page/index.html → testait une page inexistante/incomplète.
+- ROOT CAUSE (nodes.py:479, ancien) : l'EXEMPLE dans le prompt du Tester montrait
+  `{workspace_url}/index.html` (racine) au lieu du vrai fichier. Un petit LLM suit
+  l'exemple littéralement → il ignorait les URLs correctes listées juste au-dessus
+  (qui contenaient bien landing_page/) au profit de l'exemple induisant en erreur.
+- FIX (nodes.py execute_tester_node) : l'exemple est désormais calculé depuis le
+  PREMIER fichier cible (primary_target → primary_url), donc il pointe toujours sur
+  le vrai HTML (ex: .../landing_page/index.html). Ajout d'un avertissement explicite
+  anti-racine. 27 tests PASS, 0 régression.
+
+
+
 
 

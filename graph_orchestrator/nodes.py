@@ -467,8 +467,15 @@ async def execute_tester_node(
                 file_url = f"{workspace_url}/{fpath.replace('\\', '/')}"
                 target_files_urls += f"- {file_url}\n"
         
+        # Premier fichier cible (typiquement le HTML principal à ouvrir dans le navigateur).
+        # On l'utilise comme EXEMPLE concret dans le prompt : un petit LLM suit littéralement
+        # l'exemple, donc il DOIT pointer sur le vrai fichier (ex: landing_page/index.html)
+        # et non sur la racine du projet (bug : navigateur s'ouvrait à la racine).
+        primary_target = (task.get("target_files") or ["index.html"])[0]
+        primary_url = f"{workspace_url}/{primary_target.replace(chr(92), '/')}"
+
         prompt = f"""Tu es un agent QA autonome (Web Tester Node).
-        
+
 Voici tes instructions obligatoires (Skill) :
 {skill_content}
 
@@ -476,7 +483,8 @@ Contenu de la tâche d'origine : {task['content']}
 
 ATTENTION - Le dossier de travail absolu est : {workspace_url}
 {target_files_urls}
-Pour utiliser 'puppeteer_navigate', tu dois lui passer l'URL complète du fichier principal, par exemple : {workspace_url}/index.html ou l'une des adresses ci-dessus.
+Pour utiliser 'puppeteer_navigate', tu dois ouvrir le fichier HTML principal à cette URL EXACTE : {primary_url}
+(N'utilise PAS {workspace_url}/index.html à la racine — le fichier est dans un sous-répertoire.)
 
 Vérifie l'application web générée. Utilise tes outils MCP pour naviguer, inspecter et interagir.
 Une fois terminé, retourne ton résultat final STRICTEMENT en utilisant l'outil 'final_answer'.
