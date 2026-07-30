@@ -14,6 +14,7 @@ un bac à sable d'exécution interactif (navigateur MCP, bash).
 """
 
 import asyncio
+import re
 import time
 from typing import List, Optional, Tuple, Any
 import dspy
@@ -86,6 +87,7 @@ class CodeJudgeSignature(dspy.Signature):
     code: str = dspy.InputField(desc="Le code source final soumis par le CodeAgent")
     security_vulnerabilities: List[str] = dspy.InputField(desc="Liste des problèmes de sécurité soulevés par le Security Reviewer")
     test_results: str = dspy.InputField(desc="Sortie brute des tests fonctionnels exécutés par l'agent QA")
+    task_requirements: str = dspy.InputField(desc="Le cahier des charges complet (comportements attendus). Sert à vérifier que le test_results couvre bien les comportements clés et que le code les implémente — pas seulement qu'il ne crash pas.")
     output: CodeJudgeOutput = dspy.OutputField(desc="Le verdict final, approuvant ou rejetant le code avec justifications")
 
 
@@ -149,6 +151,28 @@ async def execute_router_node(task_content: str, fast_model, settings: Settings)
         return None, None
 
 
+# Mêmes libs/frameworks externes que skills_loader.DYNAMIC_SKILL_RULES (règle
+# context7-research). Sert à éviter un appel réseau Context7 inutile : on ne
+# pré-fetch la doc QUE si le prompt mentionne une lib externe.
+_EXTERNAL_LIB_RE = re.compile(
+    r"\b(chart\.?js|d3\.?js|three\.?js|vue\.?js|react|svelte|solid\.?js|angular|"
+    r"tailwind|bootstrap|material[- ]ui|antd|next\.?js|tauri|electron|"
+    r"pandas|numpy|scipy|requests|fastapi|django|flask|sqlalchemy|"
+    r"pytest|beautifulsoup|selenium|playwright)\b",
+    re.IGNORECASE,
+)
+
+
+def _mentions_external_lib(text: str) -> bool:
+    """True si `text` mentionne une lib/framework externe (déclencheur Context7).
+
+    Garde-fou : évite un appel réseau Context7 (et sa latence) sur les tâches
+    vanilla/algorithmiques, où la doc n'apporte rien. Cohérent avec le skill
+    context7-research qui reste dormant sur le vanilla.
+    """
+    return bool(_EXTERNAL_LIB_RE.search(text or ""))
+
+
 async def execute_architect_node(task: dict, reasoning_model, settings: Settings) -> Tuple[Optional[ArchitectOutput], Optional[NodeMetrics]]:
     """Exécute le nœud Architecte avec un modèle de raisonnement lourd.
     
@@ -163,10 +187,25 @@ async def execute_architect_node(task: dict, reasoning_model, settings: Settings
     print("[*] DSPy Architecte en cours d'élaboration du plan...")
     lm = _configure_dspy(settings, settings.reasoning_model_id)
     start_time = time.time()
+
+    # Pré-fetch doc Context7 : l'Architect (DSPy, pas de boucle d'outils) ne peut
+    # pas appeler Context7 lui-même. On lui injecte donc un brief doc à jour QUAND
+    # le contenu mentionne une lib/framework externe (sinon 0 appel réseau — l'Architect
+    # planifie à partir du seul prompt, comme avant). Graceful : brief vide si pas de clé.
+    task_content_raw = task.get("content", "")
+    architect_input = task_content_raw
+    if _mentions_external_lib(task_content_raw):
+        from .context7_tool import fetch_context7_brief
+        brief = await asyncio.to_thread(fetch_context7_brief, task_content_raw)
+        if brief:
+            architect_input = f"{brief}\n\n---\n\n{task_content_raw}"
+            print(f"[+] Architect : brief Context7 injecté ({len(brief)} caractères).")
+        else:
+            print("[*] Architect : Context7 indisponible/non pertinent — planification sans brief.")
     try:
         with dspy.context(lm=lm):
             predictor = dspy.ChainOfThought(ArchitectSignature)
-            result = await asyncio.to_thread(predictor, task_content=task.get("content", ""))
+            result = await asyncio.to_thread(predictor, task_content=architect_input)
         
         metrics = NodeMetrics(
             node="architect_dspy", 
@@ -262,12 +301,22 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
     try:
         with dspy.context(lm=lm):
             predictor = dspy.ChainOfThought(CodeJudgeSignature)
+            # task_requirements : le cahier des charges complet, pour que le Juge
+            # vérifie que les comportements clés sont testés ET corrects (pas juste
+            # que le code ne crash pas). Tronqué pour protéger le contexte.
+            task_requirements = truncate_output(
+                subtask.get("original_content", "") or "Cahier des charges non disponible.",
+                head_lines=30,
+                tail_lines=10,
+                max_chars=1500,
+            )
             result = await asyncio.to_thread(
-                predictor, 
-                task_id=subtask.get("id", "unknown"), 
-                code=code_content or "Code manquant", 
-                security_vulnerabilities=vulns, 
-                test_results=tests
+                predictor,
+                task_id=subtask.get("id", "unknown"),
+                code=code_content or "Code manquant",
+                security_vulnerabilities=vulns,
+                test_results=tests,
+                task_requirements=task_requirements,
             )
         
         metrics = NodeMetrics(

@@ -29,9 +29,11 @@ Instead of letting a single agent write and evaluate its own code, this system s
 - **DSPy Architect Node**: A heavy reasoning model that takes a complex prompt, designs the global architecture, and breaks it down into granular JSON subtasks using strict Pydantic constraints.
 - **Fan-out Coder Nodes (smolagents)**: For each subtask, a Coder agent is spawned asynchronously to write code using precise tools.
 - **Parallel Validation**: 
-  - *Tester Node (smolagents, **polyvalent**)*: Detects the target technology (web → **Chrome DevTools MCP** for visual/functional testing; Python → **`pytest` subprocess** with deterministic pass/fail + captured stderr) and routes to the matching runner. Captured output is **truncated** (head + tail) before feedback to protect the LLM context window from "Context Overflow".
+  - *Tester Node (smolagents, **polyvalent**)*: Detects the target technology (web → **Puppeteer MCP** for browser testing; Python → **`pytest` subprocess** with deterministic pass/fail + captured stderr) and routes to the matching runner. Captured output is **truncated** (head + tail) before feedback to protect the LLM context window from "Context Overflow".
+    - **Functional logic testing (not just crash detection)**: the web tester writes **assertion scripts** via `puppeteer_evaluate` to verify the *behavior* the app claims to deliver (e.g. "is the array sorted after clicking Start?"), not only that the page renders without JS errors. The full requirements (cahier des charges) are propagated to the tester so it knows what to verify. Iterate on the tester in isolation with `uv run python run_tester.py [file.html] [task description]`.
   - *Security Reviewer (DSPy)*: Audits the code against vulnerabilities (XSS, injections, etc.) and returns a typed list of flaws.
 - **DSPy Judge Node**: Acts as the ultimate PR reviewer. Analyzes tester/security reports, outputting a deterministic `approved: bool` verdict to either merge the code or trigger a feedback loop.
+- **Context7 (up-to-date library docs)**: The Coder, Architect, and web-Tester are wired to **Context7** (`@upstash/context7-mcp`) to fetch **current library/framework documentation** — the antidote to API hallucination. Rather than relying on stale memorized APIs, agents consult official docs on demand. Controlled by the `context7-research` skill: it triggers **only for external libs** (React, Chart.js, pandas…) and **stays dormant on vanilla JS/CSS or algorithmic tasks** to avoid wasting steps. Requires `CONTEXT7_API_KEY` (degrades gracefully without it — all nodes run unchanged).
 
 ### 3. Persistent Knowledge Graph (DuckDB)
 Context windows are limited. Instead of passing massive conversation histories between the agents, **all agents read and write to a shared, persistent DuckDB Knowledge Graph**.
@@ -100,10 +102,11 @@ uv run python -m graph_orchestrator.workflows
 ```
 
 ### Data Processing: One-shot Mode (Default)
-Executes the standard Fan-out → Reduce → Adversary → Synth flow:
+Executes the standard Fan-out → Reduce → Adversary → Synth flow (mode par défaut de `WORKFLOW_MODE`, aucun réglage requis):
 ```bash
 uv run agent_graph.py
 ```
+`agent_graph.py` délègue à `graph_orchestrator.workflows.main()`, qui lit `WORKFLOW_MODE` pour choisir le mode (`one_shot` par défaut, `exploration` ou `coding`).
 
 ### Data Processing: Exploration Mode (Loop-until-dry)
 ```bash
@@ -137,7 +140,7 @@ All parameters can be customized via environment variables or the `.env` file:
 ## 📁 Project Structure
 
 ```text
-agent_graph.py                 ← Entry point for one-shot data processing
+agent_graph.py                 ← Entry point (dispatche selon WORKFLOW_MODE)
 DOC_DSPY_ARCHITECTURE.md       ← 📖 DSPy v3 Hybrid Architecture Manifesto
 graph_orchestrator/
   ├── config.py                ← Env variables & defaults

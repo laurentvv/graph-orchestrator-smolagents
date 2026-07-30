@@ -34,6 +34,9 @@ references/
 
 # --- Artefacts générés par le graphe (régénérables) ---
 landing_page/
+bubble_sort/
+chartjs_dashboard/
+index.html
 
 # --- Frontend (web/) ---
 web/node_modules/

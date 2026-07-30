@@ -6,6 +6,37 @@
       run #13 cycle complet + reprise après crash multi-crash).
 - [ ] Cycle TESTER POLYVALENT + AUTO-CORRECTION stderr (Priorité 2) : dispatch
       multi-techno (web+python) + troncature anti Context-Overflow. En cours.
+- [ ] Cycle CONTEXT7 (doc libs à jour, anti-hallucination d'API) : intégration sur
+      3 nœuds + skill stratégique. Implémentation TERMINÉE, validation runs à venir.
+- [x] Cycle TESTER FONCTIONNEL (assertions comportementales, F-20) : le tester ne
+      testait que l'absence de crash → bugs de logique validés à tort. Implémentation
+      TERMINÉE (skill puppeteer_* + assertions, propagation spec, Judge équipé).
+
+## Jalons de l'Itération (cycle Tester fonctionnel — F-20)
+- [x] Étape TF-1 : Diagnostic (4 causes racines : skill aveugle logique, noms MCP faux, spec non propagée, Judge sans requirements).
+- [x] Étape TF-2 : Skill web-tester réécrit (noms puppeteer_* + étape "Functional Logic Testing" via puppeteer_evaluate).
+- [x] Étape TF-3 : Propagation spec complète (workflows seed_content → sub_dict original_content → tester prompt "CAHIER DES CHARGES").
+- [x] Étape TF-4 : Judge équipé (CodeJudgeSignature + task_requirements).
+- [x] Étape TF-5 : max_steps tester 20→24 (marge assertions).
+- [x] Étape TF-6 : tests/test_web_tester_functional.py (11 tests). Suite 212 passed / 0 failed.
+- [x] Étape TF-7 : Validation standalone (run_tester.py) — VALIDÉ ✅
+  Le tester écrit de vraies assertions (puppeteer_evaluate + IIFE), détecte que le
+  tableau n'est pas trié → FAIL documenté. Avant : "success" à tort. Itération skill
+  via script standalone (~3 min) au lieu du workflow complet (~30 min).
+- [x] Étape TF-8 : Corrections skill (syntaxe IIFE anti "Illegal return statement",
+  résolution 1280×800, champ ASSERTIONS FONCTIONNELLES au rapport).
+- [x] Étape TF-9 : Outil run_tester.py (tester isolé, itération rapide).
+
+## Jalons de l'Itération (cycle Context7 — doc libs à jour)
+- [x] Étape C7-1 : Exploration (API Context7, 3 nœuds, patterns de test) + plan approuvé.
+- [x] Étape C7-2 : Module context7_tool.py (get_context7_tools + fetch_context7_brief, dégradation gracieuse).
+- [x] Étape C7-3 : Skill context7-research (workflow stratégique : QUAND chercher = libs externes uniquement).
+- [x] Étape C7-4 : Branchement skills_loader (socle Coder + règle dynamique libs).
+- [x] Étape C7-5 : Coder (outils + prompt nuancé) + Architect (pré-fetch brief + garde-fou vanilla) + web-tester (outils).
+- [x] Étape C7-6 : tests/test_context7_tool.py (13 tests, mock réseau, 0 dépendance réseau).
+- [x] Étape C7-7 : Suite pytest → 201 passed / 0 failed (188 avant + 13 nouveaux).
+- [ ] Étape C7-8 : Validation run Bubble Sort (Context7 dormant sur vanilla).
+- [ ] Étape C7-9 : Validation run avec lib externe (Context7 en action).
 
 ## Jalons de l'Itération (cycle Tester polyvalent + stderr)
 - [x] Étape A : Planification + exploration (détection techno, skills_loader, config).

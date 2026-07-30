@@ -114,10 +114,10 @@
     },
     {
       "id": "F-17",
-      "name": "Nœud dédié Context7 (docs lookup)",
-      "description": "PISTE : nœud execute_docs_lookup_node piloté par CONTEXT7_API_KEY (@upstash/context7-mcp) pour fournir de la doc à jour à l'Architect/Coder. Non implémenté.",
-      "status": "pending",
-      "dependencies": ["F-06"]
+      "name": "Context7 intégré au coding workflow (doc libs à jour)",
+      "description": "Intégration Context7 (@upstash/context7-mcp, transport HTTP streamable) sur 3 nœuds : Coder + web-tester (get_context7_tools → @tool smolagents), Architect (fetch_context7_brief → pré-fetch doc injecté en prompt, DSPy sans boucle d'outils). Skill context7-research (workflow stratégique : QUAND chercher = libs externes uniquement, dormant sur vanilla). Dégradation gracieuse : sans CONTEXT7_API_KEY, tout fonctionne sans Context7. Module graph_orchestrator/context7_tool.py. 13 tests PASS.",
+      "status": "completed",
+      "dependencies": ["F-06", "F-11"]
     },
     {
       "id": "F-18",
@@ -188,6 +188,13 @@
       "description": "Le nœud Tester n'est plus cloisonné au web. IMPLÉMENTÉ : package testers/ avec interface TestRunner commune + detect_tech (détection redondante Router + extensions, fallback web) + registre get_runner. 2 runners concrets : WebTestRunner (refactor du bloc Puppeteer existant) et PythonTestRunner (subprocess pytest, déterministe, capture stdout/stderr/exit code tronqué). Nœud execute_tester_node refondu en dispatcher (~30 lignes). Ajout d'une techno = 1 module + 1 skill + 1 ligne registre (rust/ts/go = cycles futurs). Skill web-tester enrichi (rapport structuré) + skill python-tester nouveau.",
       "status": "completed",
       "dependencies": ["F-02"]
+    },
+    {
+      "id": "F-20",
+      "name": "Tester fonctionnel (assertions comportementales)",
+      "description": "Le tester ne testait que l'absence de crash (console JS), pas le comportement attendu → bugs de logique validés à tort (run Bubble Sort: SUCCESS sur un bug visuel). IMPLÉMENTÉ : (1) skill web-tester réécrit avec noms puppeteer_* corrects (avant: noms Chrome-DevTools-MCP inexistants) + étape 'Functional Logic Testing' via puppeteer_evaluate (scripts d'assertion sur les comportements clés du cahier des charges). (2) Propagation du cahier des charges complet (original_content) au tester via workflows.py → sub_dict → prompt bloc 'CAHIER DES CHARGES COMPLET'. (3) Judge (CodeJudgeSignature) reçoit task_requirements pour juger couverture/comportement. (4) max_steps tester 20→24 (marge pour les assertions). Verdict success requiert 0 erreur console + TOUTES assertions passent. 11 tests PASS.",
+      "status": "completed",
+      "dependencies": ["F-16"]
     }
   ]
 }
