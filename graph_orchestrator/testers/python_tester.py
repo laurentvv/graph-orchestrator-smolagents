@@ -11,13 +11,17 @@ Capture robuste + troncature anti "Context Overflow" :
   sinon le contexte explose au bout du 3ème essai → oubli des directives.
 - Le stdout (résumé pytest "X passed, Y failed") est conservé en tête.
 
-Pose aussi les fondations de l'auto-dépendances (F-26) : on détecte un
-`ModuleNotFoundError` dans le stderr pour préparer l'auto-install future.
+Auto-Résolution des Dépendances (F-26) : si le stderr contient un
+`ModuleNotFoundError`, le runner installe lui-même le module manquant
+(`pip install` non-persistant) puis relance les tests (1 retry max). Cela
+évite de gaspiller un cycle LLM pour une simple dépendance absente. Opt-out
+via AUTO_INSTALL_DEPS=false.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 from typing import Optional, Tuple
@@ -26,6 +30,72 @@ from ..config import Settings
 from ..feedback_utils import truncate_output
 from ..logging_utils import NodeMetrics
 from ..models import CoderOutput
+
+# Regex du nom de module capturé dans un ModuleNotFoundError (ex: 'requests',
+# 'requests.auth'). On accepte les points (sous-modules) puis on garde le top-level.
+_MISSING_MODULE_RE = re.compile(r"No module named ['\"]([\w.]+)['\"]")
+# Un identifiant Python top-level valide (anti-injection dans la commande pip) :
+# on n'injecte jamais une chaîne arbitraire issue du stderr dans un subprocess.
+_VALID_MODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def extract_missing_module(stderr: str) -> Optional[str]:
+    """Extrait le nom de module top-level d'un `ModuleNotFoundError` dans le stderr.
+
+    `ModuleNotFoundError: No module named 'requests'` → "requests".
+    `... 'requests.auth'` → "requests" (on garde le top-level, ce que pip attend).
+
+    Retourne None si :
+      - aucun `ModuleNotFoundError` détecté (autre type d'erreur) ;
+      - le nom extrait n'est pas un identifiant Python valide (défense en profondeur :
+        on n'injecte jamais une chaîne arbitraire issue du stderr dans la commande pip).
+
+    Le stderr vient du test de code utilisateur ; risque d'injection faible, mais on
+    valide quand même — ceinture + bretelles.
+    """
+    match = _MISSING_MODULE_RE.search(stderr or "")
+    if not match:
+        return None
+    # Top-level uniquement : pip installe 'requests', pas 'requests.auth'.
+    top_level = match.group(1).split(".", 1)[0]
+    if not _VALID_MODULE_RE.match(top_level):
+        return None
+    return top_level
+
+
+def _install_module(module: str, timeout_s: float = 120.0) -> bool:
+    """Installe un module Python manquant via `pip install` (non-persistant).
+
+    Non-persistant : le package est dispo pour ce run (donc pour la relance des
+    tests), mais n'est PAS ajouté à pyproject.toml/uv.lock — non-intrusif pour le
+    projet de l'utilisateur (aucun fichier modifié, aucun effet de bord visible en git).
+
+    Args:
+        module: Nom du module top-level validé (ex: "requests"). Issu d'extract_missing_module,
+            donc déjà passé par la regex anti-injection.
+        timeout_s: Timeout d'installation. Par défaut 120s (un gros package peut être long).
+
+    Returns:
+        True si l'installation a réussi (exit 0), False sinon (timeout, réseau, PyPI down,
+        package introuvable). Jamais d'exception : un échec d'install ne fait pas planter le run.
+
+    Sécurité : liste d'args (pas `shell=True`) — le nom du module vient du stderr mais
+    est déjà validé par extract_missing_module. Double défense.
+    """
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "pip", "install", module],
+            capture_output=True,
+            text=True,
+            timeout=timeout_s,
+            encoding="utf-8",
+            errors="replace",
+        )
+        return result.returncode == 0
+    except Exception:
+        # Timeout réseau, pip absent, PyPI down, etc. — l'auto-install échoue
+        # gracieusement ; le test ressort en failure comme avant.
+        return False
 
 
 class PythonTestRunner:
@@ -90,9 +160,47 @@ class PythonTestRunner:
                 settings,
             ), None
 
-        # 3. Verdict : exit 0 = succès ; tout le reste = échec.
+        # 3. Auto-Résolution des Dépendances (F-26) : si l'échec est un
+        #    ModuleNotFoundError et que l'opt-in est actif, on installe le module
+        #    manquant puis on relance les tests (1 SEUL retry — anti-boucle). Cela
+        #    économise un cycle LLM (sinon le Coder tenterait de résoudre ça en
+        #    réécrivant le code, sans savoir que c'est juste un package absent).
+        auto_install_note = ""
+        if exit_code != 0 and settings.auto_install_deps:
+            module = extract_missing_module(stderr)
+            if module:
+                print(f"[auto-install] Module manquant détecté : '{module}' — installation...")
+                if _install_module(module, timeout_s=settings.test_timeout_s):
+                    try:
+                        result2 = subprocess.run(
+                            cmd,
+                            capture_output=True,
+                            text=True,
+                            timeout=settings.test_timeout_s,
+                            cwd=os.getcwd(),
+                            encoding="utf-8",
+                            errors="replace",
+                        )
+                        stdout = result2.stdout or ""
+                        stderr = result2.stderr or ""
+                        exit_code = result2.returncode
+                        auto_install_note = f"[auto-install] '{module}' installé puis tests relancés."
+                        print(f"[auto-install] '{module}' installé — tests relancés (exit_code={exit_code}).")
+                    except subprocess.TimeoutExpired:
+                        auto_install_note = f"[auto-install] '{module}' installé, mais les tests ont dépassé le délai à la relance."
+                    except FileNotFoundError:
+                        auto_install_note = f"[auto-install] '{module}' installé, mais pytest introuvable à la relance."
+                else:
+                    auto_install_note = f"[auto-install] Échec d'installation de '{module}' (réseau/PyPI down ?)."
+                    print(f"[auto-install] Échec d'installation de '{module}'.")
+
+        # 4. Verdict : exit 0 = succès ; tout le reste = échec.
         #    On concatène stdout (résumé court) + stderr (détails des échecs), tronqué.
         combined = self._format_output(stdout, stderr, exit_code)
+        if auto_install_note:
+            # L'auto-install peut transformer un failure en success : on garde la
+            # trace de l'action pour l'observabilité (utile au débogage).
+            combined = f"{auto_install_note}\n\n{combined}"
         details = truncate_output(
             combined,
             head_lines=settings.stderr_head_lines,

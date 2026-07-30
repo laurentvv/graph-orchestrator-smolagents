@@ -87,6 +87,14 @@
 - [x] Étape ESC-7 : Suite pytest complète (220 passed / 0 failed).
 - [x] Étape ESC-8 : Docs (contract.md, plan, README) + finalisation état disque.
 
+## Jalons de l'Itération (cycle Auto-Dépendances — F-26)
+- [x] Étape AD-1 : Planification approuvée (pip install non-persistant + validation regex + cap 1 retry).
+- [x] Étape AD-2 : config.py + .env.example (auto_install_deps opt-out, valeur par défaut pour pas casser les helpers de test).
+- [x] Étape AD-3 : python_tester.py (extract_missing_module + _install_module + branchement dans run()).
+- [x] Étape AD-4 : tests/test_python_runner.py (extract unitaire + comportement auto-install + contrat _install_module).
+- [x] Étape AD-5 : Suite pytest → 232 passed / 0 failed (220 avant + 12 nouveaux). 0 régression.
+- [x] Étape AD-6 : Docs (contract.md +7 critères, plan, README) + finalisation état disque.
+
 ## Jalons bootstrap (faits)
 - [x] Création agent.md (specs gestion d'état).
 - [x] Initialisation feature_list.json, contract.md, progress.md, log.md.

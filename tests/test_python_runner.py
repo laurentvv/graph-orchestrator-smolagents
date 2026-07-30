@@ -11,6 +11,7 @@ On crée des mini-projets Python factices dans tmp_path (fixtures pytest).
 
 import asyncio
 import os
+import subprocess
 
 import pytest
 
@@ -156,3 +157,197 @@ class TestPythonRunnerEdgeCases:
 
         assert isinstance(out, CoderOutput)
         assert out.task_id == "t7"
+
+
+# ======================================================================
+# Auto-Résolution des Dépendances (F-26)
+# ======================================================================
+# Stratégie de test : on mocke `subprocess.run` (et `_install_module`) au niveau du
+# module python_tester pour éviter d'installer de vrais packages sur le CI (réseau
+# instable, lent, effet de bord). On simule des objets `CompletedProcess` avec le
+# stderr/returncode attendus. La logique de dispatch (extract_missing_module) est
+# testée de façon unitaire pure (0 subprocess).
+
+
+from graph_orchestrator.testers import python_tester as pt
+
+
+class _FakeCompletedProcess:
+    """Stub minimal de subprocess.CompletedProcess (attributs lus par le runner)."""
+
+    def __init__(self, returncode=0, stdout="", stderr=""):
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
+
+class TestExtractMissingModule:
+    """Tests unitaires de extract_missing_module (0 subprocess, pur parsing)."""
+
+    def test_extracts_simple_module(self):
+        stderr = "Traceback...\nModuleNotFoundError: No module named 'requests'\n"
+        assert pt.extract_missing_module(stderr) == "requests"
+
+    def test_extracts_toplevel_from_submodule(self):
+        """'requests.auth' → 'requests' (pip attend le top-level)."""
+        stderr = "ModuleNotFoundError: No module named 'requests.auth'"
+        assert pt.extract_missing_module(stderr) == "requests"
+
+    def test_no_module_error_returns_none(self):
+        """AssertionError, SyntaxError, etc. → None (pas un ModuleNotFoundError)."""
+        assert pt.extract_missing_module("AssertionError: assert 1 == 2") is None
+        assert pt.extract_missing_module("SyntaxError: invalid syntax") is None
+        assert pt.extract_missing_module("ValueError: bad value") is None
+
+    def test_empty_or_no_match_returns_none(self):
+        assert pt.extract_missing_module("") is None
+        assert pt.extract_missing_module("rien d'intéressant ici") is None
+
+    def test_invalid_module_name_returns_none(self):
+        """Défense en profondeur : un nom qui n'est pas un identifiant Python valide
+        → None (jamais injecté dans la commande pip)."""
+        # Cas extrême : un nom avec caractères spéciaux (injection potentielle).
+        stderr = "ModuleNotFoundError: No module named 'evil; rm -rf /'"
+        assert pt.extract_missing_module(stderr) is None
+
+
+class TestAutoInstallBehavior:
+    """Tests du branchement de l'auto-install dans PythonTestRunner.run().
+
+    On mocke subprocess.run (et _install_module) au niveau du module pour éviter
+    tout accès réseau/PyPI. Les compteurs vérifient le nombre d'appels (cap 1 retry).
+    """
+
+    def test_auto_install_retries_and_succeeds(self, tmp_path, monkeypatch):
+        """1er run : ModuleNotFoundError → install mocké (succès) → 2e run : success."""
+        (tmp_path / "test_x.py").write_text("def test_x(): assert True\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        # Le 1er subprocess.run (pytest) échoue avec ModuleNotFoundError ;
+        # le 2e (relance après install) réussit. On retourne selon le n° d'appel.
+        run_calls = {"count": 0}
+
+        def fake_run(cmd, *a, **kw):
+            run_calls["count"] += 1
+            if run_calls["count"] == 1:
+                return _FakeCompletedProcess(returncode=1, stderr="ModuleNotFoundError: No module named 'requests'")
+            # 2e appel = relance après install → succès.
+            return _FakeCompletedProcess(returncode=0, stdout="1 passed")
+
+        monkeypatch.setattr(pt.subprocess, "run", fake_run)
+        monkeypatch.setattr(pt, "_install_module", lambda m, **kw: True)  # install mockée OK
+
+        runner = PythonTestRunner()
+        out, _ = _run(runner, {"id": "t", "target_files": ["test_x.py"]}, _settings())
+
+        assert out.status == "success"  # l'auto-install a sauvé le run
+        assert "auto-install" in out.details.lower()
+        assert "requests" in out.details
+        assert run_calls["count"] == 2  # 1er run échec + 1 relance
+
+    def test_auto_install_disabled_preserves_historical_behavior(self, tmp_path, monkeypatch):
+        """opt-out (auto_install_deps=False) → pas d'install, failure normal."""
+        (tmp_path / "test_x.py").write_text("def test_x(): assert True\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        run_calls = {"count": 0}
+
+        def fake_run(cmd, *a, **kw):
+            run_calls["count"] += 1
+            return _FakeCompletedProcess(
+                returncode=1, stderr="ModuleNotFoundError: No module named 'requests'"
+            )
+
+        monkeypatch.setattr(pt.subprocess, "run", fake_run)
+
+        install_called = []
+        monkeypatch.setattr(pt, "_install_module", lambda m, **kw: install_called.append(m) or True)
+
+        runner = PythonTestRunner()
+        out, _ = _run(
+            runner, {"id": "t", "target_files": ["test_x.py"]},
+            _settings(auto_install_deps=False),
+        )
+
+        assert out.status == "failure"  # comportement historique préservé
+        assert install_called == []  # aucune install tentée
+        assert run_calls["count"] == 1  # pas de relance
+
+    def test_non_module_error_does_not_install(self, tmp_path, monkeypatch):
+        """Un AssertionError (pas un ModuleNotFoundError) → pas d'install."""
+        (tmp_path / "test_x.py").write_text("def test_x(): assert True\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        def fake_run(cmd, *a, **kw):
+            return _FakeCompletedProcess(returncode=1, stderr="AssertionError: assert 1 == 2")
+
+        monkeypatch.setattr(pt.subprocess, "run", fake_run)
+        install_called = []
+        monkeypatch.setattr(pt, "_install_module", lambda m, **kw: install_called.append(m) or True)
+
+        runner = PythonTestRunner()
+        out, _ = _run(runner, {"id": "t", "target_files": ["test_x.py"]}, _settings())
+
+        assert out.status == "failure"
+        assert install_called == []  # l'install n'est déclenchée QUE sur ModuleNotFoundError
+
+    def test_install_failure_does_not_loop(self, tmp_path, monkeypatch):
+        """Si l'install échoue (PyPI down), on NE boucle PAS (cap 1 retry)."""
+        (tmp_path / "test_x.py").write_text("def test_x(): assert True\n", encoding="utf-8")
+        monkeypatch.chdir(tmp_path)
+
+        run_calls = {"count": 0}
+
+        def fake_run(cmd, *a, **kw):
+            run_calls["count"] += 1
+            # Le 1er run échoue toujours (module absent).
+            return _FakeCompletedProcess(
+                returncode=1, stderr="ModuleNotFoundError: No module named 'ghostpkg'"
+            )
+
+        monkeypatch.setattr(pt.subprocess, "run", fake_run)
+        # Install mockée en échec (PyPI down) → pas de relance.
+        monkeypatch.setattr(pt, "_install_module", lambda m, **kw: False)
+
+        runner = PythonTestRunner()
+        out, _ = _run(runner, {"id": "t", "target_files": ["test_x.py"]}, _settings())
+
+        assert out.status == "failure"  # échec normal
+        assert "ghostpkg" in out.details
+        assert "Échec" in out.details or "échec" in out.details.lower()
+        # Cap anti-boucle : subprocess.run appelé 1 seule fois (pas de relance
+        # puisque l'install a échoué).
+        assert run_calls["count"] == 1
+
+
+class TestInstallModule:
+    """Tests unitaires de _install_module (contrat : jamais d'exception)."""
+
+    def test_install_success_returns_true(self, monkeypatch):
+        """pip install exit 0 → True."""
+        monkeypatch.setattr(
+            pt.subprocess, "run",
+            lambda *a, **kw: _FakeCompletedProcess(returncode=0, stdout="Successfully installed requests"),
+        )
+        assert pt._install_module("requests") is True
+
+    def test_install_failure_returns_false(self, monkeypatch):
+        """pip install exit≠0 (package introuvable) → False, pas d'exception."""
+        monkeypatch.setattr(
+            pt.subprocess, "run",
+            lambda *a, **kw: _FakeCompletedProcess(returncode=1, stderr="ERROR: No matching distribution"),
+        )
+        assert pt._install_module("ghostpkg") is False
+
+    def test_install_exception_returns_false(self, monkeypatch):
+        """Timeout réseau, pip absent, etc. → False, jamais d'exception propagée.
+
+        C'est LE contrat critique : l'auto-install ne fait JAMAIS planter le run.
+        Le runner appelle _install_module sans try/except car il lui fait confiance.
+        """
+        def boom(*a, **kw):
+            raise subprocess.TimeoutExpired(cmd="pip", timeout=1)
+
+        monkeypatch.setattr(pt.subprocess, "run", boom)
+        # Pas d'exception levée → False (absorbée par le try/except interne).
+        assert pt._install_module("requests") is False

@@ -129,6 +129,16 @@ class Settings:
     # passe toujours la vraie valeur lue depuis l'env en production).
     escalation_enabled: bool = True
 
+    # --- Auto-Résolution des Dépendances (Priorité 5 : Tester Python) ---
+    # Quand le PythonTestRunner détecte un `ModuleNotFoundError` dans le stderr, il
+    # installe lui-même le package manquant (`pip install`, non-persistant) puis
+    # relance les tests — au lieu de gaspiller un cycle LLM pour ça. Si False, on
+    # retombe sur le comportement historique (échec immédiat, feedback au Coder).
+    # Opt-out utile en environnement verrouillé (CI sans réseau, sandbox stricte).
+    # Valeur par défaut dans la dataclass : même raison que escalation_enabled
+    # (évite de casser les helpers de test qui construisent Settings(...) à la main).
+    auto_install_deps: bool = True
+
 
 def load_settings() -> Settings:
     """Construit les settings depuis l'environnement (avec valeurs par défaut)."""
@@ -165,6 +175,7 @@ def load_settings() -> Settings:
         stderr_tail_lines=_get_int("STDERR_TAIL_LINES", 20),
         feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),
         escalation_enabled=_get_bool("ESCALATION_ENABLED", True),
+        auto_install_deps=_get_bool("AUTO_INSTALL_DEPS", True),
     )
 
 

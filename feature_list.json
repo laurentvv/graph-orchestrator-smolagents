@@ -178,8 +178,8 @@
     {
       "id": "F-26",
       "name": "Auto-Installation des Dépendances",
-      "description": "Le Tester capte les ModuleNotFoundError et lance automatiquement pip install/uv add.",
-      "status": "pending",
+      "description": "Le Tester capte les ModuleNotFoundError et lance automatiquement pip install/uv add. IMPLÉMENTÉ : extract_missing_module (regex ModuleNotFoundError + validation identifiant anti-injection) + _install_module (pip install non-persistant via sys.executable, liste d'args sans shell=True, jamais d'exception) branchés dans PythonTestRunner.run(). Au 1er échec de test avec ModuleNotFoundError, installe le module manquant puis relance les tests (cap 1 retry anti-boucle). Opt-out via AUTO_INSTALL_DEPS=false. Non-persistant (n'écrit pas dans pyproject.toml/uv.lock). 12 tests PASS.",
+      "status": "completed",
       "dependencies": ["F-21"]
     },
     {
