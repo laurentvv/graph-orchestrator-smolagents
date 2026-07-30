@@ -2,15 +2,18 @@
 
 Ce document traduit l'audit des références (`references_audit.md`) en une feuille de route concrète, triée par ordre d'importance critique. L'objectif est d'atteindre le "Fire and Forget" complet.
 
-> **📊 ÉTAT D'AVANCEMENT (2026-07-30)**
+> **📊 ÉTAT D'AVANCEMENT (2026-07-31)**
 > | Priorité | Statut |
 > |---|---|
 > | 🔴 0. Cadre système & prompts | **Partiel** (Coder autonome ✅, Architect Read-Only ✅ via DSPy, CodeAgent ❌) |
 > | 🔴 1. Édition sécurisée | **✅ TERMINÉE** (PR #3) — la plus critique, validée au run #12 |
-> | 🟠 2. Auto-correction (stderr) | **✅ TERMINÉE** (PR en cours) — troncature + Tester polyvalent multi-techno (web+python) |
+> | 🟠 2. Auto-correction (stderr) | **✅ TERMINÉE** — troncature + Tester polyvalent multi-techno (web+python) |
 > | 🟡 3. Graphe autonome (breaker/checkpoints) | **✅ TERMINÉE** — `max_iter=3` ✅, checkpoints ✅, nœud d'escalade ✅ (F-23) |
-> | 🟢 4. Repo Map (tree-sitter) | ❌ à faire |
-> | 🔵 5. Auto-dépendances | ❌ à faire |
+> | 🟢 4. Repo Map (tree-sitter) | ⏸️ **Mis de côté** (décision utilisateur : pas utile pour l'usage actuel — création de code de zéro, peu de gros dépôts à explorer) |
+> | 🔵 5. Auto-dépendances | **✅ TERMINÉE** (F-26) — auto-install `pip` non-persistante + relance sur `ModuleNotFoundError` |
+> | 🟣 6. Feedback & Évaluation Avancée | ❌ à faire *(Issu de l'analyse system_prompts_analysis.md)* |
+> | 🟤 7. Le "Shift Left" (Linter-as-a-Reviewer) | ❌ à faire |
+> | ⚪ 8. Middlewares d'Auto-Réparation | ❌ à faire |
 >
 > **Levier hors-plan majeur découvert et appliqué** : température du Coder 0.2 (vs 1.0 serveur) — a éliminé la moitié de la corruption.
 
@@ -66,5 +69,31 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 - [ ] **Générateur de Repo Map** : Intégrer `tree-sitter` (ou `ctags`) pour parser le dépôt de l'utilisateur et générer un squelette (classes, fonctions) à injecter dans le prompt initial.
 
 ## 🔵 Priorité 5 : L'Automatisation de l'Environnement
-- [ ] **Auto-Résolution des Dépendances** : Si le nœud `Tester` détecte un `ModuleNotFoundError`, lancer automatiquement un `uv add <package>` ou `pip install` avant de relancer les tests, évitant de gâcher un cycle LLM pour ça.
+- [x] **Auto-Résolution des Dépendances** : Si le nœud `Tester` détecte un `ModuleNotFoundError`, lancer automatiquement un `uv add <package>` ou `pip install` avant de relancer les tests, évitant de gâcher un cycle LLM pour ça. — *FAIT (F-26) : `extract_missing_module` (regex + validation identifiant anti-injection) + `_install_module` (`pip install` non-persistant, jamais d'exception) branchés dans `PythonTestRunner.run()`. Au 1er échec `ModuleNotFoundError`, installe le module puis relance (cap 1 retry). Opt-out `AUTO_INSTALL_DEPS=false`. 12 tests PASS.*
 
+## 🟣 Priorité 6 : L'Évaluation Avancée & Stratégie TDD
+*Suite à l'analyse croisée des prompts systèmes de référence (Open-SWE, LlamaBot), l'évaluation du code est le prochain goulot d'étranglement qualitatif.*
+Plus d'information : `system_prompts_analysis.md`
+
+> **🔎 État Actuel :** Les nœuds Juge et Security sont binaires. Le Web Tester effectue des vérifications volatiles via Puppeteer en console sans persistance de harnais de tests.
+> **🚀 Pourquoi ce sera mieux :** Empêcher le Juge de bloquer le graphe sur des "nits" (débats de nommage) accélère le workflow. Produire des tests persistants (TDD RED-to-GREEN) garantit l'anti-régression au-delà de la session courante de l'agent.
+
+- [ ] **Code Review (Anti-Bruit & Rubric)** : Intégrer la stratégie Open-SWE dans les nœuds Security et Code Judge. Interdire les critiques de style, classer les retours (Critical, High, Medium, Low) et forcer l'ancrage strict sur le `diff` modifié pour réduire drastiquement les faux positifs et l'enlisement du Judge.
+- [ ] **TDD Persistant (Web Tester)** : Modifier le workflow de test (inspiré de LlamaBot). Le Testeur (web ou python) doit générer un vrai script automatisé (ex: `spec.js` / `test_foo.py`), s'assurer qu'il échoue (RED) prouvant l'erreur, l'envoyer au Coder pour correction, puis vérifier sa réussite (GREEN). Cela laisse un harnais de test durable sur le disque.
+
+## 🟤 Priorité 7 : Le "Shift Left" (Linter-as-a-Reviewer)
+*Suite à l'analyse croisée des références (Aider, OpenCode), filtrer les erreurs de syntaxe de base avant d'engager l'orchestrateur lourd permet des économies massives.*
+
+> **🔎 État Actuel :** Le graphe exécute le code (via Tester) pour capter les erreurs. C'est lent et cher si l'erreur est un simple "deux-points manquant" ou une variable non définie.
+> **🚀 Pourquoi ce sera mieux :** L'utilisation de linters locaux très rapides agit comme un filtre "pas cher". Les nœuds lourds (Tester, Judge) ne sont sollicités que lorsque le code est syntaxiquement valide.
+
+- [ ] **Linter-as-a-Reviewer** : Intégrer un linter ultra-rapide (ex: AST Tree-sitter, Flake8, oxlint) qui s'exécute immédiatement après la génération de code du Coder. Si la compilation syntaxique échoue, forcer une boucle d'auto-correction locale et rapide sans déclencher le reste du graphe.
+
+## ⚪ Priorité 8 : Middlewares d'Auto-Réparation (Anti-Crash)
+*Suite à l'analyse d'Open-SWE, l'orchestrateur doit être capable de survivre aux hallucinations JSON et aux coupures systèmes.*
+
+> **🔎 État Actuel :** Les outils crashent ou renvoient une erreur 400 (Bad Request) à l'API LLM si les arguments JSON sont mal typés. Pire, si un Checkpoint charge un historique contenant un appel d'outil sans résultat, l'API LLM plantera systématiquement en bloquant le graphe entier.
+> **🚀 Pourquoi ce sera mieux :** Cacher ces erreurs au graphe principal grâce à des "Middlewares" (proxys) permet de sauver des itérations précieuses et de rendre le système 100% résilient (plus aucun crash lié à l'historique ou aux typos LLM).
+
+- [ ] **Sanitizer (Auto-typage)** : Implémenter un proxy avant l'exécution des outils qui détecte les arguments mal formés (ex: `"1, 80"` au lieu de `80`) et les caste silencieusement pour éviter l'échec de validation Pydantic.
+- [ ] **Orphan Repair (Anti-corruption d'historique)** : Au démarrage (chargement de Checkpoint), scanner l'historique des messages. Si un `ToolCall` n'a pas de réponse associée, injecter un faux message `{"status": "error", "error": "Interrompu"}` pour permettre à l'agent de reprendre au lieu de faire crasher l'API.

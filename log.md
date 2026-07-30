@@ -734,6 +734,12 @@ curl http://10.201.12.50:11434/api/show -d '{"name":"nanbeige-bigctx"}'
 - PRIORITÉ 3 (Graphe autonome) → TERMINÉE. Reste : P4 Repo Map, P5 Auto-dépendances,
   P0 CodeAgent (reporté).
 
+## [2026-07-31] pr | PR #11 créée → Kilo Code Review SUCCESS → MERGED dans main
+- Branche feat/escalation-node → squash merge → main (commit 4976042).
+- Kilo Code Review : SUCCESS (conclusion SUCCESS, ~4 min). Merge state CLEAN.
+- Branche locale + remote supprimées après merge (fetch --prune).
+- Priorité 3 (Graphe autonome : breaker + checkpoints + escalade) → TERMINÉE.
+
 ## [2026-07-30] dec | DÉCISION : gemma-4-12B-it-qat-q4_0 = REASONING officiel (figé)
 - VALIDÉ en réel : tourne sur le GPU local (6 Go VRAM), donne des résultats FIABLES
   (tester : 3 assertions PASS, async bien géré, raisonnement structuré).
@@ -744,3 +750,48 @@ curl http://10.201.12.50:11434/api/show -d '{"name":"nanbeige-bigctx"}'
   * REASONING (Architect/Judge/Tester) = gemma-4-12B-it-qat-q4_0 (local GPU, fiable)
 - Le split est optimal : vitesse pour la génération (Coder), rigueur pour
   l'évaluation (Tester/Judge) et la planification (Architect).
+
+## [2026-07-31] plan | Planification cycle AUTO-DÉPENDANCES (Priorité 5 — F-26)
+- DÉCISION UTILISATEUR : Repo Map (F-25) MIS DE CÔTÉ — pas utile pour l'usage
+  actuel (création de code de zéro, peu de gros dépôts à explorer). On enchaîne
+  donc sur la dernière priorité du plan : Auto-Résolution des Dépendances (F-26).
+- OBJECTIF F-26 : quand le nœud Tester (Python) détecte un `ModuleNotFoundError`
+  dans le stderr, auto-installer le package manquant puis relancer les tests, au
+  lieu de gaspiller un cycle LLM pour ça. Le docstring de python_tester.py:14-15
+  annonçait déjà cette intention (« préparer l'auto-install future »).
+- DÉCISIONS UTILISATEUR : (1) install via `pip install` NON-PERSISTANT (n'écrit
+  ni dans pyproject.toml ni dans uv.lock — non-intrusif pour le projet) ;
+  (2) VALIDATION regex du nom de module (^[A-Za-z_][A-Za-z0-9_]*$, défense en
+  profondeur anti-injection dans la commande pip) ; (3) cap 1 retry (anti-boucle).
+- POINT D'ATTACHE : PythonTestRunner.run() (python_tester.py) entre capture du
+  stderr (ligne 74) et verdict (ligne 93). Interface TestRunner (Protocol)
+  inchangée — transparent pour le dispatcher.
+
+## [2026-07-31] feat | AUTO-DÉPENDANCES IMPLÉMENTÉES (Priorité 5 — F-26)
+- PYTHON_TESTER (python_tester.py) :
+  * extract_missing_module(stderr) : regex `No module named '([\w.]+)'` → top-level
+    ('requests.auth' → 'requests'), validation identifiant (^[A-Za-z_]...$) → None
+    si invalide (défense en profondeur anti-injection commande pip).
+  * _install_module(module) : `pip install` via sys.executable, liste d'args (PAS
+    shell=True), try/except large → jamais d'exception (timeout/réseau → False).
+    NON-PERSISTANT : n'écrit ni dans pyproject.toml ni dans uv.lock.
+  * Branchement dans run() : si exit_code≠0 ET auto_install_deps → extract_missing_module
+    → _install_module → relance (1 SEUL retry, cap anti-boucle). Trace dans details
+    pour observabilité ('[auto-install] requests installé puis tests relancés').
+    Seul ModuleNotFoundError déclenche (AssertionError/SyntaxError → historique).
+- CONFIG (config.py + .env.example) : auto_install_deps (bool, défaut True, opt-out
+  AUTO_INSTALL_DEPS=false). Valeur par défaut obligatoire (sinon casse les ~28 helpers
+  de test qui construisent Settings(...) à la main — pattern escalation_enabled).
+- TESTS (test_python_runner.py) : +12 tests. extract_missing_module unitaire (4 cas :
+  simple, sous-module→top-level, non-ModuleError→None, nom invalide→None).
+  Comportement auto-install (4 : retry+succès, opt-out préserve historique, non-
+  ModuleError n'installe pas, cap 1 retry si install échoue). Contrat _install_module
+  (3 : succès→True, échec→False, exception→False jamais propagée).
+  Stratégie : mock subprocess.run + _install_module (évite réseau/PyPI sur CI).
+- SUITE : 232 passed / 0 failed (220 avant + 12 nouveaux). 0 régression.
+- DOCS : contract.md (+7 critères 39-45), plan_usine_logicielle.md (P5 cochée,
+  P4 marquée « mis de côté »), README (ligne tester polyvalent : auto-install),
+  feature_list.json (F-26 → completed).
+- PRIORITÉ 5 (Auto-dépendances) → TERMINÉE. Le plan usine logicielle est désormais
+  COMPLET sur P1/P2/P3/P5 ; reste P0 CodeAgent (reporté), P4 Repo Map (mis de côté),
+  P6 Feedback & Évaluation Avancée (hors-plan, à définir).

@@ -42,13 +42,14 @@
 - [ ] Critère 31 : Le skill `web-tester` exige désormais un rapport structuré (section « ERREURS CONSOLE JS » = le « stderr » du web) ; le skill `python-tester` documente le verdict pytest (exit code) et la lecture d'un échec.
 - [ ] Critère 32 : La suite pytest complète passe (0 régression, nouveaux tests inclus : feedback_utils, tech_detection, python_runner, tester_dispatch, feedback_integration).
 
-## Critères du Nœud d'Escalade (Priorité 3 — F-23)
-- [ ] Critère 33 : Quand une sous-tâche épuise le Circuit Breaker (3 itérations Coder↔Tester↔Judge toutes rejetées) et que `ESCALATION_ENABLED` est vrai (défaut), le workflow appelle `execute_escalation_node` et la sous-tâche ressort avec le statut `"escalated"` (et non `"max_iterations_reached"`).
-- [ ] Critère 34 : `execute_escalation_node` (nœud DSPy, modèle de raisonnement local) produit un `EscalationOutput` structuré (root_cause, attempted_fixes, lesson, severity) à partir de l'historique des réfutations du Juge + du code courant sur disque ; `metrics.node == "escalation_dspy"`.
-- [ ] Critère 35 : Le diagnostic est persisté dans le Knowledge Graph (`kind="escalation"`, `source="escalation_node"`) et relié aux réfutations qu'il synthétise via des arêtes `ESCALATES` (traçabilité, requêtable par `query_duckdb_knowledge_graph` comme les bugs existants).
-- [ ] Critère 36 : Dégradation gracieuse — si `ESCALATION_ENABLED=false` OU si le nœud d'escalade échoue (LLM indisponible / exception non prévue), le workflow ne plante pas et retombe sur le statut historique `"max_iterations_reached"` (le post-mortem ne fait jamais planter le run).
-- [ ] Critère 37 : L'historique des échecs injecté est tronqué (`truncate_history`, `feedback_max_chars`) — un gros historique ne fait pas exploser le contexte ni crasher le nœud.
-- [ ] Critère 38 : La suite pytest complète passe (0 régression, 8 nouveaux tests `test_escalation.py` inclus : nœud isolé succès/échec/troncature/vide, E2E déclenchement/persistance/toggle-off/repli).
+## Critères de l'Auto-Résolution des Dépendances (Priorité 5 — F-26)
+- [ ] Critère 39 : `extract_missing_module(stderr)` extrait le nom de module top-level d'un `ModuleNotFoundError` (`'requests'`, `'requests.auth'` → `'requests'`) ; retourne `None` si pas de `ModuleNotFoundError` ou si le nom extrait n'est pas un identifiant Python valide (regex `^[A-Za-z_][A-Za-z0-9_]*$` — défense en profondeur anti-injection).
+- [ ] Critère 40 : Le déclenchement est conditionnel — `extract_missing_module` n'est appelé QUE si `exit_code != 0` ET `settings.auto_install_deps` est vrai ; un AssertionError/SyntaxError/etc. ne déclenche JAMAIS l'install (comportement historique préservé).
+- [ ] Critère 41 : `auto_install_deps=False` (opt-out via `AUTO_INSTALL_DEPS=false`) désactive totalement la feature — aucune install tentée, aucune relance, failure normal (comportement historique).
+- [ ] Critère 42 : L'installation est **non-persistante** (`pip install` via `sys.executable`, liste d'args sans `shell=True`) — n'écrit ni dans `pyproject.toml` ni dans `uv.lock` (aucun fichier du projet modifié, aucun effet de bord visible en git).
+- [ ] Critère 43 : Cap **1 retry** — si l'install réussit, les tests sont relancés une seule fois ; si l'install échoue (PyPI down), aucune relance (pas de boucle infinie).
+- [ ] Critère 44 : Dégradation gracieuse — `_install_module` n'élève JAMAIS d'exception (timeout/réseau/pip absent → retourne `False`) ; un échec d'install ne fait jamais planter le run (le test ressort en failure comme avant). L'action est tracée dans `details` pour l'observabilité (ex : `[auto-install] 'requests' installé puis tests relancés`).
+- [ ] Critère 45 : La suite pytest complète passe (0 régression, nouveaux tests `test_python_runner.py` inclus : `extract_missing_module` unitaire, comportement auto-install retry/opt-out/non-ModuleNotFoundError/cap, contrat `_install_module` succès/échec/exception).
 
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.
