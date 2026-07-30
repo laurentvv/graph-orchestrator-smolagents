@@ -323,6 +323,31 @@ curl http://10.201.12.50:11434/api/show -d '{"name":"nanbeige-bigctx"}'
   d'Architect économisé. La reprise après crash fonctionne EXACTEMENT comme conçue.
 - Feature Persistance d'État (Priorité 3) : VALIDATION RÉELLE ATTEINTE.
 
+## [2026-07-30] run13 | CYCLE COMPLET TERMINÉ (avec reprise multi-crash) 🎉
+- Plusieurs crashs intermédiaires (coupures manuelles pendant CSS) → reprises itératives.
+- Dernier lancement : ST1 (html) ET ST2 (css) SKIPPÉES (déjà approuvées), reprise
+  directe sur ST3 (js) à l'itération 2 (bugs précédents lus depuis DuckDB).
+- RÉSULTAT FINAL : 3 fichiers complets dans landing_page/ :
+  * index.html (12 533 octets) — HTML5 sémantique, header/nav/main/footer, 3 sections.
+  * styles.css (14 033 octets) — design premium, Flexbox/Grid, responsive, animations.
+  * script.js (7 285 octets) — burger menu, smooth scroll, IntersectionObserver.
+- Checkpoint final EFFACÉ (clear_checkpoint en fin de run = run "terminé" propre).
+- VERDICT : la reprise après crash est validée sur un cycle COMPLET de bout en bout,
+  y compris avec des crashs répétés (chaque reprise skippe ce qui est déjà validé).
+
+## [2026-07-30] fix | BUG Tester : navigateur s'ouvrait à la racine au lieu de landing_page/
+- SYMPTÔME (run #13) : le navigateur Puppeteer (Tester) chargeait index.html à la RACINE
+  du projet au lieu de landing_page/index.html → testait une page inexistante/incomplète.
+- ROOT CAUSE (nodes.py:479, ancien) : l'EXEMPLE dans le prompt du Tester montrait
+  `{workspace_url}/index.html` (racine) au lieu du vrai fichier. Un petit LLM suit
+  l'exemple littéralement → il ignorait les URLs correctes listées juste au-dessus
+  (qui contenaient bien landing_page/) au profit de l'exemple induisant en erreur.
+- FIX (nodes.py execute_tester_node) : l'exemple est désormais calculé depuis le
+  PREMIER fichier cible (primary_target → primary_url), donc il pointe toujours sur
+  le vrai HTML (ex: .../landing_page/index.html). Ajout d'un avertissement explicite
+  anti-racine. 27 tests PASS, 0 régression.
+
+
 
 
 
