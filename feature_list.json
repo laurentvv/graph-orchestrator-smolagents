@@ -108,8 +108,8 @@
     {
       "id": "F-16",
       "name": "Validation run coding workflow de bout en bout",
-      "description": "Run #11 sur localhost (qwen-3.5-bigctx) : voir le workflow aboutir (Architect→Coder→Tester→Judge→verdict). Objectif : démontrer le process complet au moins une fois.",
-      "status": "in_progress",
+      "description": "Run #12 (HTML propre/complet) + Run #13 (cycle complet bout-en-bout avec reprise après crash multi-crash) : workflow validé de bout en bout (Architect→Coder→Tester→Judge→verdict). 3 fichiers générés et approvés.",
+      "status": "completed",
       "dependencies": ["F-09","F-10","F-11","F-13","F-15"]
     },
     {
@@ -143,8 +143,8 @@
     {
       "id": "F-21",
       "name": "Capture robuste du stderr et Troncature",
-      "description": "Le nœud Tester capture le stderr, le tronque (Context Overflow) et le renvoie proprement au Coder.",
-      "status": "pending",
+      "description": "Capture/troncature du feedback anti Context-Overflow. IMPLÉMENTÉ : module feedback_utils.py (truncate_output head+tail + truncate_history) branché aux 3 points de la boucle (Tester→Judge via dspy_nodes, Judge→DuckDB→Coder via workflows, bash_command). Troncature à la LECTURE (contenu DuckDB intégral, pas de collision dedup_key). 4 nouveaux settings (test_timeout_s, stderr_head/tail_lines, feedback_max_chars). 15+ tests PASS.",
+      "status": "completed",
       "dependencies": []
     },
     {
@@ -181,6 +181,13 @@
       "description": "Le Tester capte les ModuleNotFoundError et lance automatiquement pip install/uv add.",
       "status": "pending",
       "dependencies": ["F-21"]
+    },
+    {
+      "id": "F-27",
+      "name": "Tester polyvalent multi-techno (dispatch)",
+      "description": "Le nœud Tester n'est plus cloisonné au web. IMPLÉMENTÉ : package testers/ avec interface TestRunner commune + detect_tech (détection redondante Router + extensions, fallback web) + registre get_runner. 2 runners concrets : WebTestRunner (refactor du bloc Puppeteer existant) et PythonTestRunner (subprocess pytest, déterministe, capture stdout/stderr/exit code tronqué). Nœud execute_tester_node refondu en dispatcher (~30 lignes). Ajout d'une techno = 1 module + 1 skill + 1 ligne registre (rust/ts/go = cycles futurs). Skill web-tester enrichi (rapport structuré) + skill python-tester nouveau.",
+      "status": "completed",
+      "dependencies": ["F-02"]
     }
   ]
 }

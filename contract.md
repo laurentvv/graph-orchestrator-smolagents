@@ -31,6 +31,17 @@
 - [ ] Critère 22 : `FRESH_START=1` efface le checkpoint existant ; un run allant au bout efface son propre checkpoint (run "terminé"). `save_checkpoint`/`load_checkpoint`/`clear_checkpoint` validés sur DuckDB (upsert, round-trip, absence → None).
 - [ ] Critère 23 : La suite pytest ciblée passe (0 régression, 12 nouveaux tests test_checkpoint.py inclus).
 
+## Critères du Tester polyvalent multi-techno + Boucle d'auto-correction (Priorité 2)
+- [ ] Critère 24 : `detect_tech` combine Router + extensions de `target_files` ; les extensions l'emportent en cas de conflit (déterministe > LLM) ; fallback `web` si rien de détectable.
+- [ ] Critère 25 : `execute_tester_node` dispatche vers le bon runner selon la techno (`get_runner`) ; `task["tech"]` explicite prime sur la détection.
+- [ ] Critère 26 : `PythonTestRunner` (subprocess) : exit 0 → `status="success"` ; exit≠0 → `"failure"` + stderr/stdout capturé et tronqué. Le subprocess utilise `sys.executable` (interpréteur du projet, qui a pytest).
+- [ ] Critère 27 : Le `WebTestRunner` refactorisé conserve le comportement du bloc Puppeteer d'origine (MCP Chrome DevTools, calcul d'URL, skill web-tester) ; chargé via le loader centralisé.
+- [ ] Critère 28 : `truncate_output` préserve head + tail + insère un marqueur transparent (`… [X lignes tronquées] …`) ; texte court retourné intact ; `None`/vide → `""`.
+- [ ] Critère 29 : `truncate_history` plafonne l'historique cumulé des réfutations injecté au Coder (≤ `feedback_max_chars`), bugs récents prioritaires ; garde au moins le 1er item (tronqué) pour ne pas laisser le Coder sans info.
+- [ ] Critère 30 : La troncature opère **à la lecture** (injection au Coder/Judge) — le contenu écrit en DuckDB reste intégral (pas de collision de `dedup_key`).
+- [ ] Critère 31 : Le skill `web-tester` exige désormais un rapport structuré (section « ERREURS CONSOLE JS » = le « stderr » du web) ; le skill `python-tester` documente le verdict pytest (exit code) et la lecture d'un échec.
+- [ ] Critère 32 : La suite pytest complète passe (0 régression, nouveaux tests inclus : feedback_utils, tech_detection, python_runner, tester_dispatch, feedback_integration).
+
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.
 * Validation process : `uv run python -m graph_orchestrator.workflows` (WORKFLOW_MODE=coding) →

@@ -426,81 +426,26 @@ async def execute_tester_node(
     reasoning_model: OpenAIServerModel,
     settings: Settings,
 ) -> Tuple[Optional[CoderOutput], Optional[NodeMetrics]]:
-    """Nœud Testeur : utilise Chrome DevTools via MCP pour tester les applications web."""
-    import os
-    from mcp import StdioServerParameters
-    from smolagents import ToolCollection
+    """Nœud Testeur POLYVALENT : dispatche vers le runner adapté à la techno.
 
-    # Configure the MCP server for Chrome DevTools
-    env = os.environ.copy()
-    env["PUPPETEER_EXECUTABLE_PATH"] = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
-    
-    server_parameters = StdioServerParameters(
-        command="npx",
-        args=["-y", "@modelcontextprotocol/server-puppeteer"],
-        env=env
-    )
+    Historiquement, ce nœud était 100% dédié au web (MCP Puppeteer). Il est
+    désormais techno-agnostique : il détecte la techno de la sous-tâche
+    (détection redondante Router + extensions) puis route vers le bon runner
+    (WebTestRunner, PythonTestRunner, ...). Fallback web si techno inconnue
+    (compatibilité arrière).
 
-    # Note: Using the context manager ensures the MCP server is properly closed after the run
-    # For now, we load tools inside the execution loop
-    with ToolCollection.from_mcp(server_parameters, trust_remote_code=True) as tool_collection:
-        local_tester = ToolCallingAgent(
-            tools=[*tool_collection.tools],
-            model=reasoning_model,
-            name=f"tester_{task['id'].replace('-', '_')}",
-            description="Agent QA chargé de tester les interfaces web avec le MCP Chrome DevTools.",
-            verbosity_level=resolve_verbosity("HIGH"),
-        )
+    La logique spécifique à chaque techno vit dans `graph_orchestrator/testers/`.
+    """
+    from .testers import detect_tech, get_runner
 
-        skill_path = os.path.join("skills", "web-tester", "SKILL.md")
-        skill_content = ""
-        if os.path.exists(skill_path):
-            with open(skill_path, "r", encoding="utf-8") as f:
-                skill_content = f.read()
+    # La techno peut être déjà fournie structurellement (ex: propagated depuis le
+    # routeur), sinon on la détecte depuis les extensions + le lang routeur.
+    tech = task.get("tech") or detect_tech(task, task.get("router_lang"))
 
-        workspace_url = "file:///" + os.path.abspath(os.getcwd()).replace("\\", "/")
-        
-        target_files_urls = ""
-        if "target_files" in task and task["target_files"]:
-            target_files_urls = "Les fichiers cibles de cette tâche se trouvent aux adresses suivantes :\n"
-            for fpath in task["target_files"]:
-                file_url = f"{workspace_url}/{fpath.replace('\\', '/')}"
-                target_files_urls += f"- {file_url}\n"
-        
-        # Premier fichier cible (typiquement le HTML principal à ouvrir dans le navigateur).
-        # On l'utilise comme EXEMPLE concret dans le prompt : un petit LLM suit littéralement
-        # l'exemple, donc il DOIT pointer sur le vrai fichier (ex: landing_page/index.html)
-        # et non sur la racine du projet (bug : navigateur s'ouvrait à la racine).
-        primary_target = (task.get("target_files") or ["index.html"])[0]
-        primary_url = f"{workspace_url}/{primary_target.replace(chr(92), '/')}"
+    print(f"[*] Tester polyvalent : techno détectée = '{tech}' pour {task.get('id')}")
 
-        prompt = f"""Tu es un agent QA autonome (Web Tester Node).
-
-Voici tes instructions obligatoires (Skill) :
-{skill_content}
-
-Contenu de la tâche d'origine : {task['content']}
-
-ATTENTION - Le dossier de travail absolu est : {workspace_url}
-{target_files_urls}
-Pour utiliser 'puppeteer_navigate', tu dois ouvrir le fichier HTML principal à cette URL EXACTE : {primary_url}
-(N'utilise PAS {workspace_url}/index.html à la racine — le fichier est dans un sous-répertoire.)
-
-Vérifie l'application web générée. Utilise tes outils MCP pour naviguer, inspecter et interagir.
-Une fois terminé, retourne ton résultat final STRICTEMENT en utilisant l'outil 'final_answer'.
-Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_answer :
-{{
-  "name": "final_answer",
-  "arguments": {{
-    "answer": {{
-      "task_id": "{task['id']}",
-      "status": "success ou failure",
-      "details": "Un résumé détaillé de tes tests visuels et interactifs."
-    }}
-  }}
-}}
-"""
-        return await run_with_retry(local_tester, prompt, CoderOutput, settings.worker_max_retries)
+    runner = get_runner(tech)
+    return await runner.run(task, reasoning_model, settings)
 
 
 async def execute_security_reviewer_node(

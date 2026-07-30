@@ -1,8 +1,25 @@
 # État d'Avancement du Sprint
 
 ## Objectif Actuel
-- [ ] Valider le coding workflow de bout en bout sur un prompt "landing page premium"
-      (Architect → Coder → Tester → Judge → verdict). Run #11 en cours sur localhost.
+- [x] Valider le coding workflow de bout en bout sur un prompt "landing page premium"
+      (Architect → Coder → Tester → Judge → verdict). ATTEINT (run #12 HTML propre,
+      run #13 cycle complet + reprise après crash multi-crash).
+- [ ] Cycle TESTER POLYVALENT + AUTO-CORRECTION stderr (Priorité 2) : dispatch
+      multi-techno (web+python) + troncature anti Context-Overflow. En cours.
+
+## Jalons de l'Itération (cycle Tester polyvalent + stderr)
+- [x] Étape A : Planification + exploration (détection techno, skills_loader, config).
+- [x] Étape B : feedback_utils.py (troncature head+tail + truncate_history) + tests (15 PASS).
+- [x] Étape C : config.py (settings test_timeout_s, stderr_head/tail_lines, feedback_max_chars).
+- [x] Étape D : Package testers/ (base+detect_tech, web_tester refactor, python_tester subprocess).
+- [x] Étape E : Nœud execute_tester_node refondu en dispatcher (nodes.py).
+- [x] Étape F : skills_loader couche dynamique techno→skill pour le tester (select_skills_for_tester).
+- [x] Étape G : Skills web-tester (enrichi) + python-tester (nouveau).
+- [x] Étape H : Brancher troncature aux 3 points (dspy_nodes, workflows, tools/bash_command).
+- [x] Étape I : Tests (tech_detection, python_runner, tester_dispatch, intégration troncature).
+- [x] Étape J : uv run pytest tests/ → 185 passed, 2 failed (les 2 échecs sont PRÉ-EXISTANTS
+  sur main dans test_extract.py, hors périmètre ce cycle). +45 tests vs base.
+- [ ] Étape K : contract.md + feature_list + plan cochés + log/progress fin + PR.
 
 ## Jalons de l'Itération (test process complet)
 - [x] Étape 1 : Prompt de test (tasks.json → landing page Nimbus) + reset KG.
@@ -23,8 +40,11 @@
   dans DuckDB + run_id stable (hash du contenu de tâche) + branchement save/load dans
   run_coding_workflow (skip Architect + skip sous-tâches completed + reprise à l'itération).
   Granularité "début d'itération" (sûre/idempotente). Config FRESH_START. 12 tests PASS.
-- [ ] Étape 13 : Run validation reprise (interrompre un run CPU-only, relancer → reprise).
-- [ ] Étape 14 : Cycle suivant (CodeAgent, repo-map, ou Nœud d'Escalade).
+- [x] Étape 13 : Run validation reprise (interrompre un run CPU-only, relancer → reprise).
+  Run #13 VALIDÉ en conditions réelles : cycle complet bout-en-bout avec crashs répétés,
+  reprise automatique (skip Architect + skip sous-tâches validées), 3 fichiers générés
+  (index.html 12 533 o, styles.css 14 033 o, script.js 7 285 o). Checkpoint effacé en fin.
+- [ ] Étape 14 : Cycle suivant (Priorité 2 stderr / Nœud d'Escalade / Repo Map / CodeAgent).
 
 ## Jalons bootstrap (faits)
 - [x] Création agent.md (specs gestion d'état).

@@ -69,6 +69,33 @@ def load_skill_body(skill_name: str) -> str:
         return ""
 
 
+def select_skills_for_tester(task: dict, router_lang: str = None) -> List[str]:
+    """Retourne les skills de test adaptés à la techno de la sous-tâche (Tester polyvalent).
+
+    Contrairement au Coder (socle statique + regex sur le contenu), le Tester
+    choisit son skill PRINCIPAL selon la techno détectée (détection redondante
+    Router + extensions, via testers.detect_tech). Chaque techno a son skill de
+    test dédié ; inconnu → web-tester (compatibilité arrière).
+
+    Args:
+        task: La sous-tâche (target_files, content...).
+        router_lang: La techno détectée par le routeur (RouterOutput.language).
+    """
+    # Import local : testers importe skills_loader indirectement via les runners ;
+    # on évite tout cycle d'import au niveau module.
+    from .testers import detect_tech
+    tech = detect_tech(task, router_lang)
+    return [_TESTER_SKILL_BY_TECH.get(tech, "web-tester")]
+
+
+# Techno canonique → skill de test dédié. Ajouter une techno = ajouter ici une
+# entrée + créer le skill correspondant dans skills/<tech>-tester/SKILL.md.
+_TESTER_SKILL_BY_TECH: dict[str, str] = {
+    "web": "web-tester",
+    "python": "python-tester",
+}
+
+
 def select_skills_for_coder(task_content: str) -> List[str]:
     """Retourne la liste des noms de skills à injecter dans le Coder pour cette tâche.
 

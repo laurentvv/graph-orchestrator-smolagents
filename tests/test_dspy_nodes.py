@@ -23,6 +23,11 @@ def mock_settings():
     settings.fast_model_id = "mock-fast-model"
     settings.reasoning_model_id = "mock-reasoning-model"
     settings.ollama_api_base = "http://localhost:11434/v1"
+    # Champs de troncature utilisés par execute_code_judge_node (Priorité 2).
+    # Doivent être des int réels, pas des MagicMock, sinon truncate_output crash.
+    settings.stderr_head_lines = 20
+    settings.stderr_tail_lines = 20
+    settings.feedback_max_chars = 2000
     return settings
 
 

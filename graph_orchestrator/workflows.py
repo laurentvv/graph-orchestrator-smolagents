@@ -256,8 +256,15 @@ async def run_coding_workflow(
     
     if router_res:
         print(f"[*] Le routeur a classifié la technologie principale : {router_res.language.upper()}")
+        # On propage la techno STRUCTURELLEMENT (clé dédiée) en plus du texte libre
+        # historique, pour que le Tester polyvalent puisse dispatcher sans re-parser
+        # le prompt. detect_tech combine ce signal avec les extensions de target_files.
+        coding_router_lang = router_res.language
         if seed_tasks:
             seed_tasks[0]['content'] += f"\n\n[ROUTER DIRECTIVE : The primary technology to use is {router_res.language.upper()}]"
+            seed_tasks[0]['router_lang'] = coding_router_lang
+    else:
+        coding_router_lang = None
 
     # --- État de progression (Persistance d'État — Priorité 3 : Checkpoints) --
     # Holder mutable partagé entre les scopes de la fonction. Contient le plan de
@@ -300,20 +307,30 @@ async def run_coding_workflow(
             print(f"    [>] Itération {iteration}/{max_iter} pour {subtask.task_id} (Coder)...")
             
             # Reconstruction du prompt en lisant l'historique de DuckDB
-            # Au lieu d'accumuler dans le contexte, on fait une requête "Bug Tracker" propre
+            # Au lieu d'accumuler dans le contexte, on fait une requête "Bug Tracker" propre.
+            # IMPORTANT : on tronque À LA LECTURE (injection au Coder) — le contenu reste
+            # intégral en base. Sinon, deux bugs distincts au préfixe identique produiraient
+            # le même dedup_key (hash SHA1) et le 2e serait ignoré silencieusement.
+            from .feedback_utils import truncate_history
             historique = ""
             if iteration > 1:
                 claims = kg.get_claims(entity_id)
                 refutations = [c for c in claims if c.get('kind') == 'refutation']
                 if refutations:
-                    historique = "\n\n[TICKETS DE BUGS ACTIFS (LU DEPUIS DUCKDB)] :\n"
-                    for ref in refutations:
-                        historique += f"- {ref['content']}\n"
+                    ref_contents = [c.get('content', '') for c in refutations]
+                    historique = "\n\n" + truncate_history(
+                        ref_contents,
+                        max_chars=settings.feedback_max_chars,
+                        header="[TICKETS DE BUGS ACTIFS (LU DEPUIS DUCKDB)] :",
+                    )
             
             sub_dict = {
-                "id": subtask.task_id, 
+                "id": subtask.task_id,
                 "content": subtask.description + historique,
-                "target_files": subtask.target_files
+                "target_files": subtask.target_files,
+                # Propagation de la techno détectée par le routeur vers le Tester
+                # polyvalent (détection redondante : ce signal + les extensions).
+                "router_lang": coding_router_lang,
             }
             
             # 1. Coder (Qwen-2B)

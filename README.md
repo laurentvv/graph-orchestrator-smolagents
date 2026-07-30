@@ -29,7 +29,7 @@ Instead of letting a single agent write and evaluate its own code, this system s
 - **DSPy Architect Node**: A heavy reasoning model that takes a complex prompt, designs the global architecture, and breaks it down into granular JSON subtasks using strict Pydantic constraints.
 - **Fan-out Coder Nodes (smolagents)**: For each subtask, a Coder agent is spawned asynchronously to write code using precise tools.
 - **Parallel Validation**: 
-  - *Tester Node (smolagents)*: Uses **Chrome DevTools MCP** to visually and functionally test web code.
+  - *Tester Node (smolagents, **polyvalent**)*: Detects the target technology (web → **Chrome DevTools MCP** for visual/functional testing; Python → **`pytest` subprocess** with deterministic pass/fail + captured stderr) and routes to the matching runner. Captured output is **truncated** (head + tail) before feedback to protect the LLM context window from "Context Overflow".
   - *Security Reviewer (DSPy)*: Audits the code against vulnerabilities (XSS, injections, etc.) and returns a typed list of flaws.
 - **DSPy Judge Node**: Acts as the ultimate PR reviewer. Analyzes tester/security reports, outputting a deterministic `approved: bool` verdict to either merge the code or trigger a feedback loop.
 
@@ -143,9 +143,11 @@ graph_orchestrator/
   ├── config.py                ← Env variables & defaults
   ├── models.py                ← Pydantic schemas (ArchitectOutput, SecurityOutput, etc.)
   ├── dspy_nodes.py            ← 🧠 The Brains: DSPy 3.0 Signatures & Predictors (Router, Architect, Judge)
-  ├── nodes.py                 ← 🖐️ The Hands: smolagents CodeAgents (Coders, Testers)
+  ├── nodes.py                 ← 🖐️ The Hands: smolagents CodeAgents (Coders) + Tester dispatcher
+  ├── testers/                 ← 🧪 Polyvalent test runners (web: Puppeteer, python: pytest subprocess, ...)
+  ├── feedback_utils.py        ← Output truncation (head+tail) to prevent Context Overflow in the feedback loop
   ├── workflows.py             ← Complex orchestrations integrating DSPy and smolagents
-  ├── knowledge_graph.py       ← DuckDB integration
+  ├── knowledge_graph.py       ← DuckDB integration (claims, checkpoints)
   └── hitl.py                  ← Human-In-The-Loop logic
 tasks.json                     ← 📝 User task definitions and prompts (auto-loaded)
 docs/

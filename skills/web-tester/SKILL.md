@@ -23,15 +23,31 @@ To test a web application, strictly follow this workflow using your MCP tools:
 
 3. **Interaction & State Changes**:
    - Use `click` (with `uid`) to interact with buttons.
-   - Use `press_key` to simulate user input (e.g., keyboard controls for a game).
-   - Take additional screenshots (`take_screenshot`) after interactions to verify the UI state changed as expected (e.g., a game piece moved, a score updated).
+   - Use `press_key` to simulate user input (e.g. keyboard controls for a game).
+   - Take additional screenshots (`take_screenshot`) after interactions to verify the UI state changed as expected (e.g. a game piece moved, a score updated).
 
-4. **Console & Errors**:
+4. **Console & Errors (CRITICAL — the "stderr" of the web)**:
    - Use `evaluate_script` or `get_console_message` to check for any JavaScript exceptions or errors in the background.
+   - **You MUST report console errors explicitly.** A page that renders but throws JS errors is a FAILURE.
+   - Capture the exact error message and the failing line/file when available.
+
+## Structured Report (mandatory `details` format)
+Your `details` field MUST follow this structure so the feedback is actionable and reliably
+parsable (it gets truncated to protect the context window, so put the most important info first):
+
+```
+VERDICT: success ou failure
+ERREURS CONSOLE JS: <liste des erreurs/exceptions JS, ou "aucune">
+PROBLÈMES VISUELS: <bugs CSS/rendering observés, ou "aucun">
+PROBLÈMES D'INTERACTION: <boutons/liens cassés, ou "aucun">
+ÉTAPES POUR REPRODUIRE: <si failure, les étapes minimales pour reproduire le bug>
+```
 
 ## Evaluation Criteria
+- **Errors**: Are there any hidden JavaScript errors in the console? (highest priority)
 - **Visuals**: Are there any blatant CSS rendering bugs?
 - **Interactivity**: Do buttons and keyboard inputs work as intended?
-- **Errors**: Are there any hidden JavaScript errors in the console?
 
-If the test passes, return a JSON validation. If it fails, return the specific steps to reproduce the error and the screenshots/console logs back to the Coder Node.
+If the test passes, return `status: "success"` with the verdict. If it fails, return
+`status: "failure"` with the specific steps to reproduce the error and the console errors
+captured, back to the Coder Node.

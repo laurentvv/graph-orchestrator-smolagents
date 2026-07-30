@@ -7,7 +7,7 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 > |---|---|
 > | 🔴 0. Cadre système & prompts | **Partiel** (Coder autonome ✅, Architect Read-Only ✅ via DSPy, CodeAgent ❌) |
 > | 🔴 1. Édition sécurisée | **✅ TERMINÉE** (PR #3) — la plus critique, validée au run #12 |
-> | 🟠 2. Auto-correction (stderr) | ❌ à faire |
+> | 🟠 2. Auto-correction (stderr) | **✅ TERMINÉE** (PR en cours) — troncature + Tester polyvalent multi-techno (web+python) |
 > | 🟡 3. Graphe autonome (breaker/checkpoints) | **Partiel** (`max_iter=3` ✅, checkpoints ✅, nœud d'escalade ❌) |
 > | 🟢 4. Repo Map (tree-sitter) | ❌ à faire |
 > | 🔵 5. Auto-dépendances | ❌ à faire |
@@ -43,8 +43,9 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 > **🔎 État Actuel :** Le graphe ne filtre pas intelligemment la sortie d'erreur (`stderr`) du nœud Tester.
 > **🚀 Pourquoi ce sera mieux :** Si un script Python crache 500 lignes de Traceback, le LLM va les avaler à chaque itération. Au bout du 3ème essai, la fenêtre de contexte explosera ("Context Overflow"), provoquant un "oubli" des instructions de l'Architecte. La troncature garantit une boucle infinie stable en mémoire.
 
-- [ ] **Capture robuste du `stderr`** : Dans le nœud `Tester`, exécuter le code dans un sous-processus isolé et capturer la sortie d'erreur exacte.
-- [ ] **Troncature anti "Context Overflow"** : Créer une fonction utilitaire qui coupe les grosses Tracebacks Python (ex: garder les 20 premières et 20 dernières lignes) avant de les renvoyer au `Coder`, pour sauver la mémoire du LLM.
+- [x] **Capture robuste du `stderr`** : Dans le nœud `Tester`, exécuter le code dans un sous-processus isolé et capturer la sortie d'erreur exacte. — *FAIT : `PythonTestRunner` (package `testers/`) lance `pytest` en subprocess via `sys.executable`, capture stdout+stderr+exit code. Le `WebTestRunner` capture les erreurs console JS via MCP Puppeteer (skill enrichi exigeant un rapport structuré).*
+- [x] **Troncature anti "Context Overflow"** : Créer une fonction utilitaire qui coupe les grosses Tracebacks Python (ex: garder les 20 premières et 20 dernières lignes) avant de les renvoyer au `Coder`, pour sauver la mémoire du LLM. — *FAIT : `feedback_utils.py` (`truncate_output` head+tail + `truncate_history` plafonné) branché aux 3 points de la boucle (Tester→Judge, Judge→DuckDB→Coder, `bash_command`). Troncature à la LECTURE (contenu DuckDB intégral). 4 settings config.*
+- [x] *(bonus hors-plan, décision utilisateur)* **Tester polyvalent multi-techno** : le nœud Tester n'est plus cloisonné au web. `execute_tester_node` est un dispatcher qui route selon la techno détectée (redondance Router + extensions) vers N runners dédiés (web, python, rust/ts futurs). Architecture extensible : ajouter une techno = 1 module + 1 skill + 1 ligne registre.
 
 ## 🟡 Priorité 3 : Le Graphe Autonome et ses Sécurités (L'Orchestration)
 *Sans limites, un agent bloqué bouclera à l'infini et videra vos ressources.*
