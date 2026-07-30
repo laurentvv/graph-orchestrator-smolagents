@@ -12,6 +12,8 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 > | 🟢 4. Repo Map (tree-sitter) | ⏸️ **Mis de côté** (décision utilisateur : pas utile pour l'usage actuel — création de code de zéro, peu de gros dépôts à explorer) |
 > | 🔵 5. Auto-dépendances | **✅ TERMINÉE** (F-26) — auto-install `pip` non-persistante + relance sur `ModuleNotFoundError` |
 > | 🟣 6. Feedback & Évaluation Avancée | ❌ à faire *(Issu de l'analyse system_prompts_analysis.md)* |
+> | 🟤 7. Le "Shift Left" (Linter-as-a-Reviewer) | ❌ à faire |
+> | ⚪ 8. Middlewares d'Auto-Réparation | ❌ à faire |
 >
 > **Levier hors-plan majeur découvert et appliqué** : température du Coder 0.2 (vs 1.0 serveur) — a éliminé la moitié de la corruption.
 
@@ -78,3 +80,20 @@ Plus d'information : `system_prompts_analysis.md`
 
 - [ ] **Code Review (Anti-Bruit & Rubric)** : Intégrer la stratégie Open-SWE dans les nœuds Security et Code Judge. Interdire les critiques de style, classer les retours (Critical, High, Medium, Low) et forcer l'ancrage strict sur le `diff` modifié pour réduire drastiquement les faux positifs et l'enlisement du Judge.
 - [ ] **TDD Persistant (Web Tester)** : Modifier le workflow de test (inspiré de LlamaBot). Le Testeur (web ou python) doit générer un vrai script automatisé (ex: `spec.js` / `test_foo.py`), s'assurer qu'il échoue (RED) prouvant l'erreur, l'envoyer au Coder pour correction, puis vérifier sa réussite (GREEN). Cela laisse un harnais de test durable sur le disque.
+
+## 🟤 Priorité 7 : Le "Shift Left" (Linter-as-a-Reviewer)
+*Suite à l'analyse croisée des références (Aider, OpenCode), filtrer les erreurs de syntaxe de base avant d'engager l'orchestrateur lourd permet des économies massives.*
+
+> **🔎 État Actuel :** Le graphe exécute le code (via Tester) pour capter les erreurs. C'est lent et cher si l'erreur est un simple "deux-points manquant" ou une variable non définie.
+> **🚀 Pourquoi ce sera mieux :** L'utilisation de linters locaux très rapides agit comme un filtre "pas cher". Les nœuds lourds (Tester, Judge) ne sont sollicités que lorsque le code est syntaxiquement valide.
+
+- [ ] **Linter-as-a-Reviewer** : Intégrer un linter ultra-rapide (ex: AST Tree-sitter, Flake8, oxlint) qui s'exécute immédiatement après la génération de code du Coder. Si la compilation syntaxique échoue, forcer une boucle d'auto-correction locale et rapide sans déclencher le reste du graphe.
+
+## ⚪ Priorité 8 : Middlewares d'Auto-Réparation (Anti-Crash)
+*Suite à l'analyse d'Open-SWE, l'orchestrateur doit être capable de survivre aux hallucinations JSON et aux coupures systèmes.*
+
+> **🔎 État Actuel :** Les outils crashent ou renvoient une erreur 400 (Bad Request) à l'API LLM si les arguments JSON sont mal typés. Pire, si un Checkpoint charge un historique contenant un appel d'outil sans résultat, l'API LLM plantera systématiquement en bloquant le graphe entier.
+> **🚀 Pourquoi ce sera mieux :** Cacher ces erreurs au graphe principal grâce à des "Middlewares" (proxys) permet de sauver des itérations précieuses et de rendre le système 100% résilient (plus aucun crash lié à l'historique ou aux typos LLM).
+
+- [ ] **Sanitizer (Auto-typage)** : Implémenter un proxy avant l'exécution des outils qui détecte les arguments mal formés (ex: `"1, 80"` au lieu de `80`) et les caste silencieusement pour éviter l'échec de validation Pydantic.
+- [ ] **Orphan Repair (Anti-corruption d'historique)** : Au démarrage (chargement de Checkpoint), scanner l'historique des messages. Si un `ToolCall` n'a pas de réponse associée, injecter un faux message `{"status": "error", "error": "Interrompu"}` pour permettre à l'agent de reprendre au lieu de faire crasher l'API.
