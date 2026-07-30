@@ -9,16 +9,19 @@ Antidote à l'hallucination d'API : plutôt que de se fier à la mémoire du mod
 
 Deux modes d'usage dans le coding workflow :
   1. AGENT (Coder / web-tester, smolagents) : on leur injecte les @tool MCP via
-     get_context7_tools(). L'agent décide QUAND chercher (cf. skill context7-research).
+     le context manager context7_tools(). L'agent décide QUAND chercher (cf. skill
+     context7-research). Le `with` maintient la connexion MCP ouverte pendant tout
+     le run de l'agent (sinon les outils deviendraient inertes).
   2. PRÉ-FETCH (Architect, DSPy sans boucle d'outils) : fetch_context7_brief()
      consulte Context7 en amont et renvoie un résumé compact injecté dans le prompt.
 
 Robustesse : si CONTEXT7_API_KEY est absente ou la connexion échoue, TOUT se
-dégrade gracieusement — get_context7_tools() → [], fetch_context7_brief() → "".
+dégrade gracieusement — context7_tools() yield [], fetch_context7_brief() → "".
 Aucun nœud ne dépend de Context7 pour fonctionner (backward-compatible).
 """
 
 import logging
+import re
 from contextlib import contextmanager
 from typing import List, Optional
 
@@ -76,34 +79,6 @@ def context7_tools():
         yield []
 
 
-def get_context7_tools() -> List[Tool]:
-    """[DÉPRÉCIÉ] Préférez le context manager `context7_tools()`.
-
-    Conserve une connexion ouverte via ExitStack pour compatibilité arrière avec
-    les appelants qui ne peuvent pas (encore) utiliser un `with` (ex: web_tester).
-    Évitez pour les nouveaux code : le cleanup MCP sur Windows lève parfois
-    'Cannot close a running event loop' à l'extinction du process.
-    """
-    import contextlib
-    global _LEGACY_STACK
-    try:
-        _LEGACY_STACK
-    except NameError:
-        _LEGACY_STACK = contextlib.ExitStack()
-    params = _build_params()
-    if params is None:
-        return []
-    try:
-        tools = list(_LEGACY_STACK.enter_context(
-            ToolCollection.from_mcp(params, trust_remote_code=True)
-        ).tools)
-        logger.debug("get_context7_tools : %d outil(s) chargé(s).", len(tools))
-        return tools
-    except Exception as e:
-        logger.warning("get_context7_tools : connexion échouée (%s).", e)
-        return []
-
-
 def fetch_context7_brief(query: str, top_k: int = 3) -> str:
     """Pré-fetch un résumé doc contextuel pour l'Architect (nœud DSPy sans outils).
 
@@ -134,13 +109,17 @@ def fetch_context7_brief(query: str, top_k: int = 3) -> str:
                 return ""
 
             # 1) Resolve : trouve la lib la plus pertinente pour cette tâche.
-            resolved = resolver(query=query, libraryName="")
+            # On ne passe que `query` (le ranking se fait sur la pertinence vs la
+            # question). `libraryName` est omis : une chaîne vide pouvait être
+            # interprétée différemment d'un paramètre absent par le serveur MCP
+            # (Kilo review). On ne devine pas un nom de lib — on laisse Context7
+            # proposer les candidats les plus pertinents.
+            resolved = resolver(query=query)
             if not resolved:
                 return ""
 
             # La réponse de resolve_library_id est un texte (JSON ou formatté).
             # On en extrait le premier libraryId candidat (format /org/project).
-            import re
             match = re.search(r"(/\S+?/\S+?)(?:\s|$|,|\"|\n|`)", str(resolved))
             if not match:
                 # Rien qui ressemble à un libraryId : on abandonne proprement.

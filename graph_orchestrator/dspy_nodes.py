@@ -151,25 +151,17 @@ async def execute_router_node(task_content: str, fast_model, settings: Settings)
         return None, None
 
 
-# Mêmes libs/frameworks externes que skills_loader.DYNAMIC_SKILL_RULES (règle
-# context7-research). Sert à éviter un appel réseau Context7 inutile : on ne
-# pré-fetch la doc QUE si le prompt mentionne une lib externe.
-_EXTERNAL_LIB_RE = re.compile(
-    r"\b(chart\.?js|d3\.?js|three\.?js|vue\.?js|react|svelte|solid\.?js|angular|"
-    r"tailwind|bootstrap|material[- ]ui|antd|next\.?js|tauri|electron|"
-    r"pandas|numpy|scipy|requests|fastapi|django|flask|sqlalchemy|"
-    r"pytest|beautifulsoup|selenium|playwright)\b",
-    re.IGNORECASE,
-)
+# Garde-fou : évite un appel réseau Context7 (et sa latence) sur les tâches
+# vanilla/algorithmiques, où la doc n'apporte rien. Cohérent avec le skill
+# context7-research qui reste dormant sur le vanilla. Le pattern est la source
+# unique de vérité (skills_loader.EXTERNAL_LIB_PATTERN) pour éviter la dérive.
+from .skills_loader import EXTERNAL_LIB_PATTERN as _EXTERNAL_LIB_PATTERN
+
+_EXTERNAL_LIB_RE = re.compile(_EXTERNAL_LIB_PATTERN, re.IGNORECASE)
 
 
 def _mentions_external_lib(text: str) -> bool:
-    """True si `text` mentionne une lib/framework externe (déclencheur Context7).
-
-    Garde-fou : évite un appel réseau Context7 (et sa latence) sur les tâches
-    vanilla/algorithmiques, où la doc n'apporte rien. Cohérent avec le skill
-    context7-research qui reste dormant sur le vanilla.
-    """
+    """True si `text` mentionne une lib/framework externe (déclencheur Context7)."""
     return bool(_EXTERNAL_LIB_RE.search(text or ""))
 
 
