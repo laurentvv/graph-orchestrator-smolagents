@@ -204,6 +204,8 @@ def _settings(kg_path=":memory:", fresh_start=False):
         max_iterations=3, hitl_enabled=False, hitl_nodes="synth",
         kg_path=kg_path, workflow_mode="coding", log_level="LOW",
         fresh_start=fresh_start,
+        test_timeout_s=120, stderr_head_lines=20, stderr_tail_lines=20,
+        feedback_max_chars=2000,
     )
     return s
 

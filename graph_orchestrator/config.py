@@ -109,6 +109,15 @@ class Settings:
     # fraîche même si le contenu de la tâche correspond à un run interrompu).
     fresh_start: bool
 
+    # --- Boucle d'auto-correction (Priorité 2 : capture/troncature stderr) ---
+    # Sans plafond, un gros traceback (500+ lignes) avalé à chaque itération fait
+    # exploser le contexte du LLM ("Context Overflow") → la boucle diverge.
+    # Voir graph_orchestrator/feedback_utils.py (truncate_output / truncate_history).
+    test_timeout_s: int  # timeout d'un runner de tests en subprocess (pytest, etc.)
+    stderr_head_lines: int  # lignes de tête à garder (l'erreur, en haut du log)
+    stderr_tail_lines: int  # lignes de queue à garder (la cause racine, en bas)
+    feedback_max_chars: int  # plafond global du feedback injecté au Coder
+
 
 def load_settings() -> Settings:
     """Construit les settings depuis l'environnement (avec valeurs par défaut)."""
@@ -140,6 +149,10 @@ def load_settings() -> Settings:
         workflow_mode=_get_str("WORKFLOW_MODE", "one_shot"),
         log_level=_get_str("LOG_LEVEL", "LOW"),
         fresh_start=_get_bool("FRESH_START", False),
+        test_timeout_s=_get_int("TEST_TIMEOUT_S", 120),
+        stderr_head_lines=_get_int("STDERR_HEAD_LINES", 20),
+        stderr_tail_lines=_get_int("STDERR_TAIL_LINES", 20),
+        feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),
     )
 
 

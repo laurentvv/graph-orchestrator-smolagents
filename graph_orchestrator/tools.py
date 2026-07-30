@@ -139,7 +139,7 @@ def edit_file(path: str, old_string: str, new_string: str, replace_all: bool = F
 @tool
 def bash_command(cmd: str) -> str:
     """Executes a bash shell command. Useful for creating directories, running tests, or checking environment.
-    
+
     Args:
         cmd: The shell command to execute.
     """
@@ -150,7 +150,11 @@ def bash_command(cmd: str) -> str:
             output += "\nSTDERR:\n" + result.stderr
         if not output.strip():
             output = f"Command executed successfully (exit code {result.returncode}), no output."
-        return output
+        # Troncature anti "Context Overflow" : une commande (ex: tests) peut cracher
+        # des centaines de lignes de stderr. On garde tête + queue avant de renvoyer
+        # au LLM, sinon le contexte explose (Priorité 2 du plan usine logicielle).
+        from .feedback_utils import truncate_output
+        return truncate_output(output, head_lines=20, tail_lines=20, max_chars=2000)
     except subprocess.TimeoutExpired:
         return "Error: Command timed out after 30 seconds."
     except Exception as e:

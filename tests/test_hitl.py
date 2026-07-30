@@ -32,6 +32,11 @@ def _settings(**overrides) -> Settings:
         kg_path=":memory:",
         workflow_mode="one_shot",
         log_level="LOW",
+        fresh_start=False,
+        test_timeout_s=120,
+        stderr_head_lines=20,
+        stderr_tail_lines=20,
+        feedback_max_chars=2000,
     )
     base.update(overrides)
     return Settings(**base)

@@ -335,6 +335,27 @@ curl http://10.201.12.50:11434/api/show -d '{"name":"nanbeige-bigctx"}'
 - VERDICT : la reprise après crash est validée sur un cycle COMPLET de bout en bout,
   y compris avec des crashs répétés (chaque reprise skippe ce qui est déjà validé).
 
+## [2026-07-30] plan | Planification cycle TESTER POLYVALENT + AUTO-CORRECTION stderr (Priorité 2)
+- Constat clé (exploration) : le plan original parlait de "capturer le stderr d'un
+  sous-processus de tests", MAIS le Tester actuel est 100% Puppeteer (test visuel
+  web) — ne lance aucun test Python. Le risque de Context Overflow est cependant BIEN
+  RÉEL dans la boucle : rapport Tester avalé brut par le Judge (str() sans limite),
+  réfutations concaténées sans plafond à chaque itération → historique qui grossit.
+- DÉCISIONS UTILISATEUR : (1) Tester POLYVALENT techno-agnostique (Python, HTML/CSS/JS,
+  TS, frameworks, Rust...) — ne pas le cloisonner au web ; (2) dispatch = N runners
+  dédiés par techno (1 runner + 1 skill par techno) ; (3) détection redondante
+  Router + extensions ; (4) CE CYCLE = architecture du dispatch + 2 runners concrets
+  (web refactorisé + python nouveau) — rust/ts/etc en échéance futures ; (5) troncature
+  universelle techno-agnostique dans feedback_utils.py ; (6) enrichir/créer skills via
+  skill-creator.
+- Points d'attache existants exploités : RouterOutput.language (déjà détecté mais
+  propagé seulement en texte libre), target_files (extensions disponibles jamais
+  exploitées), skills_loader DYNAMIC_SKILL_RULES (pattern regex→skill, mais Coder
+  seulement), bash_command (seul subprocess existant, sans troncature).
+- Architecture : subtask.target_files + RouterOutput.language → detect_tech() →
+  task["tech"] → execute_tester_node (dispatcher) → WebTestRunner / PythonTestRunner
+  → CoderOutput(status + details tronqué) → Judge → DuckDB → Coder.
+
 ## [2026-07-30] fix | BUG Tester : navigateur s'ouvrait à la racine au lieu de landing_page/
 - SYMPTÔME (run #13) : le navigateur Puppeteer (Tester) chargeait index.html à la RACINE
   du projet au lieu de landing_page/index.html → testait une page inexistante/incomplète.
@@ -346,5 +367,42 @@ curl http://10.201.12.50:11434/api/show -d '{"name":"nanbeige-bigctx"}'
   PREMIER fichier cible (primary_target → primary_url), donc il pointe toujours sur
   le vrai HTML (ex: .../landing_page/index.html). Ajout d'un avertissement explicite
   anti-racine. 27 tests PASS, 0 régression.
+
+## [2026-07-30] feat | Cycle TESTER POLYVALENT + AUTO-CORRECTION stderr TERMINÉ (Priorité 2)
+- TRONCATURE UNIVERSHELLE (feedback_utils.py) : truncate_output (head+tail + marqueur
+  transparent) + truncate_history (plafond cumulé, bugs récents prioritaires, garde
+  toujours le 1er item tronqué). Techno-agnostique (valable stderr Python ET console web).
+  Branchée aux 3 points de la boucle anti Context-Overflow :
+  * Tester→Judge (dspy_nodes.py) : str(test_res) → truncate_output.
+  * Judge→DuckDB→Coder (workflows.py) : concaténation brute → truncate_history.
+    SUBTILITÉ : troncature à la LECTURE (contenu DuckDB intégral) pour ne pas casser
+    la dédup par dedup_key (hash SHA1) — sinon 2 bugs distincts au préfixe identique
+    = même hash = 2e ignoré silencieusement.
+  * bash_command (tools.py) : stdout+stderr illimités → truncate_output.
+- TESTER POLYVALENT (package testers/) : le nœud n'est plus cloisonné au web.
+  * base.py : interface TestRunner (Protocol) + detect_tech (détection redondante
+    Router + extensions, extensions gagnent en conflit, fallback web).
+  * web_tester.py : WebTestRunner (refactor du bloc Puppeteer existant, comportement
+    identique, skill chargé via loader centralisé).
+  * python_tester.py : PythonTestRunner (subprocess pytest via sys.executable —
+    CRITIQUE : l'interprète système n'a pas pytest, seul le venv/uv l'a. capture
+    stdout+stderr+exit code, verdict binaire déterministe, timeout géré).
+  * __init__.py : registre get_runner + lazy import. AJOUT TECHNO = 1 module + 1 skill
+    + 1 ligne registre (rust/ts/go = cycles futurs sans toucher l'architecture).
+- NŒUD DISPATCHER (nodes.py execute_tester_node) : refondu de ~80 à ~15 lignes.
+  Détecte techno → route vers runner. task["tech"] explicite prime sur détection.
+  router_lang propagé structurellement jusqu'au sub_dict (workflows.py).
+- SKILLS : web-tester enrichi (rapport structuré exigé, section ERREURS CONSOLE JS =
+  le stderr du web) + python-tester nouveau (verdict exit code, lecture échec pytest).
+- CONFIG : 4 settings (test_timeout_s, stderr_head/tail_lines, feedback_max_chars).
+- TESTS : +45 nouveaux tests PASS (feedback_utils 15, tech_detection 19, python_runner
+  7 — subprocess RÉEL sans LLM, tester_dispatch 6, feedback_integration 1).
+  SUITE COMPLÈTE : 185 passed, 2 failed. Les 2 échecs sont PRÉ-EXISTANTS sur main
+  (test_extract.py, vérifié via stash) — hors périmètre ce cycle.
+  Régression initiale (test du Judge : MagicMock vs int dans truncate_output) corrigée
+  (mock_settings complété).
+- DÉCISION UTILISATEUR : le Tester ne doit pas être cloisonné au web. Architecture
+  N-runners dédiés, détection redondante. Ce cycle : web+python concrets, le reste
+  extensible.
 
 

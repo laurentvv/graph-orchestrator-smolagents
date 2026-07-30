@@ -19,6 +19,7 @@ from typing import List, Optional, Tuple, Any
 import dspy
 
 from .config import Settings
+from .feedback_utils import truncate_output
 from .logging_utils import NodeMetrics
 from .models import (
     ArchitectOutput,
@@ -248,7 +249,15 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
     
     # Extraction sécurisée des tableaux pour éviter des erreurs Pydantic si les champs sont None
     vulns = security_res.vulnerabilities if security_res and hasattr(security_res, "vulnerabilities") else []
-    tests = str(test_res) if test_res else "Aucun résultat de test."
+    # Le rapport du Tester peut être long (console JS, traceback). On le tronque AVANT
+    # de l'injecter au Judge pour protéger le contexte (sinon overflow sur les gros échecs).
+    tests_raw = str(test_res) if test_res else "Aucun résultat de test."
+    tests = truncate_output(
+        tests_raw,
+        head_lines=settings.stderr_head_lines,
+        tail_lines=settings.stderr_tail_lines,
+        max_chars=settings.feedback_max_chars,
+    )
     
     try:
         with dspy.context(lm=lm):

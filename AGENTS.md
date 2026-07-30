@@ -75,3 +75,4 @@ Tu ne dois jamais te fier uniquement à ta fenêtre de contexte pour suivre l'av
 2. **Phase d'Action** : Avant d'exécuter une tâche, écris la ligne correspondante dans le `log.md`.
 3. **Phase de Synchronisation** : Après chaque écriture de fichier ou test, mets à jour le fichier de statut associé (`progress.md` ou `feature_list.json`).
 4. **Gestion des Erreurs** : Si une exception survient ou si le processus s'interrompt, l'état valide est celui extrait de la dernière ligne du `log.md` combiné aux assertions de `progress.md`.
+5. **`README.md`** : PUSH = mise à jour `README.md` si nouvelle fonctionnalité ou modification importante.
