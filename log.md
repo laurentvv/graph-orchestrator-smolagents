@@ -795,3 +795,22 @@ curl http://10.201.12.50:11434/api/show -d '{"name":"nanbeige-bigctx"}'
 - PRIORITÉ 5 (Auto-dépendances) → TERMINÉE. Le plan usine logicielle est désormais
   COMPLET sur P1/P2/P3/P5 ; reste P0 CodeAgent (reporté), P4 Repo Map (mis de côté),
   P6 Feedback & Évaluation Avancée (hors-plan, à définir).
+
+## [2026-07-31] docs | Analyse prompts système + priorités P7/P8 (par autre agent)
+- system_prompts_analysis.md (nouveau, 124 lignes) : analyse croisée des prompts
+  système des frameworks de référence (OpenFox planner/builder read-only, OpenCode
+  plan mode anti-édition strict, etc.). Source documentaire de la P6.
+- plan_usine_logicielle.md : 2 nouvelles priorités issues de l'analyse :
+  * P7 "Shift Left" (Linter-as-a-Reviewer) — filtrer les erreurs de syntaxe de base
+    via un linter ultra-rapide (AST tree-sitter / Flake8 / oxlint) juste après le
+    Coder, AVANT de solliciter les nœuds lourds (Tester, Judge). Économie massive.
+  * P8 Middlewares d'Auto-Réparation (Anti-Crash) — proxy sanitizer (auto-typage
+    des args LLM mal formés, ex "1, 80"→80) + orphan repair (ToolCall sans réponse
+    dans l'historique de checkpoint → injection faux message error pour reprise).
+- Commit 56dbecd sur la branche feat/auto-install-deps (avant merge PR #12).
+
+## [2026-07-31] pr | PR #12 créée → Kilo Code Review SUCCESS → MERGED dans main
+- Branche feat/auto-install-deps → squash merge → main (commit 9a648ae).
+- Kilo Code Review : SUCCESS (conclusion SUCCESS, mergeState CLEAN).
+- Branche locale + remote supprimées après merge.
+- Priorité 5 (Auto-dépendances) → TERMINÉE et intégrée à main.
