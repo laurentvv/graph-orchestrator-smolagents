@@ -1523,3 +1523,118 @@ unitaires (pas encore par run réel — étape suivante).
 - **Tableau d'en-tête** : P4 reframée HORS-SCOPE, P8-bis ajoutée, P6 annotée.
 - Validation : 12 sections H2 cohérentes avec le tableau ; aucune réf POC citée en base de feature active.
 - **Aucune modification du code du projet** — travail plan uniquement.
+
+## [2026-07-31] gen | Démarrage cycle 2 tâches rapides (Anti-Loop SHA256 P3 + Nettoyage DOM P6)
+- **Objectif** : avancer 2 cases du plan_usine_logicielle.md en une session, sur les tâches
+  les plus rapides et isolées (chacune ~30-50 lignes, zéro LLM, ROI clair).
+- **Tâche 1 — Anti-Loop Cryptographique (Priorité 3, ligne 73)** : hash SHA256 des tool calls
+  (ToolName + Input) dans `run_with_retry`. Si le Coder répète exactement la même action X fois,
+  court-circuit immédiat → stoppe l'hémorragie de tokens. Inspiré de Crush.
+  Fichiers prévus : `loop_guard.py` (nouveau) + `nodes.py` (hook dans `run_with_retry`) +
+  `config.py` (settings `loop_guard_enabled`, `loop_guard_threshold`) + tests.
+- **Tâche 2 — Nettoyage DOM (Priorité 6, ligne 108, inspiré de LlamaBot)** : utilitaire qui
+  strippe `<svg>/<canvas>/<script>/<style>` du HTML avant envoi au LLM, branché dans
+  `web_tester.py`. Économie massive de tokens sur le Web Tester.
+  Fichiers prévus : `dom_filter.py` (nouveau) + `web_tester.py` (hook) + tests.
+- **Note archi** : le dépôt n'utilise PAS LangGraph (pas de `GraphState`), et les checkpoints
+  ne rechargent PAS la mémoire smolagents → la tâche "Orphan Repair" (P8) est N/A ici, écartée.
+
+## [2026-07-31] eval | Fin cycle 2 tâches rapides — 305 tests PASS, 0 régression
+*Cycle terminé en une session. 2 cases du plan usine logicielle cochées (P3 Anti-Loop + P6 Nettoyage DOM).*
+- **Tâche 1 — Anti-Loop Cryptographique (F-36, P3 ligne 73)** : ✅ IMPLÉMENTÉ + VALIDÉ.
+  - `loop_guard.py` (240 lignes) : `compute_tool_call_fingerprint` (SHA256 de ToolName + Input
+    normalisé via `json.dumps(sort_keys=True)` + strip whitespace sur valeurs string),
+    `LoopGuard` (record/repeated_action/reset, seuil paramétrable ≥2, opt-out `enabled=False`),
+    `extract_tool_calls_from_step` (gère ToolCallingAgent `tool_calls` ET CodeAgent `code_action`
+    via scan des noms d'`@tool` connus).
+  - Branchement `nodes.py` : `run_with_retry` reçoit un param optionnel `loop_guard=None`
+    (non-cassant — les autres nœuds appellent sans guard). Hook après `agent.run` : scan des
+    steps, enregistrement, détection. Si boucle → message CIRCUIT BREAKER injecté au prompt.
+    `reset()` aligné sur la purge `agent.memory.steps` entre retries (un bug d'une tentative
+    précédente ne fait pas déclencher la suivante). `execute_coder_node` instancie le guard
+    (seul nœud d'écriture = seul candidat pertinent).
+  - `config.py` : `loop_guard_enabled` (défaut True) + `loop_guard_threshold` (défaut 3),
+    valeurs par défaut dans la dataclass (évite de casser les helpers de test qui construisent
+    `Settings(...)` à la main, même pattern que `escalation_enabled`).
+  - Nuance vs plan : on hashe `ToolName + Input` (pas l'Output — l'Output varie même quand
+    l'agent boucle sur la même action fausse, donc l'inclure casserait la détection).
+  - Tests : `test_loop_guard.py` 16 PASS (empreinte stable/order/whitespace/string-args,
+    détection seuil/opt-out/reset/threshold<2, extraction TCA+CodeAgent+empty,
+    intégration `run_with_retry`). Correction marqueur `@pytest.mark.asyncio` → `@pytest.mark.anyio`
+    (le projet utilise anyio, pas pytest-asyncio — pattern de test_guard.py).
+- **Tâche 2 — Nettoyage DOM (F-37, P6 ligne 108, LlamaBot)** : ✅ IMPLÉMENTÉ + VALIDÉ.
+  - `dom_filter.py` (90 lignes) : `clean_dom_for_llm` strippe `<script>/<style>/<svg>/<canvas>/
+    <iframe>/<noscript>/<template>/<head>` + commentaires HTML. Regex précompilées
+    `re.IGNORECASE | re.DOTALL` (HTML tolère `<SCRIPT>`, contenu multi-ligne), variants
+    auto-fermants XHTML gérés, compactage whitespace, troncature `max_chars=8000`
+    (cohérent avec `FEEDBACK_MAX_CHARS`). Sans dépendance (pas de BeautifulSoup/lxml).
+  - Branchement `web_tester.py` : directive "🧹 NETTOYAGE DOM" dans le prompt du tester,
+    avec un snippet JS exécuté côté navigateur via `puppeteer_evaluate` (clone le DOM,
+    `querySelectorAll('script,style,svg,canvas,...').remove()`, strip comments, slice 8000).
+    Plus efficace qu'un round-trip Python : le nettoyage se fait avant le transport réseau.
+  - Gain mesuré : `test_significant_token_reduction_on_realistic_page` — un HTML à 80% de bruit
+    (script+style+svg verbeux) est divisé par >3, contenu sémantique intact.
+  - Tests : `test_dom_filter.py` 18 PASS (chaque famille de balises, casse/XHTML, commentaires,
+    préservation sémantique id/class/aria, compactage, troncature, cas limites None/vide/propre).
+- **Suite pytest complète** : **305 passed / 0 failed** (271 avant + 34 nouveaux). 0 régression.
+  Seuls warnings = `DeprecationWarning` DSPy (préexistants, hors périmètre).
+- **État disque synchronisé** : contract.md (+16 critères 72-87), feature_list.json (+F-36/F-37,
+  39 features total, JSON valide), progress.md (+section jalons TR-1..6), plan_usine_logicielle.md
+  (cases P3 Anti-Loop + P6 Nettoyage DOM cochées, tableau en-tête P6 ❌→🟡 PARTIEL),
+  README.md (+2 lignes : Coder anti-loop + Tester DOM cleanup), .env.example (+LOOP_GUARD_*).
+- **Décision archi notable** : `clean_dom_for_llm` est importé dans web_tester.py avec `# noqa: F401`
+  car le nettoyage s'opère côté navigateur (JS injecté) — l'utilitaire Python reste disponible
+  pour une future analyse post-capture côté Python et est couvert par ses propres tests.
+- **Pas de run LLM réel** : ce cycle est du code déterministe (hash + regex), validé par tests
+  unitaires. Un run de validation LLM complet n'apporterait rien de plus sur ces 2 briques
+  (elles s'activent dans la boucle chaude mais leur logique est pure Python).
+
+## [2026-07-31] gen | Démarrage tâche 3 — Guard bash denylist (Priorité 8-bis, ligne 137-140)
+- **Objectif** : combler l'angle mort de sécurité le plus concret du système. `bash_command`
+  (`tools.py`) tourne en `subprocess.run(cmd, shell=True)` où `cmd` est issu du LLM — sans
+  aucune garde. Un guard denylist bloque les commandes destructrices AVANT l'exécution :
+  `rm -rf /`, `format`, `shutdown`, `git push --force`, `dd if=... of=/dev/sd*`, `mkfs`,
+  redirection vers `/dev/sd*`, etc. C'est le "bloqueur de la transition CodeAgent" cité par
+  la P8-bis (un CodeAgent génère et exécute du Python arbitraire → `bash_command` est exposé).
+- **Portée** : DENYLIST (pas sandbox Docker — trop lourd pour une "petite tâche"). C'est le
+  premier pas concret et testable vers la robustesse runtime ; la sandbox complète reste un
+  chantier séparé. Opt-out `BASH_GUARD_ENABLED=false` pour les envs de confiance.
+- **Approche** : regex sur la commande normalisée (case-insensitive, aliases Linux+Windows).
+  Retourne un message pédagogique au LLM (pas une exception) — il peut ajuster sa commande
+  pour un usage légitime (ex: `rm -rf ./build` local reste autorisé, `rm -rf /` bloqué).
+- Fichiers prévus : `bash_guard.py` (nouveau) + `tools.py` (hook dans `bash_command`) +
+  `config.py` (`bash_guard_enabled`) + tests.
+
+## [2026-07-31] eval | Fin tâche 3 — Guard bash denylist (F-38), 371 tests PASS, 0 régression
+- **`bash_guard.py` (185 lignes)** : `check_bash_command(cmd) -> (allowed, reason)` ne lève
+  JAMAIS d'exception. Denylist regex case-insensitive `_DENY_PATTERNS` (15 motifs) :
+  - Unix : `rm -rf /` (+ chemins système `/usr`/`/etc`/`/home`...), `rm -rf ~`/`$HOME`,
+    `rm -rf *` non borné, `mkfs`, `dd of=/dev/sd*`, redirection `> /dev/sd*`, fork bomb,
+    `chmod -R 777 /`.
+  - Windows : `format X:`, `rmdir/rd /s /q` + `del /f /s /q` sur `C:\`/`%SystemRoot%`/
+    `%Windir%`/`%ProgramFiles%`, `diskpart`, `reg delete HKLM\...`.
+  - Cross : `shutdown`/`halt`/`poweroff`/`reboot`, `git push --force`/`-f`, `curl|sh`/`wget|bash`.
+- **Debug patterns (leçon technique)** : 1ère version avec `\b` autour des flags `-rf`/`/s`
+  échouait — `\b` ne matche pas entre deux non-mots (`-` et `r`, `/` et `s`). Corrigé via
+  `-[rRfF]{1,3}` pour rm et lookbehind/lookahead `(?<=\s)/s(?=\s)` pour flags Windows. Validé
+  via fichier temporaire `_debug_patterns.py` (supprimé) avant injection.
+- **Anti faux-positifs (critique)** : `rm -rf ./build`, `git push origin main`, `cat /etc/hostname`,
+  ET `cat /format/rapport.txt` (chemin contenant "format") restent AUTORISÉS. Le `_SEP` (début
+  ou séparateur de commande) empêche de matcher un mot-clé dans un chemin anodin.
+- **Branchement `tools.py`** : guard exécuté AVANT `subprocess.run(shell=True)` ; commande
+  bloquée → subprocess JAMAIS appelé (test d'intégration le vérifie). Settings lu à l'appel
+  (`from .config import settings` dans bash_command) → réactif aux changements d'env. Opt-out
+  `BASH_GUARD_ENABLED=false` testé via patch de `graph_orchestrator.config.settings` à la source.
+- **Config** : `bash_guard_enabled: bool = True` dans la dataclass (fail-safe : sécurisé par
+  défaut, même pattern que `loop_guard_enabled`/`escalation_enabled`).
+- **Tests `test_bash_guard.py` (66 PASS)** : blocages Unix/Windows/cross paramétrés, légitimes
+  préservés (17 commandes), casse/whitespace, message pédagogique, cas limites (None/vide),
+  intégration subprocess + opt-out.
+- **Suite pytest complète** : **371 passed / 0 failed** (305 avant + 66 nouveaux). 0 régression.
+- **État disque synchronisé** : contract.md (+8 critères 88-95), feature_list.json (+F-38,
+  40 features total), progress.md (+jalons TR-7..9), plan_usine_logicielle.md (P8-bis ❌→🟡
+  PARTIEL + sous-case guard denylist cochée), README.md (mention guard bash), .env.example.
+- **Portée assumée** : DENYLIST (pas sandbox Docker). C'est la couche 1 de la P8-bis ; la
+  sandbox complète (process cloisonné fs/cwd, qm docker-exec) reste un chantier séparé.
+  Le guard ne protège pas contre une commande malicieuse *inédite*, mais élimine les
+  failure modes les plus probables (hallucination `rm -rf /` ou zèle `git push --force`).

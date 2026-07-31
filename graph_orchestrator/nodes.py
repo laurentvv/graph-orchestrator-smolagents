@@ -32,6 +32,7 @@ from .models import (
 )
 from .tools import read_file, write_file, append_file, edit_file, bash_command, list_directory, search_replace
 from .skills_loader import build_skills_block
+from .loop_guard import LoopGuard, extract_tool_calls_from_step
 
 @tool
 def query_duckdb_knowledge_graph(sql_query: str) -> str:
@@ -144,6 +145,7 @@ async def run_with_retry(
     prompt: str,
     model_class: type,
     max_retries: int,
+    loop_guard: Optional["LoopGuard"] = None,
 ) -> Tuple[Optional[object], Optional[NodeMetrics]]:
     """Exécute un agent avec retry. Retourne (données_validées, métriques).
 
@@ -156,6 +158,11 @@ async def run_with_retry(
     (1) tour sans tool call exécuté → message anti "reasoning sans action" ;
     (2) exception de parsing (code Python cassé) → message "découpe au lieu de recommencer"
         (inspiration deer-flow dangling_tool_call_middleware).
+
+    P3 (Anti-Loop Cryptographique) : si un `loop_guard` est passé, on enregistre
+    chaque tool call exécuté. Quand l'agent répète EXACTEMENT le même appel
+    `threshold` fois, on interrompt immédiatement (circuit-breaker) au lieu de
+    le laisser brûler des tokens. Inspiré de Crush.
     """
     last_metrics: Optional[NodeMetrics] = None
     # Détecte si l'agent est un CodeAgent (P1) pour adapter le message de retry
@@ -180,8 +187,32 @@ async def run_with_retry(
             # Collecte métriques depuis le RunResult
             last_metrics = _metrics_from_run(agent, run_result)
 
-            if validated:
-                return validated, last_metrics
+            # P3 (Anti-Loop) : enregistre les tool calls de CETTE exécution dans
+            # le guard. On scanne tous les steps produits (un agent.run peut
+            # enchaîner plusieurs ActionStep). Si une action dépasse le seuil de
+            # répétition, on interrompt tout de suite — inutile de parser/valider
+            # une sortie produite en bouclant.
+            if loop_guard is not None:
+                steps = getattr(getattr(agent, "memory", None), "steps", None) or []
+                for step in steps:
+                    for tname, targs in extract_tool_calls_from_step(step):
+                        loop_guard.record(tname, targs)
+                loop_msg = loop_guard.repeated_action()
+                if loop_msg:
+                    print(
+                        f"[!] Anti-Loop (Tentative {attempt + 1}/{max_retries}) : "
+                        f"action répétée {loop_guard.threshold}+ fois → circuit-breaker."
+                    )
+                    # On ne renvoie pas None silencieusement : on injecte le
+                    # message dans le prompt pour un éventuel retry, qui aura
+                    # une chance de casser la boucle (si retries restants).
+                    prompt += f"\n\n{loop_msg}"
+                else:
+                    if validated:
+                        return validated, last_metrics
+            else:
+                if validated:
+                    return validated, last_metrics
 
             # F-33 (1) : tour sans tool call exécuté ? (modèle réfléchit sans agir)
             idle_msg = _detect_idle_step(agent)
@@ -226,6 +257,11 @@ async def run_with_retry(
         # On doit purger la mémoire de l'agent avant le prochain essai.
         if hasattr(agent, "memory") and hasattr(agent.memory, "steps"):
             agent.memory.steps = []
+        # P3 : alignement du guard sur la purge — le retry repart d'un historique
+        # vierge, donc les comptes de répétition doivent repartir de zéro aussi
+        # (sinon un bug d'une tentative précédente fait déclencher la suivante).
+        if loop_guard is not None:
+            loop_guard.reset()
 
 
     print(f"[-] Échec définitif pour {model_class.__name__} après {max_retries} tentatives.")
@@ -545,8 +581,20 @@ Code prêt pour la production, respectant les conventions du langage.
 - Chaque bloc syntaxiquement complet, ≤ 60 lignes ou découpe via append_file.
 - AUCUN placeholder. final_answer quand les fichiers cibles sont créés.
 """
+        # P3 (Anti-Loop Cryptographique) : instancie un guard pour CETTE exécution
+        # du Coder. Seul le Coder appelle des outils d'écriture → seul candidat
+        # où la boucle "même tool call X fois" est un failure mode réel (le
+        # failure mode classique : le modèle ré-écrit le même fichier à l'identique
+        # en boucle jusqu'à épuisement des steps). Le guard est aussi réinitialisé
+        # entre les retries dans run_with_retry (aligné sur la purge mémoire).
+        guard = LoopGuard(
+            threshold=settings.loop_guard_threshold,
+            enabled=settings.loop_guard_enabled,
+        )
         # max_retries can be slightly higher for coding since it involves tool use steps
-        return await run_with_retry(local_coder, prompt, CoderOutput, settings.worker_max_retries)
+        return await run_with_retry(
+            local_coder, prompt, CoderOutput, settings.worker_max_retries, loop_guard=guard
+        )
 
 
 async def execute_tester_node(

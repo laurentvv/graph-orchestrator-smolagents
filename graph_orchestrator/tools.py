@@ -212,6 +212,21 @@ def bash_command(cmd: str) -> str:
         cmd: The shell command to execute.
     """
     try:
+        # P8-bis (Guard denylist) : avant tout shell=True, on bloque les commandes
+        # manifestement destructrices (rm -rf /, format, mkfs, dd vers un disque,
+        # shutdown, git push --force...). Le LLM peut halluciner ou se montrer
+        # "zélé" ; un CodeAgent exécute du Python arbitraire, donc bash_command
+        # est exposé. Le guard renvoie un message pédagogique au lieu d'exécuter.
+        # Opt-out via BASH_GUARD_ENABLED=false pour les environnements de confiance.
+        # La lecture du settings se fait à l'appel (pas à l'import) pour rester
+        # réactif à un changement d'env en cours de session (ex: tests).
+        from .config import settings
+        from .bash_guard import check_bash_command
+        if getattr(settings, "bash_guard_enabled", True):
+            allowed, reason = check_bash_command(cmd)
+            if not allowed:
+                return reason
+
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30)
         output = result.stdout
         if result.stderr:

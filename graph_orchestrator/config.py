@@ -139,6 +139,26 @@ class Settings:
     # (évite de casser les helpers de test qui construisent Settings(...) à la main).
     auto_install_deps: bool = True
 
+    # --- Anti-Loop Cryptographique (Priorité 3 : circuit-breaker par hash) ---
+    # Détecte quand un agent (Coder) répète EXACTEMENT le même tool call (même
+    # outil + mêmes arguments, hashés en SHA256) plusieurs fois de suite — le
+    # failure mode "tourne en rond" qui brûle des tokens sans progresser.
+    # Inspiré de Crush. Si `loop_guard_threshold` répétitions sont atteintes,
+    # `run_with_retry` interrompt l'agent avec un message pédagogique au lieu de
+    # le laisser boucler. Seuil 3 = un humain ne refait jamais 3x le même appel
+    # identique sans boucler. Opt-out utile pour A/B ou debug.
+    loop_guard_enabled: bool = True
+    loop_guard_threshold: int = 3
+
+    # --- Guard bash denylist (Priorité 8-bis : robustesse runtime) ---
+    # `bash_command` exécute des commandes issues du LLM via shell=True. Un guard
+    # denylist bloque les commandes destructrices (rm -rf /, format, mkfs, dd vers
+    # un disque, shutdown, git push --force...) AVANT le subprocess. C'est le
+    # premier pas vers la robustesse runtime (la sandbox Docker complète reste un
+    # chantier séparé). Opt-out utile pour les environnements de confiance.
+    # Valeur par défaut True : on sécurise par défaut (fail-safe).
+    bash_guard_enabled: bool = True
+
 
 def load_settings() -> Settings:
     """Construit les settings depuis l'environnement (avec valeurs par défaut)."""
@@ -176,6 +196,9 @@ def load_settings() -> Settings:
         feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),
         escalation_enabled=_get_bool("ESCALATION_ENABLED", True),
         auto_install_deps=_get_bool("AUTO_INSTALL_DEPS", True),
+        loop_guard_enabled=_get_bool("LOOP_GUARD_ENABLED", True),
+        loop_guard_threshold=_get_int("LOOP_GUARD_THRESHOLD", 3),
+        bash_guard_enabled=_get_bool("BASH_GUARD_ENABLED", True),
     )
 
 

@@ -92,6 +92,36 @@
 - [ ] Critère 44 : Dégradation gracieuse — `_install_module` n'élève JAMAIS d'exception (timeout/réseau/pip absent → retourne `False`) ; un échec d'install ne fait jamais planter le run (le test ressort en failure comme avant). L'action est tracée dans `details` pour l'observabilité (ex : `[auto-install] 'requests' installé puis tests relancés`).
 - [ ] Critère 45 : La suite pytest complète passe (0 régression, nouveaux tests `test_python_runner.py` inclus : `extract_missing_module` unitaire, comportement auto-install retry/opt-out/non-ModuleNotFoundError/cap, contrat `_install_module` succès/échec/exception).
 
+## Critères de l'Anti-Loop Cryptographique (Priorité 3 — P3 plan usine logicielle)
+- [ ] Critère 72 : `compute_tool_call_fingerprint(tool_name, arguments)` produit un hash SHA256 stable — `(tool, args)` identiques → même empreinte, indépendamment de l'ordre des clés du dict (`sort_keys=True`) ; le whitespace de tête/queue des valeurs string est normalisé (les petits LLM ajoutent/suppriment des espaces au hasard).
+- [ ] Critère 73 : Deux outils différents appelés avec les mêmes arguments ne sont PAS considérés comme une boucle (le nom de l'outil préfixe le hash) ; deux appels du même outil avec des arguments différents non plus.
+- [ ] Critère 74 : `LoopGuard.repeated_action()` renvoie un message pédagogique (`"CIRCUIT BREAKER (Anti-Loop)..."`) uniquement quand une même empreinte atteint le seuil (`threshold`) ; `None` sinon. Seuil `< 2` rejeté (`ValueError`).
+- [ ] Critère 75 : Opt-out `LOOP_GUARD_ENABLED=false` désactive totalement la détection (jamais de déclenchement, `record()` no-op) ; seuil configurable via `LOOP_GUARD_THRESHOLD` (défaut 3).
+- [ ] Critère 76 : `reset()` vide le compteur entre deux retries (aligné sur la purge de `agent.memory.steps` dans `run_with_retry` — un bug d'une tentative précédente ne fait pas déclencher la suivante).
+- [ ] Critère 77 : `extract_tool_calls_from_step` lit les tool calls des deux familles d'agents — ToolCallingAgent (`step.tool_calls`, liste structurée `.name/.arguments`) ET CodeAgent (`step.code_action`, source Python scannée pour les noms d'`@tool` connus) ; step vide → liste vide.
+- [ ] Critère 78 : Le guard n'est instancié QUE dans `execute_coder_node` (seul nœud appelant des outils d'écriture — un agent sans outils ne peut pas boucler sur des tool calls) et passé à `run_with_retry` via le paramètre optionnel `loop_guard=None` (non-cassant : les autres nœuds appellent `run_with_retry` sans guard, comportement inchangé).
+- [ ] Critère 79 : La suite pytest complète passe (0 régression, nouveaux tests `test_loop_guard.py` inclus : empreinte stable/order/whitespace, détection seuil/opt-out/reset, extraction ToolCallingAgent+CodeAgent, intégration `run_with_retry`).
+
+## Critères du Nettoyage DOM (Priorité 6 — P6 plan usine logicielle, LlamaBot)
+- [ ] Critère 80 : `clean_dom_for_llm(html)` supprime ENTIÈREMENT (contenu inclus) les balises bruyantes : `<script>`, `<style>`, `<svg>`, `<canvas>`, `<iframe>`, `<noscript>`, `<template>`, `<head>` — case-insensitive (HTML tolère `<SCRIPT>`), variants auto-fermants (XHTML) inclus.
+- [ ] Critère 81 : Les commentaires HTML `<!-- ... -->` sont supprimés (y compris gros contenu conditionnel type `<!--[if IE]>`).
+- [ ] Critère 82 : Le contenu sémantique est PRÉSERVÉ — texte, `<div>`/`<table>`/`<p>`, attributs `id`, `class`, `aria-*`, `role` (utiles aux assertions fonctionnelles du Web Tester).
+- [ ] Critère 83 : Compactage whitespace — espaces en fin de ligne supprimés, series de ≥3 newlines réduites à 2 ; troncature finale à `max_chars` (défaut 8000, cohérent avec `FEEDBACK_MAX_CHARS`) avec marqueur `[tronqué par dom_filter]`.
+- [ ] Critère 84 : Cas limites — `None`/chaîne vide → `""` ; HTML déjà propre → contenu sémantique inchangé.
+- [ ] Critère 85 : Gain effectif — sur un HTML réaliste (80% de bruit script+style+svg), la taille est divisée par au moins 3 (justification ROI du plan : "économise massivement les tokens sur le Web Tester").
+- [ ] Critère 86 : Branchement `web_tester.py` — le prompt du Web Tester contient une directive "NETTOYAGE DOM" qui fournit un snippet JS (exécuté côté navigateur via `puppeteer_evaluate`, plus efficace qu'un round-trip Python) appliquant le même nettoyage avant analyse/citation du DOM dans le rapport.
+- [ ] Critère 87 : La suite pytest complète passe (0 régression, nouveaux tests `test_dom_filter.py` inclus : suppression de chaque famille de balises, casse/XHTML, commentaires, préservation sémantique, compactage, troncature, cas limites, gain effectif).
+
+## Critères du Guard bash denylist (Priorité 8-bis — robustesse runtime)
+- [ ] Critère 88 : `check_bash_command(cmd)` renvoie `(allowed, reason)` — ne lève JAMAIS d'exception ; `allowed=True, reason=""` si la commande passe, `allowed=False, reason="<message pédagogique>"` si bloquée.
+- [ ] Critère 89 : Blocage des commandes destructrices Unix — `rm -rf /` (+ `/usr`, `/etc`, `/home`...), `rm -rf ~`/`$HOME`, `rm -rf *` non borné, `mkfs`, `dd of=/dev/sd*`, redirection `> /dev/sd*`, fork bomb `:(){ :|:& };:`, `chmod -R 777 /`.
+- [ ] Critère 90 : Blocage des commandes destructrices Windows — `format X:`, `rmdir/rd /s /q` sur `C:\`/`%SystemRoot%`/`%Windir%`/`%ProgramFiles%`, `del /f /s /q` idem, `diskpart`, `reg delete HKLM\...`.
+- [ ] Critère 91 : Blocage cross-plateforme — `shutdown`/`halt`/`poweroff`/`reboot`, `git push --force`/`-f`, `curl|sh`/`wget|bash` (exécution code distant non inspecté).
+- [ ] Critère 92 : Préservation des usages légitimes (anti faux positifs) — `rm -rf ./build`, `rm fichier`, `git push origin main`, `git commit`, `pytest`, `mkdir`, `cat /etc/hostname`, ET un chemin contenant un mot-clé anodin (`cat /format/rapport.txt` n'est PAS bloqué par le pattern `format X:`).
+- [ ] Critère 93 : Insensibilité à la casse (`FORMAT C:`, `RM -RF /`) + normalisation whitespace (espaces multiples ne cassent pas la détection) ; commande vide/None → autorisée (no-op laissé à subprocess).
+- [ ] Critère 94 : Branchement dans `bash_command` (`tools.py`) — le guard s'exécute AVANT `subprocess.run(shell=True)` ; une commande bloquée ne lance JAMAIS le subprocess (vérifié par test d'intégration). Opt-out `BASH_GUARD_ENABLED=false` contourne le guard (utile pour les envs de confiance).
+- [ ] Critère 95 : La suite pytest complète passe (0 régression, nouveaux tests `test_bash_guard.py` inclus : 66 tests paramétrés couvrant blocages Unix/Windows/cross, légitimes préservés, casse/whitespace, message pédagogique, intégration subprocess + opt-out).
+
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.
 * Validation process : `uv run python -m graph_orchestrator.workflows` (WORKFLOW_MODE=coding) →

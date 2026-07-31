@@ -174,3 +174,51 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape 2 : Création de l'artefact Implementation Plan soumis pour validation.
 - [x] Étape 3 : Application des modifications au plan_usine_logicielle.md.
 - [x] Étape 4 : Mise à jour de log.md, progress.md, et feature_list.json.
+
+## Jalons de l'Itération (cycle 3 tâches rapides : Anti-Loop P3 + Nettoyage DOM P6 + Guard bash P8-bis)
+- [x] Étape TR-1 : Sélection des 2 tâches les plus rapides et isolées du plan (P3 ligne 73
+  + P6 ligne 108). Écart de l'Anti-Loop SHA256 (nodes.py) et du Nettoyage DOM (web_tester.py).
+  Note archi : dépôt sans LangGraph (pas de GraphState), checkpoints ne rechargent pas la
+  mémoire smolagents → "Orphan Repair" (P8) écarté (N/A).
+- [x] Étape TR-2 (Tâche 1 — Anti-Loop, F-36) : loop_guard.py (compute_tool_call_fingerprint
+  SHA256 + LoopGuard.record/repeated_action/reset + extract_tool_calls_from_step pour
+  ToolCallingAgent ET CodeAgent). Config LOOP_GUARD_ENABLED/THRESHOLD. Branché dans
+  run_with_retry (param optionnel non-cassant) via execute_coder_node.
+- [x] Étape TR-3 (Tâche 2 — Nettoyage DOM, F-37) : dom_filter.py (clean_dom_for_llm,
+  regex précompilées, sans dépendance). Branché dans web_tester.py (directive prompt +
+  snippet JS côté navigateur).
+- [x] Étape TR-4 : Tests (test_loop_guard.py 16 tests + test_dom_filter.py 18 tests).
+  Correction marqueur async (@pytest.mark.anyio, pas asyncio — projet utilise anyio).
+- [x] Étape TR-5 : Suite pytest complète → 305 passed / 0 failed (271 avant + 34 nouveaux).
+  0 régression. Seuls warnings = DeprecationWarning DSPy (préexistants, hors périmètre).
+- [x] Étape TR-6 : État disque synchronisé (contract.md +16 critères 72-87, feature_list.json
+  +F-36/F-37, progress.md, plan_usine_logicielle.md, .env.example, log.md).
+- [x] Étape TR-7 (Tâche 3 — Guard bash denylist, F-38, P8-bis) : bash_guard.py
+  (check_bash_command, denylist regex case-insensitive Unix+Windows+cross, message
+  pédagogique jamais d'exception). Branché dans tools.py bash_command AVANT subprocess.run.
+  Config BASH_GUARD_ENABLED. Patterns debuggés via fichier temp (lookbehind/lookahead pour
+  flags /s /q /f, `-[rRfF]{1,3}` pour rm). 66 tests PASS.
+- [x] Étape TR-8 : Suite pytest complète → 371 passed / 0 failed (305 avant + 66 nouveaux).
+  0 régression.
+- [x] Étape TR-9 : État disque synchronisé (contract.md +8 critères 88-95, feature_list.json
+  +F-38, progress.md, plan_usine_logicielle.md P8-bis ❌→🟡 + sous-case guard, README.md,
+  .env.example, log.md). Commit + push + PR.
+
+## Jalons de l'Itération (cycle 2 tâches rapides : Anti-Loop P3 + Nettoyage DOM P6)
+- [x] Étape TR-1 : Sélection des 2 tâches les plus rapides et isolées du plan (P3 ligne 73
+  + P6 ligne 108). Écart de l'Anti-Loop SHA256 (nodes.py) et du Nettoyage DOM (web_tester.py).
+  Note archi : dépôt sans LangGraph (pas de GraphState), checkpoints ne rechargent pas la
+  mémoire smolagents → "Orphan Repair" (P8) écarté (N/A).
+- [x] Étape TR-2 (Tâche 1 — Anti-Loop, F-36) : loop_guard.py (compute_tool_call_fingerprint
+  SHA256 + LoopGuard.record/repeated_action/reset + extract_tool_calls_from_step pour
+  ToolCallingAgent ET CodeAgent). Config LOOP_GUARD_ENABLED/THRESHOLD. Branché dans
+  run_with_retry (param optionnel non-cassant) via execute_coder_node.
+- [x] Étape TR-3 (Tâche 2 — Nettoyage DOM, F-37) : dom_filter.py (clean_dom_for_llm,
+  regex précompilées, sans dépendance). Branché dans web_tester.py (directive prompt +
+  snippet JS côté navigateur).
+- [x] Étape TR-4 : Tests (test_loop_guard.py 16 tests + test_dom_filter.py 18 tests).
+  Correction marqueur async (@pytest.mark.anyio, pas asyncio — projet utilise anyio).
+- [x] Étape TR-5 : Suite pytest complète → 305 passed / 0 failed (271 avant + 34 nouveaux).
+  0 régression. Seuls warnings = DeprecationWarning DSPy (préexistants, hors périmètre).
+- [x] Étape TR-6 : État disque synchronisé (contract.md +16 critères 72-87, feature_list.json
+  +F-36/F-37, progress.md, plan_usine_logicielle.md, .env.example, log.md).
