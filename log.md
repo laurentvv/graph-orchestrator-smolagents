@@ -1432,6 +1432,16 @@ unitaires (pas encore par run réel — étape suivante).
   approuvées par le Judge) + validation visuelle (page fonctionnelle).
 - Parallèle : PR #14 (docs/references-audit + plan enrichi) ouverte, Kilo en cours.
 
+## [2026-07-31] pr | PR #14 créée → Kilo Code Review SUCCESS (7m10s) → MERGED dans main
+- Branche docs/references-audit → squash merge → main (commit 3b82943).
+- Kilo Code Review : SUCCESS (pass en 7m10s — plus long car PR riche en markdown).
+- Conflit log.md résolu (entrée merge PR #13 sur main vs branche docs — append-only, garde-les-deux).
+- Branche locale + remote supprimées après merge.
+- Contenu : 13 fiches d'audit références (INDEX + inventory.json + projets) + plan usine
+  logicielle enrichi (P8 Middlewares, P9 Reducers/Compaction, P10 Skill Lazy, P11 Event Stream,
+  anti-loop SHA256 crush, Read-Before-Write Gate deer-flow). Aucune modif de code — purement doc.
+- DEUX PR MERGÉES AUJOURD'HUI : #13 (P1-P3 code) + #14 (docs). main à jour et propre.
+
 ## [2026-07-31] audit | AUDIT RADICAL du dossier references/ TERMINÉ (13 projets, 315 entrées)
 - **Objectif** : document de suivi navigable permettant de retrouver toute info/code utile dans
   `references/`, avec emplacement complet + évaluation de réutilisabilité pour le projet.
