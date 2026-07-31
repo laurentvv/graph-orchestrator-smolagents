@@ -168,3 +168,9 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
   → EN ATTENTE : un 2e test sur contenu plus lourd (multi-fichiers / HTML 3000+
   lignes) confirmerait le gain sur le scénario-douleur (corruption JSON du TCA).
 
+
+## Jalons de l'Itération (Amélioration Plan Usine Logicielle)
+- [x] Étape 1 : Analyse des audits LlamaBot, Deer Flow, Crush, OpenCode, Aider.
+- [x] Étape 2 : Création de l'artefact Implementation Plan soumis pour validation.
+- [x] Étape 3 : Application des modifications au plan_usine_logicielle.md.
+- [x] Étape 4 : Mise à jour de log.md, progress.md, et feature_list.json.

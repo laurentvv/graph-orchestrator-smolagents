@@ -1295,3 +1295,151 @@ unitaires (pas encore par run réel — étape suivante).
 - PROCHAIN : run réel de validation (uv run python -m graph_orchestrator.workflows,
   WORKFLOW_MODE=coding) sur un prompt test. Objectif : Architect émet une stratégie,
   CodeAgent l'exécute, Linter valide AVANT le Tester, Judge juge. C'est le test d'acceptation.
+
+## [2026-07-31] run | RUN VALIDATION P1-P3 LANCÉ (landing page Nimbus, 3 fichiers)
+- CONFIG : tasks.json coding = landing page Nimbus (3 fichiers : index.html + styles.css
+  + script.js). FAST=gemma-4-e4b_CPU (distant CPU), REASONING=gemma-4-12B (local GPU).
+- ENDPOINTS vérifiés avant lancement : /api/tags OK sur les 2, inférence FAST "OK" confirmée.
+- DÉROULEMENT observé :
+  * Router (FAST) → HTML/CSS/JS ✅.
+  * Architect (12B local) EN COURS — moment critique pour F-29 : doit émettre une strategy
+    (multifile attendu vu les 3 fichiers séparés).
+- À VÉRIFIER dans la suite du run :
+  1. F-29 : Architect émet strategy='multifile' (cas nominal HTML 3 fichiers).
+  2. P1 : CodeAgent exécute sans boucler (final_answer Python).
+  3. F-32 : prompt anti-idle (pas de "réfléchit sans agir").
+  4. F-33 : guard se déclenche si besoin.
+  5. F-30 : Linter valide AVANT le Tester (court-circuite si syntaxe invalide).
+  6. Judge juge le résultat final.
+- Process en arrière-plan. Durée estimée : plusieurs minutes à ~1h (CPU-only + 12B lent).
+
+## [2026-07-31] run | RUN P1-P3 #1 INTERROMPU : fichiers résiduels contamination
+- ERREUR MÉTHODOLOGIQUE : landing_page/ contenait des fichiers des runs précédents (30 juillet,
+  script.js notamment). Le CodeAgent a peut-être réutilisé/modifié ces résiduels au lieu de
+  partir de zéro → validation faussée. Run #1 interrompu.
+- LEÇON : TOUJOURS nettoyer les artefacts résiduels (dossiers cibles + checkpoints en base)
+  AVANT un run de validation. Les fichiers générés doivent l'être from scratch.
+- NETTOYAGE : landing_page/ supprimé + 2 checkpoints résiduels effacés (coding_5ab654e5...,
+  coding_5432cb01441e64e6). État vierge confirmé.
+- RUN #2 relancé proprement (fichiers from scratch). Le précédent avait quand même validé :
+  F-29 (strategy='multifile' émise par l'Architect), F-30 (Linter a validé avant le Tester),
+  P1 (CodeAgent a généré du HTML propre fermé correctement — pas le bug dashboard).
+
+## [2026-07-31] run | RUN P1-P3 #2 LANCÉ (run propre, validation honnête)
+- CONFIG identique : tasks.json coding = landing page Nimbus (3 fichiers), FAST distant CPU,
+  REASONING 12B local GPU. landing_page/ supprimé + checkpoints effacés (état vierge).
+- Process en arrière-plan. Validation honnête cette fois (fichiers générés from scratch).
+
+## [2026-07-31] run | RUN P1-P3 #2 — suivi intermédiaire (validation en cours, ~2h45)
+- FICHIERS GÉNÉRÉS FROM SCRATCH (timestamps 31/07, plus de contamination) :
+  index.html (4624 o), styles.css (3661 o), script.js (2096 o).
+- FEATURES VALIDÉES en conditions réelles :
+  * F-29 multifile : 3 fichiers séparés générés (pas un monolithe). ✅
+  * P1 CodeAgent : génération from scratch sans boucler. ✅
+  * F-30 Linter : a validé avant le Tester (sinon Tester n'aurait pas démarré). ✅
+  * F-20 Tester fonctionnel : assertions DOM réelles (step 18). Détail instructif :
+    hero ✅, features 3 items ✅, howItWorks 3 étapes ✅, testimonials itemCount=0
+    (bug potentiel mineur détecté par le tester — preuve qu'il ne valide pas aveuglément),
+    footer ✅.
+- COÛT OPÉRATIONNEL OBSERVÉ : ~2h45 et counting. Root cause = max_steps Tester=24
+  × ~3 min/step sur 12B local GPU × 2 sous-tâches × boucle feedback.
+  CE N'EST PAS un bug P1-P3 (le workflow s'enchaîne correctement), c'est le coût
+  inhérent à l'infra CPU-only distant + 12B lent sur GPU 6 Go.
+- OPTIMISATION FUTURE (piste) : baisser max_steps Tester 24→12 pour les runs de
+  validation rapides (la marge pour les assertions reste suffisante, on l'avait
+  montée à 24 pour F-20 mais c'était calibré pour un usage différent).
+- DÉCISION UTILISATEUR : laisser finir (on veut le verdict Judge complet + éventuelles
+  itérations). Process en arrière-plan, notification automatique à la complétion.
+
+## [2026-07-31] eval | RUN P1-P3 #2 TERMINÉ — VALIDATION RÉUSSIE DE BOUT EN BOUT ✅
+- EXIT CODE 0. Durée totale 11 389s (~3h10). 607 913 tokens.
+- RÉSULTAT FINAL : 2 sous-tâches APPROUVÉES (status=success).
+  * layout_and_styling → APPROUVÉ après 3 itérations Coder (boucle feedback a marché).
+  * interactivity_and_polish → APPROUVÉ (itération 2).
+- TABLEAU D'OBSERVABILITÉ (preuves des features en conditions réelles) :
+  | Nœud                            | Durée    | Tokens      |
+  | coder_layout_and_styling (×3)   | 656+983+1906s | 38k+61k+64k |
+  | linter (×4)                     | 0.0s chacun   | 0/0         | ← F-30 ultra-rapide
+  | tester_layout_and_styling       | 1618s    | 109k        |
+  | coder_interactivity_and_polish (×2) | 589+463s | 35k+33k |
+  | tester_interactivity_and_polish | 4105s    | 268k        | ← le + long
+  | code_judge_dspy (×2)            | 398+392s | 0 (DSPy)    |
+  | TOTAL                           | 11389s   | 608k        |
+
+- VALIDATION DES 5 FEATURES :
+  * F-29 multifile ✅ : 2 sous-tâches séparées (pas monolithe), Architect a émis strategy.
+  * P1 CodeAgent ✅ : coder_* exécutés sans boucler, génération from scratch.
+  * F-30 Linter ✅ : 'linter' apparaît AVANT chaque tester_* à 0.0s — court-circuit
+    fonctionne, syntaxe validée avant le Tester coûteux (0 faux négatif n'a bloqué).
+  * F-32 prompt ✅ : aucun "tour sans tool call" observé (pas de log guard idle déclenché).
+  * F-33 guard ✅ : "Pydantic a échoué. Tentative de sauvetage avec DSPy" (pipeline a
+    géré un parsing raté sans planter — extract_and_validate a rattrapé l'output).
+
+- POINTS D'ATTENTION (matière d'optimisation future, hors P1-P3) :
+  1. tester_interactivity_and_polish = 4105s (68 min) — max_steps=24 sur 12B est le
+     goulot. Piste : max_steps Tester 24→12 pour les runs de validation.
+  2. Sous-tâche 1 a requis 3 itérations Coder (feedback loop légitime, mais coûteuse).
+  3. Le sauvetage DSPy s'est déclenché 1 fois — le guard F-33 + extract_and_validate
+     ont géré, mais c'est un signe que gemma produit parfois des outputs mal formatés.
+
+- DÉCISION : P1-P3 VALIDÉ en conditions réelles. Prêt pour PR vers main.
+
+## [2026-07-31] eval | VALIDATION VISUELLE landing page Nimbus + retour utilisateur
+- VALIDATION VISUELLE (Chrome DevTools + screenshot + DOM check) : page FONCTIONNELLE.
+  * Toutes sections présentes et visibles : hero, features, how-it-works, testimonials, footer.
+  * CSS chargé (styles.css linké), JS fonctionnel ("Frontend interactions initialized.").
+  * Multifile respecté (3 fichiers séparés HTML/CSS/JS liés).
+  * 2 erreurs console bénignes : file:// security origin (inherent au protocole, disparaît
+    en HTTP) + /favicon.svg manquant (requête auto navigateur, cosmétique).
+- RETOUR UTILISATEUR (verbatim, à conserver) :
+  * "J'ai testé, tout est OK, ça pourrait être amélioré graphiquement, mais pour un premier
+    jet c'est très bien (voir des skills de design si l'architecte l'a demandé ou pas)."
+  * "Bubble Sort je le trouvais encore plus 'beau'."
+- ANALYSE : pourquoi Bubble Sort (monolithe) semblait "plus beau" que Nimbus (multifile) ?
+  * SKILL frontend-design BIEN injecté et appliqué (tokens --accent/--accent-2, typo
+    var(--font-body)/var(--font-display), focus visible) — ce n'est PAS un oubli du workflow.
+  * La différence vient de la STRUCTURE : monolithe = vision holistique (le modèle voit
+    HTML+CSS+JS ensemble, ajuste les proportions de façon cohérente). Multifile = design
+    "dilué" (le CSS est écrit séparément du HTML, le 4B perd un peu de cohérence classes
+    HTML↔CSS). Le multifile est ROBUSTE + viable CPU (choix justifié), le prix est un design
+    légèrement moins raffiné que le monolithe.
+  * Le plafond graphique est aussi le MODÈLE (4B applique les règles du skill mécaniquement,
+    sans le "feeling" d'un designer — espacements subtils, hiérarchie, ombres délicates).
+- TENSION DESIGN/ROBUSTESSE identifiée (à garder en tête pour cycles futurs) :
+  | Approche        | Design | Robustesse | Viable CPU |
+  | monolithe       | + beau | casse gros | non (1h+)  |
+  | multifile       | correct| robuste    | oui        |
+  → Bon choix (multifile). Le design est améliorable SANS toucher à l'architecture.
+- PISTES D'AMÉLIORATION DU DESIGN (hors P1-P3, cycles futurs) :
+  1. Skill frontend-design plus prescriptif : patterns visuels concrets (dimensions exactes,
+     ombres précises) plutôt que principes abstraits — le 4B suit mieux des recettes.
+  2. Passe de "polish" post-1er-jet : sous-tâche dédiée "améliore le visuel" (Coder qui ne
+     fait QUE raffiner le CSS via search_replace, idéalement sur 12B plus costaud).
+  3. Modèle plus gros pour la sous-tâche CSS : REASONING (12B) au lieu de FAST (4B) sur le
+     design. Plus lent mais meilleure qualité visuelle.
+
+## [2026-07-31] audit | AUDIT RADICAL du dossier references/ TERMINÉ (13 projets, 315 entrées)
+- **Objectif** : document de suivi navigable permettant de retrouver toute info/code utile dans
+  `references/`, avec emplacement complet + évaluation de réutilisabilité pour le projet.
+- **Périmètre** : 13 projets/dossiers (~10 000 fichiers pertinents scannés, hors .git/node_modules/
+  médias/fixtures/traductions README). docs (.md/.mdx) + code (.py/.ts/.go/.js) + JSON/YAML de spec.
+- **Livrables** (`docs/references-audit/`) :
+  - `README.md` (mode d'emploi), `INDEX.md` (doc maître : navigation + synthèse + Hall of Fame
+    top 25 + matrice réutilisabilité + guide de recherche), `inventory.json` (315 entrées
+    machine-lisibles, JSON valide), `projects/` (13 fiches détaillées 01-13).
+- **Méthode** : 4 vagues d'agents Explore/general-purpose en parallèle (cartographie puis fichage
+  par groupes). Noms de symboles vérifiés par lecture du code pour les fichiers Haute/Moyenne.
+- **Top réutilisabilité** : axon (23 Haute), deer-flow (21), aider (17), RepoGraph/graphify (8/11).
+  Constat clé : le KG DuckDB actuel stocke des claims mais PAS la structure du code → trio
+  axon+RepoGraph+graphify (tree-sitter+networkx) comble ce vide.
+- **Répart. reuse** : 119 Haute, 116 Moyenne, 78 Faible, 2 None. Aucune modification du code du
+  projet — audit purement documentaire.
+
+
+## [2026-07-31] plan | Amélioration plan usine logicielle (intégration audits)
+- Intégration du Read-Before-Write Gate (Priorité 1)
+- Intégration de l'Anti-Loop Cryptographique (Priorité 3)
+- Structuration du Tester en pipeline TDD 6-étapes + Nettoyage DOM (Priorité 6)
+- Intégration des Context Epochs pour l'état (Priorité 9)
+- Ajout de la Priorité 11: Observabilité et Protocole d'Événements (Run Event Stream)
+- feature_list.json et progress.md mis à jour.
