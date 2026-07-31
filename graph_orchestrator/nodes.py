@@ -30,7 +30,7 @@ from .models import (
     CodeJudgeOutput,
     extract_and_validate,
 )
-from .tools import read_file, write_file, edit_file, bash_command, list_directory, search_replace
+from .tools import read_file, write_file, append_file, edit_file, bash_command, list_directory, search_replace
 from .skills_loader import build_skills_block
 
 @tool
@@ -351,7 +351,7 @@ async def execute_coder_node(
         # Outils fichiers + recherche. Context7 (doc de libs à jour) est ajouté si
         # CONTEXT7_API_KEY est configurée. Le Coder décide QUAND l'utiliser via le
         # skill context7-research (dormant sur vanilla, actif sur libs externes).
-        coder_tools = [list_directory, read_file, write_file, edit_file, search_replace, DuckDuckGoSearchTool()]
+        coder_tools = [list_directory, read_file, write_file, append_file, edit_file, search_replace, DuckDuckGoSearchTool()]
         coder_tools.extend(c7_tools)
         local_coder = ToolCallingAgent(
             tools=coder_tools,

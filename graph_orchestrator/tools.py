@@ -102,6 +102,74 @@ def write_file(path: str, content: str) -> str:
     except Exception as e:
         return f"Error writing to file {path}: {str(e)}"
 
+
+@tool
+def append_file(path: str, content: str) -> str:
+    """Appends `content` to the END of a file, without rewriting what's already there.
+
+    Use this to BUILD A LARGE FILE INCREMENTALLY: call `write_file` once with the
+    skeleton (structure + section markers), then call `append_file` once per
+    section. This avoids the truncation/corruption that happens when a single
+    `write_file` holds thousands of lines.
+
+    Args:
+        path: The file to append to. Created if it does not exist; parent
+              directories are created automatically.
+        content: The chunk to append. Must NOT be empty or a placeholder.
+    """
+    try:
+        # Garde anti-contenu-vide / anti-placeholder (même logique que write_file).
+        if content is None or not str(content).strip():
+            return (
+                "ERROR: append_file was called with an EMPTY 'content' argument. "
+                "Re-call append_file with the real chunk of content to add. "
+                "The file was NOT modified."
+            )
+        if _is_placeholder(str(content)):
+            return (
+                "ERROR: append_file 'content' looks like a placeholder, not real "
+                "code. Provide the COMPLETE section to append. The file was NOT modified."
+            )
+
+        # Mutex par fichier (sérialise les appends concurrents, comme write_file/openfox).
+        with _file_lock(path):
+            # Lecture de l'existant (pour feedback + garde anti-doublon).
+            existing = ""
+            if os.path.exists(path):
+                with open(path, 'r', encoding='utf-8') as f:
+                    existing = f.read()
+
+            # Garde anti-doublon léger (deer-flow read-before-write, version simple) :
+            # si le chunk est déjà la fin exacte du fichier, on le signale sans
+            # réécrire — évite le bug "section appendée N fois" sans middleware lourd.
+            stripped = str(content)
+            if existing.endswith(stripped):
+                line_count = existing.count("\n") + (0 if existing.endswith("\n") else 1)
+                return (
+                    f"NOTICE: this content is already at the end of {path} — not "
+                    f"re-appended (duplicate guard). File unchanged ({len(existing)} "
+                    f"chars, {line_count} lines). Move on to the next section."
+                )
+
+            # Append effectif (mode 'a', UTF-8). Le dossier parent doit exister
+            # (le mode 'a' crée le fichier, mais pas les dossiers parents).
+            parent = os.path.dirname(os.path.abspath(path))
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            with open(path, 'a', encoding='utf-8') as f:
+                f.write(content)
+
+            # Feedback riche (inspiration SWE-agent ACI : état visible pour le modèle).
+            new_total = existing + content
+            line_count = new_total.count("\n") + (0 if new_total.endswith("\n") else 1)
+            return (
+                f"Appended {len(content)} chars to {path}. "
+                f"File now {len(new_total)} chars, {line_count} lines."
+            )
+    except Exception as e:
+        return f"Error appending to file {path}: {str(e)}"
+
+
 @tool
 def edit_file(path: str, old_string: str, new_string: str, replace_all: bool = False) -> str:
     """Surgically replaces a specific string in a file with a new string.

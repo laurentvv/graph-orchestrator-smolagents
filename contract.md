@@ -42,6 +42,15 @@
 - [ ] Critère 31 : Le skill `web-tester` exige désormais un rapport structuré (section « ERREURS CONSOLE JS » = le « stderr » du web) ; le skill `python-tester` documente le verdict pytest (exit code) et la lecture d'un échec.
 - [ ] Critère 32 : La suite pytest complète passe (0 régression, nouveaux tests inclus : feedback_utils, tech_detection, python_runner, tester_dispatch, feedback_integration).
 
+## Critères de l'Édition Incrémentale (append_file — F-28)
+- [ ] Critère 46 : `append_file(path, content)` AJOUTE `content` à la fin d'un fichier sans réécrire l'existant (contenu préservé) ; crée le fichier s'il n'existe pas (mode `'a'`).
+- [ ] Critère 47 : Le mutex par fichier (`_file_lock`) sérialise les écritures concurrentes — 2 appends parallèles ne se corrompent pas (test `test_append_concurrent_does_not_corrupt` : 40 lignes attendues, 0 perdue).
+- [ ] Critère 48 : Garde anti-contenu-vide + anti-placeholder — `content=""` ou `"TODO"` est rejeté avec message pédagogique, le fichier N'EST PAS modifié.
+- [ ] Critère 49 : Garde anti-doublon légère — si `content` est déjà la fin exacte du fichier, l'opération est signalée (`NOTICE ... duplicate`) SANS réécrire (défense contre le bug "section appendée N fois").
+- [ ] Critère 50 : Feedback riche (SWE-agent ACI) — le retour contient le nb de chars ajoutés ET la nouvelle taille totale (chars + lignes), pour que le modèle suive sa progression.
+- [ ] Critère 51 : Les sous-dossiers parents sont créés automatiquement (`os.makedirs(exist_ok=True)`), cohérent avec `write_file`.
+- [ ] Critère 52 : La suite pytest complète passe (0 régression, nouveaux tests `test_append_file.py` inclus : création, préservation, gardes, anti-doublon, sous-dossiers, concurrence).
+
 ## Critères de l'Auto-Résolution des Dépendances (Priorité 5 — F-26)
 - [ ] Critère 39 : `extract_missing_module(stderr)` extrait le nom de module top-level d'un `ModuleNotFoundError` (`'requests'`, `'requests.auth'` → `'requests'`) ; retourne `None` si pas de `ModuleNotFoundError` ou si le nom extrait n'est pas un identifiant Python valide (regex `^[A-Za-z_][A-Za-z0-9_]*$` — défense en profondeur anti-injection).
 - [ ] Critère 40 : Le déclenchement est conditionnel — `extract_missing_module` n'est appelé QUE si `exit_code != 0` ET `settings.auto_install_deps` est vrai ; un AssertionError/SyntaxError/etc. ne déclenche JAMAIS l'install (comportement historique préservé).

@@ -95,7 +95,67 @@
 - [x] Étape AD-5 : Suite pytest → 232 passed / 0 failed (220 avant + 12 nouveaux). 0 régression.
 - [x] Étape AD-6 : Docs (contract.md +7 critères, plan, README) + finalisation état disque.
 
+## Jalons de l'Itération (cycle Découpage incrémental — F-28, CodeAgent P0)
+- [x] Étape DI-1 : 2e comparatif gros fichier inline INTERROMPU (1h, step 1 non fini) → gros
+  write_file monolithique INEXPLOITABLE sur CPU-only. Le problème = le PATTERN, pas le type d'agent.
+- [x] Étape DI-2 : 2 audits (references + web) — gap append_file confirmé (aucun projet ne l'a).
+  Pattern n°1 recommandé pour petits modèles CPU = accumulateur incrémental.
+- [x] Étape DI-3 : Plan approuvé (outil append_file + tests + prompt incrémental + branchement).
+- [x] Étape DI-4 : append_file dans tools.py (mutex + gardes + feedback + anti-doublon léger).
+- [x] Étape DI-5 : tests/test_append_file.py (8 tests, 0 LLM) — 8/8 PASS.
+- [x] Étape DI-6 : Branchement append_file au Coder prod (nodes.py coder_tools) — additif non-cassant.
+  Suite pytest 240 passed / 0 failed (232 avant + 8 nouveaux).
+- [x] Étape DI-7 : prompts/dashboard_admin_incremental.md (workflow squelette + append section par section).
+- [x] Étape DI-8 : Scripts comparatifs équipés (append_file dans tools des 2 scripts + prompt CodeAgent adapté).
+- [ ] Étape DI-9 : Runs comparatifs TCA vs CodeAgent sur le dashboard incrémental.
+  HYPOTHÈSE : CodeAgent devrait nécessiter moins de steps (N append dans 1 step) que le TCA (1 step/section).
+- [ ] Étape DI-10 : Décision : migrer execute_coder_node vers CodeAgent (si gain prouvé sur le
+  découpage) + intégrer append_file au prompt du Coder prod. Création PR.
+
+## 🗺️ Feuille de route Finalisation (P1-P3, décidée 2026-07-31)
+Ce cycle (CodeAgent + append_file) a révélé 4 gaps qui s'emboîtent. Le workflow actuel
+marche sur du simple (Bubble Sort) mais SOUFFRE sur le gros/multi-étapes (dashboard).
+P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
+
+### P1 — Migrer le Coder vers CodeAgent (IMMÉDIAT, ce cycle)
+- [x] Preuves empiriques réunies (3 comparatifs convergent).
+- [ ] Migration execute_coder_node : ToolCallingAgent → CodeAgent + prompt Python + garde-fou fallback TCA.
+- [ ] Tests + validation run complet.
+
+### P2 — Architect évolué : stratégie de découpage adaptative (F-29, cycle suivant)
+- [ ] Enrichir ArchitectSignature : stratégie par sous-tâche (simple | incrémental | multi-fichier).
+- [ ] Décision techno-driven (HTML=incrémental, Python/TS=multi-fichier).
+- [ ] L'Architect dicte au Coder COMMENT construire, pas juste QUOI.
+
+### P3 — Linter Shift Left (F-30 = P7 plan usine logicielle, cycle d'après)
+- [ ] Nœud linter léger (py_compile/oxlint/AST) entre Coder et Tester.
+- [ ] Boucle fermée : syntaxe invalide → feedback immédiat au Coder (pas au Tester coûteux).
+- [ ] Spécialement critique pour Python (indentation = point noir reconnu).
+
+### Hors finalisation (P4, à évaluer plus tard)
+- F-31 : Tester en mode CodeAgent (2e candidat, optimisation potentielle, non urgent).
+- File viewer fenêtré SWE-agent ACI (lourd, optionnel).
+- 5 nœuds sans tools (Worker/Judge/Synth/Adversary) : CodeAgent inutile, ne pas migrer.
+
 ## Jalons bootstrap (faits)
 - [x] Création agent.md (specs gestion d'état).
 - [x] Initialisation feature_list.json, contract.md, progress.md, log.md.
+
+## Jalons de l'Itération (cycle CodeAgent — Priorité 0, transition ToolCallingAgent→CodeAgent)
+- [x] Étape CA-1 : Analyse codebase (7 ToolCallingAgent + 1 CodeAgent mort). Seul le
+  Coder est un vrai candidat (5 agents sans tools = pas de bénéfice, Security en DSPy).
+- [x] Étape CA-2 : Plan approuvé (2 scripts séparés, mode TCA import direct prod,
+  mode CodeAgent expérimental, isolation stricte des répertoires).
+- [x] Étape CA-3 : run_coder_tca.py (import execute_coder_node, OUT_DIR=tca/ isolé+nettoyé).
+- [x] Étape CA-4 : run_coder_codeagent.py (CodeAgent, prompt final_answer Python,
+  extraction maison, OUT_DIR=codeagent/ isolé+nettoyé).
+- [x] Étape CA-5 : .gitignore + codeagent_compare/ (artefacts jetables).
+- [ ] Étape CA-6 : Vérification imports + syntaxe (py_compile).
+- [x] Étape CA-7 : Runs comparatifs (TCA puis CodeAgent) — TERMINÉ. Les 2 réussissent
+  sur Bubble Sort (borné). CodeAgent gagne sur tokens IN (-63%) et durée (-19%).
+  Résultats consignés dans log.md.
+- [ ] Étape CA-8 : Décision : migrer execute_coder_node vers CodeAgent (si gain prouvé)
+  OU garder TCA (si CodeAgent n'apporte rien). Création feature F-XX le cas échéant.
+  → EN ATTENTE : un 2e test sur contenu plus lourd (multi-fichiers / HTML 3000+
+  lignes) confirmerait le gain sur le scénario-douleur (corruption JSON du TCA).
 

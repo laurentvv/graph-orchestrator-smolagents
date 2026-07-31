@@ -192,9 +192,51 @@
     {
       "id": "F-20",
       "name": "Tester fonctionnel (assertions comportementales)",
-      "description": "Le tester ne testait que l'absence de crash (console JS), pas le comportement attendu → bugs de logique validés à tort (run Bubble Sort: SUCCESS sur un bug visuel). IMPLÉMENTÉ : (1) skill web-tester réécrit avec noms puppeteer_* corrects (avant: noms Chrome-DevTools-MCP inexistants) + étape 'Functional Logic Testing' via puppeteer_evaluate (scripts d'assertion sur les comportements clés du cahier des charges). (2) Propagation du cahier des charges complet (original_content) au tester via workflows.py → sub_dict → prompt bloc 'CAHIER DES CHARGES COMPLET'. (3) Judge (CodeJudgeSignature) reçoit task_requirements pour juger couverture/comportement. (4) max_steps tester 20→24 (marge pour les assertions). Verdict success requiert 0 erreur console + TOUTES assertions passent. 11 tests PASS.",
+      "description": "Le tester ne testait que l'absence de crash (console JS), pas le comportement attendu → bugs de logique validés à tort (run Bubble Sort: SUCCESS sur un bug visuel). IMPLÉMENTÉ : (1) skill web-tester réécrit avec noms puppeteer_* corrects (avant: noms Chrome-DevTools-MCP inexistants) + étape 'Functional Logic Testing' via puppeteer_evaluate (scripts d'assertion sur les comportements clés du cahier des charges). (2) Propagation du cahier des charges complet (original_content) au tester via workflows.py → sub_dict → prompt bloc 'CAHIER DES CHARGES COMPLET'. (3) Judge (CodeJudgeSignature) reçoint task_requirements pour juger couverture/comportement. (4) max_steps tester 20→24 (marge pour les assertions). Verdict success requiert 0 erreur console + TOUTES assertions passent. 11 tests PASS.",
       "status": "completed",
       "dependencies": ["F-16"]
+    },
+    {
+      "id": "F-28",
+      "name": "Édition incrémentale (outil append_file)",
+      "description": "Résout le blocage 'gros fichier inline ingérable sur CPU-only' (1h sans step 1 fini sur un dashboard 3000 lignes). C'est le pattern n°1 recommandé par les audits (references + web) pour les petits modèles : accumulateur incrémental. IMPLÉMENTÉ : outil @tool append_file(path, content) dans tools.py — ajoute à la fin d'un fichier sans réécrire l'existant. Mutex par fichier (_file_lock), gardes anti-placeholder/anti-vide, feedback riche taille+lignes (SWE-agent ACI), garde anti-doublon léger (content == fin du fichier → signalé sans réécrire, version simple du middleware deer-flow read-before-write). 8 tests PASS (création, préservation, gardes, anti-doublon, sous-dossiers, concurrence/mutex). Branché au Coder de prod (nodes.py execute_coder_node : append_file ajouté à coder_tools — additif non-cassant, l'agent ne l'utilise que si le prompt le demande). Workflow recommandé : write_file(squelette) puis N append_file(section) pour construire un gros fichier viablement. Comparatif TCA vs CodeAgent en cours (avantage structurel attendu pour CodeAgent : N append dans 1 step).",
+      "status": "completed",
+      "dependencies": ["F-19", "F-20"]
+    },
+    {
+      "id": "F-29",
+      "name": "Stratégie de découpage adaptative (Architect évolué)",
+      "description": "P2 feuille de route finalisation. Gap révélé par le cycle CodeAgent : l'Architect actuel (DSPy) découpe en sous-tâches (1 fichier = 1, F-15) MAIS ne raisonne NI sur la TAILLE des fichiers, NI sur la STRATÉGIE de construction. Un dashboard de 3000 lignes en 1 sous-tâche = ingérable (1h sans step 1 fini en TCA). ÉVOLUTION prévue : enrichir ArchitectSignature pour émettre, en plus des target_files, une stratégie PAR sous-tâche : simple (1 write_file, petit fichier) | incrémental (squelette + append_file sections, gros fichier monolithique type HTML) | multi-fichier (1 module logique = 1 fichier < ~200 lignes, type Python/TS). Décision techno-driven (HTML=incrémental, Python/TS=multi-fichier) — cf. audits references + web. L'Architect doit dicter au Coder COMMENT construire, pas juste QUOI construire. Sans ça, le CodeAgent (P1) reste sous-exploité. Dépend de la validation P1 (CodeAgent au Coder).",
+      "status": "pending",
+      "dependencies": ["F-28", "F-15"]
+    },
+    {
+      "id": "F-30",
+      "name": "Linter Shift Left (anti-gaspillage cycles LLM)",
+      "description": "P3 feuille de route finalisation (= P7 du plan usine logicielle). Gap : bugs de syntaxe triviaux (ex: 'color var(--muted)' deux-points manquants observé run CodeAgent, IndentationError Python) validés à tort par le Judge → gaspille des cycles LLM coûteux (Tester/Judge) sur des erreurs triviales. SOLUTION : linter ultra-rapide (AST/tree-sitter/py_compile pour Python, oxlint/eslint pour JS, validateur HTML) juste après le Coder, AVANT le Tester. Intercepte les erreurs de syntaxe de base → feedback immédiat au Coder (boucle fermée SWE-agent ACI : édition → linter → si erreur, renvoyer au modèle pour correction). ROI élevé (surtout Python indentation = point noir reconnu par tous les audits), effort modéré. Un nœud léger (pas d'LLM) dans le graphe entre Coder et Tester.",
+      "status": "pending",
+      "dependencies": ["F-27"]
+    },
+    {
+      "id": "F-31",
+      "name": "Tester en mode CodeAgent (à évaluer)",
+      "description": "P4 (hors finalisation P1-P3, à évaluer après). Le Web Tester (WebTestRunner) est le 2e candidat CodeAgent après le Coder : il fait du tool-calling multi-étapes (puppeteer_navigate → puppeteer_screenshot → puppeteer_evaluate pour les assertions). Si le TCA souffre du même problème que le Coder (modèle qui réfléchit sans émettre le tool_call JSON), CodeAgent pourrait l'aider. Test à faire via run_tester.py isolé (comparatif TCA vs CodeAgent sur Bubble Sort assertions). NON URGENT — le tester fonctionne en TCA actuellement, c'est une optimisation potentielle.",
+      "status": "pending",
+      "dependencies": ["F-20"]
+    },
+    {
+      "id": "F-32",
+      "name": "Prompt Coder réécrit (structure canonique + anti-laziness)",
+      "description": "Accompagne P1 (migration CodeAgent). Notre prompt Coder actuel souffre de 2 défauts révélés par les audits (references aider/crush/opencode/openfox/deer-flow + web Anthropic/OpenAI/Cline/SWE-agent) : (1) le modèle 'réfléchit sans agir' (reasoning-action dilemma, les petits modèles overthinkent plus gravement), (2) il s'essouffle sur les gros blocs (triple-quote non fermée). RÉÉCRIRE selon la structure canonique : Rôle → Règles critiques → Format sortie obligatoire (début ET fin, double-marquage aider) → One-shot example (Thought 1 phrase → appel outil immédiat) → Workflow → Rappels (effet primacy/recency). Inclure : 'Une réponse sans tool call = tâche terminée' (Cline), règle '≤60 lignes/appel, chaque bloc syntaxiquement complet, jamais de string/brace ouverte entre 2 appels' (anti triple-quote), anti-laziness 'NEVER skip/omit/elide' (aider wholefile), pattern squelette/remplissage (Skeleton-of-Thought). Le prompt doit décrire le COMMENT (format, taille, ordre), pas juste le QUOI.",
+      "status": "pending",
+      "dependencies": ["F-28"]
+    },
+    {
+      "id": "F-33",
+      "name": "Guard logiciel 'dangling tool call' (middleware anti-déraillement)",
+      "description": "Accompagne P1 (migration CodeAgent). Leçon majeure des audits : UN PROMPT SEUL NE SUFFIT JAMAIS. Les 5 projets matures (aider/crush/opencode/openfox/deer-flow) couplent TOUS le prompt à un guard logiciel. Inspiration directe : deer-flow dangling_tool_call_middleware.py (détecte un tool call cassé — ex: triple-quote non fermée, payload JSON invalide — et renvoie un message pédagogique 'Do not retry the same large payload, split into smaller sections instead') et openfox FORMAT_CORRECTION_PROMPT (renvoyé jusqu'à 10 fois). À implémenter dans smolagents : détection 'tour sans tool call exécuté' (modèle réfléchit sans agir) → ré-injection consigne 'tu DOIS appeler un outil'; détection 'tool call cassé' → 'découpe au lieu de recommencer'. C'est le filet qui rattrape les déraillements que le prompt ne prévient pas.",
+      "status": "pending",
+      "dependencies": ["F-28", "F-32"]
     }
   ]
 }

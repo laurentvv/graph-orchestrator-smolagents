@@ -814,3 +814,407 @@ curl http://10.201.12.50:11434/api/show -d '{"name":"nanbeige-bigctx"}'
 - Kilo Code Review : SUCCESS (conclusion SUCCESS, mergeState CLEAN).
 - Branche locale + remote supprimées après merge.
 - Priorité 5 (Auto-dépendances) → TERMINÉE et intégrée à main.
+
+## [2026-07-31] plan | Planification cycle CodeAgent (Priorité 0 — transition ToolCallingAgent→CodeAgent)
+- CONSTAT (analyse codebase) : 7 ToolCallingAgent actifs (Worker, Coder, Security,
+  Judge, Synth, Adversary) + 1 CodeAgent MORT (execute_architect_node, remplacé
+  par DSPy). L'import CodeAgent à nodes.py:335 dans execute_coder_node est un
+  IMPORT MORT (jamais utilisé).
+- DIAGNOSTIC : sur les 7 ToolCallingAgent, SEUL le Coder (tools=[write_file,
+  read_file, edit_file, search_replace, ...], max_steps=12) est un vrai candidat
+  CodeAgent. Les 5 agents sans tools (Worker, Judge, Synth, Adversary, Judge
+  monitoring) font juste un final_answer → CodeAgent n'apporte rien. Security est
+  passé en DSPy. Web_tester est secondaire.
+- DÉCISION UTILISATEUR : (1) 2 scripts SÉPARÉS (pas un script paramétrable),
+  (2) mode TCA importe DIRECTEMENT execute_coder_node de nodes.py (comportement
+  production réel, 0 duplication), (3) mode CodeAgent instancie un CodeAgent avec
+  prompt adapté (final_answer en syntaxe Python) + extraction maison (pas de
+  sauvetage DSPy, comparaison honnête). Aucune modification de production.
+- PROMPT DE TEST : Bubble Sort Visualizer (borné, 1 fichier index.html, vanilla JS)
+  — déjà utilisé pour run_tester.py, Context7 dormant (vanilla, ne pollue pas).
+- ISOLATION STRICTE des répertoires (point critique, explicité par l'utilisateur) :
+  * OUT_DIR hardcodé et DISJOINT par script : codeagent_compare/tca/ (TCA) vs
+    codeagent_compare/codeagent/ (CodeAgent).
+  * Nettoyage préalable auto (shutil.rmtree + recréation) à chaque run → garanti
+    un write_file from scratch (sinon le Coder ferait un search_replace sur le
+    fichier résiduel du run précédent → fausse la mesure).
+  * target_files pointe dans le BON dossier (prompt indique le chemin exact).
+  * Vérif post-run : chemin absolu + os.path.exists + taille (détection fuite).
+- OBJECTIF : mesurer AVANT de migrer si CodeAgent est réellement supérieur au TCA
+  (la corruption JSON des gros contenus était la douleur n°1 du Coder, cf. runs
+  #3/#11). Si CodeAgent gagne → migration de execute_coder_node justifiée par
+  données empiriques. Sinon → on garde TCA.
+
+## [2026-07-31] gen | Scripts comparatifs CodeAgent créés (P0 — 2 scripts isolés)
+- run_coder_tca.py : MODE RÉFÉRENCE (production). Import DIRECT de
+  execute_coder_node (0 duplication) → reproduit fidèlement run_with_retry + prompt
+  JSON + sauvetage DSPy. OUT_DIR hardcodé "codeagent_compare/tca" (isolé, nettoyé
+  à chaque run via shutil.rmtree → write_file from scratch garanti).
+- run_coder_codeagent.py : MODE EXPÉRIMENTAL. Instancie CodeAgent smolagents
+  (génération Python dans code block, outils appelés comme fonctions,
+  final_answer(value) en syntaxe Python). Mêmes outils/modèle/max_steps=12 que la
+  prod. Prompt adapté (final_answer Python, pas JSON). Extraction maison
+  (_extract_coder_output : dict→CoderOutput / string→fallback JSON / wrap).
+  PAS de sauvetage DSPy (comparaison honnête du comportement brut). OUT_DIR
+  hardcodé "codeagent_compare/codeagent" (DISJOINT du TCA par construction).
+- ISOLATION STRICTE (3 garanties par script) : (1) OUT_DIR hardcodé non configurable,
+  (2) nettoyage préalable auto (shutil.rmtree ignore_errors + makedirs),
+  (3) target_files pointe dans le BON dossier + vérif post-run chemin absolu/taille.
+- .gitignore : codeagent_compare/ ajouté (artefacts jetables/régénérables).
+- VÉRIFICATIONS : py_compile OK (2 scripts) + imports tous résolus
+  (build_fast_model, execute_coder_node, resolve_verbosity, context7_tools,
+  build_skills_block, CoderOutput, NodeMetrics, CodeAgent, DuckDuckGoSearchTool).
+- PROCHAIN : étape CA-7 = runs comparatifs réels (uv run python run_coder_tca.py
+  PUIS run_coder_codeagent.py, chacun ~5-10 min sur endpoint CPU-only distant).
+  Tableau résultats (statut/durée/tokens/taille fichier/steps) à consigner ici.
+  Puis CA-8 = décision migrer ou non selon données empiriques.
+
+## [2026-07-31] run | RUN COMPARATIF TCA vs CodeAgent (Bubble Sort, gemma-4-e4b_CPU)
+- CONFIG : même modèle FAST (gemma-4-e4b_CPU distant CPU), même cahier des charges
+  (Bubble Sort, 1 fichier vanilla), max_steps=12, temp 0.2. Context7 dormant (vanilla).
+- RÉSULTATS (les 2 modes RÉUSSISSENT du 1er coup, 2 steps chacun, HTML complet) :
+
+  | Métrique        | TCA (prod)  | CodeAgent   | Delta        |
+  |-----------------|-------------|-------------|--------------|
+  | Statut          | success     | success     | =            |
+  | Taille fichier  | 9675 o / 288 lignes | 9232 o / 281 lignes | ~=    |
+  | HTML complet    | OUI (DOCTYPE+</html>) | OUI (DOCTYPE+</html>) | =   |
+  | Steps           | 2           | 2           | =            |
+  | Durée           | 581.0s      | 470.3s      | CodeAgent -19% |
+  | Tokens IN       | 19 748      | 7 262       | CodeAgent -63% 🔥 |
+  | Tokens OUT      | 3 258       | 3 017       | ~=           |
+
+- CONCLUSIONS :
+  1. LES 2 RÉUSSISSENT sur ce prompt borné (vanilla, 1 fichier). Pas de corruption
+     pour le TCA ici — son problème historique (JSON des gros contenus) ne se
+     déclenche pas sur Bubble Sort.
+  2. GAIN CodeAgent MASSIF sur les tokens d'entrée (-63%) : le contenu du fichier
+     ne transite pas en clair comme string JSON échappée dans l'historique → le
+     contexte gonfle bien moins vite. C'est exactement le bénéfice théorique
+     documenté (references_audit.md : "gère mieux la taille du contexte").
+  3. Corollaire durée -19% : moins de tokens IN = moins à traiter = plus rapide
+     sur endpoint CPU-only.
+  4. NUANCE HONNÊTE : sur un prompt borné, le TCA ne souffre pas. Le test vraiment
+     discriminant = un GROS contenu multi-fichiers (ex: landing page Nimbus 3
+     fichiers, ou HTML 3000+ lignes) — c'est là que le TCA cassait historiquement.
+- DÉCISION CA-8 : CodeAgent montre un potentiel réel (tokens IN -63%) MAIS demande
+  un 2e test sur contenu plus lourd pour confirmer. Migration non déclenchée tant
+  qu'on n'a pas prouvé le gain sur le scénario- douleur (gros fichiers).
+
+## [2026-07-31] gen | Tâche lourde + support @fichier (2e comparatif CodeAgent)
+- prompts/dashboard_admin_heavy.md : cahier des charges dashboard admin complet
+  (single-file HTML/CSS/JS vanilla, ~2500-3500 lignes attendues). Conçu pour
+  déclencher le scénario-douleur historique du TCA (corruption JSON des gros
+  contenus inline — cf. runs #3/#11). Contenu : sidebar+header responsive, 4 KPI
+  cards, tableau utilisateurs triable+recherche+pagination, graphique canvas
+  (tooltip + switch période), toasts, modal, dark/light mode persisté, ARIA.
+- Scripts run_coder_tca.py + run_coder_codeagent.py : ajout support @fichier.
+  Si l'arg CLI commence par '@', on lit le contenu du fichier pointé (permet de
+  charger n'importe quel cahier des charges sans réécrire les scripts). Sinon,
+  l'arg est utilisé directement comme texte de tâche (compat ascendante).
+  Fonction _resolve_task_desc ajoutée aux 2 scripts (même code, isolé par script).
+- VERIFICATION : py_compile OK sur les 2 scripts après modification.
+- USAGE 2e COMPARATIF :
+    uv run python run_coder_tca.py @prompts/dashboard_admin_heavy.md
+    uv run python run_coder_codeagent.py @prompts/dashboard_admin_heavy.md
+  ATTENDU (hypothèse à valider) : sur un gros contenu inline, le TCA devrait
+  souffrir (corruption JSON, possible troncature, retries) là où CodeAgent
+  (génération Python, contenu non-échappé) devrait mieux tenir. C'est le test
+  discriminant pour la décision CA-8 (migrer execute_coder_node ou non).
+
+## [2026-07-31] run | 2e COMPARATIF INTERROMPU : gros fichier inline INEXPLOITABLE (1h, step 1 non fini)
+- RUN TCA sur prompts/dashboard_admin_heavy.md (dashboard admin ~2500-3500 lignes).
+- RÉSULTAT : STEP 1 TOUJOURS EN COURS après 1h10 (activité Ollama confirmée via htop,
+  pas un hang — le modèle générait réellement). 0 retry, 0 final_answer.
+- ROOT CAUSE : le prompt "un write_file = contenu complet" oblige le modèle à
+  générer L'INTÉGRALITÉ du fichier (3000+ lignes) dans un seul argument JSON
+  `content`. Sur CPU-only (~15 tok/s) + échappement JSON + thinking gemma = ~1h+
+  pour une seule génération. Ingérable, pas juste lent.
+- LEÇON CRITIQUE : le problème n'est PAS le type d'agent (TCA vs CodeAgent) mais
+  le PATTERN "gros write_file monolithique". Même CodeAgent souffrirait (le
+  content reste un littéral string géant dans le code Python généré). Décision :
+  ne PAS lancer CodeAgent sur ce même prompt (même cause racine), pivoter vers le
+  DÉCOUPAGE INCRÉMENTAL (intuition utilisateur confirmée).
+- Process tué par l'utilisateur.
+
+## [2026-07-31] audit | 2 audits (references + web) sur le découpage incrémental de gros fichiers
+- OBJECTIF : ne pas réinventer la roue — chercher les patterns existants dans
+  references/ (crush/openfox/nanocode/aider/opencode/deer-flow) + sur le web.
+- AUDIT REFERENCES (code source des projets) : 6 patterns identifiés.
+  1. SEARCH/REPLACE textuel (aider editblock_coder.py) — on l'A DÉJÀ (search_replace_utils.py).
+  2. Format patch *** Begin Patch (opencode/aider patch_coder.py) — multi-hunks.
+  3. Multi-edit séquentiel (crush multiedit.go) — tableau d'opérations.
+  4. Edit old/new + Mutex + contexte section (openfox/crush/opencode) — on a le MUTEX.
+  5. Read-before-write versionné par hash (deer-flow) — tue le bug "section appendée 5x".
+  6. Append pur (outil dédié) — GAP EXPLICITE : AUCUN projet ne l'a.
+- AUDIT WEB (agents modernes) : convergence — "ne jamais générer le fichier final
+  en un seul coup". Pattern n°1 recommandé pour petits modèles CPU-only =
+  ACCUMULATEUR / APPEND (dev.to) : "appels petits → pas de troncature ni corruption,
+  validation par appel, crash recovery". Le builder pattern via incremental tool calls
+  est le plus adapté. Aider udiff bat SEARCH/REPLACE 3x sur gros fichiers mais fragile
+  sur petits modèles (match exact). SWE-agent ACI = file viewer + linter par edit.
+- DÉCISION : créer l'outil append_file (gap explicite, pattern n°1 recommandé).
+  + garder read-before-write (deer-flow) comme garde anti-doublon léger intégré
+  (pas le middleware complet pour ce cycle — juste une garde "content == fin du
+  fichier → signalé sans réécrire"). Tests comparatifs TCA vs CodeAgent sur le
+  découpage : avantage structurel attendu pour CodeAgent (N append dans 1 step).
+
+## [2026-07-31] gen | Outil append_file + découpage incrémental IMPLÉMENTÉS (F-28)
+- OUTIL append_file (tools.py) : ajoute à la fin d'un fichier sans réécrire l'existant.
+  * Mutex par fichier (_file_lock, comme write_file/openfox) : sérialise les écritures
+    concurrentes (test de concurrence : 40 lignes, 0 perdue).
+  * Gardes anti-contenu-vide + anti-placeholder (_is_placeholder réutilisé) : rejet
+    pédagogique, fichier non modifié.
+  * Feedback riche (SWE-agent ACI) : "Appended N chars to path. File now M chars, K lines."
+    → le modèle suit sa progression (combien de sections ajoutées, taille courante).
+  * Garde anti-doublon légère (deer-flow read-before-write, version simple) : si content
+    == fin exacte du fichier → NOTICE "already ... duplicate guard", NON réécrit. Évite
+    le bug "section appendée N fois" sans middleware lourd.
+  * Sous-dossiers créés automatiquement (os.makedirs exist_ok=True, cohérent avec write_file).
+- TESTS (tests/test_append_file.py, 8 tests, 0 LLM) : création from scratch, préservation
+  contenu, gardes vide/placeholder, anti-doublon, feedback taille/lignes, sous-dossiers,
+  concurrence (mutex). 8/8 PASS.
+- BRANCHEMENT prod (nodes.py execute_coder_node) : append_file ajouté à coder_tools. ADDITIF
+  NON-CASSANT — l'agent ne l'utilise que si le prompt le demande ; le prompt actuel du Coder
+  ne le mentionne pas, donc comportement prod inchangé tant qu'on ne modifie pas le prompt.
+  (Correction du plan initial qui disait "0 modif prod" : en réalité execute_coder_node
+  construit sa liste d'outils en dur, donc pour que le TCA puisse tester append_file, il
+  fallait l'ajouter à la liste. C'est la bonne décision — additif sûr.)
+- PROMPTS/dashboard_admin_incremental.md : dashboard admin complet MAIS avec workflow
+  incrémental IMPOSÉ dans la spec (write_file squelette → 7 append_file sections → final_answer).
+  Conçu pour valider le découpage incrémental en conditions réelles CPU-only.
+- SCRIPTS run_coder_tca.py + run_coder_codeagent.py : append_file ajouté aux tools des 2.
+  Prompt CodeAgent adapté (PLAN D'ACTION neutre + section outils mentionne append_file +
+  exemple code block avec plusieurs appels). Support @fichier déjà en place (cycle précédent).
+- SUITE pytest : 240 passed / 0 failed (232 avant + 8 nouveaux). 0 régression.
+- DOCS : feature_list.json (F-28 in_progress), contract.md (+7 critères 46-52), progress.md
+  (section Découpage incrémental).
+- PROCHAIN (DI-9) : runs comparatifs TCA vs CodeAgent sur le dashboard incrémental.
+    uv run python run_coder_tca.py @prompts/dashboard_admin_incremental.md
+    uv run python run_coder_codeagent.py @prompts/dashboard_admin_incremental.md
+  HYPOTHÈSE : CodeAgent devrait nécessiter moins de steps (N append dans 1 code block) que
+  le TCA (1 step/section) → preuve empirique de l'avantage structurel sur le découpage.
+
+## [2026-07-31] run | RUN TCA incrémental INTERROMPU : gemma boucle, n'émet JAMAIS le tool_call
+- RUN TCA sur prompts/dashboard_admin_incremental.md (workflow squelette + append).
+- COMPORTEMENT OBSERVÉ (pathologique) — steps 1 à 4 :
+  * Step 1 (write_file squelette) ✅ : 183s, squelette propre écrit (317 octets).
+  * Step 2 (append CSS) ❌ : 1030s (17 min!), finish_reason='stop', tool_calls=None.
+  * Step 3 ❌ : 10s, finish_reason='stop', tool_calls=None.
+  * Step 4 ❌ : 454s, finish_reason='stop', tool_calls=None.
+  * Tous : "Error while parsing tool call: does not contain any JSON blob".
+- ROOT CAUSE : le modèle (gemma) PENSE à appeler append_file dans son `reasoning`
+  ("I will start by generating the CSS content for Step 2") MAIS ne l'émet JAMAIS comme
+  un vrai tool_call JSON (tool_calls=None, finish_reason='stop' au lieu de 'tool_calls').
+  Il "parle" de l'action au lieu de la faire.
+- DÉRIVE CONFIRMÉE : contexte double à chaque échec (20k → 30k → 40k tokens IN) car
+  smolagents réinjecte erreur + prompt à chaque retry SANS purge. C'est exactement le
+  bug "FIX TOKEN EXPLOSION" que run_with_retry gère (nodes.py:155 purge memory.steps),
+  MAIS le retry interne de smolagents boucle AVANT que run_with_retry n'intervienne.
+- RÉSULTAT PARTIEL : seul le squelette (step 1, 317 octets) écrit. CSS/HTML/JS jamais
+  appendés (restés dans le reasoning). Run tué après step 4.
+- DIAGNOSTIC : c'est précisément le genre de problème qui justifie CodeAgent. Le TCA
+  exige du modèle qu'il émette un tool_call JSON structuré — gemma n'y arrive pas sur
+  une action multi-étapes (il planifie en prose au lieu d'agir). CodeAgent lui permet
+  d'écrire du Python (append_file(path=..., content=...)) → plus naturel, moins de
+  friction de formatage. TEST DÉCISIF : lancer CodeAgent sur le même prompt incrémental.
+  Si CodeAgent réussit là où le TCA boucle → preuve éclatante que CodeAgent est nécessaire
+  pour les workflows multi-étapes avec petits modèles locaux.
+
+## [2026-07-31] audit | 2 audits (references + web) sur le découpage Python/TS
+- QUESTION : pour Python/TS (vs HTML), append_file pose problème (insertion au milieu
+  d'une classe, indentation significative). Quelles stratégies alternatives ?
+- AUDIT REFERENCES (crush/openfox/nanocode/aider/opencode/deer-flow) : 3 pistes tranchées.
+  * Multi-fichier auto : AUCUN projet ne le fait outillé (uniquement conseil prompt aider).
+  * Squelette + stubs : AUCUN projet (stratégie non implémentée, le remplissage souffre
+    autant sur l'indentation).
+  * Format patch V4A *** Begin Patch + @@ ancre : RECOMMANDÉ par cet audit ("consensus").
+- AUDIT WEB (aider/OpenHands/SWE-agent/Cline/Cursor + benchmarks Diff-XYZ) :
+  * DIVERGENCE CRITIQUE : les petits modèles "échouent à tous les formats pareil" (Diff-XYZ).
+    Pour Ollama CPU-only, le choix du format compte MOINS que le découpage + validation.
+  * → multi-fichier = stratégie n°1 (contourne l'insertion au milieu).
+  * → unified diff @@ / Codex patch = À ÉVITER sur petits modèles (oublis +, offsets faux).
+  * Indentation Python = point noir reconnu (Copilot/Cursor/aider le documentent tous).
+  * Solution indentation = matching flou "relative whitespace" (on l'A DÉJÀ :
+    search_replace_utils.py) + LINTER py_compile BLOQUANT (SWE-agent ACI).
+- CONVERGENCE des 2 audits : (1) multi-fichier n°1 pour Python/TS, (2) squelette+stubs NON,
+  (3) indentation = point noir, (4) solution = matching flou + linter.
+- CE QU'ON A DÉJÀ : search_replace flou (portage aider ✅), append_file (F-28 ✅).
+- CE QUI MANQUE (features futures candidates) :
+  * F-29 "Stratégie de découpage adaptative" : détecter techno (Router/Architect comme
+    pour le Tester polyvalent) → HTML=append, Python/TS=multi-fichier imposé au prompt.
+  * F-30 "Linter Python en boucle fermée" : py_compile bloquant (détecte IndentationError
+    instantanément → renvoie erreur au modèle → correction). ROI le plus élevé selon
+    benchmarks. À rapprocher de P7 "Linter-as-a-Reviewer" déjà notée dans le plan.
+  * F-31 (optionnel, lourd) : file viewer fenêtré SWE-agent ACI (numéros de ligne).
+
+## [2026-07-31] run | RUN CodeAgent incrémental EN COURS — CodeAgent agit là où le TCA bouclait
+- RUN CodeAgent sur prompts/dashboard_admin_incremental.md (même prompt que le TCA échoué).
+- RÉSULTAT (steps 1 à 5 observés, run en cours) : CodeAgent suit le workflow À LA LETTRE.
+  * Step 1 (write squelette) : 189s, 376 chars. ✅
+  * Step 2 (CSS complet) : 347s, +5700 chars (319 lignes CSS réel, design system complet). ✅
+  * Step 3 (sidebar+header) : 193s, +2371 chars. ✅
+  * Step 4 (KPI + structure table/graph) : 175s, +2851 chars. ✅
+  * Step 5 (JS init+KPI+events+toast) : 274s, +4524 chars. ✅
+  * Fichier à 15 822 chars / 569 lignes après step 5 (vs 317 octets pour le TCA au même stade).
+- CONTRASTE ÉCLATANT vs TCA : le TCA bouclait (tool_calls=None, 0 append_file exécuté,
+  token-explosion 20k→40k pour 0 action). CodeAgent génère du Python (append_file(path=...,
+  content=...)) et l'exécute réellement. PREUVE EMPIRIQUE : CodeAgent est INDISPENSABLE pour
+  les workflows multi-étapes avec petits modèles locaux (gemma ne sait pas émettre de
+  tool_call JSON fiable, mais génère parfaitement du code Python qui appelle les outils).
+- POINTS À SURVEILLER : (1) tokens IN en croissance (8.8k→18k→32k→48k→66k, ~16k/step) —
+  compromis de l'incrémental (chaque step réinjecte l'accumulé) ; si troncature avant
+  final_answer, le modèle pourrait régresser. (2) RAM serveur ~9 Go sur 64 — OK. (3) Bug
+  mineur CSS (color var(--muted) au lieu de color: var(--muted), 2-points manquants) —
+  typique petit modèle, serait rattrapé par un linter (F-30).
+
+## [2026-07-31] strat | VISION WORKFLOW COMPLET + FEUILLE DE ROUTE P1-P3 (finalisation)
+- CONSTAT : ce cycle a révélé 4 gaps qui s'emboîtent. Le workflow actuel marche sur du
+  simple (Bubble Sort) mais SOUFFRE sur le gros/multi-étapes (dashboard). P1-P3 = finaliser.
+- FEUILLE DE ROUTE (priorisée par dépendance) :
+
+  P1 (IMMÉDIATE, ce cycle) — Migrer le Coder vers CodeAgent.
+  • Preuve empirique solide : 3 comparatifs convergent (Bubble Sort : tokens -63% ;
+    dashboard monolithique : TCA ingérable 1h ; dashboard incrémental : TCA boucle vs
+    CodeAgent agit). F-28 append_file déjà prêt. Décision CA-8 quasi-prise.
+  • Migration ciblée de execute_coder_node (nodes.py) : ToolCallingAgent → CodeAgent,
+    prompt adapté (final_answer Python). Avec garde-fou : garder TCA comme fallback
+    configurable au cas où (un modèle futur qui gère bien le JSON pourrait le préférer).
+
+  P2 (CYCLE SUIVANT) — Faire évoluer l'Architect (F-29 "Stratégie de découpage adaptative").
+  • Gap : l'Architect actuel (DSPy) découpe en sous-tâches (1 fichier = 1) MAIS ne raisonne
+    ni sur la TAILLE des fichiers, ni sur la STRATÉGIE de construction.
+  • Évolution ArchitectSignature : émettre, en plus des target_files, une stratégie PAR
+    sous-tâche : simple (1 write_file) | incrémental (squelette + append sections) |
+    multi-fichier (1 module logique = 1 fichier, < ~200 lignes chacun).
+  • Décision techno-driven (HTML=incrémental, Python/TS=multi-fichier) — cf. audits.
+  • Sans ça, le CodeAgent reste sous-exploité (on lui passe des sous-tâches mal planifiées).
+
+  P3 (CYCLE D'APRÈS) — Linter Shift Left (F-30, P7 du plan usine logicielle).
+  • Gap : bugs de syntaxe (color var(--muted), IndentationError Python) validés à tort par
+    le Judge → gaspille des cycles LLM coûteux (Tester/Judge) sur des erreurs triviales.
+  • Solution : linter ultra-rapide (AST/tree-sitter/py_compile/oxlint) juste après le Coder,
+    AVANT le Tester. Intercepte les erreurs de syntaxe de base → feedback immédiat au Coder.
+  • ROI élevé (surtout Python indentation, point noir reconnu par tous les audits), effort
+    modéré. Boucle fermée SWE-agent : édition → linter → si erreur, renvoyer au modèle.
+
+- NŒUDS NON CONCERNÉS : les 5 ToolCallingAgent sans tools (Worker/Judge/Synth/Adversary
+  monitoring) ne bénéficient PAS de CodeAgent (juste un final_answer). Migration inutile.
+  Security en DSPy. Web Tester = 2e candidat CodeAgent (F-31), à évaluer après P1-P3.
+- DÉCISION UTILISATEUR : P1-P3 c'est la priorité pour finaliser. Features F-29/F-30/F-31
+  créées en pending dans feature_list.json.
+
+## [2026-07-31] run | RUN CodeAgent incrémental TERMINÉ — "success" TROMPEUR (dashboard cassé)
+- RÉSULTAT BRUT CodeAgent sur prompts/dashboard_admin_incremental.md (9 steps + 1 retry) :
+  * Statut modèle : SUCCESS (final_answer). 9 steps / 12 (1 retry après step 6 raté).
+  * Fichier : codeagent_compare/codeagent/index.html = 28 895 octets / 909 lignes.
+  * Durée : 2703.4s (45 min). Tokens IN 173 081 / OUT 12 502.
+- ⚠️ MAIS LE DASHBOARD EST VISUELLEMENT CASSÉ (rendu = TEXTE BRUT en navigateur).
+  * CAUSE RACINE = BUG STRUCTUREL DU WORKFLOW INCRÉMENTAL LUI-MÊME :
+    - Le squelette step 1 est un HTML COMPLET et FERMÉ : <!DOCTYPE>...<head>...</head>
+      <body>...</body></html>.
+    - Les 7 appends (CSS, HTML, JS) arrivent APRÈS </html> → contenu orphelin hors structure.
+    - Le navigateur voit </html> puis du contenu → affiche tout en TEXTE BRUT (CSS+JS
+      non interprétés). Aucune interactivité, aucun style appliqué.
+  * C'est un BUG DE CONCEPTION du prompt dashboard_admin_incremental.md, pas du modèle.
+    Le CodeAgent a appliqué le workflow À LA LETTRE (write squelette fermé → append),
+    mais le workflow était invalide : on ne peut pas append À L'INTÉRIEUR d'une structure
+    HTML déjà fermée.
+- TABLEAU COMPARATIF HONNÊTE (dashboard incrémental, même modèle gemma-4-e4b_CPU) :
+
+  | Métrique        | TCA (prod)          | CodeAgent              | Verdict          |
+  |-----------------|---------------------|------------------------|------------------|
+  | Statut modèle   | ÉCHEC (boucle)      | SUCCESS                | CodeAgent        |
+  | Fichier généré  | 317 octets          | 28 895 octets / 909 l. | CodeAgent ×91    |
+  | RENDU RÉEL      | N/A (rien)          | ❌ CASSÉ (texte brut)  | AUCUN            |
+  | Cause échec     | gemma n'émet pas    | append après </html>   | —                |
+  |                 | de tool_call JSON   | = workflow invalide    |                  |
+
+- CE QUE ÇA VEUT DIRE (honnêtement) :
+  * DOUBLE ÉCHEC sur le dashboard : TCA ne produit rien, CodeAgent produit beaucoup MAIS
+    cassé. Aucun des 2 n'a livré un dashboard fonctionnel.
+  * CodeAgent reste SUPÉRIEUR en CAPACITÉ D'ACTION (gemma ne sait pas émettre de tool_call
+    JSON mais génère du Python correct — 28k chars vs 317). C'est validé.
+  * MAIS CodeAgent SEUL ne suffit PAS : il faut que l'ARCHITECT dicte la BONNE stratégie.
+    Le workflow append-sur-squelette-fermé est structurellement invalide pour HTML.
+  * LA VRAIE SOLUTION = MULTI-FICHIER (index.html + styles.css + script.js séparés) :
+    chaque fichier autonome et valide, pas de problème d'insertion après </html>.
+    C'est l'intuition utilisateur ("sortir le JS du HTML") — confirmée par les audits
+    (pattern n°4, stratégie n°1 pour Python/TS, naturelle pour HTML/CSS/JS).
+
+## [2026-07-31] run | BILAN RÉVISÉ CA-8 : CodeAgent validé sur l'ACTION, mais insuffisant seul
+- CE QUI EST VALIDÉ par ce cycle (3 comparatifs) :
+  1. CodeAgent SUPÉRIEUR en capacité d'ACTION : gemma (petit modèle local) ne sait pas
+     émettre de tool_call JSON fiable (tool_calls=None), mais génère du Python correct.
+     Bubble Sort : CodeAgent -63% tokens, qualité ≥ TCA. Dashboard : 28k chars vs 317.
+  2. append_file (F-28) fonctionne techniquement (8 tests PASS, mutex, anti-doublon).
+- CE QUI EST INVALIDÉ / À NUANCER :
+  * Le pattern append-monolithique-sur-squelette-fermé est INVALIDE pour HTML.
+  * CodeAgent ne garantit PAS la qualité : a généré 28k chars de code non cassé syntaxiquement
+    MAIS structurellement hors-place (après </html>). Le "success" du modèle était trompeur.
+  * SANS linter (F-30) ni tester fonctionnel, le Judge aurait validé à tort (comme au run
+    Bubble Sort initial avant F-20).
+- DÉCISION RÉVISÉE CA-8 :
+  * MIGRATION Coder → CodeAgent : TOUJOURS VALIDÉE (l'avantage d'action est décisif, les
+    petits modèles locaux ne font pas de tool_call JSON fiable). C'est la P1.
+  * MAIS la migration SEULE ne suffira pas. Il FAUT en parallèle :
+    - P2 (F-29) : Architect qui dicte MULTI-FICHIER (pas append-monolithique).
+    - P3 (F-30) : Linter qui détecte "contenu après </html>" / syntaxe invalide.
+    - F-32 : Prompt réécrit (structure canonique + anti-laziness).
+    - F-33 : Guard logiciel (tool call cassé → "découpe").
+  * La feuille de route P1-P3 est CONFIRMÉE et RENFORCÉE par ce double échec.
+- TEST À VENIR : refaire le comparatif avec un prompt MULTI-FICHIER (index.html + styles.css
+  + script.js séparés). C'est LE test qui aura du sens — pas le append-monolithique défectueux.
+
+## [2026-07-31] audit | 2 audits (references + web) sur l'écriture des prompts Coder
+- OBJECTIF : notre prompt Coder actuel souffre (modèle réfléchit sans agir, s'essouffle
+  sur gros blocs). Apprendre des meilleurs prompts des agents de code.
+- AUDIT REFERENCES (aider/crush/opencode/openfox/deer-flow/nanocode) :
+  * Anti "reasoning sans action" : opencode beast.txt "When you say 'I will do X', you
+    MUST actually do X", crush "Responding with only a plan is failure", deer-flow
+    "Thinking is for planning, the response is for delivery".
+  * Anti gros payload cassé : deer-flow dangling_tool_call_middleware (détecte tool call
+    cassé → renvoie "split into smaller sections instead of one large payload"). C'est
+    EXACTEMENT le filet qui aurait rattrapé notre step 6 (triple-quote non fermée).
+  * Découpage : aider "Break large blocks into smaller", deer-flow append=True section
+    par section "avoids mid-stream chunk-gap timeouts".
+  * Anti-lazy : aider lazy_prompt "You NEVER leave comments describing code without
+    implementing it! You always COMPLETELY IMPLEMENT".
+  * LEÇON MAJEURE : un prompt SEUL ne suffit jamais. Les 5 projets matures couplent
+    TOUS le prompt à un guard logiciel (aider ré-injecte lazy_prompt à chaque tour,
+    openfox FORMAT_CORRECTION_PROMPT ×10, deer-flow middleware).
+- AUDIT WEB (aider/Cline/SWE-agent/Anthropic/OpenAI + recherche académique) :
+  * Problème 1 (réfléchit sans agir) = "reasoning-action dilemma" (Cuadron 2025). Les
+    PETITS MODÈLES overthinkent PLUS GRAVEMENT (Dynamic Early Exit study) → plus on
+    laisse gemma réfléchir, moins il agit.
+  * Solution Pb1 : Cline "Response without tool calls will considered as completed" +
+    one-shot example (Thought 1 phrase → appel outil immédiat).
+  * Problème 2 (triple-quote) = limite fenêtre génération + dégradation attention.
+  * Solution Pb2 : règle "≤60 lignes/appel, chaque bloc syntaxiquement complet" +
+    squelette/remplissage (Skeleton-of-Thought, arXiv 2307.15337).
+  * Structure canonique : Rôle → Règles critiques → Format sortie (début ET fin) →
+    One-shot → Workflow → Rappels (effet primacy/recency, dumb zone au milieu).
+- NOUVEAU GAP IDENTIFIÉ (n°5) : notre prompt décrit le QUOI (génère code) pas le COMMENT
+  (format exact, taille max, ordre appels, gros fichiers). Et PAS de guard logiciel.
+- FEATURES CANDIDATES CRÉÉES :
+  * F-32 : Prompt Coder réécrit (structure canonique + one-shot + anti-laziness + règle
+    60-lignes + "réponse sans tool call = terminé").
+  * F-33 : Guard logiciel "dangling tool call" (middleware deer-flow : détecte tool call
+    cassé → "découpe au lieu de recommancer le même gros payload").
+
+## [2026-07-31] dec | DÉCISION CA-8 : MIGRATION CODER → CODEAGENT (sur l'ACTION), mais P1-P3 requis en parallèle
+- PREUVES EMPIRIQUES (3 comparatifs) :
+  1. Bubble Sort (simple) : CodeAgent -63% tokens IN, -19% durée, qualité ≥ TCA. ✅ validant.
+  2. Dashboard monolithique : TCA ingérable (1h, step 1 non fini). CodeAgent non testé
+     (même cause racine identifiée). ❌ inconcluant.
+  3. Dashboard incrémental : TCA ÉCHEC TOTAL (boucle, 317 octets) vs CodeAgent "success"
+     MAIS DASHBOARD CASSÉ (texte brut, append après </html>). ❌ aucun des 2 ne livre.
+- CE QUI EST DÉCIDÉ (CA-8 révisée) :
+  * MIGRATION Coder → CodeAgent : VALIDÉE pour la CAPACITÉ D'ACTION. gemma ne sait pas
+    émettre de tool_call JSON fiable, mais génère du Python correct. C'est l'avantage
+    décisif pour les petits modèles locaux. P1 confirmée.
+  * MAIS la migration SEULE est insuffisante (preuve : dashboard cassé). P1-P3 sont
+    INDISSOCIABLES : CodeAgent (P1) + Architect multi-fichier (P2) + Linter (P3) +
+    prompt réécrit (F-32) + guard logiciel (F-33). La feuille de route est renforcée.
+- TEST À VENIR : comparatif MULTI-FICHIER (index.html + styles.css + script.js séparés)
+  pour valider la VRAIE solution. Le append-monolithique est définitivement écarté.
