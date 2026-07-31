@@ -9,8 +9,8 @@
 | Métrique | Valeur |
 |---|---|
 | **Date de l'audit** | 2026-07-31 |
-| **Projets/dossiers audités** | 13 |
-| **Entrées de fichiers inventoriées** | 315 (inventaire machine : [`inventory.json`](./inventory.json)) |
+| **Projets/dossiers audités** | 15 |
+| **Entrées de fichiers inventoriées** | 356 (inventaire machine : [`inventory.json`](./inventory.json)) |
 | **Fichiers pertinents scannés** (base) | ~10 000 (hors `.git/`, `node_modules/`, médias, fixtures) |
 | **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css`) + JSON/YAML de spec/contrat |
 | **Exclusions** | `.git/` (~730 MB), `node_modules/`, médias (1 293 SVG, 16 mp4…), fixtures de tests, traductions de README (1 conservée/projet) |
@@ -19,7 +19,7 @@
 
 ---
 
-## 🧭 Navigation — les 13 fiches
+## 🧭 Navigation — les 15 fiches
 
 | # | Projet | Réutilisabilité | Fiche | Résumé en 1 ligne |
 |---|---|---|---|---|
@@ -36,6 +36,8 @@
 | 11 | **opencode** | 🔴 Faible | [11-opencode](./projects/11-opencode.md) | Agent TS/Effect-TS — uniquement les `specs/v2/` (cahiers des charges protocole) ont de la valeur |
 | 12 | **openfox** | 🔴 Faible | [12-openfox](./projects/12-openfox.md) | Agent TS local-LLM-first — docs d'architecture engine-loop + persistance SQLite (→ DuckDB) |
 | 13 | **deer_flow_analysis.md** | 🟢 Haute | [13-deer-flow-analysis](./projects/13-deer-flow-analysis.md) | Note d'analyse : 3 idées actionnables (middlewares, reducers typés, contexte à la demande) |
+| 14 | **qm** | 🟢 Haute | [14-qm](./projects/14-qm.md) | Plateforme agent multi-joueur (TS) — **algorithmes portables** : compaction de contexte duale, mémoire durable deux-tiers (LLM-juge de consolidation), idempotency, queues à leases typés |
+| 15 | **claude-code-unified-agents** | 🟡 Moyenne | [15-claude-code-unified-agents](./projects/15-claude-code-unified-agents.md) | 53 (et non 54) agents Claude Code — ~8 prompts purs alignés avec les rôles Router/Coder/Tester/Judge/Security ; reste = code TS non portable |
 
 ---
 
@@ -45,10 +47,10 @@
 `aider` (Python, mature), `crush` (Go), `nanocode` (Python, 1 fichier), `opencode` (TS, gigantesque), `openfox` (TS, local-LLM-first). → Valeur : edit-formats robustes (aider), anti-loop (crush), patterns d'outils minimaux (nanocode), specs de protocole (opencode), persistance event-sourcing (openfox).
 
 ### 2. 🔧 Frameworks d'orchestration d'agents (mixte code + docs)
-`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test.
+`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm)**.
 
 ### 3. 📚 Ressources & outils
-`Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante).
+`Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante), `claude-code-unified-agents` (prompts de spécialisation).
 
 ---
 
@@ -86,6 +88,21 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | `references/LlamaBot/app/agents/leonardo/rails_agent/middleware.py` | `FailureCircuitBreakerMiddleware` | Circuit-breaker (stop après 3 échecs, reducer `operator.add`) |
 | `references/deer-flow/backend/packages/harness/deerflow/agents/middlewares/` | `LoopDetection`, `TokenBudget`, `ToolOutputBudget` | Chaîne de 30 middlewares (loop, budget, sanitization) |
 
+### Compaction de contexte / mémoire durable / robustesse runtime (qm)
+> ⚠️ **La plus grande valeur de `qm` — ignorée par l'ancienne fiche.** Pour un orchestrateur long-running à contexte limité (DSPy brains sur petits modèles locaux), ces briques sont des blueprints quasi-directs.
+
+| Fichier | Symbole(s) clé(s) | Apport |
+|---|---|---|
+| `references/qm/src/harness/context-compaction.ts` | `planCompaction`, `forModelContext`, `estimateEntryTokens`, `COMPACT_SOFT_FRACTION=0.7`, `COMPACT_HARD_FRACTION=0.9`, `INTERRUPTED_TOOL_RESULT` | **Le fichier le plus précieux de tout le dossier.** Planning de compaction token-aware, préservation des paires tool_call/result, résumé incrémental, reconstruction des calls interrompus |
+| `references/qm/src/core/orchestrator/compaction.ts` | `createCompaction`, `compactContextIfNeeded`, `scheduleBackgroundCompaction`, `MAX_CONTEXT_TOKENS=120_000` | Compaction **duale** : synchrone hard-limit + async soft-limit en tâche de fond avec lease |
+| `references/qm/src/memory/strategies/consolidation.ts` | `MEMORY_CONSOLIDATION_PROMPT`, `applyConsolidationActions`, `ConsolidationAction` | LLM-juge `UPDATE <n>`/`DELETE <n>`/`ADD:` = consolidation de claims pour le Judge (Priorité 6) |
+| `references/qm/src/memory/strategies/scratch-promote.ts` | `createScratchPromote`, `PROMOTION_PROMPT` | Mémoire deux tiers : scratch volatile + notebook consolidé durable |
+| `references/qm/src/memory/memory-service.ts` | `MemoryService`, `foldCapture`, `replaceIfRevision`, `MAX_FACTS=300` | Contrat mémoire (recall/capture/replace) + dédup normalisée + concurrence optimiste |
+| `references/qm/src/idempotency/idempotency-store.ts` | `once(key, fn)`, `IdempotencyStore` | Effet de bord appliqué exactement une fois (turns rejoués / retries) |
+| `references/qm/src/ratelimit/budget.ts` | `createBudgetTracker`, `estimateCostUsd`, `DEFAULT_BUDGET_WINDOW_MS` | Budget USD par fenêtre glissante 24h — contrôle de coût LLM |
+| `references/qm/src/runs/run-store.ts` | `RunStore`, `errorParks`, `claim`, `heartbeat`, `reapExpired` | Queue distribuée (dedup/lease/heartbeat/retry/reaper) — modèle pour DuckDB |
+| `references/qm/src/sessions/session-store.ts` | `LeaseHolder` (`turn`/`compaction`/`fork`), `LlmCallUsage` | **Leases typés par rôle** : empêcher une compaction d'écraser un turn en cours |
+
 ### Tester / Judge / Review
 | Fichier | Symbole(s) clé(s) | Apport |
 |---|---|---|
@@ -107,30 +124,49 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 |---|---|
 | `references/deer_flow_analysis.md` | Les 3 idées actionnables : middlewares autour du nœud Agent, reducers typés, contexte à la demande (Prompt-Vault) |
 
+### System prompts spécialisés (claude-code-unified-agents)
+> Valeur concentrée dans ~8 prompts purs (49–185 lignes) alignés avec les rôles du graphe. Les autres fichiers sont du code TS non portable. 4 agents promis par le README sont absents (`ui-designer`, `content-strategist`, `performance-optimizer`, `iot-engineer`).
+
+| Fichier | Rôle cible | Apport |
+|---|---|---|
+| `…/.claude/agents/quality/code-reviewer.md` | **Judge** | Output structuré Critical/Major/Minor, tools lecture seule (pas de Write) — format du Judge (Priorité 6) |
+| `…/.claude/agents/quality/security-auditor.md` | **Security Reviewer** | Taxonomie vulns OWASP + scores CVSS + compliance frameworks |
+| `…/.claude/agents/quality/test-engineer.md` | **Tester (Python)** | Pyramide 70/20/10, pattern AAA (Arrange-Act-Assert), tests indépendants |
+| `…/.claude/agents/development/python-pro.md` | **Coder (Python)** | Type hints systématiques, PEP 8, docstrings (garde-fous concrets) |
+| `…/.claude/agents/development/frontend-specialist.md` | **Coder (Web)** | a11y (ARIA, clavier), lazy loading, code splitting |
+| `…/.claude/agents/development/backend-architect.md` | **Architect** | 5 axes obligatoires : scalabilité, cohérence, sécurité, monitoring, rollback |
+| `…/.claude/agents/orchestrator.md` | **Router** | Conditional Routing, Decision Framework, `delegate_to(agent, task=…)` |
+| `…/.claude/agents/specialized/agent-generator.md` | Spécialisation agents | `AgentCapabilitySchema` (name/description/category/expertise/tools/constraints) — déclarer formellement un rôle |
+
 ---
 
 ## 📊 Matrice réutilisabilité croisée
 
-| Projet | 🟢 Haute | 🟡 Moyenne | 🔴 Faible |
-|---|---|---|---|
-| Prompt-Vault | 13 | 0 | 0 |
-| aider | 17 | 11 | 10 |
-| nanocode | 1 | 8 | 2 |
-| RepoGraph | 8 | 6 | 2 |
-| axon | 23 | 7 | 0 |
-| graphify | 11 | 6 | 4 |
-| LlamaBot | 5 | 7 | 16 |
-| deer-flow | 21 | 18 | 7 |
-| open-swe | 11 | 7 | 12 |
-| crush | 1 | 7 | 17 |
-| opencode | 0 | 5 | 22 |
-| openfox | 3 | 3 | 20 |
-| deer-flow-analysis | 5 | 0 | 0 |
+| Projet | 🟢 Haute | 🟡 Moyenne | 🔴 Faible | Note globale |
+|---|---|---|---|---|
+| Prompt-Vault | 13 | 0 | 0 | 🟢 Haute |
+| aider | 17 | 15 | 6 | 🟢 Haute |
+| nanocode | 1 | 7 | 3 | 🟡 Moyenne |
+| RepoGraph | 8 | 5 | 3 | 🟢 Haute |
+| axon | 23 | 5 | 1 | 🟢 Haute |
+| graphify | 11 | 8 | 2 | 🟢 Haute |
+| LlamaBot | 5 | 17 | 6 | 🟡 Moyenne |
+| deer-flow | 21 | 23 | 2 | 🟡 Moyenne |
+| open-swe | 11 | 14 | 5 | 🟡 Moyenne |
+| crush | 1 | 14 | 10 | 🟡 Moyenne |
+| opencode | 0 | 4 | 22 | 🔴 Faible |
+| openfox | 3 | 4 | 18 | 🔴 Faible |
+| deer-flow-analysis | 5 | 0 | 0 | 🟢 Haute |
+| **qm** | **17** | **10** | **1** | 🟢 **Haute** |
+| **claude-code-unified-agents** | **7** | **5** | **1** | 🟡 **Moyenne** |
+| **Total** | **143** | **131** | **80** | — |
 
 **Constats** :
-- **axon** (23 Haute) et **aider** (17 Haute) sont les mines d'or.
+- **axon** (23 Haute) et **aider** (17 Haute) restent les mines d'or côté Python.
+- **qm** (17 Haute) rejoint le peloton de tête : malgré le TypeScript, ses algorithmes de **compaction de contexte, mémoire durable, idempotency et queues à leases** sont portables. (L'ancienne fiche la notait Moyenne à tort.)
 - **deer-flow** (21 Haute) malgré une note globale Moyenne — la valeur est dans les contracts/plans/middlewares.
-- **opencode/openfox** (TS) : peu de Haute, mais leurs **specs/docs** restent des références conceptuelles.
+- **claude-code-unified-agents** : 7 prompts purs 🟢 (alignés avec les rôles du graphe), mais la majorité des 53 fichiers est du code TS non portable → note Moyenne. (L'ancienne fiche la notait Haute à tort.)
+- **opencode/openfox** (TS) : peu de Haute, leurs **specs/docs** restent des références conceptuelles au mieux.
 
 ---
 
@@ -151,6 +187,14 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | Compresser le code pour le contexte LLM | Fiche **04-repograph** → `compress_file.py` (`get_skeleton`) |
 | Un web scraper (Playwright) | Fiche **02-aider** → `scrape.py` |
 | Les 3 idées actionnables clés | Fiche **13-deer-flow-analysis** (note de synthèse) |
+| **Compacter l'historique de contexte** (LLM context overflow) | Fiche **14-qm** → `harness/context-compaction.ts` (`planCompaction`) + `core/orchestrator/compaction.ts` (duale sync+async) |
+| **Consolider le knowledge graph** (LLM-juge de claims) | Fiche **14-qm** → `memory/strategies/consolidation.ts` (`UPDATE`/`DELETE`/`ADD`) |
+| **Garantir un effet de bord unique** (idempotence des retries) | Fiche **14-qm** → `idempotency/idempotency-store.ts` (`once(key, fn)`) |
+| **Contrôler le coût LLM** (budget USD, fenêtre glissante) | Fiche **14-qm** → `ratelimit/budget.ts` (`createBudgetTracker`, `estimateCostUsd`) |
+| Un **system prompt** pour le Judge / Reviewer | Fiche **15-claude-code** → `quality/code-reviewer.md` (Critical/Major/Minor, lecture seule) |
+| Un **system prompt** pour le Security Reviewer | Fiche **15-claude-code** → `quality/security-auditor.md` (OWASP, CVSS) |
+| Un **system prompt** pour le Coder Python | Fiche **15-claude-code** → `development/python-pro.md` (type hints, PEP 8) |
+| Un schéma pour **déclarer formellement un agent** | Fiche **15-claude-code** → `specialized/agent-generator.md` (`AgentCapabilitySchema`) |
 
 ---
 
@@ -160,12 +204,14 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 docs/references-audit/
 ├── README.md              ← Mode d'emploi (start ici)
 ├── INDEX.md               ← CE DOCUMENT (navigation + synthèse + Hall of Fame)
-├── inventory.json         ← Inventaire machine-lisible (315 entrées, filtrable)
-└── projects/              ← 13 fiches détaillées (1 par projet)
+├── inventory.json         ← Inventaire machine-lisible (356 entrées, filtrable)
+└── projects/              ← 15 fiches détaillées (1 par projet)
     ├── 01-prompt-vault.md
     ├── 02-aider.md
     ├── ...
-    └── 13-deer-flow-analysis.md
+    ├── 13-deer-flow-analysis.md
+    ├── 14-qm.md
+    └── 15-claude-code-unified-agents.md
 ```
 
 **Pour recherche programmatique** : `inventory.json` est consommable directement :

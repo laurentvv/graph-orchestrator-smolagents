@@ -1467,3 +1467,59 @@ unitaires (pas encore par run réel — étape suivante).
 - Intégration des Context Epochs pour l'état (Priorité 9)
 - Ajout de la Priorité 11: Observabilité et Protocole d'Événements (Run Event Stream)
 - feature_list.json et progress.md mis à jour.
+
+
+## [2026-07-31] rch  | Revue critique de l'audit références + refonte fiches 14/15 + mise à jour plan
+- **Revue croisée** : (a) digest de l'audit `docs/references-audit/` + (b) cartographie de l'état réel du code
+  (`workflows.py`, `dspy_nodes.py`, `nodes.py`, `tools.py`, `knowledge_graph.py`).
+- **Constats clés de la revue** :
+  - Fiches 14 (qm) et 15 (claude-code) BÂCLÉES — paraphrases du README, 0 symbole/chemin.
+  - Notes de l'INDEX INVERSÉES vs code réel : qm noté 🟡 alors que ses algorithmes (compaction,
+    mémoire, idempotency, queues à leases) sont portables → 🟢 ; claude-code noté 🟢 alors que 53
+    fichiers (pas 54) et majorité de code TS non portable → 🟡.
+  - Angle mort n°1 du plan : KG structural (axon/graphify/repograph = 10 entrées Hall of Fame) absent
+    du plan sans ligne de décision. Trahison doc/code : P7 marqué ❌ alors que `linter.py` (317 lignes)
+    existe et est branché (`workflows.py:381-402`).
+- **Refonte fiche 14-qm.md** : 20 → ~90 lignes, 28 entrées de code (vs 1 avant). Sections Documentation
+  pertinente / Code réutilisable / Contrats / Exclusions / Correspondance plan — au format des fiches 01-13.
+  Découverte clé : `harness/context-compaction.ts` (`planCompaction`, fractions soft/hard, préservation
+  paires tool_call/result) = probablement le fichier le plus précieux du dossier pour P9 (Compaction).
+- **Refonte fiche 15-claude-code-unified-agents.md** : 20 → ~85 lignes, 13 entrées. Corrige le compte
+  (53, pas 54 ; 4 agents promis absents : ui-designer, content-strategist, performance-optimizer,
+  iot-engineer). Distingue famille « prompt pur » (8 fichiers 🟢) vs « code trophy » (TS non portable).
+- **inventory.json enrichi** : qm 1 → 28 entrées, claude-code 2 → 13. Total 318 → 356 entrées. Tous les
+  chemins vérifiés (existent sur disque). `update_inventory.py` réécrit comme script idempotent.
+- **INDEX.md rafraîchi** : « 13 fiches » → 15 partout, 315/318 → 356 entrées, matrice réutilisabilité
+  corrigée (comptes exacts par projet + colonne note globale), Hall of Fame étendu (sections Compaction/mémoire
+  qm + System prompts claude-code), guide de recherche étendu (+9 entrées qm/claude-code), arbre corrigé.
+- **README.md rafraîchi** : 13 → 15 projets/fiches, 315 → 356 entrées.
+- **plan_usine_logicielle.md mis à jour** :
+  - P0 : nuance CodeAgent (5 Brain migrés en DSPy, Coder déjà CodeAgent, reste = ToolCallingAgent
+    one-shot + Web Tester) + prérequis nettoyage nœuds dépréciés (nodes.py:306-688).
+  - P7 : marqué ✅ TERMINÉ (linter.py existe, incohérence doc/code corrigée).
+  - P9 : pointé vers les blueprints qm concrets (`context-compaction.ts`).
+  - P11 : pointé vers la spec concrète `run_event_stream_contract.json` (fiche 08).
+  - NOUVEAU : « Décision explicite KG structural » après P4 — tranche HORS-SCOPE court terme (usage =
+    création de code de zéro, pas exploration de gros dépôts) avec palliatif léger (tags de confiance
+    + provenance sur claims DuckDB, inspiré de graphify, ~2-4 jours).
+  - Tableau d'en-tête : P7 ✅, ajout P9-P12.
+- **Aucune modification du code du projet** — travail documentaire + plan.
+
+
+## [2026-07-31] plan | Réorientation plan_usine_logicielle.md (features ↔ références production)
+*Objectif utilisateur : chaque feature du plan s'appuie sur une référence qui a « fait le job » en production.*
+- **Préambule (filtre qualité)** : ajout sous le titre d'un principe directeur distinguant
+  références production-éprouvées (aider, crush, deer-flow, qm, open-swe) / mature-collectée
+  (claude-code) / recherche-POC non retenue (RepoGraph, axon, graphify).
+- **P4 supprimée + fusionnée** : « Priorité 4 Repo Map » (qui citait RepoGraph = papier SWE-bench)
+  supprimée. Fusionnée avec la décision KG structural en une seule section « P4 HORS-SCOPE »
+  (Repo Map tree-sitter + KG structural). Palliatif léger conservé (tags de confiance claims DuckDB).
+- **P6 enrichie** : « Cycle de vie du Plan » pointe vers `plan_store.py` (open-swe) ; ajout feature
+  « System Prompts Spécialisés » pointant vers les 8 prompts purs de claude-code.
+- **P8-bis (nouvelle priorité)** : « Robustesse Runtime (Isolation & Idempotence) » — Sandbox
+  bash/pytest (qm `docker-exec.ts` + aider, débloque CodeAgent P0) + Idempotence des replays
+  (qm `idempotency-store.ts` `once(key, fn)`).
+- **Lot 4 rejeté** : Budgets LLM (coût USD) — non ajouté à la demande de l'utilisateur.
+- **Tableau d'en-tête** : P4 reframée HORS-SCOPE, P8-bis ajoutée, P6 annotée.
+- Validation : 12 sections H2 cohérentes avec le tableau ; aucune réf POC citée en base de feature active.
+- **Aucune modification du code du projet** — travail plan uniquement.
