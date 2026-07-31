@@ -241,6 +241,7 @@ async def run_coding_workflow(
     
     results = []
     from .nodes import execute_tester_node, execute_coder_node
+    from .linter import execute_linter_node
     from .dspy_nodes import (
         execute_architect_node,
         execute_security_reviewer_node,
@@ -341,6 +342,12 @@ async def run_coding_workflow(
                 # a besoin pour identifier les comportements attendus à valider via
                 # assertions fonctionnelles (sinon il ne teste que l'absence de crash).
                 "original_content": coding_state.get("seed_content", ""),
+                # F-29 : stratégie de construction dictée par l'Architect. Le Coder
+                # l'utilise pour adapter son workflow (simple=1 write_file, incremental
+                # =squelette+append sections, multifile=1 fichier par module). Défaut
+                # 'simple' (rétro-compat : sous-tâche sans stratégie explicite).
+                "strategy": getattr(subtask, "strategy", "simple"),
+                "sections": getattr(subtask, "sections", []),
             }
             
             # 1. Coder (smolagents, modèle FAST)
@@ -363,7 +370,39 @@ async def run_coding_workflow(
                 model_id=settings.reasoning_model_id,
                 run_id=run_id,
             )
-            
+
+            # --- Nœud Linter (Shift Left, F-30) --------------------------------
+            # Gatekeeper LÉGER (0 LLM, millisecondes) qui valide la SYNTAXE des fichiers
+            # générés AVANT de solliciter les nœuds lourds (Tester LLM + Judge LLM). C'est
+            # l'économie massive de P3/P7 : un bug de syntaxe trivial (IndentationError
+            # Python, contenu après </html>, string non fermée) ne doit pas gaspiller un
+            # cycle LLM complet. Si invalide → on court-circuite le Tester, on écrit le
+            # bug en DuckDB (kind='refutation', source='linter') et on relance le Coder.
+            lint_res, m_lint = execute_linter_node(sub_dict, settings)
+            if m_lint: sub_metrics.append(m_lint)
+
+            if lint_res and lint_res.status == "failure":
+                print(f"    [⚠] Linter a détecté des erreurs de syntaxe sur {subtask.task_id} — "
+                      f"court-circuit du Tester (Shift Left).")
+                if obs_id: kg.mark_status(obs_id, "rejected")
+                # Le feedback du Linter devient une réfutation (lu par le Coder à l'itération suivante
+                # via kg.get_claims, comme les réfutations du Judge — mécanisme existant réutilisé).
+                ref_id = kg.add_claim(
+                    entity_id=entity_id,
+                    content=f"[LINTER] {lint_res.details}",
+                    kind="refutation",
+                    confidence=None,
+                    source="linter",
+                    model_id="tree-sitter-linter",
+                    run_id=run_id,
+                )
+                if ref_id and obs_id:
+                    kg.add_edge(ref_id, obs_id, "REFUTES")
+                # On passe à l'itération suivante SANS Tester/Judge (économie de cycles LLM).
+                continue
+
+            print(f"    [>] Coder terminé. Déclenchement des Audits parallèles (Tester & Sécurité)...")
+
             # 2. Vérifications Contradictoires (Parallèle)
             t_task = execute_tester_node(sub_dict, reasoning_model, settings)
             s_task = execute_security_reviewer_node(sub_dict, reasoning_model, settings)

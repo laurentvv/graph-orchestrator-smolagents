@@ -48,21 +48,34 @@ class RouterSignature(dspy.Signature):
 
 
 class ArchitectSignature(dspy.Signature):
-    """Analyse une tâche et génère un plan d'architecture en sous-tâches UNITAIRES (1 fichier = 1 sous-tâche).
+    """Analyse une tâche et génère un plan d'architecture en sous-tâches UNITAIRES.
 
-    RÈGLE DE DÉCOUPAGE (très important) :
-    - Une sous-tâche = UN seul fichier cible à créer de façon autonome et complète.
-    - N'invente PAS de sous-tâches redondantes (ex: une sous-tâche "setup" + une "structure" pour
-      le même fichier). Chaque fichier = exactement UNE sous-tâche.
-    - Vise le MINIMUM de sous-tâches : si la tâche mentionne 3 fichiers (index.html, styles.css,
-      script.js), génère EXACTEMENT 3 sous-tâches (une par fichier), pas 5.
-    - Le découpage granulaire (5+ sous-tâches) est contre-productif : chaque sous-tâche déclenche
-      un agent Coder complet (coûteux). Privilégie 2-4 sous-tâches cohérentes par fichier.
+    RÈGLE DE DÉCOUPAGE :
+    - Vise le MINIMUM de sous-tâches (2-4 max). Chaque sous-tâche déclenche un agent Coder
+      complet (coûteux). Le découpage granulaire (5+) est contre-productif.
 
-    L'Architecte planifie, il ne code pas.
+    RÈGLE DE STRATÉGIE (F-29 — très important, dicte COMMENT le Coder doit construire) :
+    Pour CHAQUE sous-tâche, choisis une 'strategy' parmi :
+    - 'simple' : petit fichier isolé, faisable en UN seul write_file. Utilise-la pour un
+      script Python < ~200 lignes, un petit fichier autonome, un algorithme borné.
+    - 'incremental' : gros fichier monolithique imposé par la spec (ex: un dashboard HTML
+      complet dans un seul index.html). Le Coder construira le squelette PUIS remplira
+      section par section via append_file. Dans ce cas, fournis aussi 'sections' = la liste
+      des sections à construire (ex: ['css', 'sidebar', 'kpi', 'table', 'js']).
+    - 'multifile' : projet multi-fichiers (ex: app Python avec models.py + api.py + utils.py,
+      ou un site index.html + styles.css + script.js séparés). Chaque target_file reste
+      petit (< ~200 lignes) et autonome. Utilise-la quand la spec ne force pas un monolithe.
+
+    QUAND UTILISER QUOI :
+    - HTML/CSS/JS : 'multifile' (index.html + styles.css + script.js séparés) PAR DÉFAUT,
+      sauf si la spec impose explicitement un seul fichier → alors 'incremental'.
+    - Python/TS   : 'multifile' (1 module logique = 1 fichier) PAR DÉFAUT.
+    - Petit algo/fichier isolé : 'simple'.
+
+    L'Architecte planifie, il ne code pas. Le Coder suivra ta stratégie à la lettre.
     """
     task_content: str = dspy.InputField(desc="Le cahier des charges global de la fonctionnalité ou du projet à développer")
-    output: ArchitectOutput = dspy.OutputField(desc="Plan : liste de sous-tâches (1 par fichier cible, 2-4 max). Chaque ArchitectPlanItem a un target_files=[fichier_unique].")
+    output: ArchitectOutput = dspy.OutputField(desc="Plan : liste de sous-tâches (2-4 max). Chaque ArchitectTask a target_files + strategy ('simple'|'incremental'|'multifile') + sections (si incremental).")
 
 
 class SecuritySignature(dspy.Signature):
