@@ -1418,6 +1418,20 @@ unitaires (pas encore par run réel — étape suivante).
   3. Modèle plus gros pour la sous-tâche CSS : REASONING (12B) au lieu de FAST (4B) sur le
      design. Plus lent mais meilleure qualité visuelle.
 
+## [2026-07-31] pr | PR #13 créée → Kilo Code Review SUCCESS (3m1s) → MERGED dans main
+- Branche feat/cycle-p1-p3 → squash merge → main (commit e85924b).
+- Kilo Code Review : SUCCESS (pass en 3m1s). mergeState CLEAN.
+- Branche locale + remote supprimées après merge.
+- CYCLE P1-P3 TERMINÉ ET INTÉGRÉ À MAIN. 5 features livrées :
+  * P1 (F-29a) : migration Coder ToolCallingAgent → CodeAgent.
+  * F-29 : Architect adaptatif (strategy simple|incremental|multifile).
+  * F-30 : Linter Shift Left (tree-sitter + py_compile, multi-langue).
+  * F-32 : prompt Coder réécrit (structure canonique des audits).
+  * F-33 : guard logiciel anti-déraillement (run_with_retry).
+- Validation : 271 tests PASS (0 régression) + run réel réussi (exit 0, 2 sous-tâches
+  approuvées par le Judge) + validation visuelle (page fonctionnelle).
+- Parallèle : PR #14 (docs/references-audit + plan enrichi) ouverte, Kilo en cours.
+
 ## [2026-07-31] audit | AUDIT RADICAL du dossier references/ TERMINÉ (13 projets, 315 entrées)
 - **Objectif** : document de suivi navigable permettant de retrouver toute info/code utile dans
   `references/`, avec emplacement complet + évaluation de réutilisabilité pour le projet.
