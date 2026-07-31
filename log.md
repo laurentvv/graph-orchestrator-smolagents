@@ -1218,3 +1218,80 @@ curl http://10.201.12.50:11434/api/show -d '{"name":"nanbeige-bigctx"}'
     prompt réécrit (F-32) + guard logiciel (F-33). La feuille de route est renforcée.
 - TEST À VENIR : comparatif MULTI-FICHIER (index.html + styles.css + script.js séparés)
   pour valider la VRAIE solution. Le append-monolithique est définitivement écarté.
+
+## [2026-07-31] plan | CYCLE P1-P3 (finalisation) — plan approuvé, branche créée
+- DÉCISIONS UTILISATEUR : (1) un seul gros cycle P1-P3 (pas de sous-cycles), (2) tree-sitter
+  pour le Linter (universel), (3) CodeAgent seul (pas de fallback TCA configurable),
+  (4) P1-P3 indissociables (CodeAgent + Architect multi-fichier + Linter + prompt + guard).
+- 5 features dans un cycle : F-30 Linter (indépendant, EN PREMIER), F-29 Architect
+  adaptatif, P1 migration CodeAgent, F-32 prompt réécrit, F-33 guard logiciel.
+- Branche feat/cycle-p1-p3 créée. Commit préparatoire (F-28 + comparatifs + audits).
+- ORDRE D'IMPLÉMENTATION : F-30 Linter d'abord (protecteur, indépendant), puis F-29
+  Architect + F-32 prompt + P1 CodeAgent + F-33 guard (le bloc lié). Validation par
+  tests unitaires avant run réel coûteux (30-45 min/run sur CPU-only).
+
+## [2026-07-31] gen | CYCLE P1-P3 IMPLÉMENTÉ (5 features, 271 tests PASS, 0 régression)
+Cycle de finalisation complet. 5 features livrées, indissociables, validées par tests
+unitaires (pas encore par run réel — étape suivante).
+
+### F-30 — Linter Shift Left (tree-sitter + py_compile)
+- Nouveau module graph_orchestrator/linter.py : détection syntaxe multi-langue.
+  * Couverture : Python, HTML, CSS, JavaScript, TypeScript, TSX.
+  * Back-end double complémentaire : tree-sitter (SyntaxError, strings non fermées,
+    structures cassées) + py_compile (IndentationError Python — le POINT NOIR que
+    tree-sitter tolérant ne voit PAS) + vérifs structurelles HTML (contenu après
+    </html> = le bug EXACT du dashboard cassé, équilibrage DOCTYPE/html/head/body).
+  * Dégradation gracieuse : extension inconnue/fichier absent → valide (pas de faux positif).
+- Nœud execute_linter_node (déterministe, 0 LLM, millisecondes, model='tree-sitter-linter').
+- Branchement workflows.py : INSÉRÉ entre Coder et Tester. Si syntaxe invalide →
+  COURT-CIRCUITE le Tester coûteux (écrit le bug en DuckDB kind='refutation' source='linter'
+  → relance le Coder). C'est l'économie massive visée par P3/P7.
+- Dépendances : tree-sitter + tree-sitter-{python,html,javascript,css,typescript}.
+- Tests : tests/test_linter.py, 17 tests PASS (Python/HTML/CSS/JS/TS/TSX valide/invalide,
+  nœud, dégradation gracieuse).
+
+### F-29 — Architect adaptatif (stratégie de découpage)
+- models.py ArchitectTask : +strategy ('simple'|'incremental'|'multifile', défaut 'simple'
+  pour rétro-compat) +sections (si incremental). L'Architect dicte COMMENT construire.
+- dspy_nodes.py ArchitectSignature : docstring refondu (3 stratégies + quand utiliser quoi).
+  HTML/CSS/JS → multifile par défaut (sauf monolithe imposé → incremental). Python/TS → multifile.
+- workflows.py : strategy + sections propagés dans sub_dict → consommés par le prompt Coder.
+- Tests : tests/test_architect_strategy.py, 6 tests PASS (défaut rétro-compat, incremental,
+  multifile, Literal rejet, round-trip checkpoint, propagation sub_dict).
+
+### P1 — Migration Coder → CodeAgent (smolagents)
+- nodes.py execute_coder_node : ToolCallingAgent → CodeAgent. final_answer en SYNTAXE
+  PYTHON (final_answer({...})) au lieu de JSON. Preuves empiriques (3 comparatifs) :
+  gemma ne sait pas émettre de tool_call JSON fiable mais génère du Python correct.
+- CodeAgent instancié avec add_base_tools=False, max_steps=12 (1 step = 1 code block
+  complet, peut enchaîner plusieurs write_file/append_file). run_with_retry RÉUTILISÉ
+  (compatible CodeAgent, hérite de MultiStepAgent).
+
+### F-32 — Prompt Coder réécrit (structure canonique des audits)
+- Nouveau prompt selon la structure canonique (references aider/crush/opencode/openfox/
+  deer-flow + web Anthropic/OpenAI/Cline/SWE-agent) :
+  Rôle → Règles critiques numérotées → Format sortie → One-shot example → Workflow
+  (adapté à la stratégie F-29) → Rappels (double-marquage primacy/recency).
+- Corrige les 2 bugs observés : (1) "AGIS, ne raconte pas" + "Une réponse sans appel
+  d'outil = tâche terminée" (anti reasoning-action dilemma); (2) "≤60 lignes/appel,
+  chaque bloc syntaxiquement complet, jamais de string/brace ouverte entre 2 appels"
+  (anti triple-quote non fermée).
+
+### F-33 — Guard logiciel anti-déraillement (run_with_retry)
+- Leçon majeure des audits : UN PROMPT SEUL NE SUFFIT JAMAIS. Les 5 projets matures
+  couplent TOUS le prompt à un guard logiciel (deer-flow/openfox/aider).
+- run_with_retry étendu avec 2 détections :
+  1. _detect_idle_step : tour SANS tool call exécuté (modèle réfléchit sans agir, inspecte
+     agent.memory.steps dernier ActionStep) → message anti-idle ré-injecté (openfox style).
+  2. Exception parsing CodeAgent (triple-quote non fermée) → message "découpe au lieu de
+     recommencer le même gros payload" (deer-flow dangling_tool_call_middleware style).
+- Message de retry adapté au type d'agent (Python pour CodeAgent, JSON pour TCA).
+- Tests : tests/test_guard.py, 8 tests PASS (détection idle 6 cas + run_with_retry async 2 cas).
+
+### VALIDATION
+- Suite pytest : 271 passed / 0 failed (240 avant + 31 nouveaux). 0 RÉGRESSION.
+- Import workflow complet OK (pas de circularité avec linter.py + CodeAgent + signatures).
+- Round-trip ArchitectOutput (checkpoint) OK avec nouveaux champs (rétro-compat préservée).
+- PROCHAIN : run réel de validation (uv run python -m graph_orchestrator.workflows,
+  WORKFLOW_MODE=coding) sur un prompt test. Objectif : Architect émet une stratégie,
+  CodeAgent l'exécute, Linter valide AVANT le Tester, Judge juge. C'est le test d'acceptation.

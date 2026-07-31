@@ -29,6 +29,19 @@ class ArchitectTask(BaseModel):
     task_id: str
     description: str
     target_files: List[str]
+    # F-29 : stratégie de construction que le Coder doit suivre. L'Architect dicte
+    # COMMENT construire, pas juste QUOI. Par défaut 'simple' (rétro-compat : un
+    # sous-tâche historique sans stratégie = un seul write_file, comme avant).
+    #   - 'simple'      : petit fichier isolé, 1 seul write_file (script Python < ~200 lignes).
+    #   - 'incremental' : gros fichier monolithique (HTML dashboard) → squelette AVEC
+    #                     marqueurs d'insertion ouverts + append par section (corrige le
+    #                     bug dashboard : on n'append PAS après </html> fermé).
+    #   - 'multifile'   : 1 module logique = 1 fichier (Python/TS) — chaque fichier
+    #                     reste petit et autonome. La sous-tâche liste ses target_files.
+    strategy: Literal["simple", "incremental", "multifile"] = "simple"
+    # Si strategy='incremental', liste des sections à construire une par une via
+    # append_file (ex: ['CSS', 'sidebar', 'KPI', 'table', 'JS']). Vide sinon.
+    sections: List[str] = []
 
 
 class RouterOutput(BaseModel):

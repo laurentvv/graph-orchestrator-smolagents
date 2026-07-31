@@ -103,6 +103,42 @@ def build_reasoning_model(settings: Settings) -> OpenAIServerModel:
 # Retry + métriques
 # ==========================================
 
+def _detect_idle_step(agent) -> Optional[str]:
+    """F-33 (guard logiciel) : détecte un tour SANS tool call exécuté (modèle réfléchit sans agir).
+
+    Inspecte le dernier step de agent.memory.steps. Si ce step n'a produit AUCUN appel
+    d'outil (uniquement du text/reasoning), c'est le failure mode "reasoning-action dilemma"
+    observé sur gemma (le modèle dit "I will start by generating the CSS" mais n'émet
+    jamais l'appel). On renvoie un message pédagogique à ré-injecter (style openfox
+    FORMAT_CORRECTION_PROMPT) ; sinon None.
+
+    Un ActionStep smolagents est "productif" s'il a : tool_calls (TCA), code_action
+    (CodeAgent), ou des observations (résultat d'outil). Un step "idle" = aucun des 3.
+    """
+    try:
+        steps = getattr(getattr(agent, "memory", None), "steps", None)
+        if not steps:
+            return None
+        last = steps[-1]
+        # Champs réels d'un ActionStep smolagents (dataclass) :
+        # tool_calls (TCA) | code_action (CodeAgent) | observations (résultat d'outil).
+        has_tool_use = (
+            bool(getattr(last, "tool_calls", None))
+            or bool(getattr(last, "code_action", None))
+            or bool(getattr(last, "observations", None))
+        )
+        if not has_tool_use:
+            return (
+                "ATTENTION : ta dernière réponse ne contenait AUCUN appel d'outil exécuté "
+                "(tu as réfléchi sans agir). Tu DOIS appeler un outil (write_file, append_file, "
+                "search_replace) ou final_answer dans ton prochain bloc de code. Une réponse "
+                "sans action est un ÉCHEC."
+            )
+    except Exception:
+        pass
+    return None
+
+
 async def run_with_retry(
     agent: ToolCallingAgent,
     prompt: str,
@@ -114,10 +150,21 @@ async def run_with_retry(
     Les métriques (tokens/durée) viennent du RunResult de smolagents
     (return_full_result=True). En cas d'échec définitif, les métriques du dernier
     essai sont quand même renvoyées pour l'observabilité.
+
+    F-33 (guard logiciel) : un prompt seul ne suffit jamais (leçon majeure des audits —
+    les 5 projets matures couplent le prompt à un guard logiciel). On ajoute 2 détections :
+    (1) tour sans tool call exécuté → message anti "reasoning sans action" ;
+    (2) exception de parsing (code Python cassé) → message "découpe au lieu de recommencer"
+        (inspiration deer-flow dangling_tool_call_middleware).
     """
     last_metrics: Optional[NodeMetrics] = None
+    # Détecte si l'agent est un CodeAgent (P1) pour adapter le message de retry
+    # (final_answer en Python, pas en JSON). Le TCA garde son message historique.
+    is_code_agent = type(agent).__name__ == "CodeAgent"
 
     for attempt in range(max_retries):
+        # F-33 (2) : tool call cassé (ex: triple-quote non fermée en CodeAgent).
+        # On attrape l'exception de parsing et on renvoie un message "découpe" (deer-flow).
         try:
             # asyncio.to_thread : smolagents est synchrone, on le déporte hors de la loop.
             # IMPORTANT : return_full_result doit être nommé — sinon `True` positionnel
@@ -136,18 +183,43 @@ async def run_with_retry(
             if validated:
                 return validated, last_metrics
 
-            print(
-                f"[!] Tentative {attempt + 1}/{max_retries} échouée pour "
-                f"{model_class.__name__}. Nouvelle tentative..."
-            )
-            prompt += (
-                f"\n\nRAPPEL CRITIQUE: Tu as échoué au dernier essai. Renvoie STRICTEMENT "
-                f"un JSON valide pour ce schéma : {model_class.model_json_schema()} "
-                f"via l'outil final_answer."
-            )
+            # F-33 (1) : tour sans tool call exécuté ? (modèle réfléchit sans agir)
+            idle_msg = _detect_idle_step(agent)
+            if idle_msg:
+                print(
+                    f"[!] Tentative {attempt + 1}/{max_retries} : tour sans appel d'outil "
+                    f"({model_class.__name__}). Ré-injection d'une consigne d'action..."
+                )
+                prompt += f"\n\n{idle_msg}"
+            else:
+                print(
+                    f"[!] Tentative {attempt + 1}/{max_retries} échouée pour "
+                    f"{model_class.__name__}. Nouvelle tentative..."
+                )
+                # Message de retry adapté au type d'agent (Python pour CodeAgent, JSON pour TCA).
+                if is_code_agent:
+                    prompt += (
+                        f"\n\nRAPPEL: ton dernier essai n'a pas abouti. Appelle final_answer(...) "
+                        f"en PYTHON avec un dict conforme au schéma {model_class.__name__}."
+                    )
+                else:
+                    prompt += (
+                        f"\n\nRAPPEL CRITIQUE: Tu as échoué au dernier essai. Renvoie STRICTEMENT "
+                        f"un JSON valide pour ce schéma : {model_class.model_json_schema()} "
+                        f"via l'outil final_answer."
+                    )
         except Exception as e:
-            print(f"[-] Erreur interne (Tentative {attempt + 1}/{max_retries}): {e}")
-            
+            # F-33 (2) : exception pendant l'exécution (code Python cassé en CodeAgent,
+            # payload invalide en TCA). On renvoie un message "découpe" au lieu de planter.
+            msg = str(e)
+            print(f"[-] Erreur interne (Tentative {attempt + 1}/{max_retries}): {msg}")
+            if is_code_agent and ("Syntax" in msg or "parse" in msg.lower() or "unterminated" in msg.lower()):
+                prompt += (
+                    "\n\nATTENTION : ton dernier bloc de code Python a échoué (syntaxe invalide : "
+                    "string non fermée, parenthèse manquante...). NE RECOMMENCE PAS le même gros "
+                    "payload — DÉCOUPE en plus petits append_file, chaque bloc syntaxiquement complet."
+                )
+
         # FIX TOKEN EXPLOSION: Si on est arrivé ici (erreur ou JSON invalide),
         # l'agent a gardé tout son historique d'échec dans sa mémoire interne.
         # Au prochain tour de la boucle for, si on rappelle agent.run, il va TOUT renvoyer !
@@ -353,16 +425,27 @@ async def execute_coder_node(
         # skill context7-research (dormant sur vanilla, actif sur libs externes).
         coder_tools = [list_directory, read_file, write_file, append_file, edit_file, search_replace, DuckDuckGoSearchTool()]
         coder_tools.extend(c7_tools)
-        local_coder = ToolCallingAgent(
+
+        # P1 : migration ToolCallingAgent → CodeAgent. Les petits modèles locaux (gemma)
+        # ne savent pas émettre de tool_call JSON fiable (tool_calls=None, finish_reason=
+        # 'stop' — le modèle "parle" de l'action au lieu de l'exécuter). CodeAgent génère
+        # du PYTHON qui appelle les outils (write_file(path=..., content=...)) — beaucoup
+        # plus naturel. Preuves empiriques : cf. log.md (3 comparatifs, CodeAgent produit
+        # jusqu'à 91× plus de contenu que le TCA sur une même tâche).
+        # final_answer s'appelle maintenant en SYNTAXE PYTHON : final_answer({...}) ou
+        # final_answer("texte"), pas en JSON. extract_and_validate gère les 2 (dict + str).
+        local_coder = CodeAgent(
             tools=coder_tools,
             model=fast_model,
             name=f"coder_{task['id'].replace('-', '_')}",
             description="Agent développeur capable d'explorer le projet, d'écrire, lire, modifier du code.",
             verbosity_level=resolve_verbosity("HIGH"),
-            # 12 steps : borne le temps total. Avec "un write_file par fichier + final_answer"
-            # (cf. prompt), 12 steps couvrent 3-5 fichiers + marge. 24 encourageait la boucle
-            # de re-écriture (bug run #7 : le Coder re-génère le même fichier indéfiniment).
+            # 12 steps : borne le temps total. Un step CodeAgent = un code block complet
+            # (peut enchaîner plusieurs write_file/append_file), donc 12 steps couvrent
+            # largement un gros projet multi-fichiers + final_answer.
             max_steps=12,
+            # On gère nous-mêmes le set d'outils (pas de python_interpreter natif ajouté).
+            add_base_tools=False,
         )
 
         target_files_instruction = ""
@@ -375,62 +458,92 @@ async def execute_coder_node(
 - 'write_file' crée automatiquement les sous-répertoires manquants : tu peux appeler
   'write_file' avec le chemin complet (ex: "landing_page/index.html") MÊME SI le dossier
   n'existe pas encore. N'essaie PAS de lister un dossier qui n'existe pas.
-- Chaque fichier cible DOIT être créé via 'write_file'. Ne passe pas au reste avant."""
+- Chaque fichier cible DOIT être créé. Ne passe pas au reste avant."""
 
         # Skills ciblés pour cette tâche (socle coder + spécialisés selon le contenu).
         # Le contenu des SKILL.md est injecté directement (pas une liste de chemins à
         # explorer), pour éviter la dispersion stérile du Coder vers les fichiers .md.
         skills_block = build_skills_block(task.get("content", ""))
 
-        prompt = f"""Tu es un Agent Développeur Senior autonome. Ta mission est d'accomplir la tâche ci-dessous en utilisant tes outils.
+        # F-32 : prompt réécrit selon la structure canonique des audits (references aider/
+        # crush/opencode/openfox/deer-flow + web Anthropic/OpenAI/Cline/SWE-agent) :
+        # Rôle → Règles critiques → Format sortie → One-shot → Workflow (adapté stratégie)
+        # → Rappels (double-marquage primacy/recency). Corrige les 2 bugs observés :
+        # (1) "réfléchit sans agir" (reasoning-action dilemma, petits modèles overthinkent),
+        # (2) triple-quote non fermée (limite fenêtre génération).
+        strategy = task.get("strategy", "simple")
+        sections = task.get("sections", [])
 
-### PLAN D'ACTION STRICT (UNE PASSE UNIQUE — ne boucle pas)
-1. ÉCRIRE : appelle 'write_file' UNE SEULE FOIS par fichier cible. Écris le contenu complet et définitif du fichier dès le premier appel.
-2. TERMINER : dès que chaque fichier cible a été écrit une fois, appelle IMMÉDIATEMENT 'final_answer'. Ne re-écris PAS un fichier déjà créé.
+        # Section workflow adaptée à la stratégie dictée par l'Architect (F-29).
+        if strategy == "incremental":
+            sections_str = ", ".join(sections) if sections else "(sections à définir)"
+            strategy_block = f"""### WORKFLOW (stratégie INCREMENTAL imposée par l'Architect)
+Construis ce gros fichier monolithique EN PLUSIEURS PETITES ÉTAPES. NE TENTE PAS un seul
+write_file massif (ça s'essouffle/tronque). Procède ainsi :
+1. write_file(squelette) UNE SEULE FOIS : la structure HTML de base AVEC des MARQUEURS
+   d'insertion ouverts (ex: <!-- INSERT_CSS -->, <!-- INSERT_JS -->). Le squelette ne doit
+   PAS être fermé par </html> tant que les sections ne sont pas injectées — sinon les
+   appends arrivent après </html> et le navigateur affiche du texte brut.
+2. Pour CHAQUE section ({sections_str}) : append_file(content=section) qui remplace/ajoute
+   le contenu au bon endroit. Chaque appel ≤ 60 lignes, chaque bloc syntaxiquement complet.
+3. Une fois toutes les sections injectées, ferme proprement (</body></html>).
+4. final_answer quand c'est terminé."""
+        elif strategy == "multifile":
+            strategy_block = """### WORKFLOW (stratégie MULTIFILE imposée par l'Architect)
+Construis chaque fichier cible de façon autonome (1 module logique = 1 fichier, chacun
+< ~200 lignes). Tu PEUX enchaîner plusieurs write_file dans le même bloc de code.
+1. Pour chaque fichier cible : write_file(path=..., content=...) avec le contenu COMPLET.
+2. final_answer quand tous les fichiers sont créés."""
+        else:  # simple (défaut, rétro-compat)
+            strategy_block = """### WORKFLOW (stratégie SIMPLE)
+1. write_file(path=..., content=...) pour créer le fichier cible (contenu complet).
+2. final_answer quand c'est terminé."""
+
+        prompt = f"""Tu es un Agent Développeur Senior. Tu DOIS produire du code en appelant tes outils via du PYTHON. NE JAMAIS expliquer sans agir.
+
+### RÈGLES CRITIQUES (numérotées)
+1. AGIS, ne raconte pas : quand tu dis "je vais faire X", tu DOIS faire X dans la foulée.
+   Une réponse sans appel d'outil est considérée comme une TÂCHE TERMINÉE (échec).
+2. BLOCS COMPLETS : chaque appel write_file/append_file doit contenir un bloc SYNTAXIQUEMENT
+   COMPLET (quotes/braces/parenthèses équilibrées). NE JAMAIS laisser une string/brace
+   ouverte entre 2 appels. Si le contenu dépasse ~60 lignes, DÉCOUPE en plusieurs append_file.
+3. PAS DE PLACEHOLDER : interdiction absolue de "TODO", "...", "Logique ici", fonctions vides
+   ou mocks. Implémentation COMPLÈTE, RÉELLE et FONCTIONNELLE.
+4. ANTI-BOUCLE : NE RE-ÉCRIS JAMAIS avec write_file un fichier déjà créé (ça l'écrase).
+   Pour AJOUTER du contenu → append_file. Pour MODIFIER un fragment → search_replace.
+
+### FORMAT DE SORTIE (obligatoire)
+Tu écris du code Python dans un bloc ```python``` qui appelle tes outils. Exemple one-shot :
+```python
+# Thought courte (1 phrase) PUIS appel immédiat — pas de longue réflexion
+resultat = write_file(path="index.html", content="<!DOCTYPE html>\\n<html>...</html>")
+print(resultat)
+# ... autres appels ...
+final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Fichiers créés."}})
+```
+
+{strategy_block}
 {target_files_instruction}
 
-### ⚠️ RÈGLE ANTI-BOUCLE (très important)
-- UN fichier = UN seul 'write_file'. Si write_file répond "Successfully wrote", le fichier est FAIT. Passe au fichier suivant, ou si c'était le dernier, appelle 'final_answer'.
-- NE RE-ÉCRIS JAMAIS un fichier que tu viens de créer "pour l'améliorer" ou "pour vérifier". Ton premier jet est ton jet final.
-- NE RELIS PAS les fichiers après écriture (ça gaspille des étapes et tente de re-générer). La validation est faite plus tard par d'autres agents.
-- Objectif : le moins d'étapes possible. Idéalement : N appels write_file (un par fichier) + 1 final_answer.
-
-### RÈGLES D'OUTILS (édition de fichiers)
-- 'write_file' (path, content) : CRÉE un fichier complet de zéro. Sous-dossiers créés automatiquement. UN SEUL APPEL par fichier. À éviter pour modifier un fichier existant (génère tout le contenu = long, risque de troncature).
-- 'search_replace' (path, search, replace) : MODIFIE un fichier EXISTANT en remplaçant le bloc 'search' par 'replace'. C'est l'outil À PRIVILÉGIER pour éditer/corriger/compléter un fichier existant : tu ne fournis que le fragment concerné, pas tout le fichier. Le matching est tolérant (indentation, ellipses '...' acceptées). Copie le bloc 'search' EXACTEMENT tel qu'il est dans le fichier (utilise read_file d'abord).
-- 'edit_file' : ancien outil de remplacement strict ; préfère 'search_replace' (plus tolérant).
-- 'read_file' (path) : lis le CONTENU d'un fichier. À utiliser AVANT un search_replace pour copier le texte exact.
-- 'list_directory' (path) : liste un dossier EXISTANT. Ne l'appelle pas sur un fichier ni un dossier inexistant.
-- 'context7' (resolve_library_id / query_docs) : UNIQUEMENT si la tâche utilise une lib/framework EXTERNE
-  (React, Chart.js, pandas...) dont tu doutes de l'API exacte. Consulte le skill 'context7-research'
-  pour le workflow. NE CHERCHE PAS pour du HTML/CSS/JS vanilla, du CSS, ou un algorithme de base (gaspillage d'étapes).
-- N'utilise PAS DuckDuckGoSearchTool (trop lent/imprécis). Préfère Context7 pour la doc de libs.
-
-### WORKFLOW D'ÉDITION RECOMMANDÉ
-1. Pour CRÉER un nouveau fichier → 'write_file' une seule fois.
-2. Pour CORRIGER/COMPLÉTER un fichier existant → 'read_file' (copie le bloc exact) puis 'search_replace'. N'utilise PAS write_file pour réécrire tout le fichier : ça gaspille des tokens et risque de le tronquer.
-3. 'final_answer' quand c'est terminé.
+### OUTILS DISPONIBLES
+- `write_file(path, content)` : CRÉE/ÉCRASE un fichier complet. Sous-dossiers créés auto.
+- `append_file(path, content)` : AJOUTE un bloc à la FIN d'un fichier existant (garde anti-doublon).
+- `search_replace(path, search, replace)` : MODIFIE un fragment (matching tolérant). À utiliser après read_file.
+- `read_file(path)` / `list_directory(path)` : lecture/exploration.
+- `context7` (resolve_library_id/query_docs) : UNIQUEMENT pour une lib externe (React, Chart.js...). JAMAIS pour du vanilla.
+- Évite DuckDuckGoSearchTool (lent/imprécis).
 
 ### EXIGENCE DE QUALITÉ
-AUCUN MOCK OU PLACEHOLDER : implémentation COMPLÈTE, RÉELLE et FONCTIONNELLE. Interdiction absolue de placeholders ("TODO", "Logique ici"), fonctions vides, ou mocks. Code prêt pour la production, respectant les conventions du langage.
-
+Code prêt pour la production, respectant les conventions du langage.
 {skills_block}
 
 ### Contenu de la tâche
 {task['content']}
 
-### Pour terminer
-Quand tous les fichiers cibles sont créés et vérifiés, retourne ton résultat STRICTEMENT via l'outil 'final_answer'. Ton JSON DOIT respecter EXACTEMENT ce format :
-{{
-  "name": "final_answer",
-  "arguments": {{
-    "answer": {{
-      "task_id": "{task['id']}",
-      "status": "success",
-      "details": "Résumé technique détaillé des fichiers créés/modifiés."
-    }}
-  }}
-}}
+### RAPPEL (récence)
+- AGIS via des appels d'outils Python, ne raconte pas.
+- Chaque bloc syntaxiquement complet, ≤ 60 lignes ou découpe via append_file.
+- AUCUN placeholder. final_answer quand les fichiers cibles sont créés.
 """
         # max_retries can be slightly higher for coding since it involves tool use steps
         return await run_with_retry(local_coder, prompt, CoderOutput, settings.worker_max_retries)

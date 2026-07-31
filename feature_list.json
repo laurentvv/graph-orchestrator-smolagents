@@ -204,17 +204,24 @@
       "dependencies": ["F-19", "F-20"]
     },
     {
+      "id": "F-29a",
+      "name": "Migration Coder → CodeAgent (smolagents)",
+      "description": "P1 feuille de route finalisation. Le Coder (execute_coder_node) était un ToolCallingAgent : gemma (petit modèle local) ne sait pas émettre de tool_call JSON fiable (tool_calls=None, finish_reason='stop' — le modèle 'parle' de l'action au lieu de l'exécuter). 3 comparatifs empiriques (Bubble Sort : CodeAgent -63% tokens; dashboard monolithique : TCA ingérable 1h; dashboard incrémental : TCA ÉCHEC 317 octets vs CodeAgent 28895 octets) ont validé la migration. IMPLÉMENTÉ : execute_coder_node instancie maintenant un CodeAgent (final_answer en SYNTAXE PYTHON au lieu de JSON, 1 step = 1 code block complet pouvant enchaîner plusieurs write_file/append_file). CodeAgent seul (pas de fallback TCA configurable — les petits modèles ne font pas de tool_call JSON fiable). run_with_retry RÉUTILISÉ (compatible CodeAgent, hérite de MultiStepAgent). Accompagné de F-32 (prompt réécrit structure canonique) et F-33 (guard logiciel anti-déraillement).",
+      "status": "completed",
+      "dependencies": ["F-28"]
+    },
+    {
       "id": "F-29",
       "name": "Stratégie de découpage adaptative (Architect évolué)",
       "description": "P2 feuille de route finalisation. Gap révélé par le cycle CodeAgent : l'Architect actuel (DSPy) découpe en sous-tâches (1 fichier = 1, F-15) MAIS ne raisonne NI sur la TAILLE des fichiers, NI sur la STRATÉGIE de construction. Un dashboard de 3000 lignes en 1 sous-tâche = ingérable (1h sans step 1 fini en TCA). ÉVOLUTION prévue : enrichir ArchitectSignature pour émettre, en plus des target_files, une stratégie PAR sous-tâche : simple (1 write_file, petit fichier) | incrémental (squelette + append_file sections, gros fichier monolithique type HTML) | multi-fichier (1 module logique = 1 fichier < ~200 lignes, type Python/TS). Décision techno-driven (HTML=incrémental, Python/TS=multi-fichier) — cf. audits references + web. L'Architect doit dicter au Coder COMMENT construire, pas juste QUOI construire. Sans ça, le CodeAgent (P1) reste sous-exploité. Dépend de la validation P1 (CodeAgent au Coder).",
-      "status": "pending",
+      "status": "completed",
       "dependencies": ["F-28", "F-15"]
     },
     {
       "id": "F-30",
       "name": "Linter Shift Left (anti-gaspillage cycles LLM)",
       "description": "P3 feuille de route finalisation (= P7 du plan usine logicielle). Gap : bugs de syntaxe triviaux (ex: 'color var(--muted)' deux-points manquants observé run CodeAgent, IndentationError Python) validés à tort par le Judge → gaspille des cycles LLM coûteux (Tester/Judge) sur des erreurs triviales. SOLUTION : linter ultra-rapide (AST/tree-sitter/py_compile pour Python, oxlint/eslint pour JS, validateur HTML) juste après le Coder, AVANT le Tester. Intercepte les erreurs de syntaxe de base → feedback immédiat au Coder (boucle fermée SWE-agent ACI : édition → linter → si erreur, renvoyer au modèle pour correction). ROI élevé (surtout Python indentation = point noir reconnu par tous les audits), effort modéré. Un nœud léger (pas d'LLM) dans le graphe entre Coder et Tester.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": ["F-27"]
     },
     {
@@ -228,15 +235,22 @@
       "id": "F-32",
       "name": "Prompt Coder réécrit (structure canonique + anti-laziness)",
       "description": "Accompagne P1 (migration CodeAgent). Notre prompt Coder actuel souffre de 2 défauts révélés par les audits (references aider/crush/opencode/openfox/deer-flow + web Anthropic/OpenAI/Cline/SWE-agent) : (1) le modèle 'réfléchit sans agir' (reasoning-action dilemma, les petits modèles overthinkent plus gravement), (2) il s'essouffle sur les gros blocs (triple-quote non fermée). RÉÉCRIRE selon la structure canonique : Rôle → Règles critiques → Format sortie obligatoire (début ET fin, double-marquage aider) → One-shot example (Thought 1 phrase → appel outil immédiat) → Workflow → Rappels (effet primacy/recency). Inclure : 'Une réponse sans tool call = tâche terminée' (Cline), règle '≤60 lignes/appel, chaque bloc syntaxiquement complet, jamais de string/brace ouverte entre 2 appels' (anti triple-quote), anti-laziness 'NEVER skip/omit/elide' (aider wholefile), pattern squelette/remplissage (Skeleton-of-Thought). Le prompt doit décrire le COMMENT (format, taille, ordre), pas juste le QUOI.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": ["F-28"]
     },
     {
       "id": "F-33",
       "name": "Guard logiciel 'dangling tool call' (middleware anti-déraillement)",
       "description": "Accompagne P1 (migration CodeAgent). Leçon majeure des audits : UN PROMPT SEUL NE SUFFIT JAMAIS. Les 5 projets matures (aider/crush/opencode/openfox/deer-flow) couplent TOUS le prompt à un guard logiciel. Inspiration directe : deer-flow dangling_tool_call_middleware.py (détecte un tool call cassé — ex: triple-quote non fermée, payload JSON invalide — et renvoie un message pédagogique 'Do not retry the same large payload, split into smaller sections instead') et openfox FORMAT_CORRECTION_PROMPT (renvoyé jusqu'à 10 fois). À implémenter dans smolagents : détection 'tour sans tool call exécuté' (modèle réfléchit sans agir) → ré-injection consigne 'tu DOIS appeler un outil'; détection 'tool call cassé' → 'découpe au lieu de recommencer'. C'est le filet qui rattrape les déraillements que le prompt ne prévient pas.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": ["F-28", "F-32"]
+    },
+    {
+      "id": "F-34",
+      "name": "Nœud d'Audit Dette Technique (python-health-audit)",
+      "description": "Cycle futur (APRÈS P1-P3, hors périmètre de finalisation). Intégration du projet de l'utilisateur (github.com/laurentvv/python-health-audit) comme nœud d'audit qualité LOURD en FIN de workflow — à ne PAS confondre avec le Linter (F-30) qui est un gatekeeper léger dans la boucle chaude. python-health-audit (via uvx : Ruff + Vulture + Radon + Pylint) détecte la DETTE TECHNIQUE (code mort, complexité cyclomatique, duplication, maintainability index) et sort un rapport Markdown avec grade A-F. DIFFÉRENCES clés vs F-30 Linter : (1) usage = audit complet de projet sur demande, pas gatekeeper à chaque itération; (2) latence = uvx télécharge/install Ruff/Vulture/Radon/Pylint à chaque run (lourd, incompatible avec boucle chaude); (3) périmètre = Python seulement (vs Linter multi-langue tree-sitter); (4) ne détecte PAS les erreurs de syntaxe (son créneau = maintenabilité). POSITIONNEMENT dans le workflow : après le Judge (nœud optionnel d'audit final), OU invoqué via skill séparé par l'utilisateur. Ne PAS intégrer dans le cycle P1-P3 (garder le scope maîtrisé).",
+      "status": "pending",
+      "dependencies": ["F-30"]
     }
   ]
 }

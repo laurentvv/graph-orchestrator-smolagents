@@ -119,21 +119,30 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 
 ### P1 — Migrer le Coder vers CodeAgent (IMMÉDIAT, ce cycle)
 - [x] Preuves empiriques réunies (3 comparatifs convergent).
-- [ ] Migration execute_coder_node : ToolCallingAgent → CodeAgent + prompt Python + garde-fou fallback TCA.
-- [ ] Tests + validation run complet.
+- [x] Migration execute_coder_node : ToolCallingAgent → CodeAgent + prompt Python (F-32).
+- [x] Guard logiciel anti-déraillement (F-33 : idle step + parsing cassé).
+- [ ] Validation run réel final (étape suivante).
 
 ### P2 — Architect évolué : stratégie de découpage adaptative (F-29, cycle suivant)
-- [ ] Enrichir ArchitectSignature : stratégie par sous-tâche (simple | incrémental | multi-fichier).
-- [ ] Décision techno-driven (HTML=incrémental, Python/TS=multi-fichier).
-- [ ] L'Architect dicte au Coder COMMENT construire, pas juste QUOI.
+- [x] Enrichir ArchitectSignature : stratégie par sous-tâche (simple | incrémental | multi-fichier).
+- [x] Décision techno-driven (HTML/CSS/JS=multifile par défaut, Python/TS=multifile, monolithe imposé=incremental).
+- [x] L'Architect dicte au Coder COMMENT construire, pas juste QUOI (propagation sub_dict).
+- [x] Tests (6 PASS).
 
 ### P3 — Linter Shift Left (F-30 = P7 plan usine logicielle, cycle d'après)
-- [ ] Nœud linter léger (py_compile/oxlint/AST) entre Coder et Tester.
-- [ ] Boucle fermée : syntaxe invalide → feedback immédiat au Coder (pas au Tester coûteux).
-- [ ] Spécialement critique pour Python (indentation = point noir reconnu).
+- [x] Nœud linter léger (tree-sitter multi-langue + py_compile) entre Coder et Tester.
+- [x] Boucle fermée : syntaxe invalide → court-circuite le Tester coûteux → feedback Coder.
+- [x] Couverture multi-langue : Python, HTML, CSS, JS, TS, TSX (17 tests PASS).
+- [x] Branchement workflow (DuckDB réfutation source='linter' + continue).
+
+### État validation
+- [x] Suite pytest 271 passed / 0 failed (240 avant + 31 nouveaux). 0 régression.
+- [x] Import workflow complet OK (pas de circularité).
+- [ ] Run réel de validation (uv run python -m graph_orchestrator.workflows) — étape suivante.
 
 ### Hors finalisation (P4, à évaluer plus tard)
 - F-31 : Tester en mode CodeAgent (2e candidat, optimisation potentielle, non urgent).
+- F-34 : Nœud d'Audit Dette Technique (python-health-audit via uvx) en fin de workflow.
 - File viewer fenêtré SWE-agent ACI (lourd, optionnel).
 - 5 nœuds sans tools (Worker/Judge/Synth/Adversary) : CodeAgent inutile, ne pas migrer.
 

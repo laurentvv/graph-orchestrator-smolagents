@@ -51,6 +51,38 @@
 - [ ] Critère 51 : Les sous-dossiers parents sont créés automatiquement (`os.makedirs(exist_ok=True)`), cohérent avec `write_file`.
 - [ ] Critère 52 : La suite pytest complète passe (0 régression, nouveaux tests `test_append_file.py` inclus : création, préservation, gardes, anti-doublon, sous-dossiers, concurrence).
 
+## Critères du Cycle P1-P3 (finalisation)
+### Linter Shift Left (F-30)
+- [ ] Critère 53 : `lint_file(path)` détecte la langue par extension (Python/HTML/CSS/JS/TS/TSX) ; extension inconnue/fichier absent → valide (pas de faux positif, dégradation gracieuse).
+- [ ] Critère 54 : Back-end double complémentaire — tree-sitter (SyntaxError, strings non fermées, structures cassées) + py_compile (IndentationError Python — le point noir que tree-sitter tolérant ne voit PAS) + vérifs structurelles HTML (contenu après `</html>`, équilibrage balises).
+- [ ] Critère 55 : `execute_linter_node` (déterministe, 0 LLM, `model='tree-sitter-linter'`) retourne `CoderOutput(status, details)` avec status='failure' si AU MOINS un fichier invalide + détails exploitables par le Coder (nom du fichier + erreur).
+- [ ] Critère 56 : Branchement workflow — inséré ENTRE le Coder et le Tester ; si invalide → court-circuite le Tester coûteux (écrit réfutation `source='linter'` en DuckDB, relance le Coder à l'itération suivante via `continue`).
+
+### Architect adaptatif (F-29)
+- [ ] Critère 57 : `ArchitectTask` expose `strategy` (`Literal['simple','incremental','multifile']`, défaut `'simple'` pour rétro-compat) + `sections` (`List[str]`, vide sauf si `incremental`).
+- [ ] Critère 58 : `ArchitectSignature` docstring explique les 3 stratégies + quand utiliser laquelle (HTML/CSS/JS → multifile par défaut, Python/TS → multifile, monolithe imposé → incremental).
+- [ ] Critère 59 : `strategy` + `sections` propagés dans `sub_dict` (workflows.py) via `getattr(subtask, 'strategy', 'simple')` → consommés par le prompt Coder (F-32).
+- [ ] Critère 60 : Round-trip `ArchitectOutput.model_dump()` → `ArchitectOutput(**dict)` préserve strategy/sections (compatible checkpoint) ; sous-tâche historique sans stratégie → défaut `'simple'`.
+
+### Migration Coder → CodeAgent (P1/F-29a)
+- [ ] Critère 61 : `execute_coder_node` instancie un `CodeAgent` (pas un `ToolCallingAgent`) ; `final_answer` attendu en syntaxe Python (`final_answer({...})`), pas en JSON.
+- [ ] Critère 62 : `run_with_retry` RÉUTILISÉ (compatible CodeAgent, hérite de MultiStepAgent) ; `extract_and_validate` gère le dict renvoyé par `final_answer` (models.py gère déjà les dicts).
+
+### Prompt Coder réécrit (F-32)
+- [ ] Critère 63 : Structure canonique (Rôle → Règles critiques → Format sortie → One-shot → Workflow adapté stratégie → Rappels) ; double-marquage primacy/recency.
+- [ ] Critère 64 : Anti "reasoning sans action" — "AGIS, ne raconte pas" + "Une réponse sans appel d'outil = tâche terminée".
+- [ ] Critère 65 : Anti triple-quote — "≤60 lignes/appel, chaque bloc syntaxiquement complet, jamais de string/brace ouverte entre 2 appels".
+- [ ] Critère 66 : Workflow adapté à la stratégie — `incremental` impose squelette avec marqueurs d'insertion ouverts + append par section (corrige le bug dashboard : on n'append PAS après `</html>` fermé).
+
+### Guard logiciel anti-déraillement (F-33)
+- [ ] Critère 67 : `_detect_idle_step` détecte un tour SANS tool call exécuté (inspecte dernier `ActionStep` : `tool_calls`/`code_action`/`observations` tous vides) → message anti-idle ré-injecté (openfox style).
+- [ ] Critère 68 : Exception parsing CodeAgent (triple-quote non fermée) → message "découpe au lieu de recommancer le même gros payload" (deer-flow style).
+- [ ] Critère 69 : Message de retry adapté au type d'agent — Python (`final_answer(...)`) pour CodeAgent, JSON (`model_json_schema()`) pour ToolCallingAgent.
+
+### Validation globale
+- [ ] Critère 70 : La suite pytest complète passe (0 régression, 271 tests : 240 avant + 17 linter + 6 architect strategy + 8 guard).
+- [ ] Critère 71 : Import du workflow complet OK — pas de circularité avec `linter.py` + CodeAgent + signatures Architect modifiées.
+
 ## Critères de l'Auto-Résolution des Dépendances (Priorité 5 — F-26)
 - [ ] Critère 39 : `extract_missing_module(stderr)` extrait le nom de module top-level d'un `ModuleNotFoundError` (`'requests'`, `'requests.auth'` → `'requests'`) ; retourne `None` si pas de `ModuleNotFoundError` ou si le nom extrait n'est pas un identifiant Python valide (regex `^[A-Za-z_][A-Za-z0-9_]*$` — défense en profondeur anti-injection).
 - [ ] Critère 40 : Le déclenchement est conditionnel — `extract_missing_module` n'est appelé QUE si `exit_code != 0` ET `settings.auto_install_deps` est vrai ; un AssertionError/SyntaxError/etc. ne déclenche JAMAIS l'install (comportement historique préservé).
