@@ -1,0 +1,3256 @@
+{
+  "audit_date": "2026-07-31",
+  "scope": "filtered-useful (docs + code + specs; excludes .git/node_modules/media/fixtures/translated-READMEs)",
+  "projects": [
+    {
+      "id": "prompt-vault",
+      "name": "Prompt-Vault",
+      "path": "references/Prompt-Vault",
+      "category": "test-prompts",
+      "reuse_rating": "high",
+      "summary": "Collection curatoriale de cahiers des charges de coding prêts à l'emploi (Markdown pur) pour tester des LLM sur des tâches de génération de code, répartis sur 4 niveaux (Easy/Medium/Hard/Advanced). C'est la ressource d'évaluation clé-en-main du projet : les prompts se branchent directement dans tasks.json (WORKFLOW_MODE=coding) pour exercer le workflow Routeur → Architect → Coders → Tester → Judge.",
+      "files": [
+        {
+          "path": "references/Prompt-Vault/Easy/Bubble_Sort_Visualizer.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Visualise le tri à bulles via barres verticales colorées (défaut / comparaison / trié), boutons Start/Reset, slider de vitesse, compteur de comparaisons. Périmètre minimal, assertions déterministes pour le Tester Puppeteer."
+        },
+        {
+          "path": "references/Prompt-Vault/Easy/ToDo_List.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Tutoriel incrémental en 7 tâches d'un Task Manager : page statique → ajout → toggle done → delete → compteurs Active/Completed/Total → persistance localStorage → Clear All. Vanilla JS."
+        },
+        {
+          "path": "references/Prompt-Vault/Easy/Color_Palette_Generator.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Générateur de palette de 5 couleurs plein écran avec HEX, génération aléatoire (bouton + Spacebar), verrouillage par swatch, copie au presse-papier (Clipboard API), transitions CSS."
+        },
+        {
+          "path": "references/Prompt-Vault/Medium/Pixel_Art_Editor.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Éditeur pixel-art sur <canvas> (16/32/64), outils Pinceau/Gomme/Seau/Pipette (flood-fill BFS anti-stack-overflow), palette + 8 couleurs récentes, undo/redo 20 niveaux, export PNG, autosave localStorage."
+        },
+        {
+          "path": "references/Prompt-Vault/Medium/Sorting_Visualization.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Visualiseur temps réel de 6 algorithmes de tri (Bubble, Insertion, Selection, Merge, Quick, Heap) : barres animées, sliders vitesse/taille, Start/Pause, Shuffle, stats live."
+        },
+        {
+          "path": "references/Prompt-Vault/Hard/Kanban_Board.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Kanban complet single-file : 4 colonnes + ajout/renommage/suppression, cartes (titre/desc/priorité/date échéance), Drag&Drop natif entre colonnes, recherche + filtre priorité, persistance localStorage, glassmorphism dark."
+        },
+        {
+          "path": "references/Prompt-Vault/Hard/Markdown_Editor_Desktop.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Éditeur Markdown desktop Tauri 2 multi-fichiers (Vue 3 + Pinia, Vite, marked.js + prism.js) : split editor/preview scroll synchronisé, modes, ouvrir/sauver natif, plugins fs/dialog/shell. Premier test multi-fichiers + Architect."
+        },
+        {
+          "path": "references/Prompt-Vault/Hard/Local_OCR.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "App desktop Python OCR local privacy-first via Ollama (customtkinter + pymupdf + ollama, threading/queue) : sélection image/PDF, conversion PDF→PNG, requêtes VLM threadées, sauvegarde _extracted.md. Cas de test Python pytest."
+        },
+        {
+          "path": "references/Prompt-Vault/Advanced/LLM_Speedometer.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Outil desktop Tauri (Rust) + Vue de benchmarking de LLM locaux : métriques temps réel (TTFT, TPOT, TPS, comptes tokens), graphes streaming live, profils de comparaison moteurs, API OpenAI-compatible."
+        },
+        {
+          "path": "references/Prompt-Vault/Advanced/Feed_Aggregator.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Agrégateur RSS full-stack Nim (Jester/Mummy/HappyX + htmlgen SSR + Pico.css + db_sqlite), SQLite WAL obligatoire : crawler async, tables feeds/articles, interface SSR. Cas de test backend/DB hors JS."
+        },
+        {
+          "path": "references/Prompt-Vault/Advanced/Hantavirus_Simulation.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Simulation 2D top-down Rust + Bevy 0.18 (ECS, SimulationSet) de propagation hantavirus : souris → nuages contaminés → humains, entités Humains (5 états SIR), stats/charts/estimation R0, save/load."
+        },
+        {
+          "path": "references/Prompt-Vault/Advanced/File_Listing.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Outil desktop Tauri 2 + Vue 3 + TypeScript + Rust de listing de fichiers : sélection dossier/drag&drop, scan récursif via backend Rust, grille éditable, hashing md5/sha256, filtre/recherche, export CSV. Cas test IPC Rust↔Vue."
+        },
+        {
+          "path": "references/Prompt-Vault/README.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Tableau récapitulatif des 12 prompts (nom, description, difficulté), instructions d'usage ('fournir le contenu comme prompt à un assistant IA'), note sur le format single-index.html par défaut. Index/point d'entrée pour sélectionner un cas de test à injecter dans tasks.json."
+        }
+      ]
+    },
+    {
+      "id": "aider",
+      "name": "aider",
+      "path": "references/aider",
+      "category": "coding-agent-cli",
+      "reuse_rating": "high",
+      "summary": "AI coding agent CLI de référence, mature et très largement adopté, dont le projet cible dérive explicitement (RepoGraph descend de RepoMap). Valeur triple : 12 edit-formats robustes (whole/diff/udiff/patch…), RepoMap (PageRank + tree-sitter), et le pattern Architect → Editor (Brains/Hands) qui correspond exactement au workflow Routeur → Architect → Coders.",
+      "files": [
+        {
+          "path": "references/aider/aider/website/docs/more/edit-formats.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Tableau comparatif des edit-formats supportés (whole, diff, udiff, patch, diff-fenced, editor-*, architect, ask, context, help)."
+        },
+        {
+          "path": "references/aider/aider/website/_posts/2024-09-26-architect.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Article blog sur le mode architect (Brains propose / Hands applique)."
+        },
+        {
+          "path": "references/aider/aider/website/_posts/2023-10-22-repomap.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Article fondateur sur le RepoMap (PageRank + tree-sitter)."
+        },
+        {
+          "path": "references/aider/aider/website/examples/semantic-search-replace.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Exemple annoté du format SEARCH/REPLACE."
+        },
+        {
+          "path": "references/aider/aider/website/docs/repomap.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Doc conceptuelle du RepoMap (ctags, ranking, map_tokens)."
+        },
+        {
+          "path": "references/aider/aider/website/docs/unified-diffs.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Rationale du format unified-diff (udiff)."
+        },
+        {
+          "path": "references/aider/aider/website/docs/usage/lint-test.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Usage du lint/test automatique post-édit."
+        },
+        {
+          "path": "references/aider/aider/website/docs/usage/browser.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Doc du scraping web (Playwright/pandoc)."
+        },
+        {
+          "path": "references/aider/aider/website/_posts/2024-05-22-linting.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Rationale du linter intégré post-édit."
+        },
+        {
+          "path": "references/aider/README.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Présentation produit, features, exemples CLI, badges."
+        },
+        {
+          "path": "references/aider/aider/coders/editblock_coder.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "EditBlockCoder",
+            "find_original_update_blocks",
+            "do_replace",
+            "replace_most_similar_chunk",
+            "perfect_or_whitespace",
+            "try_dotdotdots",
+            "replace_part_with_missing_leading_whitespace",
+            "find_similar_lines"
+          ],
+          "description": "Format SEARCH/REPLACE (<<<<<<< SEARCH / ======= / >>>>>>> REPLACE). Parsing du stream LLM, application tolérante : match exact → match sans whitespace de tête → ellipsis ... → fuzzy SequenceMatcher. Génère des messages 'Did you mean' pour re-prompting."
+        },
+        {
+          "path": "references/aider/aider/coders/editblock_prompts.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "EditBlockPrompts",
+            "main_system",
+            "system_reminder",
+            "example_messages",
+            "rename_with_shell",
+            "go_ahead_tip"
+          ],
+          "description": "Prompt canonique du format SEARCH/REPLACE : règles explicites, 2 exemples few-shot (modify + new file), rappels système."
+        },
+        {
+          "path": "references/aider/aider/coders/search_replace.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "RelativeIndenter",
+            "make_relative",
+            "make_absolute",
+            "dmp_apply",
+            "dmp_lines_apply",
+            "map_patches",
+            "flexible_search_and_replace",
+            "search_and_replace",
+            "git_cherry_pick_osr_onto_o",
+            "diff_lines",
+            "all_preprocs",
+            "editblock_strategies",
+            "udiff_strategies"
+          ],
+          "description": "Moteur d'application d'edits multi-stratégies : (a) réindentation relative pour normaliser whitespace, (b) diff_match_patch char/line-level, (c) cherry-pick git comme fallback, (d) pré-processeurs."
+        },
+        {
+          "path": "references/aider/aider/repomap.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "RepoMap",
+            "get_repo_map",
+            "get_ranked_tags",
+            "get_ranked_tags_map",
+            "get_tags_raw",
+            "render_tree",
+            "to_tree",
+            "token_count",
+            "Tag",
+            "load_tags_cache",
+            "nx.pagerank"
+          ],
+          "description": "Source originale de RepoGraph. Pipeline : tree-sitter SCM queries → tags def/ref → nx.MultiDiGraph pondéré (snakes/camel/kebab boost, _ penalty, sqrt(num_refs)) → PageRank personnalisé par fichiers en chat → ranking → rendu TreeContext sous budget map_tokens. Cache diskcache v3/v4 + fallback dict."
+        },
+        {
+          "path": "references/aider/aider/coders/architect_coder.py + references/aider/aider/coders/architect_prompts.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "ArchitectCoder.reply_completed",
+            "ArchitectPrompts",
+            "main_system"
+          ],
+          "description": "Pattern Brains/Hands : après réponse de l'architect, crée un Coder.create(main_model=editor_model, edit_format=editor_edit_format, map_tokens=0) et lance editor_coder.run(with_message=content). Modèle direct pour l'étape Architect → Coders.",
+          "aggregate": true
+        },
+        {
+          "path": "references/aider/aider/coders/patch_coder.py + references/aider/aider/coders/patch_prompts.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "PatchCoder",
+            "Patch",
+            "PatchAction",
+            "Chunk",
+            "ActionType",
+            "find_context_core",
+            "find_context",
+            "peek_next_section",
+            "_parse_patch_text",
+            "_apply_update",
+            "identify_files_needed"
+          ],
+          "description": "Format V4A / apply_patch (*** Begin Patch, *** Update File:, *** Add File:, *** Delete File:, *** Move to:, *** End of File, @@scope@@). Parser complet + applicateur avec niveaux de fuzz (exact → rstrip → strip). Support move/rename.",
+          "aggregate": true
+        },
+        {
+          "path": "references/aider/aider/scrape.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "Scraper",
+            "scrape",
+            "scrape_with_playwright",
+            "scrape_with_httpx",
+            "html_to_markdown",
+            "looks_like_html",
+            "try_pandoc",
+            "slimdown_html",
+            "install_playwright",
+            "has_playwright",
+            "aider_user_agent"
+          ],
+          "description": "Extraction web : Playwright (Chromium headless, masque 'Headless' du UA, wait_until=networkidle) en prioritaire, fallback httpx, conversion HTML→Markdown via pypandoc + BeautifulSoup. Réutilisable pour le mode 'research/web testing'."
+        },
+        {
+          "path": "references/aider/aider/coders/editor_editblock_coder.py + references/aider/aider/coders/editor_editblock_prompts.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "EditorEditBlockCoder",
+            "EditorEditBlockPrompts"
+          ],
+          "description": "Variante 'Hands pure' du SEARCH/REPLACE : sous-classe EditBlockCoder avec prompt épuré (pas de shell, pas de go_ahead_tip). C'est le coder réellement instancié par ArchitectCoder.",
+          "aggregate": true
+        },
+        {
+          "path": "references/aider/aider/coders/udiff_coder.py + references/aider/aider/coders/udiff_prompts.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "UnifiedDiffCoder",
+            "find_diffs",
+            "process_fenced_block",
+            "hunk_to_before_after",
+            "apply_hunk",
+            "apply_partial_hunk",
+            "make_new_lines_explicit",
+            "normalize_hunk"
+          ],
+          "description": "Format unified-diff diff -U0 (hunks @@ ... @@, lignes +/-/ ). Application par recherche de contexte + reconstruction de hunks.",
+          "aggregate": true
+        },
+        {
+          "path": "references/aider/aider/linter.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "Linter",
+            "lint",
+            "py_lint",
+            "run_cmd",
+            "set_linter",
+            "LintResult",
+            "basic_lint",
+            "lint_python_compile",
+            "tree_context",
+            "find_filenames_and_linenums"
+          ],
+          "description": "Lint post-édit multi-langage : cmd configurable par langage, fallback basic_lint (regex) + compile() pour Python, rendu TreeContext montrant la zone d'erreur."
+        },
+        {
+          "path": "references/aider/aider/commands.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "Commands",
+            "cmd_",
+            "do_run"
+          ],
+          "description": "Système de commandes slash complet. Patron pour le routeur de commandes."
+        },
+        {
+          "path": "references/aider/aider/diffs.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "diff_partial_update",
+            "find_last_non_deleted",
+            "create_progress_bar",
+            "assert_newlines"
+          ],
+          "description": "Diff unifié partiel pendant le streaming LLM, avec barre de progression des lignes traitées."
+        },
+        {
+          "path": "references/aider/aider/coders/base_coder.py + references/aider/aider/coders/base_prompts.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "Coder",
+            "edit_format",
+            "gpt_prompts",
+            "partial_response_content",
+            "abs_fnames",
+            "abs_root_path",
+            "get_inchat_relative_files",
+            "CoderPrompts",
+            "files_content_prefix",
+            "lazy_prompt",
+            "overeager_prompt",
+            "repo_content_prefix"
+          ],
+          "description": "Socle commun : cycle get_edits → apply_edits, gestion fichiers en chat, prompts partagés. Architecture de référence pour un Coder abstrait.",
+          "aggregate": true
+        },
+        {
+          "path": "references/aider/aider/coders/wholefile_coder.py + references/aider/aider/coders/wholefile_prompts.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "WholeFileCoder",
+            "get_edits",
+            "apply_edits",
+            "do_live_diff",
+            "render_incremental_response",
+            "WholeFilePrompts"
+          ],
+          "description": "Format whole-file (réécrit fichier entier dans fence). Live-diff streaming via diffs.diff_partial_update. C'est l'approche actuelle du projet cible.",
+          "aggregate": true
+        },
+        {
+          "path": "references/aider/aider/coders/editor_whole_coder.py + references/aider/aider/coders/editor_whole_prompts.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "EditorWholeFileCoder",
+            "EditorWholeFilePrompts"
+          ],
+          "description": "Variante 'Hands' du whole-file.",
+          "aggregate": true
+        },
+        {
+          "path": "references/aider/aider/coders/editblock_fenced_coder.py + references/aider/aider/coders/editblock_fenced_prompts.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "EditBlockFencedCoder"
+          ],
+          "description": "SEARCH/REPLACE avec fence quadruple-backtick (pour modèles qui interprètent mal le triple).",
+          "aggregate": true
+        },
+        {
+          "path": "references/aider/aider/coders/__init__.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "__all__"
+          ],
+          "description": "Registre des 12 coders exportés (HelpCoder, AskCoder, Coder, EditBlockCoder, EditBlockFencedCoder, WholeFileCoder, PatchCoder, UnifiedDiffCoder, UnifiedDiffSimpleCoder, ArchitectCoder, EditorEditBlockCoder, EditorWholeFileCoder, EditorDiffFencedCoder, ContextCoder). Cartographie des edit-formats."
+        },
+        {
+          "path": "references/aider/aider/models.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "Model",
+            "edit_format",
+            "editor_model_name",
+            "editor_edit_format",
+            "get_editor_model"
+          ],
+          "description": "Mapping modèles → edit_format (GPT-5 family → 'diff', certains → 'udiff'). Guide de calibration modèle → format."
+        },
+        {
+          "path": "references/aider/aider/coders/udiff_simple.py + references/aider/aider/coders/udiff_simple_prompts.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "UnifiedDiffSimpleCoder"
+          ],
+          "description": "Variante simplifiée d'udiff.",
+          "aggregate": true
+        },
+        {
+          "path": "references/aider/aider/coders/ask_coder.py + references/aider/aider/coders/ask_prompts.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "AskCoder"
+          ],
+          "description": "Mode question sans édition.",
+          "aggregate": true
+        },
+        {
+          "path": "references/aider/aider/coders/context_coder.py + references/aider/aider/coders/context_prompts.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "ContextCoder"
+          ],
+          "description": "Chargeur de contexte read-only.",
+          "aggregate": true
+        },
+        {
+          "path": "references/aider/aider/coders/help_coder.py + references/aider/aider/coders/help_prompts.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "HelpCoder"
+          ],
+          "description": "Réponses aux questions d'aide.",
+          "aggregate": true
+        },
+        {
+          "path": "references/aider/aider/coders/editblock_func_coder.py + references/aider/aider/coders/editblock_func_prompts.py ; references/aider/aider/coders/wholefile_func_coder.py + references/aider/aider/coders/wholefile_func_prompts.py ; references/aider/aider/coders/single_wholefile_func_coder.py + references/aider/aider/coders/single_wholefile_func_prompts.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "EditBlockFunctionCoder",
+            "WholeFileFunctionCoder",
+            "SingleWholeFileFunctionCoder"
+          ],
+          "description": "Variantes 'function-calling' (édits passés via tool calls plutôt que texte).",
+          "aggregate": true
+        },
+        {
+          "path": "references/aider/aider/resources/model-settings.yml",
+          "type": "config",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Mapping modèle → edit_format, editor_model, editor_edit_format, weak_model, params. Référence pour calibrer le projet cible."
+        },
+        {
+          "path": "references/aider/aider/resources/model-metadata.json",
+          "type": "config",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Métadonnées de modèles (context window, pricing, etc.)."
+        },
+        {
+          "path": "references/aider/aider/queries/tree-sitter-language-pack/ + references/aider/aider/queries/tree-sitter-languages/",
+          "type": "spec",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Requêtes tree-sitter (fichiers *.scm) pour extraire def/ref par langage — cœur du RepoMap.",
+          "aggregate": true
+        },
+        {
+          "path": "references/aider/pyproject.toml",
+          "type": "config",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Définition du package aider-chat, dépendances, entry points."
+        },
+        {
+          "path": "references/aider/requirements.txt + references/aider/requirements/",
+          "type": "config",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Dépendances (dont tree-sitter, grep_ast, networkx, diskcache, diff_match_patch, playwright, pypandoc, litellm).",
+          "aggregate": true
+        }
+      ]
+    },
+    {
+      "id": "nanocode",
+      "name": "nanocode",
+      "path": "references/nanocode",
+      "category": "coding-agent-cli",
+      "reuse_rating": "medium",
+      "summary": "Clone minimaliste de Claude Code tenu en un seul fichier Python (~272 lignes, stdlib uniquement). Modèle pédagogique d'un agent tool-using complet : boucle agentic, 6 outils orientés editing (read/write/edit/glob/grep/bash), schéma d'outils dynamique. Intérêt principal : le pattern d'outil edit avec imposition d'unicité du old_string, plus sûr qu'un replace naïf.",
+      "files": [
+        {
+          "path": "references/nanocode/README.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Présentation, usage (clés ANTHROPIC_API_KEY/OPENROUTER_API_KEY, var MODEL), commandes /c /q exit, table des 6 outils, exemple de session, licence MIT. Décrit l'API et le contrat d'usage des outils."
+        },
+        {
+          "path": "references/nanocode/nanocode.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "edit"
+          ],
+          "description": "Remplacement de chaîne dans un fichier avec imposition d'unicité : erreur si old absent ; erreur explicite avec le compte si old apparaît >1 fois sans all=true. Clés réelles : path, old, new, all (optionnel). Bonne pratique anti-ambiguïté transposable aux outils d'editing des Coders."
+        },
+        {
+          "path": "references/nanocode/nanocode.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "make_schema",
+            "TOOLS"
+          ],
+          "description": "Génération dynamique du schéma JSON d'outils depuis un dict (description, params, fn). Convention suffixe ? = paramètre optionnel ; number mappé vers integer ; séparation auto required/optional."
+        },
+        {
+          "path": "references/nanocode/nanocode.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "read",
+            "glob",
+            "grep",
+            "bash"
+          ],
+          "description": "Implémentations stdlib d'outils de lecture/recherche/exécution. read : numéros de ligne + offset/limit. glob : tri par mtime desc. grep : regex récursive plafonnée à 50 hits. bash : streaming ligne à ligne + timeout 30s + kill."
+        },
+        {
+          "path": "references/nanocode/nanocode.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "main",
+            "run_tool"
+          ],
+          "description": "Boucle interne qui rappelle l'API tant que des blocs tool_use sont présents (break si tool_results vide) ; dispatch run_tool avec catch-all Exception retournant error: {err}."
+        },
+        {
+          "path": "references/nanocode/nanocode.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "write"
+          ],
+          "description": "Écriture simple de contenu dans un fichier. Trivial."
+        },
+        {
+          "path": "references/nanocode/nanocode.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "call_api"
+          ],
+          "description": "Appel HTTP brut via urllib.request à Anthropic ou OpenRouter (header Authorization vs x-api-key), max_tokens=8192. Couplage fort aux APIs Anthropic/OpenRouter."
+        },
+        {
+          "path": "references/nanocode/nanocode.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "separator",
+            "render_markdown"
+          ],
+          "description": "Rendu terminal couleur (RESET/BOLD/DIM/BLUE/CYAN/GREEN/YELLOW/RED), séparateur pleine largeur, gras **markdown**. Cosmétique CLI."
+        },
+        {
+          "path": "references/nanocode/README.md",
+          "type": "spec",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Contrat d'interface : variables d'env (ANTHROPIC_API_KEY, OPENROUTER_API_KEY, MODEL), commandes slash (/c, /q, exit), table des 6 outils et leur description."
+        },
+        {
+          "path": "references/nanocode/nanocode.py",
+          "type": "config",
+          "reuse": "medium",
+          "key_symbols": [
+            "OPENROUTER_KEY",
+            "API_URL",
+            "MODEL"
+          ],
+          "description": "Config inline : OPENROUTER_KEY, API_URL (Anthropic vs OpenRouter), MODEL par défaut (claude-opus-4-5 / anthropic/claude-opus-4.5)."
+        },
+        {
+          "path": "references/nanocode/nanocode.py",
+          "type": "spec",
+          "reuse": "medium",
+          "key_symbols": [
+            "TOOLS"
+          ],
+          "description": "Définition déclarative des 6 outils : (description, params typés, fonction). Paramètres optionnels marqués par suffixe ?."
+        }
+      ]
+    },
+    {
+      "id": "repograph",
+      "name": "RepoGraph",
+      "path": "references/RepoGraph",
+      "category": "research-tool",
+      "reuse_rating": "high",
+      "summary": "Module plug-in repository-level qui construit un graphe de code (networkx MultiDiGraph) à partir d'un repo Python puis l'expose pour enrichir le contexte d'un LLM. Adapté d'aider (RepoMap) + Agentless + grep-ast. Comble exactement le vide du KG DuckDB actuel (qui ne stocke pas la structure de code) : construction de graphe, recherche de dépendances, compression de fichiers pour le contexte LLM.",
+      "files": [
+        {
+          "path": "references/RepoGraph/README.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Overview papier, setup, CLI python repograph/construct_graph.py <dir>, intégrations SWE-bench, dataset HF/Drive des graphs pré-calculés."
+        },
+        {
+          "path": "references/RepoGraph/repograph/construct_graph.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "CodeGraph",
+            "Tag",
+            "get_code_graph",
+            "get_tag_files",
+            "tag_to_graph",
+            "get_ranked_tags",
+            "get_tags_raw",
+            "std_proj_funcs",
+            "find_files"
+          ],
+          "description": "Construction du graphe de code : tree-sitter (queries SCM inline) + structure AST pour extraire def/ref, filtrage builtins via exec d'imports, construction nx.MultiDiGraph (classes→méthodes, refs→defs). __main__ pickle graph.pkl + tags.json. Cœur du value-proposition."
+        },
+        {
+          "path": "references/RepoGraph/repograph/graph_searcher.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "RepoSearcher",
+            "one_hop_neighbors",
+            "two_hop_neighbors",
+            "dfs",
+            "bfs"
+          ],
+          "description": "Traversées de graphe minces (DFS/BFS bornés en profondeur) sur networkx. Wrapper clair pour exposer le graphe à un agent ; adaptable pour outil search_dependencies."
+        },
+        {
+          "path": "references/RepoGraph/repograph/utils.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "create_structure",
+            "parse_python_file"
+          ],
+          "description": "Parse un repo Python en dict hiérarchique {classes, functions, text, start_line, end_line} via ast. Pré-requis de CodeGraph ; pur stdlib ast, réutilisable pour indexer le code dans DuckDB."
+        },
+        {
+          "path": "references/RepoGraph/agentless/fl/localize.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "retrieve_graph",
+            "construct_code_graph_context",
+            "localize",
+            "merge"
+          ],
+          "description": "Récupère les callers/callees d'un symbole et fabrique un bloc de contexte texte (### Dependencies for {func}) injecté dans le prompt FL. Pont graphe→prompt transposable au workflow coding."
+        },
+        {
+          "path": "references/RepoGraph/agentless/fl/FL.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "FL",
+            "LLMFL",
+            "obtain_relevant_code_graph_prompt",
+            "localize_line_from_coarse_function_locs"
+          ],
+          "description": "Fault-localization multi-niveaux (fichier → fonction compressée → ligne) avec injection optionnelle du contexte graphe. Prompts et structure de pipeline réutilisables pour la localisation avant fan-out Coders."
+        },
+        {
+          "path": "references/RepoGraph/agentless/util/compress_file.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "CompressTransformer",
+            "get_skeleton"
+          ],
+          "description": "Compression de code : remplace corps de fonctions par ..., supprime docstrings, garde ClassDef/FunctionDef/constantes. Indépendant, pur libcst, idéal pour réduire le contexte envoyé au LLM."
+        },
+        {
+          "path": "references/RepoGraph/agentless/util/preprocess_data.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "line_wrap_content",
+            "get_repo_files",
+            "show_project_structure",
+            "get_full_file_paths_and_classes_and_functions",
+            "transfer_arb_locs_to_locs"
+          ],
+          "description": "Utilitaires de mise en forme du contexte (numérotation de lignes, sticky-scroll, extraction de fichiers). line_wrap_content utile pour afficher code numéroté."
+        },
+        {
+          "path": "references/RepoGraph/agentless/util/postprocess_data.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "check_syntax",
+            "extract_code_blocks",
+            "extract_locs_for_files",
+            "lint_code",
+            "parse_edit_commands"
+          ],
+          "description": "Post-processing des sorties LLM (extraction de blocs ```python, validation syntaxique). Réutilisable pour parser les réponses des Coders ; lint_code invoque un subprocess git temporaire."
+        },
+        {
+          "path": "references/RepoGraph/agentless/repair/repair.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "construct_topn_file_context"
+          ],
+          "description": "Construction du contexte Top-N + génération de patch. construct_topn_file_context réutilisable pour assembleur de contexte."
+        },
+        {
+          "path": "references/RepoGraph/agentless/get_repo_structure/get_repo_structure.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "clone_repo",
+            "checkout_commit",
+            "get_project_structure_from_scratch",
+            "get_code_graph_from_scratch",
+            "filter_out_test_files",
+            "repo_to_top_folder"
+          ],
+          "description": "Clonage git + checkout commit + construction structure/graphe pour SWE-bench. Pattern clone→checkout→parse."
+        },
+        {
+          "path": "references/RepoGraph/agentless/util/utils.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "load_jsonl",
+            "write_jsonl",
+            "load_json",
+            "combine_by_instance_id"
+          ],
+          "description": "IO JSON/JSONL triviaux."
+        },
+        {
+          "path": "references/RepoGraph/agentless/util/parse_global_var.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "parse_global_var_from_code"
+          ],
+          "description": "Extraction de variables globales (AST). Spécifique au prompt FL."
+        },
+        {
+          "path": "references/RepoGraph/agentless/util/api_requests.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "create_chatgpt_config",
+            "num_tokens_from_messages",
+            "request_chatgpt_engine"
+          ],
+          "description": "Wrapper API OpenAI (gpt-4o hardcodé) + comptage tokens. Remplaçable par DSPy/smolagents."
+        },
+        {
+          "path": "references/RepoGraph/requirements.txt",
+          "type": "config",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Dépendances pinées : tree-sitter==0.21.3, tree-sitter-languages==1.10.2, grep-ast==0.3.2, networkx==3.2.1, pygments==2.18.0, libcst==1.4.0, openai==1.42.0, tiktoken==0.7.0 — base pour réutiliser CodeGraph."
+        },
+        {
+          "path": "references/RepoGraph/README.md",
+          "type": "spec",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Spécifie le contrat d'usage : CLI construct_graph.py <dir> → tags_{id}.jsonl + {id}.pkl (networkx) ; datasets pré-calculés sur HF (MrZilinXiao/RepoGraph) et Drive."
+        }
+      ]
+    },
+    {
+      "id": "axon",
+      "name": "axon",
+      "path": "references/axon",
+      "category": "framework",
+      "reuse_rating": "high",
+      "summary": "Indexe n'importe quelle codebase (Python/JS/TS) en un knowledge graph structurel via un pipeline d'ingestion 12 phases, persisté dans KuzuDB (embedded, Cypher, FTS BM25, vecteurs HNSW). Exposé via CLI Typer, serveur MCP (15 tools + 3 resources) et dashboard React. Patterns de pipeline multi-phases, d'analyse d'impact BFS, de dead code multi-passes, de RRF (BM25+vecteur+fuzzy) et de guard Cypher directement adaptables.",
+      "files": [
+        {
+          "path": "references/axon/README.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Doc racine : pitch, pipeline 12 phases, modèle de graphe (nodes/relationships + ID format), 7 outils MCP, endpoints API, comparatifs, stack technique."
+        },
+        {
+          "path": "references/axon/docs/frontend-spec.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Spec UI web complète (1320 lignes) : design system 'terminal power tool', 3 vues (Explorer/Analysis/Cypher), schéma API REST, Zustand stores, animations impact/flow, raccourcis clavier."
+        },
+        {
+          "path": "references/axon/CONTRIBUTING.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Guide de contribution."
+        },
+        {
+          "path": "references/axon/pyproject.toml",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Dépendances clés (kuzu, tree-sitter, igraph, leidenalg, fastembed, mcp, fastapi, watchfiles, pathspec, typer), build hatchling."
+        },
+        {
+          "path": "references/axon/src/axon/core/ingestion/pipeline.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "PipelineResult",
+            "run_pipeline",
+            "reindex_files",
+            "build_graph"
+          ],
+          "description": "Orchestrateur des 12 phases d'ingestion (walk→structure→parse→imports→calls/heritage/types parallélisés→communities→processes→dead_code→coupling→bulk_load+embeddings). _timed context manager pour timing par phase. Reindex incrémental."
+        },
+        {
+          "path": "references/axon/src/axon/core/ingestion/dead_code.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "process_dead_code"
+          ],
+          "description": "Détection dead code multi-passes avec exemptions (entry points, exports, constructors, tests, dunder, __init__.py, décorateurs framework) + 3 passes de correction false-positives (override, conformance Protocol, stubs)."
+        },
+        {
+          "path": "references/axon/src/axon/core/search/hybrid.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "hybrid_search",
+            "_accumulate_ranks"
+          ],
+          "description": "Reciprocal Rank Fusion (RRF) : fusion BM25 + vecteur + fuzzy via score = Σ weight/(k+rank). Candidate limit, poids configurables, fallback fuzzy si FTS vide."
+        },
+        {
+          "path": "references/axon/src/axon/core/cypher_guard.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "WRITE_KEYWORDS",
+            "sanitize_cypher"
+          ],
+          "description": "Regex compilée détectant mots-clés d'écriture Cypher (DELETE/DROP/CREATE/SET/MERGE/...) après strip des commentaires. Guard read-only adaptable ; pattern applicable à toute garde SQL/Cypher."
+        },
+        {
+          "path": "references/axon/src/axon/mcp/tools.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "handle_impact",
+            "handle_context",
+            "handle_call_path",
+            "handle_query",
+            "handle_cypher",
+            "handle_dead_code",
+            "handle_review_risk",
+            "handle_test_impact"
+          ],
+          "description": "14 handlers MCP : impact analysis (BFS traverse_with_depth, groupé par profondeur will-break/may-break/review), context 360° (callers/callees/type refs/heritage), call path BFS, review risk (score 0-10), test impact."
+        },
+        {
+          "path": "references/axon/src/axon/mcp/server.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "server",
+            "TOOLS",
+            "_dispatch_tool",
+            "_with_storage",
+            "create_streamable_http_app"
+          ],
+          "description": "Serveur MCP complet : registration tools/resources, dispatch, injection storage partagé + lock async, mode read-only fallback, transport stdio + streamable HTTP (ASGI)."
+        },
+        {
+          "path": "references/axon/src/axon/core/storage/base.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "StorageBackend",
+            "SearchResult",
+            "NodeEmbedding",
+            "EMBEDDING_DIMENSIONS"
+          ],
+          "description": "Protocol @runtime_checkable : contrat complet d'un backend graphe (CRUD nodes/rels, callers/callees, traverse BFS + traverse_with_depth, fts/fuzzy/vector search, bulk_load, embeddings). 384-dim."
+        },
+        {
+          "path": "references/axon/src/axon/core/storage/kuzu_backend.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "KuzuBackend",
+            "escape_cypher"
+          ],
+          "description": "Implémentation backend KuzuDB (1250 lignes) : schema creation, bulk load CSV COPY FROM, FTS indexes, vector_search via array_cosine_similarity, BFS, retry sur lock."
+        },
+        {
+          "path": "references/axon/src/axon/core/graph/model.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "NodeLabel",
+            "RelType",
+            "GraphNode",
+            "GraphRelationship",
+            "generate_id"
+          ],
+          "description": "Modèle de données : 10 NodeLabels, 11 RelTypes, ID format {label}:{file_path}:{symbol_name}."
+        },
+        {
+          "path": "references/axon/src/axon/core/graph/graph.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "KnowledgeGraph"
+          ],
+          "description": "Graphe en mémoire dict-backed avec indexes secondaires O(1) par label/type/adjacence. Cascade delete."
+        },
+        {
+          "path": "references/axon/src/axon/core/ingestion/calls.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "resolve_call",
+            "process_calls",
+            "_CALL_BLOCKLIST"
+          ],
+          "description": "Résolution d'appels avec scores de confiance (même fichier 1.0, import 1.0, fuzzy global 0.5). Blocklist 138 builtins."
+        },
+        {
+          "path": "references/axon/src/axon/core/ingestion/coupling.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "resolve_coupling",
+            "parse_git_log",
+            "build_cochange_matrix"
+          ],
+          "description": "Analyse change coupling via git log (6 mois) : force = co_changes/max(changes), filtres strength≥0.3."
+        },
+        {
+          "path": "references/axon/src/axon/core/ingestion/processes.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "process_processes",
+            "find_entry_points",
+            "trace_flow"
+          ],
+          "description": "Détection flows : entry points framework-aware, BFS trace (max_depth 6), classification cross/intra-community."
+        },
+        {
+          "path": "references/axon/src/axon/core/ingestion/walker.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "walk_repo",
+            "discover_files",
+            "FileEntry"
+          ],
+          "description": "Walker filesystem : git ls-files puis fallback os.walk, respecte gitignore (pathspec), prune dirs, lecture parallèle."
+        },
+        {
+          "path": "references/axon/src/axon/core/embeddings/embedder.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "embed_graph",
+            "embed_query",
+            "EMBEDDABLE_LABELS"
+          ],
+          "description": "Pipeline embeddings fastembed (nomic-embed-text-v1.5, 384-dim Matryoshka), cache modèle thread-safe."
+        },
+        {
+          "path": "references/axon/src/axon/mcp/resources.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "get_overview",
+            "get_dead_code_list",
+            "get_schema"
+          ],
+          "description": "Handlers resources MCP (overview counts, dead code, schema statique)."
+        },
+        {
+          "path": "references/axon/src/axon/runtime.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "AxonRuntime"
+          ],
+          "description": "Dataclass @slots conteneur état partagé (storage, repo_path, watch, lock, urls, event_listeners)."
+        },
+        {
+          "path": "references/axon/src/axon/config/ignore.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "load_gitignore",
+            "should_ignore",
+            "DEFAULT_IGNORE_PATTERNS"
+          ],
+          "description": "Matching gitignore via pathspec. Réutilisable pour exclure fichiers du scan codebase."
+        },
+        {
+          "path": "references/axon/src/axon/core/parsers/base.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "LanguageParser",
+            "SymbolInfo",
+            "ImportInfo",
+            "CallInfo",
+            "ParseResult"
+          ],
+          "description": "Interface parser + dataclasses IR (symboles, imports, calls, type refs, heritage, exports)."
+        },
+        {
+          "path": "references/axon/src/axon/cli/main.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "app"
+          ],
+          "description": "CLI Typer complet (analyze/query/context/impact/dead-code/cypher/watch/diff/host/ui/setup/mcp/serve)."
+        },
+        {
+          "path": "references/axon/docs/frontend-spec.md",
+          "type": "spec",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Spec UI web : design system, 3 vues, schéma API REST, Zustand stores, 10 phases d'implémentation."
+        },
+        {
+          "path": "references/axon/pyproject.toml",
+          "type": "config",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Dépendances (versions min), optionnel [neo4j], build hatchling, ruff/pytest config."
+        },
+        {
+          "path": "references/axon/src/axon/core/graph/model.py",
+          "type": "spec",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Contrat de modèle de données : enums NodeLabel/RelType, dataclasses GraphNode/GraphRelationship, format ID generate_id()."
+        },
+        {
+          "path": "references/axon/src/axon/core/storage/base.py",
+          "type": "spec",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Contrat Protocol StorageBackend (runtime_checkable) : signature complète du backend de persistance graphe."
+        },
+        {
+          "path": "references/axon/src/axon/core/parsers/base.py",
+          "type": "spec",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Contrat parser LanguageParser ABC + IR dataclasses."
+        }
+      ]
+    },
+    {
+      "id": "graphify",
+      "name": "graphify",
+      "path": "references/graphify",
+      "category": "framework",
+      "reuse_rating": "high",
+      "summary": "Transforme un dossier (code, docs, PDFs, images, vidéo/audio) en un knowledge graph navigable (graph.json au format node-link NetworkX), exposé comme skill pour 20+ assistants coding (YC S26). Trois idées clés réutilisables : tags de confiance sur les edges (EXTRACTED/INFERRED/AMBIGUOUS), analyse d'impact multi-relation avec provenance par edge, et architecture d'extracteurs par langage découplée via LanguageConfig + registry.",
+      "files": [
+        {
+          "path": "references/graphify/README.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "README racine (869 lignes) : pitch, install 20+ plateformes, commandes, variables d'env, privacy, benchmarks LOCOMO/LongMemEval."
+        },
+        {
+          "path": "references/graphify/ARCHITECTURE.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Pipeline en 7 étapes, schéma d'extraction (nodes/edges/confidence), tableau des modules, procédure 'ajouter un langage'."
+        },
+        {
+          "path": "references/graphify/docs/how-it-works.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Les 3 passes (AST local / Whisper local / LLM sémantique), Leiden, rubrique de scoring de confiance (0.55–0.95), format graph.json."
+        },
+        {
+          "path": "references/graphify/docs/node-summaries-rfc.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "RFC : summaries déterministes au niveau fichier (Option A attribut summary vs Option B sidecar) avec champs generated_by, summary_version."
+        },
+        {
+          "path": "references/graphify/docs/superpowers/specs/2026-05-04-incremental-updates-dedup-design.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Spec : dedup incrémental, mise à jour par hash de fichier."
+        },
+        {
+          "path": "references/graphify/SECURITY.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Modèle de menace (SSRF, path traversal, memory bomb)."
+        },
+        {
+          "path": "references/graphify/BENCHMARKS.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Benchmarks LOCOMO (recall@10 = 0.497), LongMemEval, coût token = 0 pour le code."
+        },
+        {
+          "path": "references/graphify/graphify/affected.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "AffectedHit",
+            "affected_nodes",
+            "resolve_seed",
+            "format_affected",
+            "DEFAULT_AFFECTED_RELATIONS",
+            "load_graph"
+          ],
+          "description": "Analyse d'impact par BFS inverse multi-relation (13 relations). via_file/via_location pointent vers le SITE du call/import (pas la définition). Resolve-seed tolérant."
+        },
+        {
+          "path": "references/graphify/graphify/extractors/models.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "LanguageConfig",
+            "_SymbolResolutionFacts",
+            "_SymbolDeclarationFact",
+            "_SymbolImportFact",
+            "_SymbolAliasFact",
+            "_SymbolExportFact",
+            "_StarExportFact",
+            "_NamespaceExportFact",
+            "_SymbolUseFact"
+          ],
+          "description": "Configuration déclarative d'un langage tree-sitter + modèle de faits de résolution de symboles."
+        },
+        {
+          "path": "references/graphify/graphify/extractors/__init__.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "LANGUAGE_EXTRACTORS"
+          ],
+          "description": "Registry d'extracteurs par langage (dict {lang: extract_fn}, 25+ extracteurs importés). Pattern simple et éprouvé pour étendre les sources d'extraction."
+        },
+        {
+          "path": "references/graphify/graphify/build.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "build_from_json",
+            "build",
+            "build_merge",
+            "merge_raw_extraction",
+            "prefix_graph_for_global",
+            "prune_repo_from_graph",
+            "deduplicate_by_label",
+            "edge_data"
+          ],
+          "description": "Assemblage NetworkX : ghost-dedup AST vs sémantique, re-key sémantique depuis source_file, cross-language phantom-edge guard, merge incrémental replace-per-source."
+        },
+        {
+          "path": "references/graphify/graphify/cluster.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "cluster",
+            "_partition",
+            "label_communities_by_hub",
+            "cohesion_score",
+            "remap_communities_to_previous"
+          ],
+          "description": "Détection de communautés Leiden avec split des communautés >25%, exclusion de hubs par percentile, stabilité des IDs par matching greedy."
+        },
+        {
+          "path": "references/graphify/graphify/security.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "validate_url",
+            "safe_fetch",
+            "safe_fetch_text",
+            "_SSRFGuardedHTTPConnection",
+            "_SSRFGuardedHTTPSConnection",
+            "validate_graph_path",
+            "check_graph_file_size_cap",
+            "sanitize_label",
+            "sanitize_metadata"
+          ],
+          "description": "Guards de sécurité : SSRF (résolution DNS unique + validation IP, anti-DNS-rebind), memory bomb (cap 512 MiB), path traversal, injection HTML."
+        },
+        {
+          "path": "references/graphify/graphify/global_graph.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "global_add",
+            "global_remove",
+            "global_list",
+            "global_path"
+          ],
+          "description": "Graph global multi-projets à ~/.graphify/. Préfixe les IDs (repo_tag::node_id), déduplique les nœuds externes par label."
+        },
+        {
+          "path": "references/graphify/graphify/serve.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "query_graph",
+            "get_node",
+            "get_neighbors",
+            "get_community",
+            "god_nodes",
+            "graph_stats",
+            "shortest_path",
+            "list_prs",
+            "get_pr_impact",
+            "triage_prs"
+          ],
+          "description": "Serveur MCP exposant le graph avec 10 outils + 6 ressources, auth (--api-key), stateless mode, multi-contexte ; transports stdio + HTTP."
+        },
+        {
+          "path": "references/graphify/graphify/extractors/engine.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "_extract_with_config"
+          ],
+          "description": "Moteur d'extraction AST universel (4748 lignes) : walk tree-sitter selon LanguageConfig, collecte calls/imports/references/inherits/implements, second pass pour indirect_call."
+        },
+        {
+          "path": "references/graphify/graphify/skill.md + references/graphify/graphify/skill-*.md",
+          "type": "spec",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Déclarations de skill pour 20+ assistants. skill.md = skill racine (pipeline 9 étapes en bash). Les 15 skill-<platform>.md sont des variantes.",
+          "aggregate": true
+        },
+        {
+          "path": "references/graphify/graphify/skills/<platform>/references/extraction-spec.md",
+          "type": "spec",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Prompt exact d'extraction sémantique (schéma JSON, règles EXTRACTED/INFERRED/AMBIGUOUS, rubrique de confiance, hyperedges, règles vision). Contenu identique dupliqué par plateforme (×13).",
+          "aggregate": true
+        },
+        {
+          "path": "references/graphify/graphify/skills/<platform>/references/{query,update,hooks,exports,add-watch,github-and-merge,transcribe}.md",
+          "type": "spec",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Runbooks détaillés pour chaque sous-commande (dupliqués ×13 plateformes).",
+          "aggregate": true
+        },
+        {
+          "path": "references/graphify/graphify/always_on/*.md",
+          "type": "config",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Fichiers always-on écrits par graphify install : agents-md.md, claude-md.md, gemini-md.md, kiro-steering.md, vscode-instructions.md, antigravity-rules.md (6 fichiers).",
+          "aggregate": true
+        },
+        {
+          "path": "references/graphify/pyproject.toml",
+          "type": "config",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Package graphifyy v0.9.30 ; 31 deps tree-sitter ; extras [mcp, neo4j, falkordb, leiden, openai, anthropic, gemini, bedrock, ollama, pdf, office, video, sql, postgres, terraform, pascal, dm, chinese]."
+        }
+      ]
+    },
+    {
+      "id": "llamabot",
+      "name": "LlamaBot",
+      "path": "references/LlamaBot",
+      "category": "framework",
+      "reuse_rating": "medium",
+      "summary": "Framework d'agent de coding multi-agent orienté Rails (LangGraph 1.0 + LangChain create_agent + supervisor). Points forts transférables : agent de test TDD 6-stages avec circuit-breaker (modèle direct pour le nœud Tester), capture Playwright, catalogue de 20+ outils, sub-agents de délégation. Stack LangGraph différente de DSPy/smolagents : patterns test/web/circuit-breaker transférables mais code non portable.",
+      "files": [
+        {
+          "path": "references/LlamaBot/docs/research/injected-state-create-agent-memo.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Memo technique : InjectedState cassé avec create_agent, pattern ToolRuntime alternatif. Piège LangChain 1.0 à éviter."
+        },
+        {
+          "path": "references/LlamaBot/README.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Vue d'ensemble : 6 agents, 20+ outils, stack LangGraph+FastAPI+Postgres, variables d'env."
+        },
+        {
+          "path": "references/LlamaBot/SUMMARIZATION_BUG.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Bug de compaction SummarizationMiddleware (DeepSeek reasoning_content ignoré). Token counting."
+        },
+        {
+          "path": "references/LlamaBot/docs/VISION.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Vision produit (open-source, self-hostable)."
+        },
+        {
+          "path": "references/LlamaBot/docs/DEPLOY.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Déploiement Ubuntu/Nginx/Certbot/Postgres checkpointer."
+        },
+        {
+          "path": "references/LlamaBot/IMPLEMENTATION_PLAN.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Plan d'implémentation détaillé (36 KB)."
+        },
+        {
+          "path": "references/LlamaBot/LLAMABOT_JAVASCRIPT_REUSABILITY.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Réutilisabilité du frontend JS."
+        },
+        {
+          "path": "references/LlamaBot/app/agents/leonardo/rails_testing_agent/nodes.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "build_workflow",
+            "get_cached_system_prompt",
+            "SUMMARIZATION_PROMPT",
+            "default_tools"
+          ],
+          "description": "Agent TDD 6-stages (Bug Intake → Test Design → Failing Test → Verify → Hand-off → Regression) avec SummarizationMiddleware + circuit-breaker. Modèle direct pour nœud Tester ; workflow RED→GREEN applicable à pytest."
+        },
+        {
+          "path": "references/LlamaBot/app/agents/leonardo/rails_testing_agent/prompts.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "TDD_BUG_REPRODUCTION_PROMPT",
+            "RAILS_QA_SOFTWARE_ENGINEER_PROMPT",
+            "RAILS_TESTING_AGENT_PROMPT"
+          ],
+          "description": "Prompts TDD structurés (stages, non-négociables, sécurité). Squelette réutilisable (remplacer RSpec→pytest)."
+        },
+        {
+          "path": "references/LlamaBot/app/agents/leonardo/rails_agent/middleware.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "FailureCircuitBreakerMiddleware",
+            "check_failure_limit",
+            "DynamicModelMiddleware",
+            "ViewPathContextMiddleware",
+            "inject_view_context",
+            "DeepSeekReasoningMiddleware"
+          ],
+          "description": "Middleware LangChain : circuit-breaker (stop après 3 failed_tool_calls_count via reducer operator.add), sélection modèle runtime, injection contexte, fix DeepSeek reasoning_content."
+        },
+        {
+          "path": "references/LlamaBot/app/agents/utils/playwright_screenshot.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "capture_page_and_img_src",
+            "trim_html_for_llm",
+            "PLAYWRIGHT_AVAILABLE"
+          ],
+          "description": "Capture async Playwright (screenshot full_page + HTML + img src list) + nettoyage HTML pour LLM (supprime script/meta/svg/canvas, garde attrs src/href/alt/title). Modèle direct pour web tester."
+        },
+        {
+          "path": "references/LlamaBot/app/agents/leonardo/rails_agent/tools.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "BASH_OUTPUT_MAX_CHARS",
+            "BASH_ERROR_PATTERNS",
+            "BASH_CRITICAL_ERROR_PATTERNS",
+            "detect_bash_errors",
+            "truncate_output",
+            "read_file",
+            "write_file",
+            "edit_file",
+            "glob_files",
+            "grep_files",
+            "git_status",
+            "git_commit",
+            "bash_command",
+            "internet_search",
+            "write_todos"
+          ],
+          "description": "Catalogue 20+ outils + utilitaires (truncation 12000 chars, détection erreurs, path normalization, fuzzy edit via difflib, ripgrep)."
+        },
+        {
+          "path": "references/LlamaBot/app/agents/leonardo/rails_agent/state.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "Todo",
+            "RailsAgentState"
+          ],
+          "description": "Schéma d'état agent (todos content/status pending-in_progress-completed, debug_info, agent_mode, llm_model, failed_tool_calls_count avec operator.add). Pattern state + reducer."
+        },
+        {
+          "path": "references/LlamaBot/app/agents/leonardo/rails_agent/sub_agents.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "delegate_task",
+            "delegate_research",
+            "create_sub_agent",
+            "create_research_sub_agent",
+            "RESEARCH_ONLY_PROMPT"
+          ],
+          "description": "Délégation à sub-agents isolés (read-only vs full). Pattern fan-out/isolation de contexte applicable au fan-out Coders."
+        },
+        {
+          "path": "references/LlamaBot/app/agents/leonardo/llm_factory.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "get_llm",
+            "ChatDeepSeekWithReasoning",
+            "FakeTestChatModel",
+            "DEFAULT_LLM_MODEL"
+          ],
+          "description": "Factory LLM multi-provider (Claude/GPT-5/Gemini/DeepSeek) avec thinking activé."
+        },
+        {
+          "path": "references/LlamaBot/app/agents/utils/token_counter.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "gemini_multimodal_token_counter",
+            "SUMMARIZATION_TOKEN_THRESHOLD"
+          ],
+          "description": "Compteur tokens universel (tiktoken + Gemini API pour multimodal, gère reasoning_content DeepSeek). Seuil summarization 100000."
+        },
+        {
+          "path": "references/LlamaBot/app/agents/leonardo/rails_agent/nodes.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "build_workflow",
+            "get_cached_system_prompt",
+            "SUMMARIZATION_PROMPT",
+            "default_tools"
+          ],
+          "description": "Assembly agent principal avec stack middleware (Summarization→DynamicModel→DeepSeek→ViewContext→CircuitBreaker) + prompt caching Anthropic."
+        },
+        {
+          "path": "references/LlamaBot/app/agents/leonardo/rails_testing_agent/middleware.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "TestingModeContextMiddleware",
+            "inject_testing_mode_context"
+          ],
+          "description": "Injection contexte TDD mode. Pattern d'injection de mode réutilisable."
+        },
+        {
+          "path": "references/LlamaBot/app/agents/llamapress/clone_agent.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "LlamaPressState",
+            "url_clone_agent",
+            "image_clone_agent",
+            "router_node",
+            "write_html_page",
+            "build_workflow"
+          ],
+          "description": "Graphe supervisor clone de sites (router→url/image clone→tools) avec InjectedState (ancien pattern StateGraph). Très lié à Rails/LlamaPress."
+        },
+        {
+          "path": "references/LlamaBot/app/services/headless_agent_executor.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "execute_agent_headless"
+          ],
+          "description": "Exécution agent sans WebSocket (jobs planifiés). Spécifique infra FastAPI/SQLModel."
+        },
+        {
+          "path": "references/LlamaBot/app/langgraph.json",
+          "type": "config",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Registre 10 agents (llamabot, llamapress, rails_agent, rails_testing_agent, rails_ai_builder, rails_ticket_mode, rails_user_mode, rails_beginner, rails_plan_mode, pyxl_agent) avec points d'entrée build_workflow."
+        },
+        {
+          "path": "references/LlamaBot/langgraph.json",
+          "type": "config",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Config racine LangGraph."
+        },
+        {
+          "path": "references/LlamaBot/pyproject.toml",
+          "type": "config",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Métadonnées paquet Python."
+        },
+        {
+          "path": "references/LlamaBot/requirements.txt",
+          "type": "config",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Dépendances (langchain, langgraph, playwright, tavily, anthropic, openai, google-genai, deepseek)."
+        },
+        {
+          "path": "references/LlamaBot/.env.example",
+          "type": "config",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Variables d'env (OPENAI/ANTHROPIC/GOOGLE/TAVILY/LANGSMITH_API_KEY, DB_URI, LLAMAPRESS_API_URL)."
+        },
+        {
+          "path": "references/LlamaBot/docker-compose.yml",
+          "type": "config",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Stack Docker (LlamaBot + Rails LlamaPress)."
+        },
+        {
+          "path": "references/LlamaBot/docs/CLA.md",
+          "type": "spec",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Contributor License Agreement."
+        },
+        {
+          "path": "references/LlamaBot/app/rails/requirements/REQUIREMENTS.md",
+          "type": "spec",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Specs Rails (shape-up style)."
+        }
+      ]
+    },
+    {
+      "id": "deer-flow",
+      "name": "deer-flow",
+      "path": "references/deer-flow",
+      "category": "framework",
+      "reuse_rating": "medium",
+      "summary": "DeerFlow 2.0 (ByteDance) est un 'super agent harness' open-source qui orchestre des sub-agents, gère une mémoire long-terme persistante (DeerMem), exécute du code dans des sandboxes isolées et s'expose via canaux IM. Stack LangGraph/LangChain (≠ DSPy/smolagents) : la valeur est essentiellement documentaire — cahiers des charges (RFC authz, plans TDD) et patterns architecturaux (chaîne de middlewares, ThreadState avec reducers, sub-agents isolés, dedupe store, event-store append-only).",
+      "files": [
+        {
+          "path": "references/deer-flow/README.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "README racine (90 Ko) : présentation super-agent harness, config modèles/sandbox/channels/memory, architecture, sécurité."
+        },
+        {
+          "path": "references/deer-flow/docs/plans/2026-07-10-pluggable-authorization-rfc.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "RFC Authorization pluggable : AuthorizationProvider Protocol à 2 couches (capability filtering assembly-time + execution authorization runtime via GuardrailMiddleware). Built-in RbacAuthorizationProvider."
+        },
+        {
+          "path": "references/deer-flow/docs/plans/2026-07-10-pluggable-authorization-implementation-notes.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Notes de continuité d'implémentation authz (PR par PR, décisions review, contrats mergés)."
+        },
+        {
+          "path": "references/deer-flow/docs/plans/2026-07-15-authz-phase1a-implementation-plan.md + references/deer-flow/docs/plans/2026-07-15-authz-phase1a1-trusted-principal.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Plans d'implémentation TDD phase 1a/1a1 (principal de confiance).",
+          "aggregate": true
+        },
+        {
+          "path": "references/deer-flow/docs/plans/STORAGE_REWRITE_PLAN.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Plan rewrite stockage DeerMem : layout users/{user}/memory.json + agents/{agent}/facts/{sha-prefix}/{fact_id}.md, writes incrémentaux, journalé, révisions optimistes. PR #4279."
+        },
+        {
+          "path": "references/deer-flow/docs/plans/STORAGE_REWRITE_CHANGES.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Détail des changements du storage rewrite."
+        },
+        {
+          "path": "references/deer-flow/docs/plans/OPENVIKING_HTTP_MEMORY_INTEGRATION.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Plan intégration backend mémoire HTTP (OpenViking) via interface MemoryManager pluggable."
+        },
+        {
+          "path": "references/deer-flow/docs/plans/2026-04-01-langfuse-tracing.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Plan TDD tracing multi-provider (Langfuse + LangSmith simultanés), factory de callbacks."
+        },
+        {
+          "path": "references/deer-flow/docs/plans/2026-07-17-remember-login.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Plan 'remember me' (session cookie persistant)."
+        },
+        {
+          "path": "references/deer-flow/docs/superpowers/plans/2026-04-10-event-store-history.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Plan couche de compatibilité event-store : remplacer checkpoint par event-store append-only comme source de messages (fix perte après summarization). Design event-sourcing."
+        },
+        {
+          "path": "references/deer-flow/docs/superpowers/specs/2026-04-11-runjournal-history-evaluation.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Spéc/évidence d'évaluation du runjournal (chaîne de preuves alignement)."
+        },
+        {
+          "path": "references/deer-flow/docs/superpowers/specs/2026-04-11-summarize-marker-design.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Design marker de summarization."
+        },
+        {
+          "path": "references/deer-flow/docs/superpowers/plans/2026-07-01-scheduled-tasks-mvp.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Plan MVP scheduled tasks durable (cron + once), persistence models/repos, scheduler service, REST API. Cahier des charges scheduler."
+        },
+        {
+          "path": "references/deer-flow/docs/superpowers/specs/2026-07-01-scheduled-tasks-mvp-design.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Design associé au scheduled tasks MVP."
+        },
+        {
+          "path": "references/deer-flow/docs/superpowers/plans/2026-07-02-read-before-write-gate.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Plan middleware Read-Before-Write : bloquer write_file/str_replace sauf si agent a lu la version courante (hash sha256 stampé sur ToolMessage.additional_kwargs[deerflow_read_mark]). Fix #3857."
+        },
+        {
+          "path": "references/deer-flow/docs/superpowers/specs/2026-07-02-read-before-write-gate-design.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Design du read-before-write gate."
+        },
+        {
+          "path": "references/deer-flow/docs/superpowers/plans/2026-06-19-guardrail-request-attribution.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Plan attribution contexte utilisateur runtime → GuardrailRequest via runtime.context."
+        },
+        {
+          "path": "references/deer-flow/docs/agents/maintainer-orchestrator-design.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Design notes maintainer-orchestrator : skill 'comment-only' pour triage issues/PR. Trust boundary (comment plane = action la plus réversible). Barre de posting (confiance × sévérité P0/P1/P2)."
+        },
+        {
+          "path": "references/deer-flow/plans/subagent-card-runtime-metadata.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Plan metadata runtime carte subagent : usage tokens cumulatif, identité modèle effectif. Décisions arch (keyed par task_id, additif/optionnel, pas de migration DB)."
+        },
+        {
+          "path": "references/deer-flow/backend/docs/ARCHITECTURE.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Doc architecture backend."
+        },
+        {
+          "path": "references/deer-flow/backend/docs/AUTH_DESIGN.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Docs design auth (OIDC/JWT/local, SSO, plans de test). Inclut AUTH_UPGRADE.md, SSO.md, AUTH_TEST_PLAN.md.",
+          "aggregate": true
+        },
+        {
+          "path": "references/deer-flow/backend/docs/RUN_EVENT_STREAM.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Doc companion du run event stream (contrepoint du contract JSON)."
+        },
+        {
+          "path": "references/deer-flow/backend/docs/middleware-execution-flow.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Doc ordre d'exécution de la chaîne de middlewares."
+        },
+        {
+          "path": "references/deer-flow/backend/docs/CONFIGURATION.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Référence config complète (sandbox, channels, etc.)."
+        },
+        {
+          "path": "references/deer-flow/backend/docs/GUARDRAILS.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Doc guardrails (custom provider)."
+        },
+        {
+          "path": "references/deer-flow/contracts/run_event_stream_contract.json",
+          "type": "spec",
+          "reuse": "high",
+          "key_symbols": [
+            "record_schema",
+            "categories",
+            "events",
+            "compatibility."
+          ],
+          "description": "Spec de protocole d'événements versionné : freeze des noms/catégories, règles d'évolution (additif autorisé, breaking listé), schéma producteur par event, catégories (trace/message/outputs/error/middleware/context/subagent/workspace), sémantique de séquence."
+        },
+        {
+          "path": "references/deer-flow/contracts/subagent_status_contract.json",
+          "type": "spec",
+          "reuse": "high",
+          "key_symbols": [
+            "valid_status_values",
+            "valid_stop_reason_values"
+          ],
+          "description": "Contrat wire cross-language du statut structuré sub-agent (v2). status (completed/failed/cancelled/timed_out/polling_timed_out), stop_reason (token_capped/turn_capped/loop_capped)."
+        },
+        {
+          "path": "references/deer-flow/contracts/slash_skill_contract.json",
+          "type": "spec",
+          "reuse": "medium",
+          "key_symbols": [
+            "reserved_slash_skill_names",
+            "skill_name_pattern"
+          ],
+          "description": "Contrat cross-language parser slash-skill (backend Python ↔ frontend TS)."
+        },
+        {
+          "path": "references/deer-flow/contracts/skill_review/*.schema.json",
+          "type": "spec",
+          "reuse": "high",
+          "key_symbols": [
+            "readiness",
+            "assurance",
+            "dimensions",
+            "issues"
+          ],
+          "description": "Schémas JSON Schema v1 du système de review de skills (snapshot package → facts → report) — 3 schémas.",
+          "aggregate": true
+        },
+        {
+          "path": "references/deer-flow/backend/app/channels/base.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "Channel"
+          ],
+          "description": "Abstraction de canal de messagerie : classe de base abstraite (start, stop, send, send_file, receive_file, supports_streaming) pour connecter l'agent à un canal IM."
+        },
+        {
+          "path": "references/deer-flow/backend/app/channels/message_bus.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "MessageBus",
+            "InboundMessage",
+            "OutboundMessage",
+            "ResolvedAttachment",
+            "InboundMessageType"
+          ],
+          "description": "Bus de messages inbound/outbound avec pièces jointes résolues. Modèle de messages normalisés cross-canal."
+        },
+        {
+          "path": "references/deer-flow/backend/app/channels/dedupe_store.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "InboundDedupeStore",
+            "MemoryInboundDedupeStore",
+            "PostgresInboundDedupeStore",
+            "make_inbound_dedupe_store"
+          ],
+          "description": "Store de déduplication inbound : Protocol + 2 implémentations (memory, Postgres) + factory selon config multi-worker."
+        },
+        {
+          "path": "references/deer-flow/backend/app/channels/{slack,github,discord,telegram}.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "SlackChannel",
+            "GitHubChannel",
+            "DiscordChannel",
+            "TelegramChannel"
+          ],
+          "description": "Implémentations concrètes de canaux. Spécifiques API tierces ; l'abstraction base.py est la vraie valeur.",
+          "aggregate": true
+        },
+        {
+          "path": "references/deer-flow/backend/app/gateway/auth/providers.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "AuthProvider"
+          ],
+          "description": "Abstraction provider d'authentification. Point d'extension auth pluggable."
+        },
+        {
+          "path": "references/deer-flow/backend/app/gateway/auth/oidc.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "OIDCService",
+            "OIDCMetadata",
+            "OIDCIdentity",
+            "_constant_time_compare"
+          ],
+          "description": "Service OIDC complet (métadonnées, identité, hiérarchie d'erreurs OIDCError*, comparaison temps constant)."
+        },
+        {
+          "path": "references/deer-flow/backend/app/gateway/auth/jwt.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "TokenPayload",
+            "create_access_token",
+            "decode_token"
+          ],
+          "description": "Émission/vérification JWT avec token_version."
+        },
+        {
+          "path": "references/deer-flow/backend/packages/harness/deerflow/authz/",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "AuthorizationProvider",
+            "RbacAuthorizationProvider"
+          ],
+          "description": "Implémentation authorization pluggable (la RFC réalisée) : enforcement 2-couches (filter assembly + deny runtime).",
+          "aggregate": true
+        },
+        {
+          "path": "references/deer-flow/backend/packages/harness/deerflow/agents/middlewares/*.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "InputSanitization",
+            "ToolResultSanitization",
+            "ToolProgress",
+            "LoopDetection",
+            "ToolOutputBudget",
+            "TokenBudget",
+            "SubagentLimit",
+            "SkillActivation",
+            "SkillToolPolicy",
+            "ReadBeforeWrite",
+            "DanglingToolCall",
+            "DeferredToolFilter",
+            "LLMErrorHandling",
+            "Summarization",
+            "TerminalResponse"
+          ],
+          "description": "Chaîne de ~30 middlewares autour de l'appel LLM (sanitization, détection de boucle, budget tokens, limites sub-agents, gates d'outils). Concepts directement transposables à un orchestrateur smolagents.",
+          "aggregate": true
+        },
+        {
+          "path": "references/deer-flow/backend/packages/harness/deerflow/agents/thread_state.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "ThreadState",
+            "merge_delegations",
+            "merge_skill_context"
+          ],
+          "description": "État du graphe avec reducers typés (cap delegations à N, skill_context = références uniquement). Modèle de state d'orchestrateur avec compaction."
+        },
+        {
+          "path": "references/deer-flow/backend/packages/harness/deerflow/subagents/executor.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "SubagentExecutor",
+            "_isolated_subagent_loop",
+            "_extract_final_result",
+            "_extract_llm_error_fallback"
+          ],
+          "description": "Exécuteur de sub-agents : event loop isolé, extraction résultat pur (pas de pollution parent), gestion erreurs LLM. Pattern fan-out directement utile pour fan-out Coders."
+        },
+        {
+          "path": "references/deer-flow/backend/packages/harness/deerflow/guardrails/{provider,middleware,builtin}.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "GuardrailProvider",
+            "GuardrailMiddleware",
+            "GuardrailRequest"
+          ],
+          "description": "Middleware guardrail (point d'application de l'authz runtime).",
+          "aggregate": true
+        },
+        {
+          "path": "references/deer-flow/skills/public/*/SKILL.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [
+            "name",
+            "description"
+          ],
+          "description": "Pattern 'Skill' : package de capacité à chargement progressif (un SKILL.md par dossier). 23 skills (ex: data-analysis DuckDB, deep-research, code-documentation, skill-reviewer).",
+          "aggregate": true
+        },
+        {
+          "path": "references/deer-flow/config.example.yaml",
+          "type": "config",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Référence config complète (118 Ko) : modèles, sandbox E2B/AIO/Local, channels, memory, authz, tracing, extensions middlewares, scheduled tasks."
+        },
+        {
+          "path": "references/deer-flow/docs/plans/2026-07-10-pluggable-authorization-rfc.md",
+          "type": "spec",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "RFC authorization pluggable (déjà listée en doc, spec formelle)."
+        },
+        {
+          "path": "references/deer-flow/docs/superpowers/specs/*.md",
+          "type": "spec",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Specs design superpowers (8 specs).",
+          "aggregate": true
+        },
+        {
+          "path": "references/deer-flow/docs/superpowers/plans/*.md",
+          "type": "spec",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Plans d'implémentation TDD superpowers (9 plans).",
+          "aggregate": true
+        }
+      ]
+    },
+    {
+      "id": "open-swe",
+      "name": "open-swe",
+      "path": "references/open-swe",
+      "category": "agent-coding-tool",
+      "reuse_rating": "medium",
+      "summary": "Framework d'agent de coding interne complet maintenu par LangChain, calqué sur l'architecture des agents internes de Stripe/Ramp/Coinbase (Deep Agents + LangGraph). Réutilisabilité forte dans trois zones : le module plan-review (cycle de vie d'un plan avec commentaire/approbation/gating — pour l'étape Architect), le module review (schéma de findings riche + diff de PR — pour le Judge), et le workflow d'approval générique. Stack Deep Agents/LangGraph ≠ DSPy/smolagents : patterns transférables, code à adapter.",
+      "files": [
+        {
+          "path": "references/open-swe/README.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Présentation architecture 7 piliers, comparatif Stripe/Ramp/Coinbase, features, getting started. Vision conceptuelle directement applicable."
+        },
+        {
+          "path": "references/open-swe/docs/CUSTOMIZATION.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Guide de fork : sandbox pluggable (SANDBOX_FACTORIES), modèle (make_model), tools, triggers, prompt modulaire, middleware (@before_model/@after_agent). Patron d'agent customisable."
+        },
+        {
+          "path": "references/open-swe/docs/INSTALLATION.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Setup end-to-end : GitHub App, LangSmith, webhooks Slack/Linear/GitHub, dashboard, déploiement Docker prod."
+        },
+        {
+          "path": "references/open-swe/AGENTS.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Règles de dev du dépôt open-swe lui-même."
+        },
+        {
+          "path": "references/open-swe/agent/dashboard/plan_store.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "PLAN_STATUS_",
+            "save_plan_content",
+            "get_plan_content",
+            "set_plan_status",
+            "add_plan_comment",
+            "list_plan_comments",
+            "clear_plan_comments",
+            "write_plan_to_sandbox",
+            "plan_file_path_for_thread"
+          ],
+          "description": "Persistance du plan : double stockage (fichier Markdown dans sandbox + snapshot publié). Cycle de vie à 6 statuts, commentaires whole-document, clear-on-republish. Modèle direct pour la persistance du plan de l'Architect."
+        },
+        {
+          "path": "references/open-swe/agent/dashboard/plan_api.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "plan_router",
+            "get_plan",
+            "update_plan",
+            "post_plan_comment",
+            "remove_plan_comment",
+            "approve_plan",
+            "approve_plan_for_thread",
+            "reject_plan",
+            "_dispatch_followup",
+            "_format_comments"
+          ],
+          "description": "API REST plan-review : lecture, édition owner, commentaire, approve (owner only), reject (reader). Formatte les commentaires en feedback numéroté et dispatche un run de suivi. Patron complet d'API de revue/approval."
+        },
+        {
+          "path": "references/open-swe/agent/tools/save_plan.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "save_plan",
+            "_is_markdown_path",
+            "_active_plan_mode"
+          ],
+          "description": "Outil agent : lit un fichier Markdown de plan depuis la sandbox et le publie sur la page de revue. Valide chemin sous /workspace/plans/, extension .md, taille max 20k lignes."
+        },
+        {
+          "path": "references/open-swe/agent/tools/approve_plan.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "approve_plan",
+            "ApprovePlanState"
+          ],
+          "description": "Outil agent : approve le plan, sort du plan mode, retourne un Command LangGraph avec message 'implement now'. Vérifie ownership et statut."
+        },
+        {
+          "path": "references/open-swe/agent/middleware/plan_mode.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "PlanModeMiddleware",
+            "PlanModeState",
+            "PLAN_MODE_EXCLUDED_TOOLS"
+          ],
+          "description": "Middleware qui filtre les outils mutateurs (open_pull_request, http_request, task, linear_*, etc.) quand le plan mode est actif. Reset du flag au début de chaque run. Patron de gating d'outils par état."
+        },
+        {
+          "path": "references/open-swe/agent/dashboard/pr_diff.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "build_pr_diff_files",
+            "_fetch_file_at_ref",
+            "PR_DIFF_MAX_FILES",
+            "PR_DIFF_MAX_FILE_BYTES",
+            "PR_DIFF_FETCH_CONCURRENCY"
+          ],
+          "description": "Construit un diff full-content multi-fichiers d'une PR GitHub (récupère contenu original/modified à base_sha/head_sha, concurrency-limited). Marque binaire/oversized comme unrenderable. Utile pour le Judge."
+        },
+        {
+          "path": "references/open-swe/agent/review/findings.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "Finding",
+            "Severity",
+            "Confidence",
+            "FindingStatus",
+            "SurfaceState",
+            "new_finding",
+            "append_finding",
+            "mutate_findings",
+            "update_finding_surface",
+            "filter_findings_for_publish",
+            "_finding_fingerprint",
+            "REVIEW_FINDING_CAP"
+          ],
+          "description": "Schéma de findings de revue : severity/confidence, ancrage diff (file/lines/side), fingerprint SHA-256 pour dédup, surface state machine, persistance via thread metadata + lock par thread. Directement transposable au Judge."
+        },
+        {
+          "path": "references/open-swe/agent/review/style_guidance.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "REVIEWER_STYLE_THEMES"
+          ],
+          "description": "Prompt de thèmes : ce que le reviewer doit flaguer (correctness, async footguns, SSRF, nil deref…) vs skip (rename/style, scope-policing…). Texte réutilisable pour calibrer un Judge/Reviewer."
+        },
+        {
+          "path": "references/open-swe/agent/dashboard/review_styles.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "ReviewStyleCreate",
+            "ReviewStylePromptUpdate",
+            "normalize_repo_full_name",
+            "get",
+            "set_custom_prompt",
+            "mark_analysis_running",
+            "reconcile_running_status"
+          ],
+          "description": "Profils de style de revue par repo : prompt custom éditable, statut d'analyse background (idle/running/completed/failed), réconciliation des runs stale."
+        },
+        {
+          "path": "references/open-swe/agent/dashboard/workflow_approval.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "WORKFLOW_APPROVAL_",
+            "ensure_workflow_push_pending",
+            "decide_workflow_push_approval",
+            "workflow_push_approval_response",
+            "mark_workflow_push_notified",
+            "_MAX_APPROVAL_RECORDS"
+          ],
+          "description": "État d'approval pour pushes de fichiers workflow (CI) : record par fingerprint avec repo/branch/sha/files/diff_stats/diff_preview, statut pending→approved/rejected, cap 20 records. Patron d'approval gate générique."
+        },
+        {
+          "path": "references/open-swe/agent/dashboard/workflow_approval_api.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "workflow_approval_router",
+            "list_workflow_push_approvals",
+            "approve_workflow_push",
+            "reject_workflow_push"
+          ],
+          "description": "API REST pour lister/approuver/rejeter les pushes workflow. Reject ne déclenche pas de run ; approve dispatche un follow-up."
+        },
+        {
+          "path": "references/open-swe/agent/server.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "get_agent",
+            "create_deep_agent",
+            "PrepareAgentRunMiddleware",
+            "ensure_sandbox_for_thread",
+            "PLAN_MODE_EXCLUDED_TOOLS",
+            "_general_purpose_subagent",
+            "_browser_subagent"
+          ],
+          "description": "Harness principal : factory de l'agent avec résolution modèle (team defaults + profile override + per-thread), sandbox get-or-create, subagents (general-purpose + browser), stack middleware."
+        },
+        {
+          "path": "references/open-swe/agent/dispatch.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "create_durable_run",
+            "dispatch_agent_run",
+            "COMPLETION_WEBHOOK_URL"
+          ],
+          "description": "Contrat de dispatch unique : un seul path pour tous les triggers, avec interrupt, checkpoint sync, webhook de completion. Pattern durable spécifique LangGraph Platform."
+        },
+        {
+          "path": "references/open-swe/agent/analyzer.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "get_analyzer",
+            "PrepareAnalyzerRunMiddleware",
+            "STYLE_ANALYZER_PROMPT",
+            "STYLE_ANALYZER_MODEL_CALL_LIMIT",
+            "CompositeBackend"
+          ],
+          "description": "Graphe analyzer : apprend un prompt de style de revue par repo en minant l'historique GitHub + outcomes de findings. Utilise des skills (playbooks SKILL.md)."
+        },
+        {
+          "path": "references/open-swe/agent/middleware/",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "ToolErrorMiddleware",
+            "check_message_queue_before_model",
+            "notify_step_limit_reached",
+            "ModelCallTimeoutMiddleware",
+            "ModelFallbackMiddleware",
+            "SanitizeThinkingBlocksMiddleware",
+            "PullRequestCreationGuardMiddleware",
+            "sandbox_circuit_breaker"
+          ],
+          "description": "Bibliothèque de 24 middlewares déterministes : gestion d'erreurs outils, queue de messages mid-run, notification de limite, timeout/fallback modèle, sanitization, retry subagent, circuit breaker sandbox.",
+          "aggregate": true
+        },
+        {
+          "path": "references/open-swe/agent/utils/model.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "make_model",
+            "ModelKwargs",
+            "provider_model_kwargs",
+            "fallback_model_id_for"
+          ],
+          "description": "Helper de construction de modèle multi-provider (OpenAI/Anthropic/Google/Fireworks) avec gateway LangSmith optionnel."
+        },
+        {
+          "path": "references/open-swe/agent/utils/sandbox.py + references/open-swe/agent/utils/sandbox_state.py",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "SANDBOX_FACTORIES",
+            "create_sandbox",
+            "SANDBOX_BACKENDS",
+            "get_or_create_sandbox_backend_proxy",
+            "SandboxUnreachableError"
+          ],
+          "description": "Factory de sandboxes pluggables + cache par thread + circuit breaker.",
+          "aggregate": true
+        },
+        {
+          "path": "references/open-swe/agent/integrations/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "daytona.py",
+            "modal.py",
+            "runloop.py",
+            "e2b.py",
+            "langsmith.py",
+            "local.py",
+            "stagehand_browser.py"
+          ],
+          "description": "Intégrations sandbox providers + outils MCP + browser (Stagehand).",
+          "aggregate": true
+        },
+        {
+          "path": "references/open-swe/langgraph.json",
+          "type": "config",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Définit les 5 graphes (agent, reviewer, analyzer, chat, scheduler), l'app HTTP (agent.webapp:app), le checkpointer TTL (12h, sweep 60min), Python 3.12."
+        },
+        {
+          "path": "references/open-swe/pyproject.toml",
+          "type": "config",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Dépendances : deepagents==0.7.0b2, langgraph>=1.1.10, langchain>=1.3.9, providers, stagehand, langchain-mcp-adapters, Python ≥3.11."
+        },
+        {
+          "path": "references/open-swe/agent/runtime/constants.py",
+          "type": "config",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "DEFAULT_LLM_MODEL_ID (openai:gpt-5.6-sol), DEFAULT_LLM_MAX_TOKENS, DEFAULT_RECURSION_LIMIT, MODEL_CALL_RECURSION_LIMIT."
+        },
+        {
+          "path": "references/open-swe/agent/resources/default_prompt.md",
+          "type": "prompt",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Prompt défaut injecté entre task overview et repo setup (DEFAULT_PROMPT_PATH override)."
+        },
+        {
+          "path": "references/open-swe/agent/prompt.py",
+          "type": "prompt",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Sections modulaires : WORKING_ENV_SECTION, PLAN_MODE_GUIDANCE_SECTION, PLAN_MODE_SECTION, SELF_AWARENESS_SECTION, REPO_SETUP_SECTION, TASK_EXECUTION_SECTION, DEPENDENCY_SECTION, EXTERNAL_UNTRUSTED_COMMENTS_SECTION, COMMIT_PR_SECTION, ALWAYS_CREATE_PR_SECTION, construct_system_prompt(...)."
+        },
+        {
+          "path": "references/open-swe/agent/skills/bootstrap-repo-analysis/SKILL.md",
+          "type": "spec",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Playbook d'apprentissage initial du style de revue d'un repo."
+        },
+        {
+          "path": "references/open-swe/agent/skills/continual-learning/SKILL.md",
+          "type": "spec",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Playbook d'affinage continu du style de revue."
+        },
+        {
+          "path": "references/open-swe/docs/INSTALLATION.md",
+          "type": "spec",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Catalogue complet des variables d'env (LANGSMITH_*, GITHUB_APP_*, SANDBOX_*, DEFAULT_SANDBOX_SNAPSHOT_ID, ALLOWED_GITHUB_ORGS/REPOS, TOKEN_ENCRYPTION_KEY avec rotation, etc.) — §6."
+        }
+      ]
+    },
+    {
+      "id": "crush",
+      "name": "crush",
+      "path": "references/crush",
+      "category": "coding-agent-cli",
+      "reuse_rating": "medium",
+      "summary": "Assistant de coding CLI/TUI de Charm (Go) qui orchestre des conversations LLM tool-use par session autour d'un Coordinator (agents coder + task). Le seul élément à valeur d'export directe Haute est loop_detection.go (anti-loop par hash SHA256 des interactions tool, ~90 lignes, portable en Python). Le reste est conceptuel : pattern sub-agent avec accumulation de coût, filetracker, hooks PreToolUse (deny/allow/halt + rewrite), permission service.",
+      "files": [
+        {
+          "path": "references/crush/docs/hooks/README.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Guide hooks complet (humain+agent) : exécution via shell POSIX embarqué, events, input (env vars + stdin JSON), output envelope (decision/halt/reason/context/updated_input), exit codes (0/2/49), aggregation multi-hooks, compat Claude Code."
+        },
+        {
+          "path": "references/crush/README.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Doc produit : installation, config (providers/MCP/LSP/skills/hooks), providers custom OpenAI/Anthropic-compat, modèles locaux."
+        },
+        {
+          "path": "references/crush/AGENTS.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Guide dev interne : architecture (internal/), patterns (config-as-service, tools auto-documentés, prompts Go-template, pub/sub), commandes build/test/lint."
+        },
+        {
+          "path": "references/crush/docs/hooks/FUTURE.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Hooks planned : context_files (lazy injection de chemins vs contenu)."
+        },
+        {
+          "path": "references/crush/docs/hooks/examples/rtk-rewrite.sh",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Exemple hook de réécriture de commande bash (RTK token-saving)."
+        },
+        {
+          "path": "references/crush/internal/agent/loop_detection.go",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "hasRepeatedToolCalls",
+            "getToolInteractionSignature",
+            "toolResultOutputString",
+            "loopDetectionWindowSize",
+            "loopDetectionMaxRepeats"
+          ],
+          "description": "Anti-loop : examine les windowSize dernières steps, hash SHA256 de (ToolName + Input + Output appariés par ToolCallID), déclenche si un count > maxRepeats. Steps sans tool-call ignorées. ~90 lignes, trivialement reproductible en Python pour renforcer le circuit-breaker des Coders. Fenêtre=10/repeats=5."
+        },
+        {
+          "path": "references/crush/internal/agent/coordinator.go",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "Coordinator",
+            "coordinator",
+            "NewCoordinator",
+            "runSubAgent",
+            "agentTool",
+            "buildAgent",
+            "buildTools",
+            "updateParentSessionCost",
+            "AgentToolName"
+          ],
+          "description": "Orchestrateur multi-agent : build agents nommés, gère queue/cancel/auth-retry (401 → refresh → retry), et fan-out sub-agent via fantasy.NewParallelAgentTool. runSubAgent crée une sous-session, exécute le sub-agent, propage le coût enfant→parent."
+        },
+        {
+          "path": "references/crush/internal/agent/agent.go",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "SessionAgent",
+            "sessionAgent",
+            "NewSessionAgent",
+            "SessionAgentCall",
+            "ValidateCall",
+            "StopWhen"
+          ],
+          "description": "Boucle de streaming principale : queue de prompts par session, annulation concurrente (cancelMark + acceptSeq monotone), auto-summarize (seuils largeContextWindowThreshold=200_000, ratio smallContextWindowRatio=0.2), persistence messages même sur cancel."
+        },
+        {
+          "path": "references/crush/internal/agent/agent_tool.go",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "AgentParams",
+            "agentTool"
+          ],
+          "description": "Définition du tool agent (sub-agent task) : fantasy.NewParallelAgentTool, délègue à runSubAgent. Montre le pattern 'tool qui lance un agent'."
+        },
+        {
+          "path": "references/crush/internal/hooks/hooks.go",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "Decision",
+            "HookResult",
+            "AggregateResult",
+            "aggregate",
+            "shallowMerge",
+            "EventPreToolUse",
+            "HaltExitCode"
+          ],
+          "description": "Sémantique d'agrégation multi-hooks : deny>allow>none, halt sticky, updated_input shallow-merge en ordre config, reasons/contexts concaténés. Portable comme spec de policy-engine."
+        },
+        {
+          "path": "references/crush/internal/hooks/runner.go",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "Runner",
+            "NewRunner",
+            "Run",
+            "matchingHooks"
+          ],
+          "description": "Exécution parallèle des hooks via shell embarqué, dédup par commande, timeout + abandon-grace, parsing exit codes (2=block, 49=halt). Implémentation Go non portable."
+        },
+        {
+          "path": "references/crush/internal/agent/hooked_tool.go",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "hookedTool",
+            "newHookedTool",
+            "wrapToolsWithHooks"
+          ],
+          "description": "Décorateur : wrap chaque tool pour lancer PreToolUse hooks avant exécution. Sub-agents non wrappés."
+        },
+        {
+          "path": "references/crush/internal/permission/permission.go",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "Service",
+            "permissionService",
+            "NewPermissionService",
+            "Request",
+            "Grant",
+            "GrantPersistent",
+            "Deny",
+            "WithHookApproval",
+            "PermissionKey"
+          ],
+          "description": "Service de permission : allowlist (toolName ou toolName:action), approbation persistante par session, prompt interactif via pubsub, pré-approval par hook."
+        },
+        {
+          "path": "references/crush/internal/filetracker/service.go",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "Service",
+            "service",
+            "NewService",
+            "RecordRead",
+            "LastReadTime",
+            "ListReadFiles"
+          ],
+          "description": "Suit les fichiers lus par session (SQLite). Permet de savoir quels fichiers ont été lus et quand."
+        },
+        {
+          "path": "references/crush/internal/skills/skills.go",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "Skill",
+            "Parse",
+            "Discover",
+            "ToPromptXML",
+            "Validate",
+            "Deduplicate",
+            "Filter",
+            "ApproxTokenCount"
+          ],
+          "description": "Découverte/parse de SKILL.md (frontmatter YAML), validation, injection XML dans le system prompt, dédup (dernier gagne = user>builtin). ApproxTokenCount ~4 chars/token."
+        },
+        {
+          "path": "references/crush/internal/agent/usage_fallback.go",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "fallbackStepUsage",
+            "estimateMessageTokens",
+            "approxTokenCount",
+            "usageIsZero"
+          ],
+          "description": "Estimation de tokens quand le provider ne renvoie pas l'usage (~4 chars/token). Heuristique simple."
+        },
+        {
+          "path": "references/crush/internal/diff/diff.go",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "GenerateDiff"
+          ],
+          "description": "Diff unifié via go-udiff + comptage +/-. Trivial en Python (difflib)."
+        },
+        {
+          "path": "references/crush/internal/agent/loop_detection_test.go",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "TestHasRepeatedToolCalls",
+            "TestGetToolInteractionSignature"
+          ],
+          "description": "Tests documentant le comportement exact (seuil strict >, steps vides ignorées, signatures ToolCallID-indépendantes). Spec exécutable idéale pour réimplémenter en Python (pytest)."
+        },
+        {
+          "path": "references/crush/schema.json",
+          "type": "spec",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Schéma JSON de crush.json : Config (providers, mcp, lsp, options, permissions, tools, hooks), HookConfig (name/matcher regex/command/timeout), ProviderConfig, Options. Référence de tous les knobs de config."
+        },
+        {
+          "path": "references/crush/crush.json",
+          "type": "config",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Config par défaut embarquée (providers/models)."
+        },
+        {
+          "path": "references/crush/internal/agent/testdata/TestCoderAgent/glm-5.1/*.yaml",
+          "type": "spec",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Cas de test d'agent (bash/edit/read/grep/multiedit/parallel_tool_calls) pour GLM-5.1 — patterns d'appels d'outils attendus (golden tests).",
+          "aggregate": true
+        },
+        {
+          "path": "references/crush/internal/config/config.go",
+          "type": "spec",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Constantes AgentCoder=coder, AgentTask=task, SelectedModelTypeLarge/Small. Définit la structure d'agents (2 agents nommés)."
+        },
+        {
+          "path": "references/crush/internal/agent/templates/*.md",
+          "type": "prompt",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Templates de system prompts (coder, task, agent_tool, summary, title, agentic_fetch).",
+          "aggregate": true
+        },
+        {
+          "path": "references/crush/docs/hooks/README.md",
+          "type": "spec",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Spéc formelle (section Reference) : stdin payload, output envelope, exit codes (0/2/49), règles d'agrégation, variables d'env."
+        },
+        {
+          "path": "references/crush/.golangci.yml + references/crush/.goreleaser.yml + references/crush/Taskfile.yaml + references/crush/sqlc.yaml",
+          "type": "config",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Configuration toolchain Go (lint, release, tasks, sqlc). Non pertinent pour la cible Python.",
+          "aggregate": true
+        }
+      ]
+    },
+    {
+      "id": "opencode",
+      "name": "opencode",
+      "path": "references/opencode",
+      "category": "agent-coding-tool",
+      "reuse_rating": "low",
+      "summary": "Agent de coding mature entièrement TypeScript/Effect-TS (monorepo 32 packages) — écosystème incompatible avec Python (DSPy/smolagents). La valeur pour le projet cible réside uniquement dans specs/v2/ (cahiers des charges de protocole agent : session event-sourcing, tools, config, provider/model, permission/provider policy) et l'organisation monorepo. Les contrats de haut niveau (event-sourcing, context epochs/compaction, permission/provider policy) sont transposables conceptuellement, mais le code TS n'est pas portable.",
+      "files": [
+        {
+          "path": "references/opencode/specs/v2/session.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Session V2 : prompt admission/promotion (inbox durable steer/queue), Context Epochs (baseline immutable + updates chronologiques), compaction auto/overflow, event-sourcing, tableau parité V1→V2."
+        },
+        {
+          "path": "references/opencode/specs/v2/tools.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Outils V2 : Tool.make opaque, Tool.Context (sessionID/agent/assistantMessageID/toolCallID), registration scopée, output bounding, échecs (ToolFailure vs interruption)."
+        },
+        {
+          "path": "references/opencode/specs/v2/config.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Revue config V2 en 11 groupes (providers, agents, permissions, mcp, compaction), décisions keep/remove/redesign par champ."
+        },
+        {
+          "path": "references/opencode/specs/v2/provider-policy.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Policy allow/deny (wildcard, last-match-wins), precedence inversée (user-global > repo), migration legacy enabled/disabled_providers."
+        },
+        {
+          "path": "references/opencode/specs/v2/provider-model.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Schémas Provider/Model catalog Effect, endpoints (openai/anthropic/aisdk), variants, cost/limit, plugins built-in."
+        },
+        {
+          "path": "references/opencode/specs/v2/instructions.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Directives port core V2 : services conteneurs typés, plugin hooks (Immer drafts + cancel), boot composition."
+        },
+        {
+          "path": "references/opencode/specs/v2/todo.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Roadmap V2 : agent loop Effect-native, prompt inbox durable, continuation recovery différée, hot-reload."
+        },
+        {
+          "path": "references/opencode/specs/v2/schema-changelog.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Historique changements schema durable V2 (compaction, context epochs, tool registry, apply_patch, permissions)."
+        },
+        {
+          "path": "references/opencode/specs/v2/catalog-config-plugin-lifecycle.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Options lifecycle catalog/config/plugin (replayable transforms, reload)."
+        },
+        {
+          "path": "references/opencode/specs/project.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "API HTTP project/session (REST multi-project/worktree)."
+        },
+        {
+          "path": "references/opencode/specs/tui-package.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Plan extraction package TUI (10 sections, ownership boundaries CLI/SDK)."
+        },
+        {
+          "path": "references/opencode/README.md + references/opencode/AGENTS.md + references/opencode/CONTEXT.md + references/opencode/CONTRIBUTING.md + references/opencode/packages/docs/README.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Docs produit/orientation.",
+          "aggregate": true
+        },
+        {
+          "path": "references/opencode/packages/core/src/session/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "execution.ts",
+            "run",
+            "context",
+            "compaction.ts",
+            "projector.ts",
+            "input.ts",
+            "prompt.ts",
+            "store.ts",
+            "history.ts"
+          ],
+          "description": "Cœur session V2 Effect-native : coordinateur, epochs contexte, compaction, projection event-sourcing, inbox. Concepts transposables (event-sourcing, compaction) mais Effect-TS pur.",
+          "aggregate": true
+        },
+        {
+          "path": "references/opencode/packages/core/src/tool/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "Definition",
+            "Tool.make",
+            "Tool.Context",
+            "ToolFailure"
+          ],
+          "description": "Registry outils typé, output bounding, permission-checked built-ins. Contrat élégant mais indissociable d'Effect.",
+          "aggregate": true
+        },
+        {
+          "path": "references/opencode/packages/core/src/permission/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "PermissionV2.Ruleset",
+            "assert"
+          ],
+          "description": "Ruleset ordonné {action, resource, effect: allow/deny/ask}. Modèle policy transposable.",
+          "aggregate": true
+        },
+        {
+          "path": "references/opencode/packages/core/src/skill/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Skills à chargement différé permission-filtered. Concept proche DeerFlow/Prompt-Vault.",
+          "aggregate": true
+        },
+        {
+          "path": "references/opencode/packages/core/src/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Core V2 domaines typés (485 fichiers). TS/Effect.",
+          "aggregate": true
+        },
+        {
+          "path": "references/opencode/packages/llm/src/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "llm.ts",
+            "provider.ts",
+            "tool.ts"
+          ],
+          "description": "SDK LLM multi-provider (151 fichiers) : anthropic, openai, openai-compatible, google, amazon-bedrock, azure, github-copilot, openrouter, xai, cloudflare. Multi-provider mais TS.",
+          "aggregate": true
+        },
+        {
+          "path": "references/opencode/packages/opencode/src/session/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "prompt.ts",
+            "compaction.ts",
+            "retry.ts",
+            "reminders.ts",
+            "overflow.ts",
+            "llm.ts",
+            "system.ts",
+            "message.ts",
+            "processor.ts"
+          ],
+          "description": "Application legacy session (20 fichiers).",
+          "aggregate": true
+        },
+        {
+          "path": "references/opencode/packages/opencode/src/tool/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "task.ts",
+            "apply_patch.ts",
+            "read.ts",
+            "edit.ts",
+            "write.ts",
+            "grep.ts",
+            "glob.ts",
+            "shell.ts",
+            "webfetch.ts",
+            "websearch.ts",
+            "skill.ts",
+            "todo.ts",
+            "plan.ts",
+            "question.ts",
+            "lsp.ts"
+          ],
+          "description": "Outils built-in legacy (25 fichiers). Concepts d'outils transposables.",
+          "aggregate": true
+        },
+        {
+          "path": "references/opencode/packages/opencode/src/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Application legacy complète (707 fichiers). Riche mais legacy TS.",
+          "aggregate": true
+        },
+        {
+          "path": "references/opencode/packages/tui/ + references/opencode/packages/ui/ + references/opencode/packages/web/ + references/opencode/packages/desktop/ + references/opencode/packages/console/ + references/opencode/packages/storybook/ + references/opencode/packages/session-ui/",
+          "type": "code",
+          "reuse": "none",
+          "key_symbols": [],
+          "description": "Frontends TUI/web React/Solid. Interface TS pure.",
+          "aggregate": true
+        },
+        {
+          "path": "references/opencode/packages/{schema,plugin,protocol,server,client,cli,sdk}",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Infra/SDK TS.",
+          "aggregate": true
+        },
+        {
+          "path": "references/opencode/specs/v2/*.md",
+          "type": "spec",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Specs protocole V2 (9 fichiers) : config, session, tools, provider-model, provider-policy, instructions, todo, schema-changelog, catalog-config-plugin-lifecycle.",
+          "aggregate": true
+        },
+        {
+          "path": "references/opencode/specs/project.md + references/opencode/specs/tui-package.md",
+          "type": "spec",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Specs HTTP/archi : API project/session, extraction TUI.",
+          "aggregate": true
+        },
+        {
+          "path": "references/opencode/.opencode/",
+          "type": "config",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Config dogfooding : agents (triage.md, duplicate-pr.md), commands (commit.md, changelog.md, issues.md, learn.md, translate.md), skills (effect/SKILL.md), tools (github-triage.ts, github-pr-search.ts), glossary (16 langues i18n), themes, tui.json.",
+          "aggregate": true
+        },
+        {
+          "path": "references/opencode/package.json",
+          "type": "config",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Config monorepo : workspace Bun."
+        }
+      ]
+    },
+    {
+      "id": "openfox",
+      "name": "OpenFox",
+      "path": "references/openfox",
+      "category": "agent-coding-tool",
+      "reuse_rating": "low",
+      "summary": "Assistant de coding 'local-LLM-first' (CLI + serveur + web, TypeScript/Node.js, stack OpenAI-compatible vLLM/sglang/ollama/llamacpp). Point commun avec le projet cible via Ollama. La valeur réside dans la documentation d'architecture de l'engine-loop multi-tour (event-sourcing + EventStore SSOT + compaction par mode) : les diagrammes ASCII détaillés (runChatTurn, runTopLevelAgentLoop, compaction, lifecycle context window) orientent la conception d'une boucle d'orchestrateur Python avec persistance DuckDB. Code TS non portable.",
+      "files": [
+        {
+          "path": "references/openfox/docs/ENGINE-LOOP.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Diagramme ASCII exhaustif (25 Ko) du tour de chat : runChatTurn → runTopLevelAgentLoop (for;;), branches post-response (pattern retry, abort, compaction check, truncation, tool calls, compaction mode, normal complete), event types, data flow, reminder reinjection après compaction."
+        },
+        {
+          "path": "references/openfox/docs/MTAE-ARCHITECTURE.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Vision engine multi-tour : orchestrator mince + agent loop pur (jamais EventStore direct), 7 sous-fonctions typées (buildContext, streamLLM, shouldCompact, matchAutoPatterns, executeTools, drainQueue, compactionLoop), stratégie de test, migration en 4 phases."
+        },
+        {
+          "path": "references/openfox/docs/SESSION-DEBUGGING.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Schéma BDD SQLite (projects/sessions/events/settings), event-sourcing + snapshots (turn.snapshot = état complet fin de tour), types d'événements, requêtes SQL de debug. Transposable à DuckDB."
+        },
+        {
+          "path": "references/openfox/docs/DESIGN-AUTO-RETRY-PATTERNS.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Pattern matching auto-retry configurable (regex sur thinking/content/both, action retry, détection mid-stream, cap retries). Remplace toggle XML hardcoded."
+        },
+        {
+          "path": "references/openfox/docs/PROVIDER-PLUGINS.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Système plugins provider (AuthAdapter, TransportAdapter, Preset), manifest package.json, lifecycle, exemple minimal."
+        },
+        {
+          "path": "references/openfox/docs/PR-REVIEW.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Workflow PR review agent-assisté (5 phases : setup/review/fix/test/merge), squash-merge via API REST, cherry-pick fixes."
+        },
+        {
+          "path": "references/openfox/docs/DESIGN-UNIFIED-IMAGE-HANDLING.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Fallback vision model."
+        },
+        {
+          "path": "references/openfox/docs/RELEASE.md + references/openfox/docs/REVERSE-PROXY.md",
+          "type": "doc",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Release, reverse-proxy.",
+          "aggregate": true
+        },
+        {
+          "path": "references/openfox/README.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Présentation 2.0 : multi-turn engine, provider dialog, auto-retry, unified image handling, workflows contract-driven."
+        },
+        {
+          "path": "references/openfox/AGENTS.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Guide codebase : stack (Node 24+/Hono/Express/WebSocket/SQLite), structure, build/lint/test commands."
+        },
+        {
+          "path": "references/openfox/src/server/chat/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "orchestrator.ts",
+            "agent",
+            "conversation",
+            "stream",
+            "execute",
+            "auto",
+            "retry",
+            "request",
+            "drain",
+            "truncation.ts"
+          ],
+          "description": "Cœur du moteur agent décrit par les docs. La boucle for(;;) avec branches post-response est l'implémentation des diagrammes ASCII (runChatTurn, runTopLevelAgentLoop, executeToolBatch, matchAutoPatterns).",
+          "aggregate": true
+        },
+        {
+          "path": "references/openfox/src/server/context/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "compactor.ts",
+            "image",
+            "instructions.ts",
+            "tokenizer.ts",
+            "nudge"
+          ],
+          "description": "Compaction, instructions, tokenizing. shouldCompact(threshold) transposable.",
+          "aggregate": true
+        },
+        {
+          "path": "references/openfox/src/server/events/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "EventStore"
+          ],
+          "description": "EventStore SSOT event-sourcing. Modèle transposable à DuckDB.",
+          "aggregate": true
+        },
+        {
+          "path": "references/openfox/src/server/session/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "SessionManager"
+          ],
+          "description": "Gestion session, queue ASAP (setCurrentContextSize, drainAsapMessages).",
+          "aggregate": true
+        },
+        {
+          "path": "references/openfox/src/server/db/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "index.ts",
+            "sessions.ts",
+            "projects.ts",
+            "settings.ts",
+            "migrations.ts"
+          ],
+          "description": "Persistance SQLite (better-sqlite3), migrations. Schéma transposable à DuckDB (cf. SESSION-DEBUGGING.md).",
+          "aggregate": true
+        },
+        {
+          "path": "references/openfox/src/server/workflows/",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "executor.ts",
+            "registry.ts",
+            "types.ts",
+            "shell.ts"
+          ],
+          "description": "Exécuteur workflows contract-driven (steps, transitions, phases plan/build/verification). Modèle step/transition transposable.",
+          "aggregate": true
+        },
+        {
+          "path": "references/openfox/src/server/tools/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "edit.ts",
+            "read.ts",
+            "shell.streaming.ts",
+            "edit",
+            "file",
+            "path",
+            "load",
+            "session",
+            "ask.ts",
+            "dev",
+            "diagnostics.ts",
+            "pdf"
+          ],
+          "description": "Outils built-in avec tests (40+ fichiers) : edit race, path denial, encoding, shell streaming. Concepts de sécurité (path-security, edit mutex) transposables.",
+          "aggregate": true
+        },
+        {
+          "path": "references/openfox/src/server/agents/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "registry.ts",
+            "types.ts"
+          ],
+          "description": "Registry agents (planner/builder/verifier/sub-agents).",
+          "aggregate": true
+        },
+        {
+          "path": "references/openfox/src/server/sub-agents/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [
+            "SubAgentExecutor"
+          ],
+          "description": "Exécution sous-agents isolés. Concept proche DeerFlow.",
+          "aggregate": true
+        },
+        {
+          "path": "references/openfox/src/server/skills/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Skills (cf. load-skill tool).",
+          "aggregate": true
+        },
+        {
+          "path": "references/openfox/src/server/providers/ + references/openfox/src/provider/",
+          "type": "code",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Intégration LLMs locaux (vLLM, sglang, ollama, llamacpp). Pertinent car même cible Ollama, mais projet cible utilise LiteLLM/DSPy.",
+          "aggregate": true
+        },
+        {
+          "path": "references/openfox/src/server/ + references/openfox/src/cli/ + references/openfox/src/shared/ + references/openfox/web/",
+          "type": "code",
+          "reuse": "none",
+          "key_symbols": [],
+          "description": "Reste du serveur et frontend (routes/, ws/, runner/, queue/, commands/, llm/, mcp/, lsp/, git/, terminal/, dev-server/, shared/, utils/, public/). TS/infra.",
+          "aggregate": true
+        },
+        {
+          "path": "references/openfox/.openfox/workflows/review.workflow.json",
+          "type": "spec",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Workflow JSON : workflow PR review contract-driven (8 steps, transitions, phases build/verification, maxIterations=20). Format JSON déclaratif transposable."
+        },
+        {
+          "path": "references/openfox/.openfox/dev.json + references/openfox/.openfox/workspace.json",
+          "type": "config",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Config runtime dev/workspace OpenFox.",
+          "aggregate": true
+        },
+        {
+          "path": "references/openfox/.openfox/commands/test-cmd.command.md",
+          "type": "config",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Exemple commande."
+        },
+        {
+          "path": "references/openfox/.jscpd-web.json + references/openfox/package.json + references/openfox/tsconfig*.json",
+          "type": "config",
+          "reuse": "low",
+          "key_symbols": [],
+          "description": "Config déduplication code, Node/TS (lint/build).",
+          "aggregate": true
+        }
+      ]
+    },
+    {
+      "id": "deer-flow-analysis",
+      "name": "deer_flow_analysis.md",
+      "path": "references/deer_flow_analysis.md",
+      "category": "analysis-note",
+      "reuse_rating": "high",
+      "summary": "Note d'analyse technique en français (document unique à la racine de references/) — le document le plus directement orientant pour le projet cible. Analyse DeerFlow 2.0 (Python/LangGraph) et propose 3 idées concrètes et actionnables : (1) boucle de middlewares/hooks autour du nœud Agent (token budget, loop detection, tool output budget, sanitization), (2) reducers typés pour l'état du graphe (delegations, skill_context, artifacts), (3) contexte à la demande (Skills/Prompt-Vault).",
+      "files": [
+        {
+          "path": "references/deer_flow_analysis.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Note d'analyse DeerFlow 2.0 (5 sections : gestion état ThreadState, chaîne middlewares, framework Skills, orchestration sous-agents, gestion erreurs) + synthèse de 3 idées à appliquer. Liens vers code source bytedance/deer-flow (Python). Le document le plus directement orientant pour le projet cible."
+        },
+        {
+          "path": "references/deer-flow/backend/packages/harness/deerflow/agents/thread_state.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "ThreadState",
+            "merge_delegations",
+            "merge_skill_context"
+          ],
+          "description": "État graphe étendu avec reducers : artifacts, todos, delegations (N=50 max, statut préservé), skill_context (références uniquement), summary_text. Python (LangGraph) ; pattern de reducers transposable à smolagents."
+        },
+        {
+          "path": "references/deer-flow/backend/packages/harness/deerflow/agents/middlewares/",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "InputSanitization",
+            "ToolResultSanitization",
+            "ToolProgressMiddleware",
+            "LoopDetectionMiddleware",
+            "ToolOutputBudgetMiddleware",
+            "TokenBudget",
+            "SubagentLimit",
+            "ToolErrorHandlingMiddleware"
+          ],
+          "description": "Chaîne middlewares pré/post LLM : anti-injection, anti-stagnation, détection boucles, troncature output, budgets tokens/sous-agents, erreurs en faux ToolMessage. Directement transposable (hooks autour du nœud Agent).",
+          "aggregate": true
+        },
+        {
+          "path": "references/deer-flow/backend/packages/harness/deerflow/skills/",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "SkillActivationMiddleware",
+            "SkillToolPolicyMiddleware"
+          ],
+          "description": "Skills à chargement différé : SKILL.md injecté uniquement à l'activation, autorisation dynamique des outils du skill. Équivalent 'Prompt-Vault' pour le projet cible.",
+          "aggregate": true
+        },
+        {
+          "path": "references/deer-flow/backend/packages/harness/deerflow/subagents/executor.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "SubagentExecutor",
+            "_isolated_subagent_loop",
+            "_extract_final_result",
+            "_extract_llm_error_fallback"
+          ],
+          "description": "Délégation sous-agents : event loop isolé, extraction résultat pur (sans polluer le parent), marquage AIMessage défectueux. Pertinent pour workflow coding multi-agent."
+        }
+      ]
+    }
+  ]
+}

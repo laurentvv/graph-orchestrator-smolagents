@@ -38,6 +38,7 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 - [x] **Outil "SEARCH/REPLACE" textuel** : Supprimer l'édition basée sur le remplacement strict/JSON. Créer un outil Python qui parse le format texte brut `<<<< ==== >>>>` (inspiré de `aider`). — *FAIT (PR #3) : `search_replace_utils.py` (portage Aider) + outil `@tool search_replace(path, search, replace)` avec matching tolérant (exact → indentation → ellipses).*
 - [x] **Verrou d'accès (Mutex)** : Implémenter un verrou asynchrone par fichier (inspiré de `openfox`) dans `tools.py` pour empêcher l'exécution en parallèle de deux opérations d'écriture sur le même fichier. — *FAIT : `_FILE_LOCKS` (threading.Lock) dans tools.py.*
 - [x] **Validation Anti-Vide** : Rejeter immédiatement toute édition qui remplace le code par des placeholders (`// ... code ici ...`). — *FAIT : garde anti-placeholder + anti-effacement dans `search_replace` ET `write_file`.*
+- [ ] **Read-Before-Write Gate (Inspiré de Deer Flow / Crush)** : Implémenter un middleware qui bloque toute tentative de `write_file` ou `edit_file` si l'agent n'a pas préalablement lu le fichier dans la session courante (suivi via un hash SHA256). Cela évite les écrasements aveugles ou les corruptions de fichiers.
 - [x] *(bonus hors-plan)* **Température du Coder 0.2** — *FAIT (PR #3) : le défaut serveur était 1.0 (chat créatif) → corruption aléatoire. Config `CODER_TEMPERATURE=0.2` + Modelfile. Levier découvert par l'utilisateur, a éliminé la moitié du problème de corruption.*
 
 ## 🟠 Priorité 2 : La Boucle d'Auto-Correction (Le feedback)
@@ -57,6 +58,7 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 > **🚀 Pourquoi ce sera mieux :** En cas de micro-coupure réseau (API) ou de plantage inattendu, une boucle Python en RAM est détruite. L'ajout de Checkpoints (comme dans *LangGraph*) permet de sauvegarder l'état sur disque à chaque nœud et de reprendre l'usine exactement là où elle a planté, économisant du temps et de l'argent.
 
 - [x] **Le Coupe-Circuit (Circuit Breaker)** : Renforcer le compteur `retry_count` existant dans l'état global du graphe (`GraphState`). — *FAIT (préexistant) : `max_iterations=3` dans le workflow coding, la boucle s'arrête et passe à la sous-tâche suivante.*
+- [ ] **Anti-Loop Cryptographique (Inspiré de Crush)** : Ajouter un anti-loop déterministe qui hache en SHA256 les interactions d'outils (ToolName + Input + Output). Si un Coder répète exactement la même action X fois, le circuit-breaker s'active immédiatement pour stopper l'hémorragie financière et computationnelle.
 - [x] **Nœud d'Escalade (Judge/Summarizer)** : Si le Coupe-Circuit s'active au bout de 3 essais, router vers un nouveau nœud qui résume les échecs ou fait appel à une API distante (modèle lourd) pour corriger l'erreur vicieuse. — *FAIT (F-23) : nœud DSPy `execute_escalation_node` qui synthétise les réfutations accumulées dans le KG en un diagnostic post-mortem structuré (cause racine + leçon + severity), le persiste (kind="escalation" + arêtes ESCALATES vers les réfutations), marque la sous-tâche "escalated". Stratégie "diagnostic seul" (pas de retry/modèle distant — réutilise le modèle de raisonnement local). Dégradation gracieuse (repli "max_iterations_reached" si désactivé ou LLM down). 8 tests PASS.*
 - [x] **Persistance d'État (Checkpoints)** : Connecter la base `DuckDB` existante au cycle de vie du graphe pour écrire l'état d'exécution à chaque changement de nœud (Reprise sur erreur). — *FAIT : table `checkpoint` dans knowledge_graph.py (save/load/clear) + run_id stable (hash du contenu de tâche) + branchement dans run_coding_workflow (skip Architect + skip sous-tâches completed + reprise à l'itération). Granularité "début d'itération" (sûre/idempotente). Config FRESH_START. 12 tests PASS.* **Besoin critique résolu** : avec ~10-15 min/fichier en CPU-only, une coupure ne perd plus 40 min — la reprise est automatique.
 
@@ -79,7 +81,10 @@ Plus d'information : `system_prompts_analysis.md`
 > **🚀 Pourquoi ce sera mieux :** Empêcher le Juge de bloquer le graphe sur des "nits" (débats de nommage) accélère le workflow. Produire des tests persistants (TDD RED-to-GREEN) garantit l'anti-régression au-delà de la session courante de l'agent.
 
 - [ ] **Code Review (Anti-Bruit & Rubric)** : Intégrer la stratégie Open-SWE dans les nœuds Security et Code Judge. Interdire les critiques de style, classer les retours (Critical, High, Medium, Low) et forcer l'ancrage strict sur le `diff` modifié pour réduire drastiquement les faux positifs et l'enlisement du Judge.
-- [ ] **TDD Persistant (Web Tester)** : Modifier le workflow de test (inspiré de LlamaBot). Le Testeur (web ou python) doit générer un vrai script automatisé (ex: `spec.js` / `test_foo.py`), s'assurer qu'il échoue (RED) prouvant l'erreur, l'envoyer au Coder pour correction, puis vérifier sa réussite (GREEN). Cela laisse un harnais de test durable sur le disque.
+- [ ] **TDD Persistant (Web Tester)** : Modifier le workflow de test (inspiré de LlamaBot). Structurer le nœud Tester selon un pipeline strict : Bug Intake → Test Design → Failing Test (RED) → Verify (GREEN) → Hand-off. Le Testeur (web ou python) doit générer un vrai script automatisé, s'assurer qu'il échoue prouvant l'erreur, l'envoyer au Coder pour correction, puis vérifier sa réussite.
+- [ ] **Nettoyage DOM (Inspiré de LlamaBot)** : Pour le Web Tester, ajouter un filtre de troncature HTML (suppression des `<svg>`, `<canvas>`, et `<script>`) avant l'envoi au LLM pour économiser massivement les tokens.
+- [ ] **Structuration des "Findings" et Déduplication (Inspiré d'Open-SWE)** : Limiter le nombre de retours du Judge (cap strict, ex: 6 maximum) pour éviter l'enlisement. Ajouter un système de fingerprinting (empreinte SHA) pour dédupliquer les erreurs d'une itération à l'autre et ne pas rabâcher les mêmes remarques.
+- [ ] **Cycle de vie du Plan (Inspiré d'Open-SWE)** : Structurer l'étape de l'Architecte avec des statuts clairs (planning, ready, revising, approved). Le passage au Coder ne doit se faire que sur un statut "approved" (gate explicite).
 
 ## 🟤 Priorité 7 : Le "Shift Left" (Linter-as-a-Reviewer)
 *Suite à l'analyse croisée des références (Aider, OpenCode), filtrer les erreurs de syntaxe de base avant d'engager l'orchestrateur lourd permet des économies massives.*
@@ -95,5 +100,34 @@ Plus d'information : `system_prompts_analysis.md`
 > **🔎 État Actuel :** Les outils crashent ou renvoient une erreur 400 (Bad Request) à l'API LLM si les arguments JSON sont mal typés. Pire, si un Checkpoint charge un historique contenant un appel d'outil sans résultat, l'API LLM plantera systématiquement en bloquant le graphe entier.
 > **🚀 Pourquoi ce sera mieux :** Cacher ces erreurs au graphe principal grâce à des "Middlewares" (proxys) permet de sauver des itérations précieuses et de rendre le système 100% résilient (plus aucun crash lié à l'historique ou aux typos LLM).
 
-- [ ] **Sanitizer (Auto-typage)** : Implémenter un proxy avant l'exécution des outils qui détecte les arguments mal formés (ex: `"1, 80"` au lieu de `80`) et les caste silencieusement pour éviter l'échec de validation Pydantic.
+- [ ] **Sanitizer (Auto-typage)** : Implémenter un proxy avant l'exécution des outils qui détecte les arguments mal formés (ex: `"1, 80"` au lieu de `80`) et les caste silencieusement pour éviter l'échec de validation Pydantic. (Validé par les approches d'Input/Output Sanitization de DeerFlow).
 - [ ] **Orphan Repair (Anti-corruption d'historique)** : Au démarrage (chargement de Checkpoint), scanner l'historique des messages. Si un `ToolCall` n'a pas de réponse associée, injecter un faux message `{"status": "error", "error": "Interrompu"}` pour permettre à l'agent de reprendre au lieu de faire crasher l'API.
+- [ ] **Middlewares de Contrôle d'Exécution (Inspiré de DeerFlow & Open-SWE)** :
+  - *LoopDetectionMiddleware* : Détecter la stagnation et forcer une réponse finale pour stopper une boucle infinie d'outils.
+  - *ToolOutputBudgetMiddleware* : Tronquer automatiquement les résultats d'outils trop longs au niveau du middleware pour protéger le budget de tokens.
+  - *Circuit Breaker* : Gérer les timeouts de modèles ou les crashs distants de manière gracieuse.
+
+## 🟢 Priorité 9 : Optimisation de l'État du Graphe (Event-Sourcing & Reducers)
+*Le maintien d'un contexte propre sur plusieurs itérations est vital pour les LLMs locaux.*
+
+> **🔎 État Actuel :** Le graphe maintient une liste brute de messages qui grandit à l'infini, posant un risque fort de "Context Overflow".
+> **🚀 Pourquoi ce sera mieux :** Inspiré par DeerFlow (Reducers typés) et OpenFox (EventStore & Compaction), structurer la mémoire par domaines empêche sa croissance linéaire.
+
+- [ ] **Reducers d'État (DeerFlow)** : Étendre l'état du graphe (GraphState) avec des reducers (ex: `artifacts`, `todos`, `summary_text`, `delegations`) pour compacter l'état sans perte d'information critique. 
+- [ ] **Compaction Automatique (OpenFox & OpenCode)** : Intégrer un "Compactor" qui se déclenche lorsque la limite de contexte approche. Gérer la compaction via des "Context Epochs" : définir une baseline immuable et n'y rajouter que les deltas chronologiques. Remplacer l'historique brut par un résumé tout en conservant les instructions globales.
+
+## 🔵 Priorité 10 : Contexte à la Demande (Prompt-Vault / Skills)
+*Le LLM n'a pas besoin de connaître toutes les documentations d'outils dès la première seconde.*
+
+> **🔎 État Actuel :** Le prompt système initial peut devenir très lourd si on y intègre toutes les descriptions détaillées d'outils et de skills.
+> **🚀 Pourquoi ce sera mieux :** Réduit drastiquement l'usage des tokens et améliore le respect des consignes grâce à un chargement "Lazy".
+
+- [ ] **Skill Activation Middleware (Inspiré de DeerFlow)** : Ne placer que les titres et résumés des outils dans le prompt initial. Lorsqu'un outil ou skill est appelé par l'agent, le middleware s'active, lit le contenu de `SKILL.md` (ou du Prompt-Vault) et l'injecte localement dans le contexte d'exécution de cet appel.
+
+## 🟠 Priorité 11 : Observabilité et Protocole d'Événements
+*Un système opaque est impossible à déboguer.*
+
+> **🔎 État Actuel :** Le logging se fait de manière classique vers `stdout` ou des fichiers, ce qui est difficile à exploiter par d'autres systèmes.
+> **🚀 Pourquoi ce sera mieux :** Un flux d'événements strict permet l'observabilité et l'intégration de TUIs.
+
+- [ ] **Run Event Stream (Inspiré de Deer Flow & OpenFox)** : Définir un contrat JSON strict (versionné) pour les événements du graphe (trace, message, tool_call, error, subagent_status). Cela permettra de brancher facilement une UI de monitoring, un TUI (terminal UI), ou de faire de l'analyse post-mortem avancée sans parser des logs texte.
