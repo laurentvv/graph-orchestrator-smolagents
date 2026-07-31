@@ -14,6 +14,12 @@ from __future__ import annotations
 import os
 from typing import Optional, Tuple
 
+# clean_dom_for_llm est importé côté tests (tests/test_dom_filter.py) et utilisé
+# à terme pour post-traiter tout HTML rapatrié côté Python. Dans web_tester, le
+# nettoyage s'opère côté navigateur (JS injecté dans le prompt, plus efficace :
+# pas de round-trip du HTML brut). On garde l'import symbolique pour documenter
+# la dépendance et faciliter son utilisation future (ex: analyse post-capture).
+from ..dom_filter import clean_dom_for_llm  # noqa: F401
 from ..logging_utils import NodeMetrics
 from ..models import CoderOutput
 
@@ -105,6 +111,22 @@ ATTENTION - Le dossier de travail absolu est : {workspace_url}
 {target_files_urls}
 Pour utiliser 'puppeteer_navigate', tu dois ouvrir le fichier HTML principal à cette URL EXACTE : {primary_url}
 (N'utilise PAS {workspace_url}/index.html à la racine — le fichier est dans un sous-répertoire.)
+
+### 🧹 NETTOYAGE DOM (économise le contexte — Priorité 6)
+Quand tu inspectes le HTML de la page (via `puppeteer_evaluate("document.documentElement.outerHTML")`),
+NE renvoie JAMAIS le HTML brut dans ton raisonnement : les `<script>`, `<style>`, `<svg>`,
+`<canvas>` sont massifs et inutiles pour valider la logique. Applique TOUJOURS ce nettoyage
+avant d'analyser ou de citer le DOM dans ton rapport :
+```js
+// Récupère un DOM NETTOYÉ (script/style/svg/canvas/comments supprimés, whitespace compacté)
+(() => {{
+  const clone = document.documentElement.cloneNode(true);
+  clone.querySelectorAll('script,style,svg,canvas,iframe,noscript,template').forEach(el => el.remove());
+  return clone.outerHTML.replace(/<!--[\\s\\S]*?-->/g,'').replace(/\\s{{2,}}/g,' ').slice(0, 8000);
+}})()
+```
+Cela divise par ~10 la taille du HTML que tu manipules, sans perdre le texte/structure pertinents
+pour tes assertions fonctionnelles (IDs, classes, contenu textuel, attributs aria-*).
 
 Vérifie l'application web générée. N'oublie PAS l'étape 4 du skill (Functional Logic Testing) :
 identifie les comportements clés du cahier des charges ci-dessus et écris des assertions via

@@ -304,6 +304,29 @@
       "description": "Mise à jour du plan usine logicielle (Priorités 1, 3, 6, 9, 11) avec Read-Before-Write Gate, Anti-Loop Crypto, Pipeline TDD 6-étapes, Context Epochs, et Run Event Stream.",
       "status": "completed",
       "dependencies": []
+    },
+    {
+      "id": "F-36",
+      "name": "Anti-Loop Cryptographique (circuit-breaker par hash SHA256)",
+      "description": "Priorité 3 du plan usine logicielle (ligne 73), inspiré de Crush. Détecte quand le Coder répète EXACTEMENT le même tool call (même outil + mêmes arguments, hashés en SHA256) plusieurs fois de suite — le failure mode 'tourne en rond' qui brûle des tokens sans progresser. Implémentation : loop_guard.py (compute_tool_call_fingerprint = hash de ToolName + Input normalisé via sort_keys + strip whitespace ; LoopGuard.record/repeated_action/reset ; extract_tool_calls_from_step gère ToolCallingAgent ET CodeAgent). Branché dans run_with_retry (param optionnel loop_guard=None, non-cassant) via execute_coder_node (seul nœud d'écriture). Reset du guard aligné sur la purge de agent.memory.steps entre retries. Config LOOP_GUARD_ENABLED (opt-out) + LOOP_GUARD_THRESHOLD (défaut 3). Complémentaire du max_iterations (niveau graphe) et de _detect_idle_step (tour sans aucun tool call). 16 tests PASS (test_loop_guard.py).",
+      "status": "completed",
+      "dependencies": [
+        "F-33"
+      ]
+    },
+    {
+      "id": "F-37",
+      "name": "Nettoyage DOM pour Web Tester (filtre HTML anti-bruit)",
+      "description": "Priorité 6 du plan usine logicielle (ligne 108), inspiré de LlamaBot. Avant d'envoyer le HTML capturé au LLM, on strippe les balises volumineuses non pertinentes pour la validation logique : <script>, <style>, <svg>, <canvas>, <iframe>, <noscript>, <template>, <head> + commentaires HTML. Implémentation : dom_filter.py (clean_dom_for_llm, regex précompilées case-insensitive + DOTALL, variants auto-fermants XHTML, compactage whitespace, troncature max_chars=8000). Sans dépendance (pas de BeautifulSoup/lxml). Branché dans web_tester.py : directive 'NETTOYAGE DOM' dans le prompt avec un snippet JS exécuté côté navigateur via puppeteer_evaluate (plus efficace qu'un round-trip Python). Gain mesuré : taille divisée par ≥3 sur un HTML réaliste (test_significant_token_reduction). 18 tests PASS (test_dom_filter.py).",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-38",
+      "name": "Guard bash denylist (robustesse runtime, anti-commandes destructrices)",
+      "description": "Priorité 8-bis du plan usine logicielle (ligne 137-140). bash_command (tools.py) exécute des commandes issues du LLM via subprocess.run(shell=True) sans aucune garde. Un CodeAgent génère et exécute du Python arbitraire → bash_command est exposé à des appels destructeurs (hallucination ou zèle du LLM). Implémentation : bash_guard.py (check_bash_command renvoie (allowed, reason), ne lève jamais d'exception). Denylist regex case-insensitive couvrant Unix (rm -rf /, rm -rf ~, rm -rf *, mkfs, dd of=/dev/sd*, > /dev/sd*, fork bomb, chmod -R 777 /) + Windows (format X:, rmdir/rd /s /q sur C:\\/%SystemRoot%, del /f /s /q idem, diskpart, reg delete HKLM) + cross-plateforme (shutdown/halt/reboot, git push --force, curl|sh). Patterns validés pour préserver les légitimes (rm -rf ./build, git push origin main, cat /format/rapport.txt). Branché dans tools.py bash_command AVANT subprocess.run. Opt-out BASH_GUARD_ENABLED=false (patch settings à la source testé). PORTÉE = denylist (pas sandbox Docker, chantier séparé). 66 tests PASS (test_bash_guard.py).",
+      "status": "completed",
+      "dependencies": []
     }
   ]
 }
