@@ -42,3 +42,6 @@ codeagent_compare/
 # --- Frontend (web/) ---
 web/node_modules/
 web/dist/
+
+# Output daté par run (Priorité 13 du plan usine logicielle)
+runs/
