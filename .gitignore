@@ -45,3 +45,4 @@ web/dist/
 
 # Output daté par run (Priorité 13 du plan usine logicielle)
 runs/
+debug/

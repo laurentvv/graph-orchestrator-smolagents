@@ -428,9 +428,32 @@ async def execute_coder_node(
         # (2) triple-quote non fermée (limite fenêtre génération).
         strategy = task.get("strategy", "simple")
         sections = task.get("sections", [])
+        iteration = task.get("iteration", 1)
 
-        # Section workflow adaptée à la stratégie dictée par l'Architect (F-29).
-        if strategy == "incremental":
+        # MODE CORRECTION (itération > 1) : les fichiers cible EXISTENT DÉJÀ (créés à
+        # l'itération 1). Le Coder doit CORRIGER chirurgicalement les bugs signalés dans
+        # ### Contenu de la tâche (tickets [LINTER] / [JUDGE]), PAS réécrire from-scratch.
+        # Sans cette branche, le modèle suit le workflow de création (write_file) → écrase
+        # tout le travail précédent à chaque itération = gaspillage + boucle de frustration.
+        # Correction = read_file (voir l'état actuel) + search_replace (cibler le fragment
+        # fautif). C'est l'invariant n°1 (read-before-write) et n°2 (pas de whole-file rewrite).
+        if iteration > 1:
+            strategy_block = f"""### WORKFLOW — MODE CORRECTION (itération {iteration}, les fichiers EXISTENT DÉJÀ)
+NE RECOMMENCE PAS DE ZÉRO. Les fichiers cible ont été créés à l'itération précédente et
+contiennent du vrai code. Le bug à corriger est décrit dans ### Contenu de la tâche (tickets
+[LINTER] / [JUDGE]). Procède ainsi :
+1. read_file(path) sur CHAQUE fichier signalé fautif pour voir son état ACTUEL.
+2. Identifie le fragment précis qui cause le bug (ex: balise </html> placée trop tôt,
+   fonction manquante, syntaxe cassée). Les tickets te donnent la ligne et l'aperçu.
+3. search_replace(path, old_string=fragment_fautif, new_string=fragment_corrigé) pour
+   corriger CHIRURGICALEMENT. Donne le fragment EXACT à remplacer (copie de read_file).
+   Si le bug est "contenu après </html>", déplace le </html> à la FIN via search_replace.
+4. Répéte pour chaque bug signalé. final_answer quand tous les bugs sont corrigés.
+ATTENTION : NE JAMAIS appeler write_file sur un fichier déjà créé (ça l'écrase et perd
+tout le travail). Uniquement read_file + search_replace en mode correction."""
+
+        # MODE CRÉATION (itération 1) — workflow adapté à la stratégie dictée par l'Architect (F-29).
+        elif strategy == "incremental":
             sections_str = ", ".join(sections) if sections else "(sections à définir)"
             strategy_block = f"""### WORKFLOW (stratégie INCREMENTAL imposée par l'Architect)
 Construis ce gros fichier monolithique EN PLUSIEURS PETITES ÉTAPES. NE TENTE PAS un seul
@@ -484,7 +507,7 @@ final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Fichi
 ### OUTILS DISPONIBLES
 - `write_file(path, content)` : CRÉE/ÉCRASE un fichier complet. Sous-dossiers créés auto.
 - `append_file(path, content)` : AJOUTE un bloc à la FIN d'un fichier existant (garde anti-doublon).
-- `search_replace(path, search, replace)` : MODIFIE un fragment (matching tolérant). À utiliser après read_file.
+- `search_replace(path, old_string, new_string)` : MODIFIE un fragment (matching tolérant). À utiliser après read_file.
 - `read_file(path)` / `list_directory(path)` : lecture/exploration.
 - `context7` (resolve_library_id/query_docs) : UNIQUEMENT pour une lib externe (React, Chart.js...). JAMAIS pour du vanilla.
 - Évite DuckDuckGoSearchTool (lent/imprécis).

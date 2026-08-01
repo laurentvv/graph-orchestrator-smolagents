@@ -90,27 +90,42 @@ class ArchitectSignature(dspy.Signature):
         "architect",
         """Analyse une tâche et génère un plan d'architecture en sous-tâches UNITAIRES.
 
-        RÈGLE DE DÉCOUPAGE :
-        - Vise le MINIMUM de sous-tâches (2-4 max). Chaque sous-tâche déclenche un agent Coder
-          complet (coûteux). Le découpage granulaire (5+) est contre-productif.
+        RÈGLE DE DÉCOUPAGE (1 LIVRABLE TESTABLE = 1 SOUS-TÂCHE) :
+        - Une sous-tâche = un ENSEMBLE COHÉRENT de fichiers que le Tester va valider ENSEMBLE.
+          Ne JAMAIS découper un livrable en sous-tâches par fichier — sinon le Tester teste des
+          fichiers isolés qui ne marchent pas seuls (ex: index.html sans styles.css → REJETÉ
+          systématique, boucle infinie). C'est le failure mode n°1 observé en prod.
+        - CAS TYPIQUES :
+          * 1 fichier unique (Bubble Sort dans index.html) → 1 sous-tâche, target_files=[ce fichier].
+          * Site HTML+CSS+JS liés (landing_page/) → 1 sous-tâche, target_files=[index.html,
+            styles.css, script.js] (le Coder crée les 3, le Tester valide l'ensemble rendu).
+          * App Python 3 modules indépendants (models.py/api.py/utils.py) → 1 sous-tâche
+            multifile si les modules se testent ensemble, OU plusieurs sous-tâches UNIQUEMENT
+            si chaque module est réellement testable isolément (rare).
+        - Vise le MINIMUM de sous-tâches. Chaque sous-tâche déclenche un agent Coder + Tester +
+          Judge complets (coûteux). Le découpage granulaire est contre-productif.
 
         RÈGLE DE STRATÉGIE (F-29 — très important, dicte COMMENT le Coder doit construire) :
         Pour CHAQUE sous-tâche, choisis une 'strategy' parmi :
-        - 'simple' : petit fichier isolé, faisable en UN seul write_file. Utilise-la pour un
-          script Python < ~200 lignes, un petit fichier autonome, un algorithme borné.
-        - 'incremental' : gros fichier monolithique imposé par la spec (ex: un dashboard HTML
-          complet dans un seul index.html). Le Coder construira le squelette PUIS remplira
-          section par section via append_file. Dans ce cas, fournis aussi 'sections' = la liste
-          des sections à construire (ex: ['css', 'sidebar', 'kpi', 'table', 'js']).
-        - 'multifile' : projet multi-fichiers (ex: app Python avec models.py + api.py + utils.py,
-          ou un site index.html + styles.css + script.js séparés). Chaque target_file reste
-          petit (< ~200 lignes) et autonome. Utilise-la quand la spec ne force pas un monolithe.
+        - 'simple' : UN seul write_file par fichier (contenu COMPLET). C'est la stratégie PAR
+          DÉFAUT. Pour une sous-tâche multifile, le Coder enchaîne plusieurs write_file (un par
+          fichier cible) dans le même run. Convient pour tout fichier < ~500 lignes.
+        - 'incremental' : RÉSERVÉ aux GROS fichiers monolithiques (> ~500 lignes, ex: un
+          dashboard admin complet dans un seul index.html imposé par la spec). Le Coder
+          construira le squelette PUIS remplira section par section via append_file. Dans ce
+          cas, fournis 'sections' = liste des sections (ex: ['css', 'sidebar', 'kpi', 'js']).
+          N'utilise JAMAIS incremental sur un fichier < ~500 lignes — ça crée des bugs de
+          structure (contenu après </html>) pour aucun bénéfice.
+        - 'multifile' : quand une sous-tâche porte PLUSIEURS fichiers liés (index.html +
+          styles.css + script.js). Le Coder crée chaque fichier via write_file autonome.
+          Même logique que 'simple' (contenu complet par fichier), juste pour signaler
+          qu'il y a plusieurs fichiers dans la sous-tâche.
 
         QUAND UTILISER QUOI :
-        - HTML/CSS/JS : 'multifile' (index.html + styles.css + script.js séparés) PAR DÉFAUT,
-          sauf si la spec impose explicitement un seul fichier → alors 'incremental'.
-        - Python/TS   : 'multifile' (1 module logique = 1 fichier) PAR DÉFAUT.
-        - Petit algo/fichier isolé : 'simple'.
+        - HTML/CSS/JS dans 1 seul fichier → 'simple'.
+        - HTML/CSS/JS en fichiers séparés liés → 'multifile' (1 sous-tâche, tous les fichiers).
+        - Python/TS 1 module → 'simple'. Plusieurs modules liés → 'multifile'.
+        - Gros monolithe (> 500 lignes) imposé → 'incremental' (dernier recours).
 
         Le Coder suivra ta stratégie à la lettre. Chaque sous-tâche doit avoir des critères
         d'acceptation vérifiables (comportements attendus testables, pas juste un nom de fichier).

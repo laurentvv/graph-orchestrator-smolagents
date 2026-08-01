@@ -492,6 +492,12 @@ async def run_coding_workflow(
                     # 'simple' (rétro-compat : sous-tâche sans stratégie explicite).
                     "strategy": getattr(subtask, "strategy", "simple"),
                     "sections": getattr(subtask, "sections", []),
+                    # Numéro d'itération (1=création initiale, 2+=correction). Le prompt
+                    # Coder s'adapte : itération 1 = write_file (création), itération 2+ =
+                    # read_file + search_replace (correction chirurgicale, JAMAIS rewrite).
+                    # Sans ça, le Coder réécrit le fichier from-scratch à chaque itération
+                    # au lieu de corriger les bugs signalés par le Linter/Judge.
+                    "iteration": iteration,
                 }
 
                 # 1. Coder (smolagents, modèle FAST)

@@ -300,3 +300,18 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape RP-9 : Suite pytest complète → 482 passed / 0 failed (442 baseline + 40 nouveaux), 0 régression. web_tester_functional désélectionné (nécessite Chrome/npx).
 - [x] Étape RP-10 : État disque synchronisé (feature_list.json +F-44, contract.md +critères 141-149, plan_usine_logicielle.md P0+P0-bis+P6 cochés, progress.md, README.md, log.md).
 
+## Jalons de l'Itération (requête utilisateur)
+- [x] Clonage du dépôt awesome-claude-skills dans references/.
+
+## Jalons de l'Itération (cycle Validation Coder — 6 fixes + Architect + timings)
+- [x] Étape VC-1 : Fix SanitizedTool.__getattr__ (to_code_prompt délégation — bug CodeAgent crash).
+- [x] Étape VC-2 : Fix search_replace arg names (search→old_string, replace→new_string, convention canonique aider/Cline).
+- [x] Étape VC-3 : Fix Coder mode CORRECTION (iteration>1 = read_file+search_replace, pas rewrite).
+- [x] Étape VC-4 : Fix auto-réparation HTML append_file (déplace </body></html> à la fin, 0 LLM).
+- [x] Étape VC-5 : Fix Linter HTML (ignore faux positifs tree-sitter sur CSS/JS inline).
+- [x] Étape VC-6 : Fix Architect découpage (règle "1 livrable testable = 1 sous-tâche" + simple par défaut).
+- [x] Étape VC-7 : Run GPU validation — Coder one-shot (2 steps/77s, 9726 octets, HTML+BubbleSort complets).
+- [x] Étape VC-8 : Analyse timings (debug/TIMINGS_ANALYSE.md) — Tester identifié comme goulot (querySelector, ~30 min).
+- [x] Étape VC-9 : Audit utilisateur intégré (audit_coder/ — 7 tests + screenshots, confirme Coder one-shot).
+- [x] Étape VC-10 : Suite pytest 482 passed / 0 failed après tous les fixes. Commit.
+- [ ] Étape VC-11 (cycle suivant) : Fix Tester querySelector (ACTION IMMÉDIATE documentée).
