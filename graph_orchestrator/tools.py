@@ -95,6 +95,18 @@ def write_file(path: str, content: str) -> str:
                 "ERROR: write_file 'content' looks like a placeholder, not real code. "
                 "Provide the COMPLETE implementation. The file was NOT created."
             )
+        
+        # Garde anti-squelette HTML (bug "incremental" des petits modèles distants).
+        import re
+        if bool(re.search(r"<body[^>]*>\s*(?:<!--.*?-->\s*)*</body>", stripped, re.IGNORECASE)) or (
+            path.endswith(".html") and len(stripped) < 200 and "<html" in stripped.lower()
+        ):
+            return (
+                "ERROR: write_file 'content' is an empty HTML skeleton. "
+                "The incremental strategy (skeleton + appends) is forbidden here. "
+                "You MUST generate and provide the COMPLETE file content (HTML + CSS + JS) "
+                "in this single write_file call. The file was NOT created."
+            )
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
