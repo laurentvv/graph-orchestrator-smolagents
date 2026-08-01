@@ -1770,3 +1770,30 @@ pour de la reformulation. E4B = bon compromis qualité/latence sur GPU 6 Go.
 ### Décision
 E4B câblé via setting (PROMPT_REFINER_MODEL_ID dans .env). Le défaut reste vide (= 12B) pour
 réto-compat ; le .env.example documente la recommandation E4B.
+
+## [2026-08-01] merge | PR #15 (hardening) + PR #16 (prompt-refiner) mergées sur main
+*Les 2 PR du jour sont finalisées. Kilo Code Review SUCCESS sur les deux.*
+
+### PR #15 — feat(hardening) : anti-loop SHA256 (F-36) + nettoyage DOM (F-37) + guard bash (F-38)
+- Mergée (squash) en commit 27227a9.
+- 3 features livraison cycle précédent : circuit-breaker anti-boucle Coder, filtre DOM Web
+  Tester, guard denylist commandes destructrices. 371 tests.
+
+### PR #16 — feat(prompt-refiner) : meta-prompt LLM avant l'Architect (F-39)
+- Mergée (squash) en commit f74cf8d après rebase sur main (résolution conflits fichiers
+  d'état : contract/feature_list/log/plan/progress/config/.env).
+- Nœud DSPy PromptRefiner (gemma REASONING) + setting modèle dédié (E4B recommandé).
+- **Test réel réalisé avant merge** (première validation non-mockée d'un nœud) :
+  - 12B : 318s/247s par prompt (overkill).
+  - E4B : 41s/27s par prompt (~8× plus rapide, qualité équivalente/supérieure).
+  - Setting PROMPT_REFINER_MODEL_ID ajouté pour câbler E4B. .env.example documenté.
+- **Leçons cycle** : (1) bug hang E2E découvert (helpers ne mockaient pas le nouveau nœud →
+  appel LLM réel en test) — corrigé ; (2) l'approche "tester le prompt réellement avant merge"
+  a évité de livrer un nœud à 5min/prompt sans le savoir.
+- 381 tests / 0 régression.
+
+### État main après merges
+- 41 features (F-36 à F-39 ajoutées ce jour).
+- Suite pytest : 381 passed / 0 failed.
+- Branches locales/distantes supprimées (feat/hardening-loop-dom-bashguard, feat/prompt-refiner-
+  meta-prompt).
