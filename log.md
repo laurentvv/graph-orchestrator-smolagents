@@ -1855,3 +1855,28 @@ FRESH_START=true → nouveau dossier daté. (Le timestamp seul aurait cassé la 
 ### Non fait ce cycle
 - Rétention auto OUTPUT_RETENTION (complément futur, noté dans plan).
 - Run LLM réel (validation tests mockés).
+
+
+## [2026-08-01] rch  | Ajout référence learn-claude-code (fiche 16) + intégration au plan
+*Nouvelle référence `references/learn-claude-code/` (cours 20 leçons déconstruisant Claude Code).*
+- **Découverte clé** : c'est du **PYTHON NATIF** (contrairement à qm qui est TS) — 25 fichiers .py,
+  0 TS côté agent. Patterns portables quasi littéralement. Code pédagogique mais fonctionnel et testé.
+- **Fiche 16 créée** (`docs/references-audit/projects/16-learn-claude-code.md`, ~90 lignes) au format
+  des 15 autres. Note 🟢 Haute. 18 entrées (11 Haute, 5 Moyenne, 2 Faible), tous chemins vérifiés.
+- **inventory.json** : 356 → 374 entrées. INDEX.md/README.md rafraîchis (16 fiches/projets, matrice
+  étendue, Hall of Fame + nouvelle section « Harness patterns Python natifs », guide +7 entrées).
+  update_inventory.py étendu (bloc LCC_FILES + logique main).
+- **plan_usine_logicielle.md enrichi** (8 références learn-claude-code ajoutées) :
+  - P0 spécialisation → s06_subagent (`spawn_subagent`, cap 30 tours, pas de récursion).
+  - P6 cycle de vie plan → s12_task_system (`blockedBy` DAG) + s05_todo_write (nag reminder).
+  - P8 (section entière) → s04_hooks comme **patron commun d'architecture** (~30 lignes,
+    `HOOKS[event]`+`trigger_hooks`), s08 pour Orphan Repair (+test), s11 error_recovery pour Circuit Breaker.
+  - P9 compaction → s08_context_compact (4 couches budget→snip→micro→auto, équivalent Python testé de qm).
+  - P10 skill loading → s07_skill_loading (blueprint quasi direct, Python natif).
+  - P11 event stream → s04_hooks comme couche d'observabilité native (complémentaire du contrat deer-flow).
+- **Lacunes assumées** (comblées par d'autres fiches, signalées dans la fiche) : P3 anti-loop (→ crush),
+  P6 Judge/DuckDB claims (→ open-swe), P8-bis sandbox stricte (→ qm), P12 scopes (→ qm).
+- **Exclusions conscientes** (fiche) : s14-s19 (cron/teams/autonomous, ~3500 lignes hors-scope orchestrateur
+  synchrone) ; web/ (site Next.js non portable) ; docs/ (narratif).
+- Validation : chiffres cohérents (16/374 partout), script idempotent, aucune réf POC en base de feature active.
+- **Aucune modification du code du projet** — travail documentaire + plan.

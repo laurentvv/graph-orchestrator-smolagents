@@ -8,9 +8,9 @@
 
 | Métrique | Valeur |
 |---|---|
-| **Date de l'audit** | 2026-07-31 |
-| **Projets/dossiers audités** | 15 |
-| **Entrées de fichiers inventoriées** | 356 (inventaire machine : [`inventory.json`](./inventory.json)) |
+| **Date de l'audit** | 2026-08-01 |
+| **Projets/dossiers audités** | 16 |
+| **Entrées de fichiers inventoriées** | 374 (inventaire machine : [`inventory.json`](./inventory.json)) |
 | **Fichiers pertinents scannés** (base) | ~10 000 (hors `.git/`, `node_modules/`, médias, fixtures) |
 | **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css`) + JSON/YAML de spec/contrat |
 | **Exclusions** | `.git/` (~730 MB), `node_modules/`, médias (1 293 SVG, 16 mp4…), fixtures de tests, traductions de README (1 conservée/projet) |
@@ -19,7 +19,7 @@
 
 ---
 
-## 🧭 Navigation — les 15 fiches
+## 🧭 Navigation — les 16 fiches
 
 | # | Projet | Réutilisabilité | Fiche | Résumé en 1 ligne |
 |---|---|---|---|---|
@@ -38,6 +38,7 @@
 | 13 | **deer_flow_analysis.md** | 🟢 Haute | [13-deer-flow-analysis](./projects/13-deer-flow-analysis.md) | Note d'analyse : 3 idées actionnables (middlewares, reducers typés, contexte à la demande) |
 | 14 | **qm** | 🟢 Haute | [14-qm](./projects/14-qm.md) | Plateforme agent multi-joueur (TS) — **algorithmes portables** : compaction de contexte duale, mémoire durable deux-tiers (LLM-juge de consolidation), idempotency, queues à leases typés |
 | 15 | **claude-code-unified-agents** | 🟡 Moyenne | [15-claude-code-unified-agents](./projects/15-claude-code-unified-agents.md) | 53 (et non 54) agents Claude Code — ~8 prompts purs alignés avec les rôles Router/Coder/Tester/Judge/Security ; reste = code TS non portable |
+| 16 | **learn-claude-code** | 🟢 Haute | [16-learn-claude-code](./projects/16-learn-claude-code.md) | Cours 20 leçons déconstruisant Claude Code en harness engineering — **Python natif** : hooks, compaction, error recovery, skill loading, task DAG (patterns directement portables) |
 
 ---
 
@@ -47,7 +48,7 @@
 `aider` (Python, mature), `crush` (Go), `nanocode` (Python, 1 fichier), `opencode` (TS, gigantesque), `openfox` (TS, local-LLM-first). → Valeur : edit-formats robustes (aider), anti-loop (crush), patterns d'outils minimaux (nanocode), specs de protocole (opencode), persistance event-sourcing (openfox).
 
 ### 2. 🔧 Frameworks d'orchestration d'agents (mixte code + docs)
-`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm)**.
+`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm)**, **patterns harness Python natifs (learn-claude-code)**.
 
 ### 3. 📚 Ressources & outils
 `Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante), `claude-code-unified-agents` (prompts de spécialisation).
@@ -138,6 +139,22 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | `…/.claude/agents/orchestrator.md` | **Router** | Conditional Routing, Decision Framework, `delegate_to(agent, task=…)` |
 | `…/.claude/agents/specialized/agent-generator.md` | Spécialisation agents | `AgentCapabilitySchema` (name/description/category/expertise/tools/constraints) — déclarer formellement un rôle |
 
+### Harness patterns Python natifs (learn-claude-code)
+> ⚡ **La référence la plus directement exploitable** pour les briques transversales : contrairement à qm (TypeScript), tout est en **Python natif**, portage quasi littéral. Code pédagogique mais **fonctionnel et testé**. Couvre P8 (hooks + error recovery), P9 (compaction), P10 (skill loading), P11 (event stream), P6 (task DAG), P0 (subagent).
+
+| Fichier | Symbole(s) clé(s) | Apport |
+|---|---|---|
+| `references/learn-claude-code/s04_hooks/code.py` | `HOOKS[event]`, `trigger_hooks` | **Architecture middleware en ~30 lignes.** Squelette de TOUS les middlewares (Sanitizer, Orphan Repair, LoopDetection) ET de l'event stream (P8 + P11) |
+| `references/learn-claude-code/s11_error_recovery/code.py` | `RecoveryState`, `with_retry`, fallback model | 3 chemins de récupération : escalation max_tokens, compaction, backoff+jitter+fallback model (P8 anti-crash) |
+| `references/learn-claude-code/s08_context_compact/code.py` | `snip_compact`, `micro_compact`, `reactive_compact` | 4 couches budget→snip→micro→auto. **Préserve les paires tool_use/tool_result** = Orphan Repair. Équivalent Python de `context-compaction.ts` (qm), testé |
+| `references/learn-claude-code/tests/test_compaction_tool_pairs.py` | `assert_no_orphan_tool_results` | **Test exact du middleware Orphan Repair** (P8) — 5 scénarios de paires préservées |
+| `references/learn-claude-code/s07_skill_loading/code.py` | `_scan_skills`, `load_skill`, `_parse_frontmatter` | **Blueprint quasi direct de P10** : catalogue cheap en SYSTEM + chargement on-demand (Python natif) |
+| `references/learn-claude-code/s12_task_system/code.py` | `Task`, `blockedBy`, `can_start`, `claim_task`, `complete_task` | Mini-orchestrateur DAG file-backed — cycle de vie plan (P6) + base escalade (P3) |
+| `references/learn-claude-code/s06_subagent/code.py` | `spawn_subagent`, cap 30 tours, pas de récursion | Patron d'isolation des subagents pour Coder/Tester spécialisés (P0) |
+| `references/learn-claude-code/s05_todo_write/code.py` | `nag reminder`, `_normalize_todos` | Persistence plan/todo + validation défensive (LLM envoie string au lieu de list) (P6) |
+| `references/learn-claude-code/s20_comprehensive/code.py` (ou `agents/s_full.py`) | boucle agrégée | **Référence d'intégration** : compose hooks + compaction + task graph + error recovery dans une seule boucle. Point d'entrée recommandé |
+| `references/learn-claude-code/skills/code-review/SKILL.md` | checklist Security/Correctness/… | Skill de revue réutilisable tel quel comme prompt de Judge (P6) |
+
 ---
 
 ## 📊 Matrice réutilisabilité croisée
@@ -159,11 +176,13 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | deer-flow-analysis | 5 | 0 | 0 | 🟢 Haute |
 | **qm** | **17** | **10** | **1** | 🟢 **Haute** |
 | **claude-code-unified-agents** | **7** | **5** | **1** | 🟡 **Moyenne** |
-| **Total** | **143** | **131** | **80** | — |
+| **learn-claude-code** | **11** | **5** | **2** | 🟢 **Haute** |
+| **Total** | **154** | **136** | **82** | — |
 
 **Constats** :
 - **axon** (23 Haute) et **aider** (17 Haute) restent les mines d'or côté Python.
 - **qm** (17 Haute) rejoint le peloton de tête : malgré le TypeScript, ses algorithmes de **compaction de contexte, mémoire durable, idempotency et queues à leases** sont portables. (L'ancienne fiche la notait Moyenne à tort.)
+- **learn-claude-code** (11 Haute, 🟢 Haute) : la référence la plus **directement exploitable** pour les briques transversales (hooks, compaction, error recovery, skill loading, task DAG) car **Python natif** — portage quasi littéral, contrairement à qm (TS).
 - **deer-flow** (21 Haute) malgré une note globale Moyenne — la valeur est dans les contracts/plans/middlewares.
 - **claude-code-unified-agents** : 7 prompts purs 🟢 (alignés avec les rôles du graphe), mais la majorité des 53 fichiers est du code TS non portable → note Moyenne. (L'ancienne fiche la notait Haute à tort.)
 - **opencode/openfox** (TS) : peu de Haute, leurs **specs/docs** restent des références conceptuelles au mieux.
@@ -195,6 +214,12 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | Un **system prompt** pour le Security Reviewer | Fiche **15-claude-code** → `quality/security-auditor.md` (OWASP, CVSS) |
 | Un **system prompt** pour le Coder Python | Fiche **15-claude-code** → `development/python-pro.md` (type hints, PEP 8) |
 | Un schéma pour **déclarer formellement un agent** | Fiche **15-claude-code** → `specialized/agent-generator.md` (`AgentCapabilitySchema`) |
+| **Une architecture de middlewares** (hooks/events, Python natif) | Fiche **16-learn-claude-code** → `s04_hooks/code.py` (`HOOKS[event]`, `trigger_hooks`) |
+| **Un middleware anti-crash** (retry, backoff, fallback model) | Fiche **16-learn-claude-code** → `s11_error_recovery/code.py` (`with_retry`, `RecoveryState`) |
+| **Compacter le contexte** (version Python, avec tests) | Fiche **16-learn-claude-code** → `s08_context_compact/code.py` (4 couches) ; version TS plus mature en fiche **14-qm** |
+| **Charger les skills à la demande** (lazy, Python natif) | Fiche **16-learn-claude-code** → `s07_skill_loading/code.py` (`load_skill`, `_scan_skills`) |
+| **Un système de tâches avec dépendances** (DAG) | Fiche **16-learn-claude-code** → `s12_task_system/code.py` (`blockedBy`, `can_start`) |
+| **Instancier un subagent isolé** (contexte frais, cap tours) | Fiche **16-learn-claude-code** → `s06_subagent/code.py` (`spawn_subagent`) |
 
 ---
 
@@ -204,14 +229,15 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 docs/references-audit/
 ├── README.md              ← Mode d'emploi (start ici)
 ├── INDEX.md               ← CE DOCUMENT (navigation + synthèse + Hall of Fame)
-├── inventory.json         ← Inventaire machine-lisible (356 entrées, filtrable)
-└── projects/              ← 15 fiches détaillées (1 par projet)
+├── inventory.json         ← Inventaire machine-lisible (374 entrées, filtrable)
+└── projects/              ← 16 fiches détaillées (1 par projet)
     ├── 01-prompt-vault.md
     ├── 02-aider.md
     ├── ...
     ├── 13-deer-flow-analysis.md
     ├── 14-qm.md
-    └── 15-claude-code-unified-agents.md
+    ├── 15-claude-code-unified-agents.md
+    └── 16-learn-claude-code.md
 ```
 
 **Pour recherche programmatique** : `inventory.json` est consommable directement :

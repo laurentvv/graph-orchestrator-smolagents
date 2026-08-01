@@ -1,16 +1,16 @@
 # Audit des références — Mode d'emploi
 
-Ce dossier est le **document de suivi** de l'audit radical du dossier `references/` (15 projets, ~10 000 fichiers pertinents). Il permet de retrouver instantanément n'importe quelle information, feature ou code utile, avec son **emplacement complet** et une **évaluation de réutilisabilité** pour `graph-orchestrator-smolagents`.
+Ce dossier est le **document de suivi** de l'audit radical du dossier `references/` (16 projets, ~10 000 fichiers pertinents). Il permet de retrouver instantanément n'importe quelle information, feature ou code utile, avec son **emplacement complet** et une **évaluation de réutilisabilité** pour `graph-orchestrator-smolagents`.
 
 ## 🚀 Par où commencer ?
 
 | Tu veux… | Va à |
 |---|---|
-| Une vue d'ensemble + la liste des 15 projets | **[INDEX.md](./INDEX.md)** ← document maître |
+| Une vue d'ensemble + la liste des 16 projets | **[INDEX.md](./INDEX.md)** ← document maître |
 | Le top des fichiers les plus réutilisables | **[INDEX.md > Hall of Fame](./INDEX.md#-hall-of-fame--top-25-fichiers-les-plus-réutilisables)** |
 | Savoir où chercher pour un besoin précis | **[INDEX.md > Guide de recherche](./INDEX.md#-guide-de-recherche--comment-retrouver-x)** |
-| Le détail d'un projet précis | **[projects/](./projects/)** (15 fiches) |
-| Filtrer/querier l'inventaire par programmation | **[inventory.json](./inventory.json)** (356 entrées) |
+| Le détail d'un projet précis | **[projects/](./projects/)** (16 fiches) |
+| Filtrer/querier l'inventaire par programmation | **[inventory.json](./inventory.json)** (374 entrées) |
 
 ## 📚 Structure
 
@@ -18,10 +18,10 @@ Ce dossier est le **document de suivi** de l'audit radical du dossier `reference
 docs/references-audit/
 ├── README.md              ← tu es ici (mode d'emploi)
 ├── INDEX.md               ← document maître (navigation + synthèse + Hall of Fame + matrice + guide)
-├── inventory.json         ← inventaire machine-lisible (15 projets, 356 entrées)
-└── projects/              ← 15 fiches détaillées (1 par projet)
+├── inventory.json         ← inventaire machine-lisible (16 projets, 374 entrées)
+└── projects/              ← 16 fiches détaillées (1 par projet)
     ├── 01-prompt-vault.md  …  13-deer-flow-analysis.md
-    └── 14-qm.md  …  15-claude-code-unified-agents.md
+    └── 14-qm.md  …  16-learn-claude-code.md
 ```
 
 ## 🎯 Convention de réutilisabilité

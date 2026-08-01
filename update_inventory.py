@@ -163,11 +163,81 @@ CC_FILES = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# 16 — learn-claude-code : 18 entrées (patterns Python natifs, testés)
+# ---------------------------------------------------------------------------
+LCC_FILES = [
+    # --- Intégration / vue d'ensemble ---
+    {"path": "references/learn-claude-code/s20_comprehensive/code.py", "type": "code", "reuse": "high",
+     "key_symbols": ["terminal_print", "agent loop agrégée"],
+     "description": "Capstone 2119 lignes : hooks + compaction + task graph + error recovery + memory + subagent + background dans une seule boucle sans collision. Référence d'intégration montrant que les patterns se combinent. Point d'entrée recommandé."},
+    {"path": "references/learn-claude-code/agents/s_full.py", "type": "code", "reuse": "high",
+     "key_symbols": ["microcompact", "drain background", "check inbox", "dispatch 23 outils"],
+     "description": "Capstone s01-s11 (740 lignes) : microcompact + drain background + check inbox avant chaque appel LLM. Version consolidée SANS le bruit s14-s19. Souvent le meilleur point d'entrée unique."},
+    # --- P8 : Hooks + Error Recovery + Compaction (préservation paires) ---
+    {"path": "references/learn-claude-code/s04_hooks/code.py", "type": "code", "reuse": "high",
+     "key_symbols": ["HOOKS", "trigger_hooks", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"],
+     "description": "Architecture middleware en ~30 lignes : registre HOOKS[event] + trigger_hooks (court-circuite si callback retourne non-None). Squelette de TOUS les middlewares (Sanitizer, Orphan Repair, LoopDetection) ET de l'event stream. P8 + P11."},
+    {"path": "references/learn-claude-code/s11_error_recovery/code.py", "type": "code", "reuse": "high",
+     "key_symbols": ["RecoveryState", "with_retry", "is_prompt_too_long_error", "backoff", "fallback model"],
+     "description": "3 chemins de récupération : escalation max_tokens 8K→64K, compaction, backoff exponentiel+jitter (max 10) + fallback model après 529 consécutifs. Squelette du middleware anti-crash. P8."},
+    {"path": "references/learn-claude-code/s08_context_compact/code.py", "type": "code", "reuse": "high",
+     "key_symbols": ["snip_compact", "micro_compact", "tool_result_budget", "reactive_compact", "budget → snip → micro → auto"],
+     "description": "4 couches en cascade : snip (trim middle si >50 msg), micro (remplace vieux tool_results par placeholders), budget (persiste gros résultats sur disque), reactive (urgence prompt_too_long). Préserve les paires tool_use/tool_result = Orphan Repair. Équivalent Python de context-compaction.ts (qm). P9."},
+    {"path": "references/learn-claude-code/tests/test_compaction_tool_pairs.py", "type": "test", "reuse": "high",
+     "key_symbols": ["assert_no_orphan_tool_results", "snip_compact", "reactive_compact"],
+     "description": "Test du middleware Orphan Repair : valide la préservation des paires tool_use/tool_result (5 scénarios). Test exact de la préoccupation P8 Orphan Repair. Pattern de test réutilisable."},
+    # --- P10 : Skill loading ---
+    {"path": "references/learn-claude-code/s07_skill_loading/code.py", "type": "code", "reuse": "high",
+     "key_symbols": ["_parse_frontmatter", "_scan_skills", "load_skill"],
+     "description": "Lazy loading : scan skills/*/SKILL.md au démarrage (parse YAML frontmatter), injecte nom+description (~100 tokens/skill) dans SYSTEM, load_skill(name) charge le contenu complet via tool_result à la demande. Blueprint quasi direct de P10, Python natif."},
+    {"path": "references/learn-claude-code/skills/code-review/SKILL.md", "type": "skill", "reuse": "high",
+     "key_symbols": ["Security", "Correctness", "Performance", "Maintainability", "Testing"],
+     "description": "Checklist structurée de revue + format de sortie (158 lignes). Réutilisable tel quel comme prompt de Judge. P6."},
+    # --- P6 : Task system + TodoWrite ---
+    {"path": "references/learn-claude-code/s12_task_system/code.py", "type": "code", "reuse": "high",
+     "key_symbols": ["Task", "blockedBy", "can_start", "claim_task", "complete_task"],
+     "description": "Mini-orchestrateur DAG file-backed : Task dataclass (id, subject, status, owner, blockedBy), can_start (deps manquantes=bloqué), claim_task, complete_task (reporte débloquage aval). P6 cycle de vie plan + base P3."},
+    {"path": "references/learn-claude-code/s05_todo_write/code.py", "type": "code", "reuse": "high",
+     "key_symbols": ["TodoWrite", "nag reminder", "_normalize_todos"],
+     "description": "Persistence d'un plan/todo à travers la conversation + nag reminder (réinjecte si stale) + validation défensive (_normalize_todos fallback JSON→ast.literal_eval car LLM envoie souvent string au lieu de list). P6."},
+    # --- P0 : Subagent ---
+    {"path": "references/learn-claude-code/s06_subagent/code.py", "type": "code", "reuse": "high",
+     "key_symbols": ["spawn_subagent", "max 30 turns", "pas de récursion"],
+     "description": "spawn_subagent(description) : messages frais, hard cap 30 tours, pas de récursion (subagent sans l'outil task), retourne summary only. Patron d'isolation des subagents pour Coder/Tester spécialisés. P0."},
+    # --- P0 : fondamentaux agent loop + tools + system prompt ---
+    {"path": "references/learn-claude-code/s01_agent_loop/code.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["while stop_reason == tool_use"],
+     "description": "Boucle agent nue (137 lignes) : perception → LLM → action. Socle minimal, clair et dépouillé. P0 fondamentaux (smolagents fournit déjà cette boucle)."},
+    {"path": "references/learn-claude-code/s02_tool_use/code.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["TOOL_HANDLERS", "dispatch map"],
+     "description": "Multi-outils + dispatch map TOOL_HANDLERS (190 lignes). Pattern de registre d'outils déjà utilisé dans tools.py du projet cible. P0."},
+    {"path": "references/learn-claude-code/s10_system_prompt/code.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["assemblage system prompt", "cache déterministe"],
+     "description": "Construction reproductible du system prompt (skills + mémoire + cache déterministe, 219 lignes). P0/P11."},
+    # --- P8-bis partiel : Permission (deny-list, pas isolation) ---
+    {"path": "references/learn-claude-code/s03_permission/code.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["deny", "rule", "approval", "3 gates"],
+     "description": "3 gates : deny (règles permanentes), rule (auto-approve par pattern), approval (humain). Limité à un deny-list, pas une vraie isolation Docker. P8-bis partiel (à combiner avec qm pour sandbox complète)."},
+    # --- Mémoire (partiel, pas un KG) ---
+    {"path": "references/learn-claude-code/s09_memory/code.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["select_relevant_memories", ".memory/", "frontmatter"],
+     "description": "Mémoire persistante file-backed : index léger + fichiers Markdown frontmatter, select_relevant_memories (LLM ou fallback keyword). Pas un KG (pas de claims/refutations). Pattern index+contenu à la demande transposable. P6 partiel."},
+    # --- Hors scope (exclusions conscientes, gardés pour traçabilité) ---
+    {"path": "references/learn-claude-code/s18_worktree_isolation/code.py", "type": "code", "reuse": "low",
+     "key_symbols": ["git worktree add", "validate_worktree_name", "_count_worktree_changes", "events.jsonl"],
+     "description": "Isolation par worktree git soignée (anti path traversal). Hors scope : orienté git worktree, pas multi-tenant utilisateurs. qm reste la réf P12."},
+    {"path": "references/learn-claude-code/s19_mcp_plugin/code.py", "type": "code", "reuse": "low",
+     "key_symbols": ["MCPClient (mock)", "assemble_tool_pool", "mcp__{server}__{tool}"],
+     "description": "MCPClient est un MOCK (handler factice, pas de vraie connexion stdio/HTTP). Seul le naming convention est utile. Le projet cible a déjà Context7 MCP branché."},
+]
+
+
 def main() -> None:
     data = json.loads(INVENTORY.read_text(encoding="utf-8"))
 
-    data["projects_audited"] = 15
-    data["audit_date"] = "2026-07-31"
+    data["projects_audited"] = 16
+    data["audit_date"] = "2026-08-01"
 
     updated = []
     seen_ids = set()
@@ -190,10 +260,19 @@ def main() -> None:
                 "summary": "Collection de 53 (et non 54) agents Claude Code spécialisés. Valeur concentrée dans ~8 prompts purs (49-185 lignes) alignés avec les rôles Router/Architect/Coder/Tester/Judge/Security : python-pro, code-reviewer, security-auditor, test-engineer, frontend-specialist, backend-architect, orchestrator. Les autres fichiers sont du code TS non portable (code trophy). 4 agents promis absents du dépôt.",
                 "files": CC_FILES,
             }
+        elif pid == "learn-claude-code":
+            project = {
+                "id": "learn-claude-code", "name": "learn-claude-code",
+                "path": "references/learn-claude-code",
+                "category": "harness-engineering",
+                "reuse_rating": "high",
+                "summary": "Cours didactique en 20 leçons qui déconstruit Claude Code en harness engineering. PYTHON NATIF (contrairement à qm) : patterns portables quasi littéralement. Couvre P8 (hooks s04 + error recovery s11), P9 (compaction s08), P10 (skill loading s07), P11 (event stream via hooks), P6 (task DAG s12 + todo s05), P0 (subagent s06). Lacunes assumées : P3 anti-loop (crush), P6 Judge/DuckDB (open-swe), P8-bis sandbox stricte (qm).",
+                "files": LCC_FILES,
+            }
         updated.append(project)
         seen_ids.add(pid)
 
-    # Sécurité : si qm/claude-code n'étaient pas déjà présents, on les ajoute.
+    # Sécurité : si qm/claude-code/learn-claude-code n'étaient pas déjà présents, on les ajoute.
     if "qm" not in seen_ids:
         updated.append({"id": "qm", "name": "qm", "path": "references/qm",
                         "category": "agent-harness", "reuse_rating": "high",
@@ -203,6 +282,11 @@ def main() -> None:
                         "path": "references/claude-code-unified-agents", "category": "agent-prompts",
                         "reuse_rating": "medium", "summary": "(ajouté par update_inventory.py)",
                         "files": CC_FILES})
+    if "learn-claude-code" not in seen_ids:
+        updated.append({"id": "learn-claude-code", "name": "learn-claude-code",
+                        "path": "references/learn-claude-code",
+                        "category": "harness-engineering", "reuse_rating": "high",
+                        "summary": "(ajouté par update_inventory.py)", "files": LCC_FILES})
 
     data["projects"] = updated
 
