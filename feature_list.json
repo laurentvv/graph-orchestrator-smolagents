@@ -341,6 +341,13 @@
       "description": "Priorité 13 du plan usine logicielle. Le Coder écrivait dans os.getcwd() (= racine projet) → bubble_sort/ + landing_page/ polluaient la racine, écrasaient les runs, pas de traçabilité. Implémentation (Option A chdir global) : workflows.py (_slugify safe cross-plateforme + _resolve_run_output_dir : reprise via checkpoint output_dir sinon nouveau daté runs/YYYY-MM-DD_HHMM_slug/ + _scoped_chdir context manager restoration cwd garantie via finally). Branché dans run_coding_workflow : KG instancié AVANT chdir (DuckDB stable à kg_path), checkpoint chargé AVANT décision reprise/nouveau, corps wrappé dans with _scoped_chdir(run_output_dir). output_dir persisté dans checkpoint pour reprise même dossier. Pas de modif tools.py/web_tester.py/python_tester.py (bénéficient du chdir automatiquement via os.getcwd). Config output_dir (défaut runs). runs/ ajouté au .gitignore. 13 tests PASS (test_output_dir.py : slugify 5, resolve 3, scoped_chdir 2, E2E 3 — écriture run dir + reprise même dossier + kg_path stable). Rétention auto OUTPUT_RETENTION non implémentée (complément futur).",
       "status": "completed",
       "dependencies": []
+    },
+    {
+      "id": "F-41",
+      "name": "Orphan Repair (anti-corruption d'historique, anti-crash au replay de checkpoint)",
+      "description": "Priorité 8 du plan usine logicielle (ligne 129). Un appel d'outil (tool_use) sans réponse (tool_result) associée — modèle interrompu au milieu d'un tool call, historique restauré depuis un checkpoint — fait crasher l'API LLM au replay (couple asymétrique / 400). Implémentation : orphan_repair.py (100% Python natif, 0 LLM) avec 2 niveaux. (1) repair_orphan_tool_results(messages) : forme 'messages' générique (dicts {role, content}, blocs tool_use/tool_result), collecte les appels déjà répondus puis injecte une fausse réponse FAKE_INTERRUPTED='{\"status\": \"error\", \"error\": \"Interrompu\"}' pour chaque appel orphelin. Détecte les blocs type='tool_use' ET la forme sérialisée type='function' + function.name (OpenAI/smolagents ToolCall.dict), et répond via tool_use_id/tool_call_id/id. Idempotent, déterministe. (2) repair_orphan_steps(steps) : opère sur memory.steps smolagents (ActionStep avec .tool_calls/.observations/.error/.is_final_answer), injecte observations=FAKE_INTERRUPTED pour que step.to_messages() produise la paire tool_call/tool_response. Branché (défensif, try/except) dans nodes.run_with_retry en tête de boucle AVANT agent.run. Inspiré de la référence 16-learn-claude-code s08_context_compact (assert_no_orphan_tool_results). 11 tests PASS (test_orphan_repair.py).",
+      "status": "completed",
+      "dependencies": []
     }
   ]
 }

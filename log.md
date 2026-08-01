@@ -1940,3 +1940,15 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
 - tasks.json restauré (Nimbus, modif Bubble Sort annulée).
 - FRESH_START remis à false (reprise auto pour la prod).
 - Branche `run/bubble-sort-validation` à supprimer (pas de code à garder).
+
+## [2026-01-08] P8 | Orphan Repair (anti-corruption d'historique, F-41) — implémenté et vérifié
+- **Contexte** : un `tool_use` sans `tool_result` associé (agent interrompu au milieu d'un tool call, historique restauré depuis un checkpoint) fait crasher l'API LLM au replay (couple asymétrique). Priorité 8 du plan usine logicielle (ligne 129), blueprint `s08_context_compact/code.py`.
+- **Implémentation** : `graph_orchestrator/orphan_repair.py` (100% Python natif, 0 LLM, déterministe, idempotent).
+  - `repair_orphan_tool_results(messages)` : opère sur la forme "messages" générique (dicts `{role, content}`, blocs `tool_use`/`tool_result`) ; collecte les appels répondus puis injecte `FAKE_INTERRUPTED = '{"status": "error", "error": "Interrompu"}'` pour chaque appel orphelin. Détecte `type="tool_use"` ET la forme sérialisée `type="function"` + `function.name` (OpenAI/smolagents ToolCall.dict), répond via `tool_use_id`/`tool_call_id`/`id`.
+  - `repair_orphan_steps(steps)` : opère sur `memory.steps` smolagents (ActionStep `.tool_calls/.observations/.error/.is_final_answer`) ; injecte `observations = FAKE_INTERRUPTED` pour que `step.to_messages()` produise la paire `tool_call`/`tool_response`.
+  - Intégration défensive (`try/except Exception`) dans `nodes.run_with_retry`, en tête de boucle, AVANT `agent.run`.
+- **Corrections en cours de run** : le fichier initial contenait des échappements `\uXXXX` littéraux (écrits par l'éditeur au lieu des caractères accentués) → module supprimé et réécrit proprement en UTF-8 ; `_is_tool_use_block` étendu pour la forme imbriquée ; assertion `test_multiple_orphans_repaired` rectifiée (3 orphelins, pas 2).
+- **Tests** : `tests/test_orphan_repair.py` 11 tests (niveau messages 7 + niveau steps 4). Vérification : `pytest tests/test_orphan_repair.py tests/test_guard.py tests/test_loop_guard.py` → **35 passed**. Suite complète (`pytest -q`, web_tester_functional désélectionné) → **405 passed / 0 failed** (394 baseline + 11 nouveaux), 0 régression.
+- **État disque synchronisé** : `feature_list.json` +F-41, `contract.md` +critères 114-121, `plan_usine_logicielle.md` P8 marquée [x], `progress.md` itération, `README.md` note Orphan Repair, `log.md` présent.
+- **Note roadmap restante** (cf. progress.md cyle 2) : "Orphan Repair" (P8) avait été écarté comme N/A — cette itération le livre.
+

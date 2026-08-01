@@ -259,3 +259,12 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
   0 régression. Seuls warnings = DeprecationWarning DSPy (préexistants, hors périmètre).
 - [x] Étape TR-6 : État disque synchronisé (contract.md +16 critères 72-87, feature_list.json
   +F-36/F-37, progress.md, plan_usine_logicielle.md, .env.example, log.md).
+
+## Jalons de l'Itération (P8 — Orphan Repair, anti-corruption d'historique, F-41)
+- [x] Étape OP-1 : Contexte — P8 du plan (ligne 129), blueprint s08_context_compact, structure smolagents memory.steps/ActionStep lue.
+- [x] Étape OP-2 : `orphan_repair.py` — niveau messages (`repair_orphan_tool_results`, FAKE_INTERRUPTED={{status:error,error:Interrompu}}) gérant tool_use + forme sérialisée type=function/function.name, réponse via tool_use_id/tool_call_id/id.
+- [x] Étape OP-3 : `orphan_repair.py` — niveau steps (`repair_orphan_steps` : ActionStep avec tool_calls sans observations/error/is_final_answer → observations=FAKE_INTERRUPTED).
+- [x] Étape OP-4 : Intégration défensive (`try/except Exception: pass`) dans `nodes.run_with_retry` (bloc P8, ~lignes 174-189) AVANT chaque `agent.run`.
+- [x] Étape OP-5 : Tests — `tests/test_orphan_repair.py` 11 tests ; vérif `orphan+guard+loop_guard` = 35 passed ; suite complète = 405 passed / 0 failed (0 régression).
+- [x] Étape OP-6 : État disque synchronisé — feature_list.json +F-41, contract.md +critères 114-121, plan_usine_logicielle.md P8 [x], progress.md, README.md, log.md.
+

@@ -144,6 +144,14 @@
 - [ ] Critère 111 : `kg_path` ne suit PAS le chdir — la DB DuckDB reste à sa place d'origine (testé `test_e2e_kg_path_stable_after_chdir` : la DB existe à `kg_path`, pas dans `runs/`).
 - [ ] Critère 112 : Cas `kg_path=":memory:"` (tests) — ne crash pas (dossier neuf créé, pas de persistance checkpoint).
 - [ ] Critère 113 : La suite pytest complète passe (0 régression, nouveaux tests `test_output_dir.py` inclus : slugify 5 cas, resolve 3 cas, scoped_chdir 2 cas, E2E 3 cas — écriture run dir, reprise même dossier, kg_path stable).
+- [ ] Critère 114 : `repair_orphan_tool_results` détecte un `tool_use` orphelin (sans `tool_result` associé) et injecte une fausse réponse `FAKE_INTERRUPTED` (`{"status": "error", "error": "Interrompu"}`) — testé `test_single_orphan_repaired` (1 réparation, temoin id+content).
+- [ ] Critère 115 : `repair_orphan_tool_results` ignore les appels d'outil déjà répondus (idempotence complète) — testé `test_already_answered_untouched` (0 réparation, liste strictement égale) + `test_reapply_is_noop` (0 réparation au second passage).
+- [ ] Critère 116 : `repair_orphan_tool_results` gère les orphelins multiples sur plusieurs messages (réparation = somme) et détecte les blocs sérialisés `type="function"` + `function.name` (OpenAI/smolagents ToolCall.dict) via `id` — testé `test_multiple_orphans_repaired` (3 réparations) et `test_block_with_id_and_name_is_tool_use`.
+- [ ] Critère 117 : `repair_orphan_tool_results` résiste aux cas dégénérés — appel sans id, string `content`, content non-liste — sans crasher (testé `test_call_without_id_skipped`, `test_string_content_skipped`, `test_non_list_content_skipped`).
+- [ ] Critère 118 : `repair_orphan_steps` répares un ActionStep smolagents avec `tool_calls` mais sans `observations`/`error` en injectant `observations=FAKE_INTERRUPTED` — testé `test_steps_level_uses_observations` (1 étape réparée, `.observations == FAKE_INTERRUPTED`).
+- [ ] Critère 119 : `repair_orphan_steps` ignore les étapes non-orphelines : avec observations, avec erreur, réponse finale, sans tool_calls (0 réparation) — testé `test_steps_status_nodes` + `test_final_answer_respected`.
+- [ ] Critère 120 : L'intégration dans `nodes.run_with_retry` est défensive (bloc `try/except Exception`) et répare la mémoire avant chaque exécution d'agent — vérifié par lecture du code (P8 block, lignes ~174-189).
+- [ ] Critère 121 : La suite pytest complète passe toujours (0 régression ; `tests/test_orphan_repair.py` 11 tests + `test_guard.py` + `test_loop_guard.py`, total 405 passed / 0 failed).
 
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.

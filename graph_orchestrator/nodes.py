@@ -33,6 +33,7 @@ from .models import (
 from .tools import read_file, write_file, append_file, edit_file, bash_command, list_directory, search_replace
 from .skills_loader import build_skills_block
 from .loop_guard import LoopGuard, extract_tool_calls_from_step
+from .orphan_repair import repair_orphan_steps
 
 @tool
 def query_duckdb_knowledge_graph(sql_query: str) -> str:
@@ -170,6 +171,22 @@ async def run_with_retry(
     is_code_agent = type(agent).__name__ == "CodeAgent"
 
     for attempt in range(max_retries):
+        # P8 (Orphan Repair) : avant chaque exécution, on répare les appels d'outil
+        # orphelins de la mémoire (tool_calls sans observation/erreur). Un historique
+        # restauré depuis un checkpoint peut contenir un appel interrompu ; renvoyé
+        # tel quel à l'API, il ferait crasher le graphe. On injecte une fausse réponse
+        # "Interrompu" pour permettre la reprise. Défensif (jamais bloquant).
+        try:
+            mem_steps = getattr(getattr(agent, "memory", None), "steps", None)
+            if mem_steps:
+                n_orphan = repair_orphan_steps(mem_steps)
+                if n_orphan:
+                    print(
+                        f"[Orphan Repair] {n_orphan} appel(s) d'outil orphelin(s) "
+                        f"réparé(s) avant exécution."
+                    )
+        except Exception:
+            pass
         # F-33 (2) : tool call cassé (ex: triple-quote non fermée en CodeAgent).
         # On attrape l'exception de parsing et on renvoie un message "découpe" (deer-flow).
         try:
