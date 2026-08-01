@@ -1880,3 +1880,20 @@ FRESH_START=true → nouveau dossier daté. (Le timestamp seul aurait cassé la 
   synchrone) ; web/ (site Next.js non portable) ; docs/ (narratif).
 - Validation : chiffres cohérents (16/374 partout), script idempotent, aucune réf POC en base de feature active.
 - **Aucune modification du code du projet** — travail documentaire + plan.
+
+## [2026-08-01] merge | PR #17 (output daté par run, F-40) mergée sur main
+*Kilo Code Review SUCCESS. Squash merge f121e67.*
+
+- **PR #17 — feat(output) : répertoire daté par run, isolation des artefacts (F-40, Priorité 13)**.
+- Chaque run écrit dans `runs/YYYY-MM-DD_HHMM_slug/` au lieu de polluer la racine projet.
+  Reprise après crash préservée (output_dir persisté dans checkpoint → même dossier à la relance).
+  kg_path stable (KG instancié avant chdir). Restoration cwd auto (_scoped_chdir finally).
+- **Rebase post-merge** : le commit local « fiche 16 learn-claude-code » (38194b8) a été rejoué
+  au-dessus du merge de la PR #17. 1 conflit sur log.md (fichiers append-only d'état) résolu en
+  gardant les deux contenus. Suite pytest 394 passed / 0 régression après rebase.
+
+### État main après merge
+- 42 features (F-40 ajoutée — Output daté par run).
+- Suite pytest : 394 passed / 0 failed.
+- Branche feat/output-dated-per-run supprimée (locale + distante).
+- Priorité 13 du plan cochée ✅ TERMINÉ.
