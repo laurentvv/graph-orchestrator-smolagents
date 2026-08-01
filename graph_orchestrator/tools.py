@@ -4,6 +4,7 @@ import re
 import subprocess
 from smolagents import tool
 
+from .idempotency import get_current_store, make_op_key
 from .search_replace_utils import find_similar_lines, replace_most_similar_chunk
 
 # --- Mutex par fichier (anti race-condition) ---------------------------------
@@ -165,11 +166,40 @@ def append_file(path: str, content: str) -> str:
 
             # Append effectif (mode 'a', UTF-8). Le dossier parent doit exister
             # (le mode 'a' crée le fichier, mais pas les dossiers parents).
-            parent = os.path.dirname(os.path.abspath(path))
-            if parent:
-                os.makedirs(parent, exist_ok=True)
-            with open(path, 'a', encoding='utf-8') as f:
-                f.write(content)
+            def _do_append() -> None:
+                parent = os.path.dirname(os.path.abspath(path))
+                if parent:
+                    os.makedirs(parent, exist_ok=True)
+                with open(path, 'a', encoding='utf-8') as f:
+                    f.write(content)
+
+            # Idempotence des effets de bord (Priorité 8-bis) : au replay de
+            # checkpoint, le Coder rejoue ses appends. La garde anti-doublon
+            # ci-dessus (content == fin du fichier) ne couvre que le cas où
+            # RIEN n'a été appendé depuis. Si un append ULTÉRIEUR a déplacé la
+            # fin du fichier, l'anti-doublon ne voit plus le dup → double-append
+            # réel. Le store d'idempotence (backing DuckDB, indexé par
+            # run_id+hash(path+content)) garantit qu'un append déjà appliqué
+            # CE RUN n'est jamais ré-appliqué, même après crash/replay. Si pas
+            # de store (scripts standalone / opt-out) → comportement historique.
+            _idem_store = get_current_store()
+            if _idem_store is not None and _idem_store.run_id:
+                _idem_key = make_op_key(
+                    _idem_store.run_id, "append", os.path.abspath(path), content
+                )
+                _ran = _idem_store.once(_idem_key, _do_append)
+                if not _ran:
+                    line_count = existing.count("\n") + (
+                        0 if existing.endswith("\n") else 1
+                    )
+                    return (
+                        f"NOTICE: this append to {path} was already applied "
+                        f"earlier in this run (idempotent replay guard) — not "
+                        f"re-appended. File unchanged ({len(existing)} chars, "
+                        f"{line_count} lines)."
+                    )
+            else:
+                _do_append()
 
             # Feedback riche (inspiration SWE-agent ACI : état visible pour le modèle).
             new_total = existing + content

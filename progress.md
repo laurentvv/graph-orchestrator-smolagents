@@ -278,3 +278,13 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape SZ-7 : Suite pytest complète → 417 passed / 0 failed (394 baseline + 23 nouveaux), 0 régression. web_tester_functional désélectionné (nécessite Chrome/npx).
 - [x] Étape SZ-8 : État disque synchronisé — feature_list.json +F-42, contract.md +critères 122-129, progress.md, README.md, log.md.
 
+## Jalons de l'Itération (P8-bis — Idempotence des effets de bord, F-43)
+- [x] Étape ID-1 : Contexte — replays de checkpoint réappliquent les effets de bord non-idempotents (append_file, pip install). Référence qm idempotency-store.ts (once(key, fn), inflight + done + backing + rétention 14j). Mécanisme de replay tracé (save_coding_state granularité début d'itération → Coder rejoue).
+- [x] Étape ID-2 : `idempotency.py` — `IdempotencyStore` (once/committed/reset/_prune_if_due, threading.Lock, backing DuckDB) + `make_op_key` + contexte module-level (`_scoped_idempotency`/`get_current_store`/`set_current_store`/`clear_current_store`). Port Python fidèle de qm.
+- [x] Étape ID-3 : `knowledge_graph.py` — table `idempotency_record(run_id, op_key, created_at, PK)` + `save_idempotency` (INSERT OR IGNORE) / `is_idempotency_committed` / `prune_idempotency` / `clear_idempotency`. Import `datetime`/`timedelta` ajouté.
+- [x] Étape ID-4 : `config.py` + `.env.example` — `idempotence_enabled` (défaut True) + `idempotency_retention_days` (défaut 14).
+- [x] Étape ID-5 : Branchement `workflows.py` — store créé après kg+run_id+checkpoint, corps wrappé `with _scoped_chdir(...), _scoped_idempotency(_idem_store):` (composition sans réindentation). `clear_idempotency(run_id)` aux 2 sites `clear_checkpoint` (FRESH_START + fin de run).
+- [x] Étape ID-6 : Branchement `tools.py` (`append_file` via `once` + `_do_append` closure, write_file NON wrappé) + `python_tester.py` (`_install_module` via `_install_module_or_raise`/`_InstallFailed`, échec non marqué done).
+- [x] Étape ID-7 : Tests — `tests/test_idempotency.py` 25 tests (store 10 + KG 4 + scoped 3 + make_op_key 4 + intégration append 2 + intégration pip 2) ; 25/25 PASS.
+- [x] Étape ID-8 : Suite pytest complète → 442 passed / 0 failed (417 baseline + 25 nouveaux), 0 régression. web_tester_functional désélectionné (nécessite Chrome/npx). État disque synchronisé (feature_list.json +F-43, contract.md +critères 130-140, plan_usine_logicielle.md P8-bis [x], progress.md, README.md, log.md).
+

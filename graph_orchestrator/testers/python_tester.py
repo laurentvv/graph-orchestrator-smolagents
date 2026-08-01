@@ -28,6 +28,7 @@ from typing import Optional, Tuple
 
 from ..config import Settings
 from ..feedback_utils import truncate_output
+from ..idempotency import get_current_store, make_op_key
 from ..logging_utils import NodeMetrics
 from ..models import CoderOutput
 
@@ -37,6 +38,25 @@ _MISSING_MODULE_RE = re.compile(r"No module named ['\"]([\w.]+)['\"]")
 # Un identifiant Python top-level valide (anti-injection dans la commande pip) :
 # on n'injecte jamais une chaîne arbitraire issue du stderr dans un subprocess.
 _VALID_MODULE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+class _InstallFailed(Exception):
+    """Levée quand ``_install_module`` retourne False (pour ne PAS marquer done).
+
+    Utilisée via ``IdempotencyStore.once`` : un échec d'install ne doit PAS être
+    marqué done (retryable au prochain replay), donc on lève (``once`` ne marque
+    pas done sur exception). Un succès retourne normalement → ``once`` marque done.
+    """
+
+    def __init__(self, module: str):
+        super().__init__(f"pip install failed for '{module}'")
+        self.module = module
+
+
+def _install_module_or_raise(module: str, timeout_s: float = 120.0) -> None:
+    """Wrap ``_install_module`` : lève ``_InstallFailed`` si l'install échoue."""
+    if not _install_module(module, timeout_s=timeout_s):
+        raise _InstallFailed(module)
 
 
 def extract_missing_module(stderr: str) -> Optional[str]:
@@ -170,7 +190,27 @@ class PythonTestRunner:
             module = extract_missing_module(stderr)
             if module:
                 print(f"[auto-install] Module manquant détecté : '{module}' — installation...")
-                if _install_module(module, timeout_s=settings.test_timeout_s):
+                # Idempotence des effets de bord (Priorité 8-bis) : au replay de
+                # checkpoint, le Tester rejoue l'auto-install. pip install est
+                # coûteux (réseau) ; on le skip s'il a déjà réussi CE RUN (backing
+                # DuckDB). Un échec n'est PAS marqué done (retryable). Si pas de
+                # store (scripts standalone / opt-out) → comportement historique.
+                _idem_store = get_current_store()
+                if _idem_store is not None and _idem_store.run_id:
+                    _idem_key = make_op_key(_idem_store.run_id, "pip", module)
+                    try:
+                        _idem_store.once(
+                            _idem_key,
+                            lambda: _install_module_or_raise(
+                                module, timeout_s=settings.test_timeout_s
+                            ),
+                        )
+                        _installed = True
+                    except _InstallFailed:
+                        _installed = False
+                else:
+                    _installed = _install_module(module, timeout_s=settings.test_timeout_s)
+                if _installed:
                     try:
                         result2 = subprocess.run(
                             cmd,

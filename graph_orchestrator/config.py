@@ -189,6 +189,15 @@ class Settings:
     # Accepte un chemin relatif (résolu en absolu au runtime) ou absolu. Défaut "runs".
     output_dir: str = "runs"
 
+    # --- Idempotence des effets de bord (Priorité 8-bis : replays/retries) ---
+    # Si True, un store d'idempotence (backing DuckDB) garantit que les effets de
+    # bord non-idempotents (append_file, pip install) ne sont appliqués qu'UNE
+    # FOIS par run_id — même après un replay de checkpoint (reprise après crash).
+    # Inspiré de qm (idempotency-store.ts). Opt-out pour A/B/debug.
+    idempotence_enabled: bool = True
+    # Rétention des records d'idempotence en jours (défaut 14, aligné sur qm).
+    idempotency_retention_days: int = 14
+
 
 def load_settings() -> Settings:
     """Construit les settings depuis l'environnement (avec valeurs par défaut)."""
@@ -233,6 +242,8 @@ def load_settings() -> Settings:
         prompt_refiner_enabled=_get_bool("PROMPT_REFINER_ENABLED", True),
         prompt_refiner_model_id=_get_str("PROMPT_REFINER_MODEL_ID", ""),
         output_dir=_get_str("OUTPUT_DIR", "runs"),
+        idempotence_enabled=_get_bool("IDEMPOTENCE_ENABLED", True),
+        idempotency_retention_days=_get_int("IDEMPOTENCY_RETENTION_DAYS", 14),
     )
 
 

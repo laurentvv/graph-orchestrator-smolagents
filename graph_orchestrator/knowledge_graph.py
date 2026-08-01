@@ -18,6 +18,7 @@ Pour les tests : KnowledgeGraph(":memory:") — graphe volatil en RAM.
 
 import hashlib
 import json
+from datetime import datetime, timedelta
 from typing import List, Optional
 
 import duckdb
@@ -101,6 +102,20 @@ class KnowledgeGraph:
                 status     VARCHAR DEFAULT 'in_progress',
                 updated_at TIMESTAMP DEFAULT now(),
                 PRIMARY KEY (run_id)
+            )
+        """)
+        # Idempotence des effets de bord (Priorité 8-bis) : records durables des
+        # opérations non-idempotentes (append_file, pip install) appliquées par
+        # run_id. Permet à un replay de checkpoint de ne pas ré-appliquer un effet
+        # de bord déjà committé. Lié au cycle de vie du checkpoint (clear_idempotency
+        # appelé aux mêmes sites que clear_checkpoint — FRESH_START + fin de run).
+        # Inspiré de qm (idempotency-store.ts). Rétention 14j par défaut (prune).
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS idempotency_record (
+                run_id      VARCHAR NOT NULL,
+                op_key      VARCHAR NOT NULL,
+                created_at  TIMESTAMP DEFAULT now(),
+                PRIMARY KEY (run_id, op_key)
             )
         """)
         c.commit()
@@ -202,6 +217,46 @@ class KnowledgeGraph:
     def clear_checkpoint(self, run_id: str) -> None:
         """Efface le checkpoint d'un run (FRESH_START=1)."""
         self.conn.execute("DELETE FROM checkpoint WHERE run_id = ?", [run_id])
+        self.conn.commit()
+
+    # ==========================================
+    # Idempotence des effets de bord (Priorité 8-bis)
+    # ==========================================
+    # Records durables des opérations non-idempotentes (append_file, pip install)
+    # appliquées par run_id. Backing du store IdempotencyStore (idempotency.py).
+    # Cycle de vie lié au checkpoint : clear_idempotency(run_id) est appelé aux
+    # MÊMES sites que clear_checkpoint (FRESH_START + fin de run réussi) pour
+    # éviter qu'un run terminé ne pollue un nouveau run de même run_id.
+
+    def save_idempotency(self, run_id: str, op_key: str) -> None:
+        """Persiste qu'une opération idempotente a été appliquée (INSERT OR IGNORE)."""
+        self.conn.execute(
+            "INSERT OR IGNORE INTO idempotency_record(run_id, op_key, created_at) "
+            "VALUES (?, ?, now())",
+            [run_id, op_key],
+        )
+        self.conn.commit()
+
+    def is_idempotency_committed(self, run_id: str, op_key: str) -> bool:
+        """Vrai si l'opération a déjà été appliquée pour ce run (backing durable)."""
+        row = self.conn.execute(
+            "SELECT 1 FROM idempotency_record WHERE run_id = ? AND op_key = ? LIMIT 1",
+            [run_id, op_key],
+        ).fetchone()
+        return row is not None
+
+    def prune_idempotency(self, retention_s: float) -> None:
+        """Supprime les records d'idempotence plus anciens que ``retention_s`` secondes."""
+        cutoff = datetime.now() - timedelta(seconds=retention_s)
+        self.conn.execute(
+            "DELETE FROM idempotency_record WHERE created_at < ?",
+            [cutoff],
+        )
+        self.conn.commit()
+
+    def clear_idempotency(self, run_id: str) -> None:
+        """Efface tous les records d'idempotence d'un run (lié à clear_checkpoint)."""
+        self.conn.execute("DELETE FROM idempotency_record WHERE run_id = ?", [run_id])
         self.conn.commit()
 
     # ==========================================

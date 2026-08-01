@@ -37,6 +37,7 @@ from rich.panel import Panel
 
 from .config import Settings, settings as default_settings
 from .hitl import hitl_checkpoint, should_trigger_hitl
+from .idempotency import IdempotencyStore, _scoped_idempotency
 from .knowledge_graph import KnowledgeGraph
 from .logging_utils import NodeMetrics, render_observability_table
 from .models import ArchitectOutput, FinalSynthesis, WorkerOutput
@@ -305,6 +306,7 @@ async def run_coding_workflow(
     checkpoint = None
     if settings.fresh_start:
         kg.clear_checkpoint(run_id)
+        kg.clear_idempotency(run_id)
         print(f"[*] FRESH_START=1 : checkpoint existant effacé, exécution fraîche.")
     else:
         checkpoint = kg.load_checkpoint(run_id)
@@ -328,7 +330,24 @@ async def run_coding_workflow(
     _resume_tag = "REPRIS" if (checkpoint and checkpoint.get("output_dir")) else "nouveau"
     print(f"[📁] Run output dir ({_resume_tag}) : {run_output_dir}")
 
-    with _scoped_chdir(run_output_dir):
+    # --- Idempotence des effets de bord (Priorité 8-bis : replays/retries) ---
+    # Store garantissant que les effets non-idempotents (append_file, pip install)
+    # ne sont appliqués qu'UNE FOIS par run_id — même après un replay de checkpoint
+    # (reprise après crash). Backing DuckDB (même kg). Exposé aux @tool (tools.py)
+    # et au PythonTestRunner (python_tester.py) via le contexte module-level
+    # (_scoped_idempotency → get_current_store()). Si désactivé → None :
+    # comportement historique (re-applique les effets au replay).
+    _idem_store = (
+        IdempotencyStore(
+            kg=kg,
+            run_id=run_id,
+            retention_s=settings.idempotency_retention_days * 86400,
+        )
+        if settings.idempotence_enabled
+        else None
+    )
+
+    with _scoped_chdir(run_output_dir), _scoped_idempotency(_idem_store):
         # Tout le corps ci-dessous (imports, nœuds, boucle Coder/Judge) s'exécute dans le
         # dossier du run. Les target_files relatifs y atterrissent naturellement.
         results = []
@@ -684,6 +703,7 @@ async def run_coding_workflow(
 
         # Toutes les sous-tâches sont traitées : on marque le run comme terminé.
         kg.clear_checkpoint(run_id)
+        kg.clear_idempotency(run_id)
         print(f"\n[*] Run {run_id} terminé — checkpoint effacé.")
 
         return {"architect_plans": len(seed_tasks), "final_results": results}, all_metrics
