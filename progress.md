@@ -107,10 +107,10 @@
   Suite pytest 240 passed / 0 failed (232 avant + 8 nouveaux).
 - [x] Étape DI-7 : prompts/dashboard_admin_incremental.md (workflow squelette + append section par section).
 - [x] Étape DI-8 : Scripts comparatifs équipés (append_file dans tools des 2 scripts + prompt CodeAgent adapté).
-- [ ] Étape DI-9 : Runs comparatifs TCA vs CodeAgent sur le dashboard incrémental.
-  HYPOTHÈSE : CodeAgent devrait nécessiter moins de steps (N append dans 1 step) que le TCA (1 step/section).
-- [ ] Étape DI-10 : Décision : migrer execute_coder_node vers CodeAgent (si gain prouvé sur le
-  découpage) + intégrer append_file au prompt du Coder prod. Création PR.
+- [x] Étape DI-9 : Runs comparatifs TCA vs CodeAgent sur le dashboard incrémental.
+  RÉSULTAT : Le modèle (gemma-4-e4b) écrivait un squelette vide mais échouait à faire les `append_file` suivants.
+  SOLUTION : Ajout d'une garde anti-squelette HTML dans `write_file` pour interdire la stratégie incrémentale sur ces fichiers et forcer l'écriture monolithique. Test validé : le CodeAgent a généré les 280 lignes d'un coup avec succès.
+- [x] Étape DI-10 : Décision : Le garde-fou a été corrigé (regex DOTALL) et poussé en PR. L'utilisation du CodeAgent est confirmée car il génère correctement le fichier d'un bloc.
 
 ## 🗺️ Feuille de route Finalisation (P1-P3, décidée 2026-07-31)
 Ce cycle (CodeAgent + append_file) a révélé 4 gaps qui s'emboîtent. Le workflow actuel
