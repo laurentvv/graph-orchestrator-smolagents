@@ -183,6 +183,27 @@ class SanitizedTool(BaseTool):
         self.output_type = getattr(tool, "output_type", "string")
         super().__init__()
 
+    def __getattr__(self, name: str) -> Any:
+        """Délègue tout attribut non défini sur le proxy vers l'outil sous-jacent.
+
+        Indispensable : le CodeAgent smolagents appelle des méthodes natives définies
+        sur ``Tool`` (pas ``BaseTool``) lors du rendu du template Jinja du system prompt —
+        notamment ``to_code_prompt()``. Comme ``SanitizedTool`` hérite de ``BaseTool``,
+        ces méthodes sont absentes du proxy. Sans cette délégation, l'instantiation du
+        CodeAgent plante (``UndefinedError: 'SanitizedTool object' has no attribute
+        'to_code_prompt'``) dès le premier appel à ``initialize_system_prompt``.
+
+        ``__getattr__`` ne s'invoque QUE pour les attributs non résolus par la voie
+        normale : nos copies ``name``/``description``/``inputs``/``output_type`` et nos
+        méthodes ``__call__``/``forward`` restent prioritaires, le reste délègue.
+        """
+        # ``_wrapped`` lui-même peut être accédé avant la fin de __init__ si Python
+        # cherche un attribut interne (ex. __setstate__) → on protège.
+        wrapped = self.__dict__.get("_wrapped")
+        if wrapped is None:
+            raise AttributeError(name)
+        return getattr(wrapped, name)
+
     def forward(self, *args: Any, **kwargs: Any) -> Any:
         """Utile si le proxy est utilisé hors `__call__` ; coerce puis délègue."""
         coerced = sanitize_tool_arguments(kwargs, self.inputs)

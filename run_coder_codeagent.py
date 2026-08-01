@@ -248,7 +248,7 @@ final_answer({{"task_id": "codeagent_standalone", "status": "success", "details"
 - `append_file(path, content)` : AJOUTE un bloc à la FIN d'un fichier existant. POUR CONSTRUIRE UN
   GROS FICHIER section par section (write_file squelette puis N append_file). Garde anti-doublon
   intégré (ré-appender le même contenu est détecté et signalé).
-- `search_replace(path, search, replace)` : MODIFIE un fichier EXISTANT (matching tolérant). À éviter pour une création from scratch.
+- `search_replace(path, old_string, new_string)` : MODIFIE un fichier EXISTANT (matching tolérant). À éviter pour une création from scratch.
 - `read_file(path)` : lis le contenu d'un fichier.
 - `list_directory(path)` : liste un dossier EXISTANT.
 - N'utilise PAS DuckDuckGoSearchTool (trop lent). Bubble Sort = vanilla, aucune lib externe.

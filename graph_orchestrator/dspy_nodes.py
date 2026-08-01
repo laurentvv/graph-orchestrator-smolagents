@@ -30,6 +30,7 @@ from .models import (
     RouterOutput,
     SecurityOutput,
 )
+from .prompts import with_invariants
 
 
 # ==========================================
@@ -37,125 +38,176 @@ from .models import (
 # ==========================================
 
 class RouterSignature(dspy.Signature):
-    """Analyse la requête de l'utilisateur pour déterminer la technologie principale requise et la stratégie de routage.
-    
-    Cette signature agit comme le premier filtre de l'orchestrateur. Elle détermine :
-    - Si l'architecture nécessite une phase de planification (architect_plan_required).
-    - Si une revue de sécurité stricte est requise.
-    - Quel langage de programmation principal est concerné (ex: 'python', 'javascript').
-    """
+    __doc__ = with_invariants(
+        "router",
+        """Analyse la requête de l'utilisateur pour déterminer la technologie principale requise.
+
+        Cette signature agit comme le premier filtre de l'orchestrateur. Elle détermine :
+        - Quel langage de programmation principal est concerné (ex: 'python', 'javascript').
+        """,
+    )
     task_content: str = dspy.InputField(desc="La requête initiale ou directive de l'utilisateur fournie au graphe")
     output: RouterOutput = dspy.OutputField(desc="Décision de routage structurée, typée strictement par le schéma Pydantic RouterOutput")
 
 
 class PromptRefinerSignature(dspy.Signature):
-    """Tu es un PromptRefiner : tu reformules le prompt utilisateur brut en une SPEC STRUCTURÉE
-    et NON-AMBIGUË, directement exploitable par un Architect logiciel. Inspiré du pattern
-    "Enhance Prompt" (Kilo Code / Cline / Roo Code).
+    __doc__ = with_invariants(
+        "prompt_refiner",
+        """Pipeline obligatoire :
+        1. CLARTÉ & DÉSAMBIGUÏSATION : détecte les termes VAGUES du prompt brut (ex: 'rapide',
+           'user-friendly', 'flexible', 'moderne', 'optimisé', 'beau') et liste-les dans
+           `ambiguities_detected`. Reformule-les en exigences mesurables (ex: 'rapide' →
+           'temps de réponse < 200ms' SI chiffrable, sinon supprime/nuance).
+        2. CONTEXTE : utilise `available_capabilities` pour ORIENTER la spec vers ce qui est
+           faisable (web-tester → critères testables via navigateur ; python-tester → critères
+           pytest ; context7 → note 'consulter la doc de la lib'). Tu ne fais que CITER, tu ne
+           consommes pas ces capacités toi-même.
+        3. FORMATAGE : structure la spec en sections fixes EXACTES :
+             ## Objectif (1-3 phrases : outcome visible attendu)
+             ## Fonctionnalités attendues (puces, chacune testable)
+             ## Contraintes techniques (stack, format imposé, taille max si précisée)
+             ## Critères de validation (Given/When/Then quand pertinent, sinon puces concrètes)
+        4. COMPLÉTION LÉGÈRE : ajoute UNIQUEMENT les manques évidents et basiques (edge cases
+           types : champ vide, données invalides, cas limite). N'AJOUTE JAMAIS de fonctionnalité
+           que l'utilisateur n'a pas demandée (anti-hallucination de scope).
 
-    Pipeline obligatoire :
-    1. CLARTÉ & DÉSAMBIGUÏSATION : détecte les termes VAGUES du prompt brut (ex: 'rapide',
-       'user-friendly', 'flexible', 'moderne', 'optimisé', 'beau') et liste-les dans
-       `ambiguities_detected`. Reformule-les en exigences mesurables (ex: 'rapide' →
-       'temps de réponse < 200ms' SI chiffrable, sinon supprime/nuance).
-    2. CONTEXTE : utilise `available_capabilities` pour ORIENTER la spec vers ce qui est
-       faisable (web-tester → critères testables via navigateur ; python-tester → critères
-       pytest ; context7 → note 'consulter la doc de la lib'). Tu ne fais que CITER, tu ne
-       consommes pas ces capacités toi-même.
-    3. FORMATAGE : structure la spec en sections fixes EXACTES :
-         ## Objectif (1-3 phrases : outcome visible attendu)
-         ## Fonctionnalités attendues (puces, chacune testable)
-         ## Contraintes techniques (stack, format imposé, taille max si précisée)
-         ## Critères de validation (Given/When/Then quand pertinent, sinon puces concrètes)
-    4. COMPLÉTION LÉGÈRE : ajoute UNIQUEMENT les manques évidents et basiques (edge cases
-       types : champ vide, données invalides, cas limite). N'AJOUTE JAMAIS de fonctionnalité
-       que l'utilisateur n'a pas demandée (anti-hallucination de scope).
-
-    RÈGLES CRITIQUES :
-    - Tu STRUCTURES, tu n'INVENTES PAS. Si une exigence est absente du prompt brut, ne la
-      fabrique pas — contente-toi de la signaler comme manquante dans une section 'À clarifier'.
-    - CONCISION : ~30 lignes max. Une spec est un brief, pas un roman.
-    - PRÉSERVE toute exigence EXPLICITE du prompt brut (stack imposée, format, nb d'éléments...).
-    - Si le prompt brut est DÉJÀ clair et structuré, renvoie une spec quasi identique (ne dégrade
-      pas une bonne entrée).
-    """
+        RÈGLES CRITIQUES :
+        - Si une exigence est absente du prompt brut, ne la fabrique pas — contente-toi de la
+          signaler comme manquante dans une section 'À clarifier'.
+        - CONCISION : ~30 lignes max. Une spec est un brief, pas un roman.
+        - PRÉSERVE toute exigence EXPLICITE du prompt brut (stack imposée, format, nb d'éléments...).
+        - Si le prompt brut est DÉJÀ clair et structuré, renvoie une spec quasi identique (ne dégrade
+          pas une bonne entrée).
+        """,
+    )
     raw_prompt: str = dspy.InputField(desc="Le prompt utilisateur brut, souvent vague ou incomplet")
     available_capabilities: str = dspy.InputField(desc="Catalogue des capacités disponibles (skills, statut Context7, testers) pour orienter la spec vers ce qui est faisable")
     output: PromptRefinerOutput = dspy.OutputField(desc="Spec structurée (refined_prompt) + termes vagues détectés (ambiguities_detected)")
 
 
 class ArchitectSignature(dspy.Signature):
-    """Analyse une tâche et génère un plan d'architecture en sous-tâches UNITAIRES.
+    __doc__ = with_invariants(
+        "architect",
+        """Analyse une tâche et génère un plan d'architecture en sous-tâches UNITAIRES.
 
-    RÈGLE DE DÉCOUPAGE :
-    - Vise le MINIMUM de sous-tâches (2-4 max). Chaque sous-tâche déclenche un agent Coder
-      complet (coûteux). Le découpage granulaire (5+) est contre-productif.
+        RÈGLE DE DÉCOUPAGE (1 LIVRABLE TESTABLE = 1 SOUS-TÂCHE) :
+        - Une sous-tâche = un ENSEMBLE COHÉRENT de fichiers que le Tester va valider ENSEMBLE.
+          Ne JAMAIS découper un livrable en sous-tâches par fichier — sinon le Tester teste des
+          fichiers isolés qui ne marchent pas seuls (ex: index.html sans styles.css → REJETÉ
+          systématique, boucle infinie). C'est le failure mode n°1 observé en prod.
+        - CAS TYPIQUES :
+          * 1 fichier unique (Bubble Sort dans index.html) → 1 sous-tâche, target_files=[ce fichier].
+          * Site HTML+CSS+JS liés (landing_page/) → 1 sous-tâche, target_files=[index.html,
+            styles.css, script.js] (le Coder crée les 3, le Tester valide l'ensemble rendu).
+          * App Python 3 modules indépendants (models.py/api.py/utils.py) → 1 sous-tâche
+            multifile si les modules se testent ensemble, OU plusieurs sous-tâches UNIQUEMENT
+            si chaque module est réellement testable isolément (rare).
+        - Vise le MINIMUM de sous-tâches. Chaque sous-tâche déclenche un agent Coder + Tester +
+          Judge complets (coûteux). Le découpage granulaire est contre-productif.
 
-    RÈGLE DE STRATÉGIE (F-29 — très important, dicte COMMENT le Coder doit construire) :
-    Pour CHAQUE sous-tâche, choisis une 'strategy' parmi :
-    - 'simple' : petit fichier isolé, faisable en UN seul write_file. Utilise-la pour un
-      script Python < ~200 lignes, un petit fichier autonome, un algorithme borné.
-    - 'incremental' : gros fichier monolithique imposé par la spec (ex: un dashboard HTML
-      complet dans un seul index.html). Le Coder construira le squelette PUIS remplira
-      section par section via append_file. Dans ce cas, fournis aussi 'sections' = la liste
-      des sections à construire (ex: ['css', 'sidebar', 'kpi', 'table', 'js']).
-    - 'multifile' : projet multi-fichiers (ex: app Python avec models.py + api.py + utils.py,
-      ou un site index.html + styles.css + script.js séparés). Chaque target_file reste
-      petit (< ~200 lignes) et autonome. Utilise-la quand la spec ne force pas un monolithe.
+        RÈGLE DE STRATÉGIE (F-29 — très important, dicte COMMENT le Coder doit construire) :
+        Pour CHAQUE sous-tâche, choisis une 'strategy' parmi :
+        - 'simple' : UN seul write_file par fichier (contenu COMPLET). C'est la stratégie PAR
+          DÉFAUT. Pour une sous-tâche multifile, le Coder enchaîne plusieurs write_file (un par
+          fichier cible) dans le même run. Convient pour tout fichier < ~500 lignes.
+        - 'incremental' : RÉSERVÉ aux GROS fichiers monolithiques (> ~500 lignes, ex: un
+          dashboard admin complet dans un seul index.html imposé par la spec). Le Coder
+          construira le squelette PUIS remplira section par section via append_file. Dans ce
+          cas, fournis 'sections' = liste des sections (ex: ['css', 'sidebar', 'kpi', 'js']).
+          N'utilise JAMAIS incremental sur un fichier < ~500 lignes — ça crée des bugs de
+          structure (contenu après </html>) pour aucun bénéfice.
+        - 'multifile' : quand une sous-tâche porte PLUSIEURS fichiers liés (index.html +
+          styles.css + script.js). Le Coder crée chaque fichier via write_file autonome.
+          Même logique que 'simple' (contenu complet par fichier), juste pour signaler
+          qu'il y a plusieurs fichiers dans la sous-tâche.
 
-    QUAND UTILISER QUOI :
-    - HTML/CSS/JS : 'multifile' (index.html + styles.css + script.js séparés) PAR DÉFAUT,
-      sauf si la spec impose explicitement un seul fichier → alors 'incremental'.
-    - Python/TS   : 'multifile' (1 module logique = 1 fichier) PAR DÉFAUT.
-    - Petit algo/fichier isolé : 'simple'.
+        QUAND UTILISER QUOI :
+        - HTML/CSS/JS dans 1 seul fichier → 'simple'.
+        - HTML/CSS/JS en fichiers séparés liés → 'multifile' (1 sous-tâche, tous les fichiers).
+        - Python/TS 1 module → 'simple'. Plusieurs modules liés → 'multifile'.
+        - Gros monolithe (> 500 lignes) imposé → 'incremental' (dernier recours).
 
-    L'Architecte planifie, il ne code pas. Le Coder suivra ta stratégie à la lettre.
-    """
+        Le Coder suivra ta stratégie à la lettre. Chaque sous-tâche doit avoir des critères
+        d'acceptation vérifiables (comportements attendus testables, pas juste un nom de fichier).
+        """,
+    )
     task_content: str = dspy.InputField(desc="Le cahier des charges global de la fonctionnalité ou du projet à développer")
     output: ArchitectOutput = dspy.OutputField(desc="Plan : liste de sous-tâches (2-4 max). Chaque ArchitectTask a target_files + strategy ('simple'|'incremental'|'multifile') + sections (si incremental).")
 
 
 class SecuritySignature(dspy.Signature):
-    """Audite le code source fourni pour détecter des vulnérabilités de sécurité potentielles.
-    
-    Agit comme un hacker éthique / auditeur paranoïaque.
-    L'objectif est d'identifier de potentielles failles (XSS, injections, fuite de mémoire, etc.)
-    dans le bloc de code généré par le CodeAgent.
-    """
+    __doc__ = with_invariants(
+        "security",
+        """Audite le code source fourni pour détecter des vulnérabilités de sécurité.
+
+        TAXONOMIE OWASP Top 10 : couvre XSS, injection (SQL/commande), broken auth, data
+        exposure, security misconfig, etc. Sois exhaustif mais PRIORISE par sévérité.
+
+        RUBRIC DE SÉVÉRITÉ (rubrique ``findings``, échelle CVSS) :
+        - 'critical' : exploitable sans interaction, fuite de données / RCE / crash.
+        - 'high'     : faille fonctionnelle sérieuse (auth bypass, injection nécessitant un vecteur).
+        - 'medium'   : robustesse sécurité (validation manquante, info leak mineure).
+        - 'low'      : durcissement (en-tête manquant, pratique sous-optimale).
+
+        Chaque finding doit porter un ``location`` (fichier + ligne/fragment) et une ``suggestion``
+        de correction actionnable. Remplis aussi ``vulnerabilities`` (liste plate de strings,
+        pour compatibilité avec le Judge qui la consomme). ``is_secure=True`` si et seulement
+        si AUCUNE vulnérabilité critical/high.
+        """,
+    )
     task_id: str = dspy.InputField(desc="L'identifiant unique de la tâche pour la traçabilité")
     code: str = dspy.InputField(desc="Le bloc de code source brut généré par le Coder à inspecter")
-    output: SecurityOutput = dspy.OutputField(desc="Liste stricte des vulnérabilités trouvées via le schéma SecurityVulnerability")
+    output: SecurityOutput = dspy.OutputField(desc="Verdict de sécurité : is_secure bool + vulnerabilities (liste plate) + findings (rubric structurée sévérité/location/suggestion)")
 
 
 class CodeJudgeSignature(dspy.Signature):
-    """Évalue l'implémentation globale d'un CodeAgent en fusionnant toutes les métriques et rapports.
-    
-    Le Juge est le dernier rempart avant la validation de la sous-tâche (Merge PR). 
-    Il analyse le code source, les retours des tests unitaires (QA) et les rapports de sécurité, 
-    puis tranche : soit il approuve (is_approved=True), soit il refuse et fournit un feedback pour la prochaine itération.
-    """
+    __doc__ = with_invariants(
+        "judge",
+        """Évalue l'implémentation globale d'un CodeAgent en fusionnant toutes les métriques
+        et rapports. Tu es le dernier rempart avant la validation de la sous-tâche.
+
+        RUBRIC DE SÉVÉRITÉ (rubrique ``findings``, échelle identique au Security Reviewer) :
+        - 'critical' : crash, perte de données, faille de sécurité exploitable, non-respect
+          d'une exigence FONCTIONNELLE clé du cahier des charges.
+        - 'high'     : bug fonctionnel sérieux, test échouant, faille de sécurité confirmée.
+        - 'medium'   : robustesse (edge case non géré, gestion d'erreur manquante).
+        - 'low'      : nit / style / lisibilité (NE FAIS PAS REJETER POUR ÇA — signale juste).
+
+        RÈGLES D'ÉVALUATION :
+        - IN-DIFF ONLY : juge le code soumis (``code``), pas un fichier hypothétique plus large.
+        - ANTI-NITS : ne REJETTE JAMAIS pour des critiques de style/nommage pur. Un 'low' seul
+          ne justifie pas un rejet.
+        - VÉRIFICATION COMPORTEMENTALE : utilise ``task_requirements`` et ``test_results`` pour
+          confirmer que les comportements clés sont implémentés ET testés (pas juste l'absence
+          de crash). Un test qui passe sans couvrir le comportement attendu = échec de couverture.
+        - ``is_approved=True`` si et seulement si AUCUN finding critical/high.
+
+        Remplis ``findings`` (structuré) ET ``final_feedback`` (résumé actionnable pour le Coder
+        à la prochaine itération, si rejet).
+        """,
+    )
     task_id: str = dspy.InputField(desc="Identifiant de la tâche examinée")
     code: str = dspy.InputField(desc="Le code source final soumis par le CodeAgent")
     security_vulnerabilities: List[str] = dspy.InputField(desc="Liste des problèmes de sécurité soulevés par le Security Reviewer")
     test_results: str = dspy.InputField(desc="Sortie brute des tests fonctionnels exécutés par l'agent QA")
     task_requirements: str = dspy.InputField(desc="Le cahier des charges complet (comportements attendus). Sert à vérifier que le test_results couvre bien les comportements clés et que le code les implémente — pas seulement qu'il ne crash pas.")
-    output: CodeJudgeOutput = dspy.OutputField(desc="Le verdict final, approuvant ou rejetant le code avec justifications")
+    output: CodeJudgeOutput = dspy.OutputField(desc="Verdict final (is_approved) + findings (rubric sévérité) + final_feedback (résumé actionnable si rejet)")
 
 
 class EscalationSignature(dspy.Signature):
-    """Post-mortem d'une sous-tâche qui a épuisé le Circuit Breaker (3 itérations
-    Coder↔Tester↔Judge toutes rejetées).
+    __doc__ = with_invariants(
+        "escalation",
+        """Post-mortem d'une sous-tâche qui a épuisé le Circuit Breaker (3 itérations
+        Coder↔Tester↔Judge toutes rejetées).
 
-    Tu es un ingénieur principal menant une rétrospective d'incident. Tu reçois
-    l'historique COMPLET des réfutations émises par le Juge (les bugs récurrents
-    qui n'ont pas pu être résolus) et l'état actuel du code sur disque. Tu dois
-    produire un diagnostic STRUCTURÉ et ACTIONNABLE — pas une simple description.
+        Tu reçois l'historique COMPLET des réfutations émises par le Juge (les bugs récurrents
+        qui n'ont pas pu être résolus) et l'état actuel du code sur disque.
 
-    Ton diagnostic doit permettre à un run futur (ou à un humain) de ne pas
-    répéter les mêmes erreurs. Identifie la cause racine profonde (pas le
-    symptôme de surface), liste objectivement ce qui a été tenté (anti-répétition),
-    et formule une leçon concrète.
-    """
+        Ton diagnostic doit permettre à un run futur (ou à un humain) de ne pas répéter les
+        mêmes erreurs. Identifie la cause racine profonde (pas le symptôme de surface), liste
+        objectivement ce qui a été tenté (anti-répétition), et formule une leçon concrète.
+        """,
+    )
     task_id: str = dspy.InputField(desc="Identifiant de la sous-tâche en échec")
     task_description: str = dspy.InputField(desc="Le cahier des charges / description de la sous-tâche")
     failure_history: str = dspy.InputField(desc="Historique concaténé des réfutations du Juge (bugs non résolus sur les 3 itérations). C'est la matière première du diagnostic.")

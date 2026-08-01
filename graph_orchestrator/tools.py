@@ -166,12 +166,23 @@ def append_file(path: str, content: str) -> str:
 
             # Append effectif (mode 'a', UTF-8). Le dossier parent doit exister
             # (le mode 'a' crée le fichier, mais pas les dossiers parents).
+            # Réparation HTML : si le fichier existant finit par </body></html>, le
+            # contenu à appendu arriverait APRÈS la fermeture → texte brut dans le
+            # navigateur. On déplace la fermeture après le nouveau contenu (déterministe).
             def _do_append() -> None:
                 parent = os.path.dirname(os.path.abspath(path))
                 if parent:
                     os.makedirs(parent, exist_ok=True)
-                with open(path, 'a', encoding='utf-8') as f:
-                    f.write(content)
+                new_existing, new_content = _html_repair_on_append(existing, content)
+                if new_existing != existing:
+                    # Cas HTML : on réécrit tout le fichier (existing amputé + content + fermeture).
+                    with open(path, 'w', encoding='utf-8') as f:
+                        f.write(new_existing)
+                        f.write(new_content)
+                else:
+                    # Cas nominal : simple append à la fin.
+                    with open(path, 'a', encoding='utf-8') as f:
+                        f.write(content)
 
             # Idempotence des effets de bord (Priorité 8-bis) : au replay de
             # checkpoint, le Coder rejoue ses appends. La garde anti-doublon
@@ -296,6 +307,40 @@ def bash_command(cmd: str) -> str:
 # imprécisions classiques : indentation différente, lignes vides, ellipses.
 # ===========================================================================
 
+# --- Réparation auto HTML sur append_file (anti "contenu après </html>") --------
+# Failure mode observé en réel (run Bubble Sort) : le Coder fait write_file(squelette
+# COMPLET avec </body></html>) puis append_file(css) puis append_file(js). Le contenu
+# appendu arrive APRÈS </html> → le navigateur l'affiche en texte brut. Le Linter le
+# détecte ("contenu après </html>") mais le petit modèle (gemma) ne sait pas le corriger
+# proprement → boucle de frustration.
+# Réparation déterministe (0 LLM) : si le fichier se termine par </html> (avec </body>
+# optionnel + whitespace), on SUPPRIME cette fermeture de l'existant et on la REPOSE à
+# la fin du nouveau contenu. Le document reste bien formé, le contenu est à sa place.
+# Transparent : si le fichier ne finit pas par </html>, comportement inchangé.
+_HTML_CLOSE_RE = re.compile(
+    r"[ \t\r\n]*(?:</body>[ \t\r\n]*)?</html>[ \t\r\n]*$",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _html_repair_on_append(existing: str, content: str) -> tuple[str, str]:
+    """Si 'existing' finit par </body></html>, déplace la fermeture après 'content'.
+
+    Renvoie (new_existing, new_content) :
+    - Si pas de fermeture HTML en fin de fichier → (existing, content) inchangés.
+    - Sinon → existing amputé de la fermeture + content enrichi de la fermeture à la fin.
+    Le format de fermeture détecté (</body></html> ou </html> seul, casse/whitespace)
+    est préservé tel quel dans le content de sortie.
+    """
+    match = _HTML_CLOSE_RE.search(existing)
+    if not match:
+        return existing, content
+    closing = match.group(0)  # la fermeture exacte (avec son whitespace interne)
+    new_existing = existing[: match.start()].rstrip() + "\n"
+    new_content = content.rstrip() + "\n" + closing.lstrip() + "\n"
+    return new_existing, new_content
+
+
 # Placeholders interdits dans un bloc replace (garde anti-paresse, Priorité 1).
 _PLACEHOLDER_TOKENS = {"...", "todo", "todoreplace", "// code here", "# code here",
                        "placeholder", "<your code>", "<!-- code -->"}
@@ -312,30 +357,30 @@ def _is_placeholder(text: str) -> bool:
 
 
 @tool
-def search_replace(path: str, search: str, replace: str) -> str:
-    """Surgically edits a file by replacing the 'search' block with the 'replace' block.
+def search_replace(path: str, old_string: str, new_string: str) -> str:
+    """Surgically edits a file by replacing the 'old_string' block with the 'new_string' block.
 
     PREFER this tool over write_file when modifying an EXISTING file: you only need to
     provide the exact code to find and its replacement, NOT the whole file. This avoids
     truncation/corruption on long files.
 
     The matching is TOLERANT: minor leading-whitespace differences and `...` ellipses
-    in the 'search' block are accepted. If 'search' appears multiple times, the edit fails
-    (provide more surrounding lines to make it unique). If it cannot be found, the tool
-    returns the closest lines found so you can correct your 'search' block.
+    in the 'old_string' block are accepted. If 'old_string' appears multiple times, the edit
+    fails (provide more surrounding lines to make it unique). If it cannot be found, the tool
+    returns the closest lines found so you can correct your 'old_string' block.
 
     Args:
         path: The file path to edit. Must exist.
-        search: The exact block of text to find in the file (copy it verbatim from the file,
+        old_string: The exact block of text to find in the file (copy it verbatim from the file,
             including indentation). Use `...` on its own line to elide unchanged code in the
             middle of the block.
-        replace: The new block of text that replaces 'search'. Must be real code, never a
+        new_string: The new block of text that replaces 'old_string'. Must be real code, never a
             placeholder like 'TODO' or '// code here'.
     """
     try:
-        # Garde anti-placeholder : un replace qui vide/placeholderise le code est refusé.
-        if _is_placeholder(replace):
-            return ("ERROR: 'replace' looks like a placeholder (TODO, '...', '// code here', "
+        # Garde anti-placeholder : un new_string qui vide/placeholderise le code est refusé.
+        if _is_placeholder(new_string):
+            return ("ERROR: 'new_string' looks like a placeholder (TODO, '...', '// code here', "
                     "empty). Provide the COMPLETE real replacement code. File NOT modified.")
 
         lock = _file_lock(path)
@@ -343,27 +388,27 @@ def search_replace(path: str, search: str, replace: str) -> str:
             with open(path, "r", encoding="utf-8") as f:
                 original = f.read()
 
-            # 'search' vide = ajout en fin de fichier (utile pour compléter un fichier).
-            if not search.strip():
+            # 'old_string' vide = ajout en fin de fichier (utile pour compléter un fichier).
+            if not old_string.strip():
                 new_content = original
                 if new_content and not new_content.endswith("\n"):
                     new_content += "\n"
-                new_content += replace
+                new_content += new_string
             else:
-                new_content = replace_most_similar_chunk(original, search, replace)
+                new_content = replace_most_similar_chunk(original, old_string, new_string)
 
             if new_content is None:
                 # Échec : feedback pédagogique avec les lignes les plus proches.
-                hint = find_similar_lines(search, original)
+                hint = find_similar_lines(old_string, original)
                 msg = (
-                    "ERROR: the 'search' block was NOT found in the file (even with tolerant "
+                    "ERROR: the 'old_string' block was NOT found in the file (even with tolerant "
                     "matching). The file was NOT modified. Copy the exact text FROM the file "
                     "(use read_file first), including indentation."
                 )
                 if hint:
                     msg += (
                         "\n\nClosest lines found in the file (use these verbatim as your "
-                        "'search' block):\n" + hint
+                        "'old_string' block):\n" + hint
                     )
                 return msg
 

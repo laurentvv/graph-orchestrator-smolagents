@@ -241,8 +241,14 @@ def lint_file(path: str) -> LintResult:
     errors: List[str] = []
 
     # --- tree-sitter (SyntaxError génériques, strings non fermées, structures cassées)
+    # EXCEPTION HTML : tree-sitter-html parse le CSS/JS inline comme du texte HTML →
+    # des dizaines de nœuds ERROR sur du code parfaitement valide (les #, {}, let, ; du
+    # <style>/<script> sont incompréhensibles pour le parser HTML). C'était la cause de
+    # la boucle Linter infinie sur Bubble Sort (77 faux positifs sur un HTML correct).
+    # Pour le HTML, on se fie UNIQUEMENT aux vérifs structurelles (_lint_html_structure)
+    # qui sont précises (équilibrage balises, contenu après </html>, DOCTYPE).
     parser = _get_parser(lang)
-    if parser is not None:
+    if parser is not None and lang != "html":
         err_count, miss_count = _count_tree_sitter_errors(parser, source.encode("utf-8"))
         if err_count > 0:
             errors.append(f"[tree-sitter] {err_count} erreur(s) de syntaxe détectée(s).")

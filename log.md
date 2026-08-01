@@ -2200,3 +2200,27 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
   skills créatifs (canvas-design, slack-gif, video-downloader), 54 .ttf.
 - Validation : chiffres cohérents (18/402), script idempotent.
 - **Aucune modification du code du projet** — travail documentaire + plan.
+
+## [2026-08-01_21:00:00] eval | RUN GPU VALIDÉ (Coder one-shot) + 2 fixs Architect + analyse timings
+- RUN GPU (localhost 4B+12B, logs/run_bubble_gpu_20260801_200950.log) :
+  * PromptRefiner→Router→Architect→Coder en ~3 min total (vs ~8 min sur CPU distant).
+  * Architect respecte la NOUVELLE règle : 1 sous-tâche, stratégie SIMPLE → Coder one-shot
+    (2 steps / 77s, fichier 9726 octets, HTML+Bubble Sort complets et corrects).
+  * Linter valide (fix faux positifs tree-sitter HTML efficace).
+  * Tester+Security déclenchés (fan-out OK) MAIS Tester bloque sur querySelector (cf infra).
+- BUG ARCHITECT n°1 (sur-correction) : ma règle initiale "1 fichier = 1 sous-tâche (absolue)"
+  aurait cassé le multifile légitime (landing_page/ 3 fichiers liés testés isolément = rejet
+  systématique, = bug Nimbus historique). CORRIGÉ : la règle est désormais "1 LIVRABLE
+  TESTABLE = 1 sous-tâche" — un ensemble cohérent que le Tester valide ENSEMBLE.
+- BUG ARCHITECT n°2 (stratégie) : 'incremental' était choisi pour des petits fichiers →
+  bugs de structure (</html> mal placé). CORRIGÉ : 'simple' est désormais la stratégie PAR
+  DÉFAUT pour tout fichier < ~500 lignes ; 'incremental' réservé aux gros monolithes.
+- TESTER = GOULOT D'ÉTRANGLEMENT IDENTIFIÉ (documenté debug/TIMINGS_ANALYSE.md) :
+  * ~30 min même sur GPU (10 steps). Step 1 = 477s (chargement navigateur).
+  * Friction querySelector not a function (17× !) — le modèle boucle. ACTION IMMÉDIATE
+    requise : enrichir skill web-tester + investiguer le contexte puppeteer_evaluate.
+  * "does not contain JSON blob" (3×) — guard anti-idle (F-33) absent du Tester.
+- COMPARATIF (GPU vs CPU) : Coder 9× plus rapide sur GPU (77s vs 695s). Tester identique
+  (~30 min — le 12B est déjà en VRAM, le GPU n'aide pas le Tester, mais évite le swapping).
+- DOCS : debug/TIMINGS_ANALYSE.md (analyse timings + frictions + recommandations priorisées).
+  debug/run_gpu_*/ (log + index.html + transitions). Script parsing réutilisable.
