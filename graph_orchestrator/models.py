@@ -14,6 +14,37 @@ from pydantic import BaseModel, ValidationError
 
 
 # ==========================================
+# Schéma de sévérité partagé (Rubric Judge + Security — P6)
+# ==========================================
+
+Severity = Literal["critical", "high", "medium", "low"]
+
+
+class Finding(BaseModel):
+    """Un retour structuré du Judge ou du Security Reviewer (rubric de sévérité P6).
+
+    Remplace les listes plates de strings par un retour ancré sur le code et classé par
+    gravité, pour stopper l'enlisement du Judge sur des « nits » (débats de nommage) et
+    forcer la priorisation (fiche 17 : In-Diff Only + Anti-Nits, inspiré Open-SWE Reviewer
+    + Claude Code 2.0 « professional objectivity »).
+
+    - ``severity`` suit l'échelle CVSS/OWASP : critical (exploitable / data loss / crash)
+      > high (faille fonctionnelle) > medium (robustesse) > low (nit, style).
+    - ``category`` : axe du retour (security / correctness / performance / testing /
+      maintainability / documentation…).
+    - ``location`` : ancrage in-diff (fichier + ligne/fragment) — JAMAIS une critique vague
+      sur l'ensemble du fichier quand seul un fragment a changé.
+    - ``description`` : problème observé, factuel. ``suggestion`` : correctif actionnable.
+    """
+
+    severity: Severity
+    category: str
+    location: str = ""
+    description: str
+    suggestion: str = ""
+
+
+# ==========================================
 # Sorties des nœuds
 # ==========================================
 
@@ -84,6 +115,11 @@ class SecurityOutput(BaseModel):
     task_id: str
     is_secure: bool
     vulnerabilities: List[str]
+    # P6 (Rubric Security) : retours structurés par sévérité (échelle CVSS), ancrés sur le
+    # code (location) et actionnables (suggestion). Additif — défaut [] = rétro-compatible
+    # avec les checkpoints existants et les tests qui construisent SecurityOutput(...) sans
+    # ce champ. ``vulnerabilities`` (liste plate) est conservé pour le Judge qui le consomme.
+    findings: List[Finding] = []
 
 
 class CodeJudgeOutput(BaseModel):
@@ -91,6 +127,11 @@ class CodeJudgeOutput(BaseModel):
     task_id: str
     is_approved: bool
     final_feedback: str
+    # P6 (Rubric Judge) : retours structurés par sévérité (critical/high/medium/low), ancrage
+    # in-diff only (location), anti-nits (un 'low' seul ne justifie pas un rejet). Additif —
+    # défaut [] = rétro-compatible avec les checkpoints existants et les tests qui construisent
+    # CodeJudgeOutput(...) sans ce champ. ``final_feedback`` reste le résumé actionnable.
+    findings: List[Finding] = []
 
 
 class EscalationOutput(BaseModel):

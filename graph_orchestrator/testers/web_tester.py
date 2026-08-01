@@ -22,6 +22,7 @@ from typing import Optional, Tuple
 from ..dom_filter import clean_dom_for_llm  # noqa: F401
 from ..logging_utils import NodeMetrics
 from ..models import CoderOutput
+from ..prompts import build_role_header
 
 
 class WebTestRunner:
@@ -96,7 +97,7 @@ class WebTestRunner:
                 # que la page s'affiche. Fallback sur content si non propagé.
                 full_requirements = task.get("original_content") or task.get("content", "")
 
-                prompt = f"""Tu es un agent QA autonome (Web Tester Node).
+                prompt = f"""{build_role_header("web_tester")}
 
 Voici tes instructions obligatoires (Skill) :
 {skill_content}
