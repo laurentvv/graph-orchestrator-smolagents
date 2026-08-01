@@ -174,6 +174,14 @@ class Settings:
     # bien meilleur choix. Setter PROMPT_REFINER_MODEL_ID dans .env pour cibler un modèle dédié.
     prompt_refiner_model_id: str = ""
 
+    # --- Output daté par run (Priorité 13 : isolation des artefacts) ---
+    # Racine du dossier où chaque run écrit ses fichiers générés. Le workflow coding crée un
+    # sous-dossier daté `runs/YYYY-MM-DD_HHMM_slug/` et s'y chdir avant les nœuds Coder/Tester,
+    # au lieu de polluer la racine du projet. Le chemin du run est persisté dans le checkpoint
+    # (DuckDB) pour que la reprise après crash reprenne dans le MÊME dossier (fichiers préservés).
+    # Accepte un chemin relatif (résolu en absolu au runtime) ou absolu. Défaut "runs".
+    output_dir: str = "runs"
+
 
 def load_settings() -> Settings:
     """Construit les settings depuis l'environnement (avec valeurs par défaut)."""
@@ -216,6 +224,7 @@ def load_settings() -> Settings:
         bash_guard_enabled=_get_bool("BASH_GUARD_ENABLED", True),
         prompt_refiner_enabled=_get_bool("PROMPT_REFINER_ENABLED", True),
         prompt_refiner_model_id=_get_str("PROMPT_REFINER_MODEL_ID", ""),
+        output_dir=_get_str("OUTPUT_DIR", "runs"),
     )
 
 

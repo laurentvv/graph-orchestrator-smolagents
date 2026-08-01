@@ -134,6 +134,17 @@
 - [ ] Critère 103 : Context7 est CITÉ seulement dans le catalogue (statut dispo), JAMAIS consommé par le PromptRefiner — l'Architect fait déjà le pré-fetch en `dspy_nodes.py:225` (pas de duplication d'appel).
 - [ ] Critère 104 : La suite pytest complète passe (0 régression, nouveaux tests `test_prompt_refiner.py` inclus : exécuteur mock LLM + available_capabilities propagé, dégradation gracieuse, helper capabilities avec/sans clé/repli, E2E toggle off, E2E toggle on + propagation Architect, E2E checkpoint skip). Les 3 helpers E2E existants (`test_escalation`/`test_checkpoint`/`test_feedback_integration`) mockent `execute_prompt_refiner_node` pour éviter un appel LLM réel en test.
 
+## Critères de l'Output daté par run (Priorité 13 — isolation des artefacts)
+- [ ] Critère 105 : `_slugify(text)` produit un slug sûr cross-plateforme (lowercase, `[^a-z0-9]→_`, collapse `__+`, strip bord, truncate `max_len=24`) ; fallback `'run'` si texte vide/nul ; aucun caractère interdit Windows (`:`/`?`/`*`/`<>`/`|`).
+- [ ] Critère 106 : `_resolve_run_output_dir` renvoie un chemin **absolu** — si `checkpoint["output_dir"]` existe → REPRED ce dossier (reprise après crash, fichiers préservés) ; sinon → nouveau dossier daté `{output_dir}/{YYYY-MM-DD}_{HHMM}_{slug}/` résolu en absolu.
+- [ ] Critère 107 : `_scoped_chdir(target_dir)` est un context manager qui restore **TOUJOURS** le cwd original à la sortie (y compris en cas d'exception mid-bloc — `try/finally`). Critical pour les tests E2E qui enchaînent plusieurs runs.
+- [ ] Critère 108 : Branchement dans `run_coding_workflow` — ORDRE CRITIQUE respecté : (1) KG instancié AVANT le chdir → DuckDB reste à `kg_path` stable ; (2) checkpoint chargé AVANT la décision reprise/nouveau ; (3) `run_id` (hash du contenu brut, PAS du cwd) calculé avant et inchangé.
+- [ ] Critère 109 : Le `output_dir` est persisté dans le checkpoint (`save_coding_state` payload clé `"output_dir"`) pour que la reprise après crash reprenne dans le MÊME dossier.
+- [ ] Critère 110 : Les fichiers générés par le Coder atterrissent dans `runs/.../`, PAS à la racine du projet (validé par test E2E qui écrit un fichier relatif et vérifie son emplacement).
+- [ ] Critère 111 : `kg_path` ne suit PAS le chdir — la DB DuckDB reste à sa place d'origine (testé `test_e2e_kg_path_stable_after_chdir` : la DB existe à `kg_path`, pas dans `runs/`).
+- [ ] Critère 112 : Cas `kg_path=":memory:"` (tests) — ne crash pas (dossier neuf créé, pas de persistance checkpoint).
+- [ ] Critère 113 : La suite pytest complète passe (0 régression, nouveaux tests `test_output_dir.py` inclus : slugify 5 cas, resolve 3 cas, scoped_chdir 2 cas, E2E 3 cas — écriture run dir, reprise même dossier, kg_path stable).
+
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.
 * Validation process : `uv run python -m graph_orchestrator.workflows` (WORKFLOW_MODE=coding) →

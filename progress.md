@@ -175,6 +175,22 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape 3 : Application des modifications au plan_usine_logicielle.md.
 - [x] Étape 4 : Mise à jour de log.md, progress.md, et feature_list.json.
 
+## Jalons de l'Itération (Output daté par run — F-40, Priorité 13)
+- [x] Étape OD-1 : Exploration points d'insertion (KG instantiation, checkpoint, run_id critique,
+  load_tasks_from_json relatif) + décision design (date + persistance checkpoint pour préserver
+  la reprise — le timestamp seul l'aurait cassée).
+- [x] Étape OD-2 : config.py + .env.example — output_dir (défaut runs).
+- [x] Étape OD-3 : workflows.py — _slugify + _resolve_run_output_dir + _scoped_chdir (context
+  manager finally) + branchement (KG avant chdir, corps wrappé dans with) + persistance checkpoint.
+- [x] Étape OD-4 : Refactor indentation corps 350 lignes (script Python + py_compile + suite
+  381 passed = 0 cassé).
+- [x] Étape OD-5 : tests/test_output_dir.py (13 PASS) — slugify, resolve, scoped_chdir, E2E
+  (Coder écrit dans run dir + reprise même dossier + kg_path stable). Correctif mock linter
+  (module source, pas workflows).
+- [x] Étape OD-6 : Suite pytest complète → 394 passed / 0 failed (381 + 13). 0 régression.
+- [x] Étape OD-7 : État disque synchronisé (contract.md +9 critères 105-113, feature_list.json
+  +F-40, progress.md, plan_usine_logicielle.md case P13 cochée, .gitignore runs/, log.md).
+
 ## Jalons de l'Itération (nœud PromptRefiner — F-39, meta-prompt avant l'Architect)
 - [x] Étape PR-1 : Exploration (Router/Architect DSPy, checkpoint, test patterns) + recherche web
   Kilo Code/Cline "Enhance Prompt" (sources consignées log.md). Plan approuvé (Phase 1 seule ;

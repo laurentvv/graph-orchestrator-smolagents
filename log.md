@@ -1797,3 +1797,61 @@ réto-compat ; le .env.example documente la recommandation E4B.
 - Suite pytest : 381 passed / 0 failed.
 - Branches locales/distantes supprimées (feat/hardening-loop-dom-bashguard, feat/prompt-refiner-
   meta-prompt).
+
+## [2026-08-01] gen | Démarrage Priorité 13 — Output daté par run (isolation artefacts)
+- **Objectif** : le Coder écrit dans `runs/YYYY-MM-DD_HHMM_slug/` au lieu de la racine projet
+  (cwd). Constat : bubble_sort/ + landing_page/ polluaient la racine, écrasaient les runs,
+  pas de traçabilité.
+- **Décision design (choix user)** : Date + persistance checkpoint. À la 1re exécution on crée
+  le dossier daté et on PERSISTE son chemin dans le checkpoint DuckDB. À la reprise (crash +
+  relance), on RELIT le chemin → le Coder reprend dans le MÊME dossier (fichiers préservés).
+  FRESH_START=true → nouveau dossier daté.
+- **Approche** : `chdir` global (Option A du plan) dans run_coding_workflow, après le calcul du
+  run_id + l'instanciation du KG (point critique : kg_path doit rester absolu/stable, la DB
+  DuckDB ne change pas de place). Les target_files relatifs atterrissent naturellement dans le
+  run dir sans modifier tools.py/web_tester.py/python_tester.py.
+- **Point d'attention** : restoration du cwd original à la fin du workflow (try/finally) pour
+  ne pas fuir entre appels (tests E2E).
+
+## [2026-08-01] eval | Fin Priorité 13 — Output daté par run (F-40), 394 tests PASS, 0 régression
+*Isolation des artefacts : chaque run écrit dans runs/YYYY-MM-DD_HHMM_slug/ au lieu de la racine.*
+
+### Implémentation (Option A : chdir global)
+- **workflows.py** :
+  - `_slugify(text)` : safe cross-plateforme (lowercase, [^a-z0-9]→_, collapse __+, truncate 24,
+    fallback 'run'). Source = seed_tasks[0]['id'].
+  - `_resolve_run_output_dir(settings, seed_tasks, checkpoint)` : REPRISE via checkpoint
+    ['output_dir'] (même dossier, fichiers préservés) SINON nouveau daté runs/YYYY-MM-DD_HHMM_slug/.
+  - `_scoped_chdir(target)` : context manager, restoration cwd garantie via try/finally (critical
+    pour tests E2E multi-runs).
+  - Branchement dans run_coding_workflow : ORDRE CRITIQUE respecté — (1) KG instancié AVANT chdir
+    → DuckDB stable à kg_path (testé) ; (2) checkpoint chargé AVANT décision reprise/nouveau ;
+    (3) run_id (hash content brut) inchangé. Corps wrappé dans `with _scoped_chdir(...)`.
+  - output_dir persisté dans save_coding_state (payload clé output_dir) → reprise même dossier.
+- **config.py + .env.example** : output_dir (défaut runs). runs/ ajouté au .gitignore.
+- **PAS de modif** tools.py/web_tester.py/python_tester.py : bénéficient du chdir automatiquement
+  (os.getcwd, os.path.abspath relatifs au nouveau cwd).
+
+### Décision design (choix user)
+Date + persistance checkpoint : à la 1re exécution on crée le dossier daté et on PERSISTE son
+chemin. À la reprise (crash + relance), on RELIT le chemin → Coder reprend dans le MÊME dossier.
+FRESH_START=true → nouveau dossier daté. (Le timestamp seul aurait cassé la reprise.)
+
+### Leçons techniques
+- Refactor d'indentation (corps 350 lignes wrappé dans `with`) : fait via script Python +
+  vérif py_compile + suite pytest complète (381 passed avant ajout des nouveaux tests = 0 casser).
+- Tests E2E : execute_linter_node importé LOCALEMENT dans run_coding_workflow → mock doit
+  cibler le module SOURCE (graph_orchestrator.linter), pas workflows (sinon AttributeError).
+  Idem hang évité en mockant le linter (sinon il analyse le vrai fichier → potentiellement lent).
+
+### Tests test_output_dir.py (13 PASS)
+- slugify (5) : basic, special chars, Windows-safe, empty fallback, truncation.
+- resolve (3) : nouveau daté, reprise checkpoint, fallback id manquant.
+- scoped_chdir (2) : restoration cwd + restoration sur exception.
+- E2E (3) : Coder écrit dans run dir (pas racine) + reprise même dossier + kg_path stable.
+
+### Suite pytest complète : 394 passed / 0 failed (381 + 13). 0 régression.
+
+### Non fait ce cycle
+- Rétention auto OUTPUT_RETENTION (complément futur, noté dans plan).
+- Run LLM réel (validation tests mockés).
