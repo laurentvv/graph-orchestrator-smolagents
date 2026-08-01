@@ -13,7 +13,10 @@ des insights déjà vus survit à l'effacement du contexte et aux redémarrages.
 import asyncio
 import hashlib
 import json
+import os
+import re
 import sys
+from contextlib import contextmanager
 from typing import List, Optional, Tuple
 
 # --- Flushing temps-réel (observabilité) -------------------------------------
@@ -49,6 +52,77 @@ from .nodes import (
 )
 
 console = Console()
+
+
+# ==========================================
+# Output daté par run (Priorité 13 : isolation des artefacts)
+# ==========================================
+def _slugify(text: str, max_len: int = 24) -> str:
+    """Transforme un texte en slug sûr pour un nom de dossier (cross-plateforme).
+
+    Lowercase, remplace tout caractère non [a-z0-9] par `_`, collapse les `__+`,
+    strip les `_` de bord. Sûr Windows (pas de `:`/`?`/`*`/`<>`/`|`). Tronqué à
+    `max_len` pour garder des chemins lisibles.
+    """
+    s = (text or "").strip().lower()
+    s = re.sub(r"[^a-z0-9]+", "_", s)
+    s = re.sub(r"_+", "_", s).strip("_")
+    if not s:
+        s = "run"
+    return s[:max_len].strip("_") or "run"
+
+
+def _resolve_run_output_dir(
+    settings: Settings,
+    seed_tasks: List[dict],
+    checkpoint: Optional[dict],
+) -> str:
+    """Détermine le dossier de sortie absolu pour CE run (Priorité 13).
+
+    Logique de reprise (préserve la cohérence avec les checkpoints, Priorité 3) :
+      - Si un checkpoint existe ET contient `output_dir` → on REPREND ce dossier
+        (le Coder retrouvera les fichiers déjà générés, pas de repartie de zéro).
+      - Sinon (nouveau run ou fresh_start) → on crée un NOUVEAU dossier daté
+        `{output_dir}/{YYYY-MM-DD}_{HHMM}_{slug}/` résolu en absolu.
+
+    Le slug est dérivé de `seed_tasks[0]['id']` (stable, connu avant l'Architect).
+    Fallback sur 'run' si l'id est absent.
+
+    Args:
+        settings: Configuration (lit `output_dir`).
+        seed_tasks: Tâches (pour le slug).
+        checkpoint: Checkpoint chargé (peut contenir `output_dir` à reprendre).
+
+    Returns:
+        Chemin absolu du dossier de run (non encore créé — l'appelant fait makedirs).
+    """
+    # Cas reprise : le checkpoint persiste le chemin du run interrompu.
+    if checkpoint and checkpoint.get("output_dir"):
+        return os.path.abspath(checkpoint["output_dir"])
+
+    # Nouveau run : dossier daté. Racine résolue en absolu (peut être relative "runs").
+    root = os.path.abspath(settings.output_dir) if settings.output_dir else os.path.abspath("runs")
+    from datetime import datetime
+    stamp = datetime.now().strftime("%Y-%m-%d_%H%M")
+    task_id = (seed_tasks[0].get("id", "") if seed_tasks else "") or "run"
+    slug = _slugify(task_id)
+    return os.path.join(root, f"{stamp}_{slug}")
+
+
+@contextmanager
+def _scoped_chdir(target_dir: str):
+    """Change de répertoire de travail le temps d'un bloc, restore TOUJOURS à la sortie.
+
+    Garantit la restoration du cwd original même en cas d'exception mid-workflow (critical
+    pour les tests E2E qui enchaînent plusieurs run_coding_workflow dans la même session :
+    sans restoration, le 2e run chercherait tasks.json/le KG dans le mauvais dossier).
+    """
+    original = os.getcwd()
+    os.chdir(target_dir)
+    try:
+        yield target_dir
+    finally:
+        os.chdir(original)
 
 
 async def run_exploration_workflow(
@@ -238,359 +312,381 @@ async def run_coding_workflow(
             print(f"[↩] Checkpoint trouvé — reprise de l'exécution {run_id}")
         else:
             print(f"[*] Nouvelle exécution {run_id} (aucun checkpoint)")
-    
-    results = []
-    from .nodes import execute_tester_node, execute_coder_node
-    from .linter import execute_linter_node
-    from .dspy_nodes import (
-        execute_architect_node,
-        execute_security_reviewer_node,
+
+    # --- Output daté par run (Priorité 13 : isolation des artefacts) -----------
+    # On chdir vers un dossier dédié PAR RUN pour que les fichiers générés (Coder/Tester)
+    # n'aillent PAS polluer la racine du projet. ORDRE CRITIQUE :
+    #   1. KG déjà instancié (l.273) AVANT ce point → DuckDB reste à sa place (kg_path stable).
+    #      Si on chdirait avant, la DB suivrait le cwd et changerait de place à chaque run.
+    #   2. checkpoint déjà chargé ci-dessus → on sait s'il faut REPREDRE le dossier existant
+    #      (reprise après crash) ou en créer un nouveau daté.
+    # Le chemin du run est persisté dans le checkpoint (cf. save_coding_state) pour la reprise.
+    # _scoped_chdir GARANTIT la restoration du cwd original à la sortie (même en cas
+    # d'exception) — critical pour les tests E2E qui enchaînent plusieurs runs.
+    run_output_dir = _resolve_run_output_dir(settings, seed_tasks, checkpoint)
+    os.makedirs(run_output_dir, exist_ok=True)
+    _resume_tag = "REPRIS" if (checkpoint and checkpoint.get("output_dir")) else "nouveau"
+    print(f"[📁] Run output dir ({_resume_tag}) : {run_output_dir}")
+
+    with _scoped_chdir(run_output_dir):
+        # Tout le corps ci-dessous (imports, nœuds, boucle Coder/Judge) s'exécute dans le
+        # dossier du run. Les target_files relatifs y atterrissent naturellement.
+        results = []
+        from .nodes import execute_tester_node, execute_coder_node
+        from .linter import execute_linter_node
+        from .dspy_nodes import (
+            execute_architect_node,
+            execute_security_reviewer_node,
         execute_code_judge_node,
         execute_escalation_node,
         execute_router_node,
         execute_prompt_refiner_node,
     )
     
-    # Routine initiale de routage
-    task_content = seed_tasks[0]['content'] if seed_tasks else ""
+        # Routine initiale de routage
+        task_content = seed_tasks[0]['content'] if seed_tasks else ""
 
-    # --- Nœud PromptRefiner (F-39, meta-prompt avant l'Architect) ---------------
-    # Reformule le prompt brut en spec structurée AVANT le Router et l'Architect, inspiré
-    # du pattern "Enhance Prompt" (Kilo Code / Cline). ORDE CRITIQUE : ce bloc s'exécute
-    # APRÈS le calcul du run_id (l.221, hash du prompt BRUT) — sinon le hash deviendrait
-    # non-déterministe (le LLM génère du texte différent à chaque run) et casserait la
-    # reprise après crash. Ici on mute task_content, pas le run_id.
-    #
-    # Skip LLM si checkpoint contient déjà le refined_prompt (économie à la reprise).
-    if checkpoint and checkpoint.get("refined_prompt"):
-        task_content = checkpoint["refined_prompt"]
-        if seed_tasks:
-            seed_tasks[0]['content'] = task_content
-        print(f"[↩] PromptRefiner : spec RECHARGÉE depuis le checkpoint ({len(task_content)} caractères).")
-    elif settings.prompt_refiner_enabled and seed_tasks:
-        refined, m_refine = await execute_prompt_refiner_node(task_content, reasoning_model, settings)
-        if m_refine:
-            all_metrics.append(m_refine)
-        if refined and refined.refined_prompt.strip():
-            task_content = refined.refined_prompt
-            seed_tasks[0]['content'] = task_content
-        # Si refined est None (LLM down), on garde task_content brut (dégradation gracieuse).
+        # --- Nœud PromptRefiner (F-39, meta-prompt avant l'Architect) ---------------
+        # Reformule le prompt brut en spec structurée AVANT le Router et l'Architect, inspiré
+        # du pattern "Enhance Prompt" (Kilo Code / Cline). ORDE CRITIQUE : ce bloc s'exécute
+        # APRÈS le calcul du run_id (l.221, hash du prompt BRUT) — sinon le hash deviendrait
+        # non-déterministe (le LLM génère du texte différent à chaque run) et casserait la
+        # reprise après crash. Ici on mute task_content, pas le run_id.
+        #
+        # Skip LLM si checkpoint contient déjà le refined_prompt (économie à la reprise).
+        if checkpoint and checkpoint.get("refined_prompt"):
+            task_content = checkpoint["refined_prompt"]
+            if seed_tasks:
+                seed_tasks[0]['content'] = task_content
+            print(f"[↩] PromptRefiner : spec RECHARGÉE depuis le checkpoint ({len(task_content)} caractères).")
+        elif settings.prompt_refiner_enabled and seed_tasks:
+            refined, m_refine = await execute_prompt_refiner_node(task_content, reasoning_model, settings)
+            if m_refine:
+                all_metrics.append(m_refine)
+            if refined and refined.refined_prompt.strip():
+                task_content = refined.refined_prompt
+                seed_tasks[0]['content'] = task_content
+            # Si refined est None (LLM down), on garde task_content brut (dégradation gracieuse).
 
-    print(f"[*] Analyse de la requête par le routeur ultra-rapide ({settings.fast_model_id})...")
-    router_res, m0 = await execute_router_node(task_content, fast_model, settings)
-    if m0: all_metrics.append(m0)
-    
-    if router_res:
-        print(f"[*] Le routeur a classifié la technologie principale : {router_res.language.upper()}")
-        # On propage la techno STRUCTURELLEMENT (clé dédiée) en plus du texte libre
-        # historique, pour que le Tester polyvalent puisse dispatcher sans re-parser
-        # le prompt. detect_tech combine ce signal avec les extensions de target_files.
-        coding_router_lang = router_res.language
-        if seed_tasks:
-            seed_tasks[0]['content'] += f"\n\n[ROUTER DIRECTIVE : The primary technology to use is {router_res.language.upper()}]"
-            seed_tasks[0]['router_lang'] = coding_router_lang
-    else:
-        coding_router_lang = None
+        print(f"[*] Analyse de la requête par le routeur ultra-rapide ({settings.fast_model_id})...")
+        router_res, m0 = await execute_router_node(task_content, fast_model, settings)
+        if m0: all_metrics.append(m0)
 
-    # --- État de progression (Persistance d'État — Priorité 3 : Checkpoints) --
-    # Holder mutable partagé entre les scopes de la fonction. Contient le plan de
-    # l'Architect sérialisé (évite de relancer ce nœud LLM coûteux à la reprise) +
-    # la liste des sous-tâches déjà approuvées + la position (sous-tâche, itération).
-    # À la reprise (checkpoint trouvé), on HYDRATE ces champs depuis le checkpoint
-    # pour que les skips (sous-tâches complétées) et la position prennent effet.
-    coding_state = {
-        "architect_result": checkpoint.get("architect_result") if checkpoint else None,
-        "completed_subtasks": (checkpoint or {}).get("completed_subtasks", []),
-        "current_subtask_idx": 0,
-        "current_iteration": 0,
-        # Spec racine complète (cahier des charges d'origine). Propagée jusqu'au
-        # Tester (via sub_dict["original_content"]) pour qu'il connaisse le
-        # comportement attendu global et écrive des assertions fonctionnelles,
-        # pas seulement un smoke-test. Aussi passée au Judge (task_requirements).
-        "seed_content": task_content,
-    }
+        if router_res:
+            print(f"[*] Le routeur a classifié la technologie principale : {router_res.language.upper()}")
+            # On propage la techno STRUCTURELLEMENT (clé dédiée) en plus du texte libre
+            # historique, pour que le Tester polyvalent puisse dispatcher sans re-parser
+            # le prompt. detect_tech combine ce signal avec les extensions de target_files.
+            coding_router_lang = router_res.language
+            if seed_tasks:
+                seed_tasks[0]['content'] += f"\n\n[ROUTER DIRECTIVE : The primary technology to use is {router_res.language.upper()}]"
+                seed_tasks[0]['router_lang'] = coding_router_lang
+        else:
+            coding_router_lang = None
 
-    def save_coding_state(subtask_idx: int, iteration: int) -> None:
-        """Persiste l'état courant dans DuckDB (granularité "début d'itération").
+        # --- État de progression (Persistance d'État — Priorité 3 : Checkpoints) --
+        # Holder mutable partagé entre les scopes de la fonction. Contient le plan de
+        # l'Architect sérialisé (évite de relancer ce nœud LLM coûteux à la reprise) +
+        # la liste des sous-tâches déjà approuvées + la position (sous-tâche, itération).
+        # À la reprise (checkpoint trouvé), on HYDRATE ces champs depuis le checkpoint
+        # pour que les skips (sous-tâches complétées) et la position prennent effet.
+        coding_state = {
+            "architect_result": checkpoint.get("architect_result") if checkpoint else None,
+            "completed_subtasks": (checkpoint or {}).get("completed_subtasks", []),
+            "current_subtask_idx": 0,
+            "current_iteration": 0,
+            # Spec racine complète (cahier des charges d'origine). Propagée jusqu'au
+            # Tester (via sub_dict["original_content"]) pour qu'il connaisse le
+            # comportement attendu global et écrive des assertions fonctionnelles,
+            # pas seulement un smoke-test. Aussi passée au Judge (task_requirements).
+            "seed_content": task_content,
+        }
 
-        On ne sauvegarde qu'à des points COHÉRENTS : le Coder n'a pas encore tourné
-        pour cette itération. À la reprise, on rejoue donc l'itération complète
-        (Coder écrase le fichier = idempotent), sans risque de reprendre sur un
-        état intermédiaire (ex: Judge en cours) qui serait incohérent.
-        """
-        kg.save_checkpoint(run_id, {
-            "architect_result": coding_state["architect_result"],
-            "completed_subtasks": list(coding_state["completed_subtasks"]),
-            "current_subtask_idx": subtask_idx,
-            "current_iteration": iteration,
-            # F-39 : on persiste le prompt raffiné par le PromptRefiner pour skipper ce
-            # nœud LLM à la reprise (même logique que architect_result). task_content a
-            # déjà été muté au point d'insertion du PromptRefiner, donc coding_state
-            # ["seed_content"] contient la version raffinée (ou brute si désactivé/down).
-            "refined_prompt": coding_state["seed_content"],
-        })
+        def save_coding_state(subtask_idx: int, iteration: int) -> None:
+            """Persiste l'état courant dans DuckDB (granularité "début d'itération").
 
-    async def process_subtask_loop(subtask, start_iteration: int = 1) -> Tuple[dict, List[NodeMetrics]]:
-        sub_metrics = []
-        entity_id = f"file:{subtask.task_id}"
-        kg.add_entity(entity_id, kind="file", name=subtask.task_id)
+            On ne sauvegarde qu'à des points COHÉRENTS : le Coder n'a pas encore tourné
+            pour cette itération. À la reprise, on rejoue donc l'itération complète
+            (Coder écrase le fichier = idempotent), sans risque de reprendre sur un
+            état intermédiaire (ex: Judge en cours) qui serait incohérent.
+            """
+            kg.save_checkpoint(run_id, {
+                "architect_result": coding_state["architect_result"],
+                "completed_subtasks": list(coding_state["completed_subtasks"]),
+                "current_subtask_idx": subtask_idx,
+                "current_iteration": iteration,
+                # F-39 : on persiste le prompt raffiné par le PromptRefiner pour skipper ce
+                # nœud LLM à la reprise (même logique que architect_result). task_content a
+                # déjà été muté au point d'insertion du PromptRefiner, donc coding_state
+                # ["seed_content"] contient la version raffinée (ou brute si désactivé/down).
+                "refined_prompt": coding_state["seed_content"],
+                # Priorité 13 : on persiste le chemin du dossier de run pour que la reprise
+                # après crash reprenne dans le MÊME dossier (fichiers déjà générés préservés).
+                # run_output_dir est absolu (résolu dans _resolve_run_output_dir).
+                "output_dir": run_output_dir,
+            })
 
-        max_iter = settings.max_iterations  # avant : codé en dur à 3 (ignorait la config)
+        async def process_subtask_loop(subtask, start_iteration: int = 1) -> Tuple[dict, List[NodeMetrics]]:
+            sub_metrics = []
+            entity_id = f"file:{subtask.task_id}"
+            kg.add_entity(entity_id, kind="file", name=subtask.task_id)
 
-        for iteration in range(start_iteration, max_iter + 1):
-            # Checkpoint au DÉBUT de chaque itération (point de sauvegarde sûr).
-            save_coding_state(coding_state["current_subtask_idx"], iteration)
-            print(f"    [>] Itération {iteration}/{max_iter} pour {subtask.task_id} (Coder)...")
-            
-            # Reconstruction du prompt en lisant l'historique de DuckDB
-            # Au lieu d'accumuler dans le contexte, on fait une requête "Bug Tracker" propre.
-            # IMPORTANT : on tronque À LA LECTURE (injection au Coder) — le contenu reste
-            # intégral en base. Sinon, deux bugs distincts au préfixe identique produiraient
-            # le même dedup_key (hash SHA1) et le 2e serait ignoré silencieusement.
-            from .feedback_utils import truncate_history
-            historique = ""
-            if iteration > 1:
-                claims = kg.get_claims(entity_id)
-                refutations = [c for c in claims if c.get('kind') == 'refutation']
-                if refutations:
-                    ref_contents = [c.get('content', '') for c in refutations]
-                    historique = "\n\n" + truncate_history(
-                        ref_contents,
-                        max_chars=settings.feedback_max_chars,
-                        header="[TICKETS DE BUGS ACTIFS (LU DEPUIS DUCKDB)] :",
-                    )
-            
-            sub_dict = {
-                "id": subtask.task_id,
-                "content": subtask.description + historique,
-                "target_files": subtask.target_files,
-                # Propagation de la techno détectée par le routeur vers le Tester
-                # polyvalent (détection redondante : ce signal + les extensions).
-                "router_lang": coding_router_lang,
-                # Spec racine complète (cahier des charges d'origine). Le Tester en
-                # a besoin pour identifier les comportements attendus à valider via
-                # assertions fonctionnelles (sinon il ne teste que l'absence de crash).
-                "original_content": coding_state.get("seed_content", ""),
-                # F-29 : stratégie de construction dictée par l'Architect. Le Coder
-                # l'utilise pour adapter son workflow (simple=1 write_file, incremental
-                # =squelette+append sections, multifile=1 fichier par module). Défaut
-                # 'simple' (rétro-compat : sous-tâche sans stratégie explicite).
-                "strategy": getattr(subtask, "strategy", "simple"),
-                "sections": getattr(subtask, "sections", []),
-            }
-            
-            # 1. Coder (smolagents, modèle FAST)
-            coder_res, m1 = await execute_coder_node(sub_dict, fast_model, settings)
-            if m1: sub_metrics.append(m1)
-            
-            if not coder_res or coder_res.status == "failure":
-                print(f"    [-] Le Coder a échoué techniquement sur {subtask.task_id}.")
-                return {"status": "failure", "reason": "Coder crash"}, sub_metrics
-                
-            print(f"    [>] Coder terminé. Déclenchement des Audits parallèles (Tester & Sécurité)...")
-            
-            # On enregistre l'observation du Coder dans DuckDB
-            obs_id = kg.add_claim(
-                entity_id=entity_id,
-                content=f"Code généré (Itération {iteration}): {coder_res.details}",
-                kind="observation",
-                confidence=1.0,
-                source="coder",
-                model_id=settings.reasoning_model_id,
-                run_id=run_id,
-            )
+            max_iter = settings.max_iterations  # avant : codé en dur à 3 (ignorait la config)
 
-            # --- Nœud Linter (Shift Left, F-30) --------------------------------
-            # Gatekeeper LÉGER (0 LLM, millisecondes) qui valide la SYNTAXE des fichiers
-            # générés AVANT de solliciter les nœuds lourds (Tester LLM + Judge LLM). C'est
-            # l'économie massive de P3/P7 : un bug de syntaxe trivial (IndentationError
-            # Python, contenu après </html>, string non fermée) ne doit pas gaspiller un
-            # cycle LLM complet. Si invalide → on court-circuite le Tester, on écrit le
-            # bug en DuckDB (kind='refutation', source='linter') et on relance le Coder.
-            lint_res, m_lint = execute_linter_node(sub_dict, settings)
-            if m_lint: sub_metrics.append(m_lint)
-
-            if lint_res and lint_res.status == "failure":
-                print(f"    [⚠] Linter a détecté des erreurs de syntaxe sur {subtask.task_id} — "
-                      f"court-circuit du Tester (Shift Left).")
-                if obs_id: kg.mark_status(obs_id, "rejected")
-                # Le feedback du Linter devient une réfutation (lu par le Coder à l'itération suivante
-                # via kg.get_claims, comme les réfutations du Judge — mécanisme existant réutilisé).
-                ref_id = kg.add_claim(
-                    entity_id=entity_id,
-                    content=f"[LINTER] {lint_res.details}",
-                    kind="refutation",
-                    confidence=None,
-                    source="linter",
-                    model_id="tree-sitter-linter",
-                    run_id=run_id,
-                )
-                if ref_id and obs_id:
-                    kg.add_edge(ref_id, obs_id, "REFUTES")
-                # On passe à l'itération suivante SANS Tester/Judge (économie de cycles LLM).
-                continue
-
-            print(f"    [>] Coder terminé. Déclenchement des Audits parallèles (Tester & Sécurité)...")
-
-            # 2. Vérifications Contradictoires (Parallèle)
-            t_task = execute_tester_node(sub_dict, reasoning_model, settings)
-            s_task = execute_security_reviewer_node(sub_dict, reasoning_model, settings)
-            
-            (test_res, m2), (sec_res, m3) = await asyncio.gather(t_task, s_task)
-            if m2: sub_metrics.append(m2)
-            if m3: sub_metrics.append(m3)
-            
-            # 3. Judge Panel (Fan-in) — DSPy ChainOfThought (Pydantic force le JSON Mode)
-            print(f"    [>] Audits terminés. Juge ({settings.reasoning_model_id}) en cours d'évaluation...")
-            judge_res, m4 = await execute_code_judge_node(sub_dict, test_res, sec_res, fast_model, settings)
-            if m4: sub_metrics.append(m4)
-            
-            if judge_res and judge_res.is_approved:
-                print(f"    [+] {subtask.task_id} APPROUVÉ par le Juge ! 🚀")
-                if obs_id: kg.mark_status(obs_id, "approved")
-                # Sous-tâche validée → on la marque comme complétée pour le checkpoint
-                # (à la reprise, elle sera sautée sans ré-exécuter le Coder).
-                coding_state["completed_subtasks"].append(subtask.task_id)
+            for iteration in range(start_iteration, max_iter + 1):
+                # Checkpoint au DÉBUT de chaque itération (point de sauvegarde sûr).
                 save_coding_state(coding_state["current_subtask_idx"], iteration)
-                return {"status": "success", "task_id": subtask.task_id}, sub_metrics
-            else:
-                feedback = judge_res.final_feedback if judge_res else "Erreur système du juge."
-                print(f"    [-] {subtask.task_id} REJETÉ. Sauvegarde du bug dans DuckDB...")
-                if obs_id: kg.mark_status(obs_id, "rejected")
-                
-                # Le Juge écrit la faille ou le bug dans DuckDB (le Knowledge Graph)
-                ref_id = kg.add_claim(
-                    entity_id=entity_id, 
-                    content=feedback, 
-                    kind="refutation",
-                    confidence=None, 
-                    source="judge_panel",
-                    model_id=settings.reasoning_model_id, 
-                    run_id=run_id
-                )
-                if ref_id and obs_id:
-                    kg.add_edge(ref_id, obs_id, "REFUTES")
-                
-        print(f"    [!] Max itérations atteintes pour {subtask.task_id}.")
+                print(f"    [>] Itération {iteration}/{max_iter} pour {subtask.task_id} (Coder)...")
 
-        # --- Nœud d'Escalade (Priorité 3, F-23) --------------------------------
-        # Le Circuit Breaker s'est activé : la sous-tâche a épuisé ses itérations
-        # sans approval. Au lieu d'abandonner sans retour, on synthétise les
-        # réfutations accumulées dans le KG en un diagnostic post-mortem, persisté
-        # et exploitable par un run futur. Dégradation gracieuse : si l'escalade
-        # est désactivée (ESCALATION_ENABLED=false) ou si le nœud LLM échoue, on
-        # retombe sur le statut historique 'max_iterations_reached'.
-        if settings.escalation_enabled:
-            from .feedback_utils import truncate_history
-            # Lecture de TOUTES les réfutations accumulées pour cette sous-tâche.
-            refutations = [c for c in kg.get_claims(entity_id) if c.get('kind') == 'refutation']
-            failure_history = truncate_history(
-                [c.get('content', '') for c in refutations],
-                max_chars=settings.feedback_max_chars,
-                header="[HISTORIQUE DES ÉCHECS (RÉFUTATIONS DU JUGE)] :",
-            )
-            escalation_sub = {
-                "id": subtask.task_id,
-                "description": subtask.description,
-                "target_files": subtask.target_files,
-            }
-            print(f"    [↗] Activation du Nœud d'Escalade (post-mortem) pour {subtask.task_id}...")
-            try:
-                esc_res, m5 = await execute_escalation_node(escalation_sub, failure_history, reasoning_model, settings)
-                if m5: sub_metrics.append(m5)
-            except Exception as esc_err:
-                # Défense en profondeur : le nœud attrape déjà ses erreurs LLM en
-                # interne (→ None), mais on protège aussi contre toute exception
-                # non prévue. Le post-mortem ne doit JAMAIS faire planter le run —
-                # on replie sur le statut historique.
-                print(f"    [-] Nœud d'Escalade en erreur ({esc_err}) — repli sur le statut brut.")
-                esc_res = None
+                # Reconstruction du prompt en lisant l'historique de DuckDB
+                # Au lieu d'accumuler dans le contexte, on fait une requête "Bug Tracker" propre.
+                # IMPORTANT : on tronque À LA LECTURE (injection au Coder) — le contenu reste
+                # intégral en base. Sinon, deux bugs distincts au préfixe identique produiraient
+                # le même dedup_key (hash SHA1) et le 2e serait ignoré silencieusement.
+                from .feedback_utils import truncate_history
+                historique = ""
+                if iteration > 1:
+                    claims = kg.get_claims(entity_id)
+                    refutations = [c for c in claims if c.get('kind') == 'refutation']
+                    if refutations:
+                        ref_contents = [c.get('content', '') for c in refutations]
+                        historique = "\n\n" + truncate_history(
+                            ref_contents,
+                            max_chars=settings.feedback_max_chars,
+                            header="[TICKETS DE BUGS ACTIFS (LU DEPUIS DUCKDB)] :",
+                        )
 
-            if esc_res:
-                # Persistance du diagnostic dans le KG (kind="escalation").
-                diag_text = (
-                    f"CAUSE RACINE: {esc_res.root_cause}\n"
-                    f"TENTATIVES: {', '.join(esc_res.attempted_fixes) or 'non documentées'}\n"
-                    f"LEÇON: {esc_res.lesson}\n"
-                    f"GRAVITÉ: {esc_res.severity}"
-                )
-                esc_id = kg.add_claim(
+                sub_dict = {
+                    "id": subtask.task_id,
+                    "content": subtask.description + historique,
+                    "target_files": subtask.target_files,
+                    # Propagation de la techno détectée par le routeur vers le Tester
+                    # polyvalent (détection redondante : ce signal + les extensions).
+                    "router_lang": coding_router_lang,
+                    # Spec racine complète (cahier des charges d'origine). Le Tester en
+                    # a besoin pour identifier les comportements attendus à valider via
+                    # assertions fonctionnelles (sinon il ne teste que l'absence de crash).
+                    "original_content": coding_state.get("seed_content", ""),
+                    # F-29 : stratégie de construction dictée par l'Architect. Le Coder
+                    # l'utilise pour adapter son workflow (simple=1 write_file, incremental
+                    # =squelette+append sections, multifile=1 fichier par module). Défaut
+                    # 'simple' (rétro-compat : sous-tâche sans stratégie explicite).
+                    "strategy": getattr(subtask, "strategy", "simple"),
+                    "sections": getattr(subtask, "sections", []),
+                }
+
+                # 1. Coder (smolagents, modèle FAST)
+                coder_res, m1 = await execute_coder_node(sub_dict, fast_model, settings)
+                if m1: sub_metrics.append(m1)
+
+                if not coder_res or coder_res.status == "failure":
+                    print(f"    [-] Le Coder a échoué techniquement sur {subtask.task_id}.")
+                    return {"status": "failure", "reason": "Coder crash"}, sub_metrics
+
+                print(f"    [>] Coder terminé. Déclenchement des Audits parallèles (Tester & Sécurité)...")
+
+                # On enregistre l'observation du Coder dans DuckDB
+                obs_id = kg.add_claim(
                     entity_id=entity_id,
-                    content=diag_text,
-                    kind="escalation",
-                    confidence=None,
-                    source="escalation_node",
+                    content=f"Code généré (Itération {iteration}): {coder_res.details}",
+                    kind="observation",
+                    confidence=1.0,
+                    source="coder",
                     model_id=settings.reasoning_model_id,
                     run_id=run_id,
                 )
-                # Relie le diagnostic aux réfutations qu'il synthétise (traçabilité).
-                if esc_id is not None:
-                    for ref in refutations:
-                        kg.add_edge(esc_id, ref['id'], "ESCALATES")
-                print(f"    [⚠] {subtask.task_id} ESCALADÉ — diagnostic persisté (gravité: {esc_res.severity}).")
-                return {
-                    "status": "escalated",
-                    "task_id": subtask.task_id,
-                    "diagnostic": esc_res.model_dump(),
-                }, sub_metrics
 
-            print(f"    [-] Nœud d'Escalade indisponible/échoué pour {subtask.task_id} — repli sur le statut brut.")
+                # --- Nœud Linter (Shift Left, F-30) --------------------------------
+                # Gatekeeper LÉGER (0 LLM, millisecondes) qui valide la SYNTAXE des fichiers
+                # générés AVANT de solliciter les nœuds lourds (Tester LLM + Judge LLM). C'est
+                # l'économie massive de P3/P7 : un bug de syntaxe trivial (IndentationError
+                # Python, contenu après </html>, string non fermée) ne doit pas gaspiller un
+                # cycle LLM complet. Si invalide → on court-circuite le Tester, on écrit le
+                # bug en DuckDB (kind='refutation', source='linter') et on relance le Coder.
+                lint_res, m_lint = execute_linter_node(sub_dict, settings)
+                if m_lint: sub_metrics.append(m_lint)
 
-        return {"status": "max_iterations_reached", "task_id": subtask.task_id}, sub_metrics
+                if lint_res and lint_res.status == "failure":
+                    print(f"    [⚠] Linter a détecté des erreurs de syntaxe sur {subtask.task_id} — "
+                          f"court-circuit du Tester (Shift Left).")
+                    if obs_id: kg.mark_status(obs_id, "rejected")
+                    # Le feedback du Linter devient une réfutation (lu par le Coder à l'itération suivante
+                    # via kg.get_claims, comme les réfutations du Judge — mécanisme existant réutilisé).
+                    ref_id = kg.add_claim(
+                        entity_id=entity_id,
+                        content=f"[LINTER] {lint_res.details}",
+                        kind="refutation",
+                        confidence=None,
+                        source="linter",
+                        model_id="tree-sitter-linter",
+                        run_id=run_id,
+                    )
+                    if ref_id and obs_id:
+                        kg.add_edge(ref_id, obs_id, "REFUTES")
+                    # On passe à l'itération suivante SANS Tester/Judge (économie de cycles LLM).
+                    continue
 
-    for task in seed_tasks:
-        # --- Reprise : l'Architect est-il déjà en checkpoint ? ----------------
-        # À la reprise, on évite de relancer ce nœud de raisonnement coûteux en
-        # rechargeant le plan sérialisé. Sinon, appel normal + persistance du plan.
-        if checkpoint and checkpoint.get("architect_result"):
-            architect_result = ArchitectOutput(**checkpoint["architect_result"])
-            print(f"\n[*] 1. Plan de l'Architecte RECHARGÉ depuis le checkpoint (économise un appel LLM).")
-        else:
-            print(f"\n[*] 1. Exécution de l'Architecte pour la tâche globale : {task['id']}")
-            architect_result, arch_metrics = await execute_architect_node(task, reasoning_model, settings)
-            if arch_metrics:
-                all_metrics.append(arch_metrics)
+                print(f"    [>] Coder terminé. Déclenchement des Audits parallèles (Tester & Sécurité)...")
 
-        if architect_result is None:
-            print(f"[-] L'Architecte a échoué à planifier la tâche {task['id']}.")
-            continue
+                # 2. Vérifications Contradictoires (Parallèle)
+                t_task = execute_tester_node(sub_dict, reasoning_model, settings)
+                s_task = execute_security_reviewer_node(sub_dict, reasoning_model, settings)
 
-        # Persiste le plan (premier checkpoint utile : sauve l'appel Architect).
-        coding_state["architect_result"] = architect_result.model_dump()
+                (test_res, m2), (sec_res, m3) = await asyncio.gather(t_task, s_task)
+                if m2: sub_metrics.append(m2)
+                if m3: sub_metrics.append(m3)
 
-        print(f"[+] Plan de l'Architecte reçu : {architect_result.global_architecture}")
-        print(f"[*] 2. Fan-out : Lancement des boucles d'ingénierie parallèles sur {len(architect_result.subtasks)} sous-tâches...\n")
+                # 3. Judge Panel (Fan-in) — DSPy ChainOfThought (Pydantic force le JSON Mode)
+                print(f"    [>] Audits terminés. Juge ({settings.reasoning_model_id}) en cours d'évaluation...")
+                judge_res, m4 = await execute_code_judge_node(sub_dict, test_res, sec_res, fast_model, settings)
+                if m4: sub_metrics.append(m4)
 
-        # Exécution Séquentielle (Pipeline) pour éviter les Race Conditions sur les fichiers
-        for i, st in enumerate(architect_result.subtasks):
-            coding_state["current_subtask_idx"] = i
+                if judge_res and judge_res.is_approved:
+                    print(f"    [+] {subtask.task_id} APPROUVÉ par le Juge ! 🚀")
+                    if obs_id: kg.mark_status(obs_id, "approved")
+                    # Sous-tâche validée → on la marque comme complétée pour le checkpoint
+                    # (à la reprise, elle sera sautée sans ré-exécuter le Coder).
+                    coding_state["completed_subtasks"].append(subtask.task_id)
+                    save_coding_state(coding_state["current_subtask_idx"], iteration)
+                    return {"status": "success", "task_id": subtask.task_id}, sub_metrics
+                else:
+                    feedback = judge_res.final_feedback if judge_res else "Erreur système du juge."
+                    print(f"    [-] {subtask.task_id} REJETÉ. Sauvegarde du bug dans DuckDB...")
+                    if obs_id: kg.mark_status(obs_id, "rejected")
 
-            # --- Reprise : sous-tâche déjà approuvée ? On la saute ----------------
-            if st.task_id in coding_state["completed_subtasks"]:
-                print(f"[*] Sous-tâche {i+1}/{len(architect_result.subtasks)} ({st.task_id}) déjà APPROUVÉE — skip.")
-                results.append({"status": "success", "task_id": st.task_id, "replayed": True})
+                    # Le Juge écrit la faille ou le bug dans DuckDB (le Knowledge Graph)
+                    ref_id = kg.add_claim(
+                        entity_id=entity_id, 
+                        content=feedback, 
+                        kind="refutation",
+                        confidence=None, 
+                        source="judge_panel",
+                        model_id=settings.reasoning_model_id, 
+                        run_id=run_id
+                    )
+                    if ref_id and obs_id:
+                        kg.add_edge(ref_id, obs_id, "REFUTES")
+
+            print(f"    [!] Max itérations atteintes pour {subtask.task_id}.")
+
+            # --- Nœud d'Escalade (Priorité 3, F-23) --------------------------------
+            # Le Circuit Breaker s'est activé : la sous-tâche a épuisé ses itérations
+            # sans approval. Au lieu d'abandonner sans retour, on synthétise les
+            # réfutations accumulées dans le KG en un diagnostic post-mortem, persisté
+            # et exploitable par un run futur. Dégradation gracieuse : si l'escalade
+            # est désactivée (ESCALATION_ENABLED=false) ou si le nœud LLM échoue, on
+            # retombe sur le statut historique 'max_iterations_reached'.
+            if settings.escalation_enabled:
+                from .feedback_utils import truncate_history
+                # Lecture de TOUTES les réfutations accumulées pour cette sous-tâche.
+                refutations = [c for c in kg.get_claims(entity_id) if c.get('kind') == 'refutation']
+                failure_history = truncate_history(
+                    [c.get('content', '') for c in refutations],
+                    max_chars=settings.feedback_max_chars,
+                    header="[HISTORIQUE DES ÉCHECS (RÉFUTATIONS DU JUGE)] :",
+                )
+                escalation_sub = {
+                    "id": subtask.task_id,
+                    "description": subtask.description,
+                    "target_files": subtask.target_files,
+                }
+                print(f"    [↗] Activation du Nœud d'Escalade (post-mortem) pour {subtask.task_id}...")
+                try:
+                    esc_res, m5 = await execute_escalation_node(escalation_sub, failure_history, reasoning_model, settings)
+                    if m5: sub_metrics.append(m5)
+                except Exception as esc_err:
+                    # Défense en profondeur : le nœud attrape déjà ses erreurs LLM en
+                    # interne (→ None), mais on protège aussi contre toute exception
+                    # non prévue. Le post-mortem ne doit JAMAIS faire planter le run —
+                    # on replie sur le statut historique.
+                    print(f"    [-] Nœud d'Escalade en erreur ({esc_err}) — repli sur le statut brut.")
+                    esc_res = None
+
+                if esc_res:
+                    # Persistance du diagnostic dans le KG (kind="escalation").
+                    diag_text = (
+                        f"CAUSE RACINE: {esc_res.root_cause}\n"
+                        f"TENTATIVES: {', '.join(esc_res.attempted_fixes) or 'non documentées'}\n"
+                        f"LEÇON: {esc_res.lesson}\n"
+                        f"GRAVITÉ: {esc_res.severity}"
+                    )
+                    esc_id = kg.add_claim(
+                        entity_id=entity_id,
+                        content=diag_text,
+                        kind="escalation",
+                        confidence=None,
+                        source="escalation_node",
+                        model_id=settings.reasoning_model_id,
+                        run_id=run_id,
+                    )
+                    # Relie le diagnostic aux réfutations qu'il synthétise (traçabilité).
+                    if esc_id is not None:
+                        for ref in refutations:
+                            kg.add_edge(esc_id, ref['id'], "ESCALATES")
+                    print(f"    [⚠] {subtask.task_id} ESCALADÉ — diagnostic persisté (gravité: {esc_res.severity}).")
+                    return {
+                        "status": "escalated",
+                        "task_id": subtask.task_id,
+                        "diagnostic": esc_res.model_dump(),
+                    }, sub_metrics
+
+                print(f"    [-] Nœud d'Escalade indisponible/échoué pour {subtask.task_id} — repli sur le statut brut.")
+
+            return {"status": "max_iterations_reached", "task_id": subtask.task_id}, sub_metrics
+
+        for task in seed_tasks:
+            # --- Reprise : l'Architect est-il déjà en checkpoint ? ----------------
+            # À la reprise, on évite de relancer ce nœud de raisonnement coûteux en
+            # rechargeant le plan sérialisé. Sinon, appel normal + persistance du plan.
+            if checkpoint and checkpoint.get("architect_result"):
+                architect_result = ArchitectOutput(**checkpoint["architect_result"])
+                print(f"\n[*] 1. Plan de l'Architecte RECHARGÉ depuis le checkpoint (économise un appel LLM).")
+            else:
+                print(f"\n[*] 1. Exécution de l'Architecte pour la tâche globale : {task['id']}")
+                architect_result, arch_metrics = await execute_architect_node(task, reasoning_model, settings)
+                if arch_metrics:
+                    all_metrics.append(arch_metrics)
+
+            if architect_result is None:
+                print(f"[-] L'Architecte a échoué à planifier la tâche {task['id']}.")
                 continue
 
-            # --- Reprise : itération de départ pour cette sous-tâche ---------------
-            # Si le checkpoint pointe exactement sur (i, iteration), on reprend là.
-            start_iter = 1
-            if checkpoint and checkpoint.get("current_subtask_idx") == i and checkpoint.get("current_iteration"):
-                start_iter = checkpoint["current_iteration"]
-                print(f"[*] Reprise de la sous-tâche {i+1}/{len(architect_result.subtasks)} à l'itération {start_iter}...")
-                checkpoint = None  # le checkpoint n'est consommé qu'une fois
+            # Persiste le plan (premier checkpoint utile : sauve l'appel Architect).
+            coding_state["architect_result"] = architect_result.model_dump()
 
-            print(f"[*] Traitement de la sous-tâche {i+1}/{len(architect_result.subtasks)}...")
-            res, metrics = await process_subtask_loop(st, start_iteration=start_iter)
-            all_metrics.extend(metrics)
-            results.append(res)
+            print(f"[+] Plan de l'Architecte reçu : {architect_result.global_architecture}")
+            print(f"[*] 2. Fan-out : Lancement des boucles d'ingénierie parallèles sur {len(architect_result.subtasks)} sous-tâches...\n")
 
-        print(f"\n[*] 3. Fusion des sous-tâches terminée pour {task['id']}.")
+            # Exécution Séquentielle (Pipeline) pour éviter les Race Conditions sur les fichiers
+            for i, st in enumerate(architect_result.subtasks):
+                coding_state["current_subtask_idx"] = i
 
-    # Toutes les sous-tâches sont traitées : on marque le run comme terminé.
-    kg.clear_checkpoint(run_id)
-    print(f"\n[*] Run {run_id} terminé — checkpoint effacé.")
+                # --- Reprise : sous-tâche déjà approuvée ? On la saute ----------------
+                if st.task_id in coding_state["completed_subtasks"]:
+                    print(f"[*] Sous-tâche {i+1}/{len(architect_result.subtasks)} ({st.task_id}) déjà APPROUVÉE — skip.")
+                    results.append({"status": "success", "task_id": st.task_id, "replayed": True})
+                    continue
 
-    return {"architect_plans": len(seed_tasks), "final_results": results}, all_metrics
+                # --- Reprise : itération de départ pour cette sous-tâche ---------------
+                # Si le checkpoint pointe exactement sur (i, iteration), on reprend là.
+                start_iter = 1
+                if checkpoint and checkpoint.get("current_subtask_idx") == i and checkpoint.get("current_iteration"):
+                    start_iter = checkpoint["current_iteration"]
+                    print(f"[*] Reprise de la sous-tâche {i+1}/{len(architect_result.subtasks)} à l'itération {start_iter}...")
+                    checkpoint = None  # le checkpoint n'est consommé qu'une fois
+
+                print(f"[*] Traitement de la sous-tâche {i+1}/{len(architect_result.subtasks)}...")
+                res, metrics = await process_subtask_loop(st, start_iteration=start_iter)
+                all_metrics.extend(metrics)
+                results.append(res)
+
+            print(f"\n[*] 3. Fusion des sous-tâches terminée pour {task['id']}.")
+
+        # Toutes les sous-tâches sont traitées : on marque le run comme terminé.
+        kg.clear_checkpoint(run_id)
+        print(f"\n[*] Run {run_id} terminé — checkpoint effacé.")
+
+        return {"architect_plans": len(seed_tasks), "final_results": results}, all_metrics
 
 
 # ==========================================
