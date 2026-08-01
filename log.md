@@ -1897,3 +1897,46 @@ FRESH_START=true → nouveau dossier daté. (Le timestamp seul aurait cassé la 
 - Suite pytest : 394 passed / 0 failed.
 - Branche feat/output-dated-per-run supprimée (locale + distante).
 - Priorité 13 du plan cochée ✅ TERMINÉ.
+
+## [2026-08-01] run | Run réel Bubble Sort (validation process) — PROCESS VALIDÉ, Coder limité
+*Premier run LLM réel après les cycles F-36→F-40. Objectif : valider le process complet
+de bout en bout. Run stoppé volontairement après constats (choix user : consigner le bilan).*
+
+### ✅ Validations concrètes du process (l'objectif atteint)
+1. **Priorité 13 (Output daté, F-40)** ✅✅✅ — dossier `runs/2026-08-01_1024_bubble_sort/`
+   créé automatiquement, **racine projet restée PROPRE** (pas de index.html/bubble_sort polluants).
+   C'est la validation principale recherchée et elle passe en conditions réelles.
+2. **PromptRefiner (F-39, E4B)** ✅ — spec de 2149 caractères produite en ~2 min (2 ambiguïtés
+   détectées). E4B local GPU efficace pour ce nœud.
+3. **Router (F-39)** ✅ — classification JAVASCRIPT correcte.
+4. **Architect (DSPy)** ✅ — plan produit, Coder reçu ses instructions (skills frontend-design
+   injectés, stratégie propagée).
+5. **Coder démarré** ✅ — CodeAgent a appelé write_file dans le run dir (chemin résolu correctement).
+
+### ⚠️ Contraintes révélées (matériel + modèle distant)
+1. **Architect hangs ~8 min (12B overflow VRAM)** — gemma-4-12B fait 8.6 Go pour 6 Go VRAM →
+   45% swap CPU/GPU (`ollama ps` : `55%/45% CPU/GPU`, context 32768). Lent mais aboutit. Le 12B
+   est trop gros pour la RTX 3060 Laptop 6 Go en contexte grand. Le E4B (5.2 Go, tient en VRAM)
+   serait 8× plus rapide — déjà prouvé pour le PromptRefiner.
+2. **Coder génère un squelette vide** — `write_file(path="index.html", content=skeleton_html)`
+   mais `skeleton_html` = squelette minimal 11 lignes (`<body></body>` vide). Le Coder interprète
+   la stratégie `incremental` (squelette + appends) mais ne fait JAMAIS les append_file du vrai
+   contenu (CSS/JS/barres). Failure mode connu du modèle distant CPU (gemma-4-e4b) — documenté
+   progress.md étape DI-9 (runs comparatifs en attente). Le garde anti-contenu-vide de tools.py
+   ne suffit pas ici (le content n'est pas vide, juste minimal).
+3. **Latence Coder massive** — 160s/step sur distant CPU. 12 steps max → jusqu'à 32 min Coder seul.
+
+### Conclusion
+- **Le process global (orchestrateur + toutes les features F-36→F-40) fonctionne de bout en bout.**
+  Le pipeline PromptRefiner→Router→Architect→Coder s'enchaîne correctement, la Priorité 13 isole
+  bien les artefacts, le checkpoint est cohérent.
+- **Le goulot d'étranglement est matériel + qualité du Coder distant**, pas le code du projet.
+  Pistes (non abordées ce run) : (1) basculer Coder sur E4B local GPU (8× plus rapide) ;
+  (2) durcir le prompt Coder anti-squelette-vide (détecter content minimal vs squelette attendu) ;
+  (3) réduire le context du 12B (32768 trop grand pour 6 Go VRAM).
+
+### Nettoyage post-run
+- Artefacts `runs/` supprimés (run réel + dossiers tests pytest qui traînaient).
+- tasks.json restauré (Nimbus, modif Bubble Sort annulée).
+- FRESH_START remis à false (reprise auto pour la prod).
+- Branche `run/bubble-sort-validation` à supprimer (pas de code à garder).
