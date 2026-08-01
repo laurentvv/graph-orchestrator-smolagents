@@ -1740,3 +1740,33 @@ _test_prompt_refiner_real.py (supprimé après) sur 2 prompts contrastés.*
 - MERGE TEL QUEL. Le toggle PROMPT_REFINER_ENABLED=false permet de le désactiver en attendant.
 - OPTIMISATION LATENCE = cycle suivant (réduire max_tokens ~2000, ou passer en FAST, ou opt-in
   par défaut). À évaluer : la qualité de la spec reste-t-elle bonne avec moins de tokens ?
+
+## [2026-08-01] eval | Test comparatif réel 12B vs E4B + setting modèle dédié
+*Le user a proposé un modèle + petit local GPU pour réduire la latence (4-5 min/prompt sur 12B).
+Test comparatif E4B (5.2 Go) vs 12B (7.2 Go) sur les 2 mêmes prompts.*
+
+### Résultats comparatifs (E4B gagnant net)
+| Critère | 12B | E4B | Gagnant |
+|---|---|---|---|
+| Latence prompt vague | 318s | **41s** | E4B (7.7×) |
+| Latence prompt clair | 247s | **27s** | E4B (9.1×) |
+| Détection termes vagues | 3/3 | 3/3 | = |
+| Structure sections + capacités citées | ✅ | ✅ | = |
+| Critères CRUD testables | partiel | ✅ explicite | E4B |
+| Anti-invention (section À clarifier) | ✅ | ✅ plus riche | E4B |
+
+**Conclusion** : E4B ~8× plus rapide pour qualité équivalente/supérieure. Le 12B est overkill
+pour de la reformulation. E4B = bon compromis qualité/latence sur GPU 6 Go.
+
+### Implémentation : setting modèle dédié
+- `config.py` : `prompt_refiner_model_id: str = ""` (défaut vide = fallback reasoning_model_id,
+  rétro-compat). `_get_str("PROMPT_REFINER_MODEL_ID", "")`.
+- `dspy_nodes.py` execute_prompt_refiner_node : `refiner_model_id = settings.prompt_refiner_model_id
+  or settings.reasoning_model_id` → passé à `_configure_dspy` ET à la métrique `model`.
+- `.env.example` : valeur E4B recommandée commentée (infra locale RTX 3060 6 Go).
+- Tests : 2 nouveaux (modèle dédié setté → _configure_dspy reçoit CE modèle + métrique OK ;
+  vide → fallback reasoning). Suite 381 passed / 0 failed.
+
+### Décision
+E4B câblé via setting (PROMPT_REFINER_MODEL_ID dans .env). Le défaut reste vide (= 12B) pour
+réto-compat ; le .env.example documente la recommandation E4B.

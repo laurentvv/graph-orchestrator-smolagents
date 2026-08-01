@@ -324,7 +324,10 @@ async def execute_prompt_refiner_node(
         (dégradation gracieuse : l'appelant repliera sur le prompt brut).
     """
     print("[*] DSPy PromptRefiner en cours (reformulation du prompt brut en spec)...")
-    lm = _configure_dspy(settings, settings.reasoning_model_id)
+    # Modèle dédié si setté (E4B recommandé : ~8× plus rapide que le 12B pour qualité
+    # équivalente — voir log.md test comparatif). Fallback sur reasoning_model_id sinon.
+    refiner_model_id = settings.prompt_refiner_model_id or settings.reasoning_model_id
+    lm = _configure_dspy(settings, refiner_model_id)
     capabilities = _build_capabilities_summary(settings)
     start_time = time.time()
     try:
@@ -342,7 +345,7 @@ async def execute_prompt_refiner_node(
 
         metrics = NodeMetrics(
             node="prompt_refiner_dspy",
-            model=settings.reasoning_model_id,
+            model=refiner_model_id,
             duration_s=time.time() - start_time,
             input_tokens=0,
             output_tokens=0,

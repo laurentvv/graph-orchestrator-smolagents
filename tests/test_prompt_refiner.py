@@ -36,6 +36,7 @@ def _mock_settings():
     s.ollama_api_base = "http://localhost:11434/v1"
     s.llm_timeout_s = 1.0
     s.prompt_refiner_enabled = True
+    s.prompt_refiner_model_id = ""  # défaut vide = fallback sur reasoning_model_id
     return s
 
 
@@ -91,6 +92,50 @@ def test_execute_prompt_refiner_node_graceful_failure(mock_cot, mock_configure):
     )
     assert output is None
     assert metrics is None
+
+
+@patch("graph_orchestrator.dspy_nodes._configure_dspy")
+@patch("graph_orchestrator.dspy_nodes.dspy.ChainOfThought")
+def test_prompt_refiner_uses_dedicated_model_when_set(mock_cot, mock_configure):
+    """Si prompt_refiner_model_id est setté → _configure_dspy reçoit CE modèle (pas reasoning).
+
+    Levier de perf (test réel log.md) : E4B ~8× plus rapide que le 12B pour qualité équivalente.
+    On vérifie que le setting est bien câblé : le modèle passé à _configure_dspy + dans les
+    métriques est le modèle dédié, pas le reasoning par défaut.
+    """
+    mock_instance = MagicMock()
+    mock_prediction = MagicMock()
+    mock_prediction.output = PromptRefinerOutput(refined_prompt="spec")
+    mock_instance.return_value = mock_prediction
+    mock_cot.return_value = mock_instance
+
+    settings = _mock_settings()
+    settings.prompt_refiner_model_id = "dedicated-e4b-model"
+    output, metrics = asyncio.run(
+        execute_prompt_refiner_node("prompt", "FAKE_REASON", settings)
+    )
+
+    # _configure_dspy reçoit le modèle dédié, pas reasoning_model_id.
+    mock_configure.assert_called_once_with(settings, "dedicated-e4b-model")
+    # La métrique reflète aussi le modèle réellement utilisé (pas le défaut).
+    assert metrics.model == "dedicated-e4b-model"
+
+
+@patch("graph_orchestrator.dspy_nodes._configure_dspy")
+@patch("graph_orchestrator.dspy_nodes.dspy.ChainOfThought")
+def test_prompt_refiner_falls_back_to_reasoning_model_when_unset(mock_cot, mock_configure):
+    """prompt_refiner_model_id vide → fallback sur reasoning_model_id (rétro-compat)."""
+    mock_instance = MagicMock()
+    mock_prediction = MagicMock()
+    mock_prediction.output = PromptRefinerOutput(refined_prompt="spec")
+    mock_instance.return_value = mock_prediction
+    mock_cot.return_value = mock_instance
+
+    settings = _mock_settings()
+    settings.prompt_refiner_model_id = ""  # vide = fallback
+    asyncio.run(execute_prompt_refiner_node("prompt", "FAKE_REASON", settings))
+
+    mock_configure.assert_called_once_with(settings, "mock-reasoning-model")
 
 
 # ==========================================
