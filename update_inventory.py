@@ -294,10 +294,56 @@ SP_FILES = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# 18 — awesome-claude-skills : 10 entrées (format SKILL.md + outillage)
+# ---------------------------------------------------------------------------
+ACS_BASE = "references/awesome-claude-skills"
+ACS_FILES = [
+    # --- skill-creator : méta-skill pivot (P10) ---
+    {"path": f"{ACS_BASE}/skill-creator/SKILL.md", "type": "skill", "reuse": "high",
+     "key_symbols": ["Anatomy", "Progressive Disclosure", "three-level loading", "Metadata", "SKILL.md body", "Bundled resources"],
+     "description": "Méta-skill pivot (209 L). Définit l'anatomie d'une skill ET le modèle 3-niveaux (Progressive Disclosure) : Metadata ~100 mots toujours en contexte → corps SKILL.md <5k mots au déclenchement → resources illimitées (scripts exécutés sans être lus). Caution externe du modèle P10."},
+    {"path": f"{ACS_BASE}/skill-creator/scripts/init_skill.py", "type": "code", "reuse": "high",
+     "key_symbols": ["init_skill", "scaffolding", "SKILL.md + scripts/ + references/ + assets/"],
+     "description": "Génère le squelette canonique d'une skill (303 L) : SKILL.md + 3 dossiers. Réutilisable en l'état comme scripts/new_skill.py pour normaliser la création de nos skills."},
+    {"path": f"{ACS_BASE}/skill-creator/scripts/quick_validate.py", "type": "code", "reuse": "high",
+     "key_symbols": ["validate_frontmatter", "regex ^[a-z0-9-]+$", "check chevrons <>"],
+     "description": "Valide (64 L) : name en hyphen-case strict, pas de --, pas de chevrons dans description, description explicite. À adopter comme gate CI/pre-commit sur notre dossier skills/."},
+    {"path": f"{ACS_BASE}/skill-creator/scripts/package_skill.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["package_skill", "zip bundling"],
+     "description": "Packaging zip d'une skill pour distribution marketplace. Mécanisme utile à comprendre ; moins pertinent pour nous."},
+    # --- mcp-builder ---
+    {"path": f"{ACS_BASE}/mcp-builder/SKILL.md", "type": "skill", "reuse": "high",
+     "key_symbols": ["Research", "Implementation", "Review", "Evaluation", "Build for Workflows", "Optimize for Limited Context"],
+     "description": "Guide 4 phases (328 L) pour bâtir des serveurs MCP. Principes de design d'outils pour agents transposables à nos Hands smolagents : Build for Workflows Not Just API, Optimize for Limited Context, Actionable Error Messages, Evaluation-Driven Development."},
+    {"path": f"{ACS_BASE}/mcp-builder/reference/mcp_best_practices.md", "type": "doc", "reuse": "high",
+     "key_symbols": ["Build for Workflows", "Optimize for Limited Context", "Actionable Error Messages"],
+     "description": "Bonnes pratiques MCP. Principes de design d'outils transposables aux tools smolagents."},
+    {"path": f"{ACS_BASE}/mcp-builder/reference/evaluation.md", "type": "doc", "reuse": "medium",
+     "key_symbols": ["10 questions XML", "vérification"],
+     "description": "Pattern créer 10 questions d'évaluation XML + vérifier les réponses. Transposable au nœud Judge (création de cas de vérification)."},
+    # --- webapp-testing ---
+    {"path": f"{ACS_BASE}/webapp-testing/SKILL.md", "type": "skill", "reuse": "medium",
+     "key_symbols": ["Playwright", "reconnaissance-then-action", "screenshot → sélecteurs"],
+     "description": "Test de webapps locales via Playwright (95 L) avec gestion cycle de vie serveur. Complément Playwright-native à notre web_tester (Puppeteer MCP)."},
+    {"path": f"{ACS_BASE}/webapp-testing/scripts/with_server.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["wait_for_port", "multi-serveur", "cycle de vie serveur"],
+     "description": "Démarre/arrête un serveur local proprement pendant les tests Playwright, attend que le port soit prêt. Pattern réutilisable pour le nœud Tester."},
+    # --- document-skills (exemple scripts-heavy) ---
+    {"path": f"{ACS_BASE}/document-skills/docx/ooxml/scripts/pack.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["pack", "unpack", "validate", "manipulation zip OOXML"],
+     "description": "Manipulation OOXML complète (~30 .py dans document-skills). Exemple le plus abouti de skill scripts-heavy : modèle de découplage SKILL.md (instructions) / scripts/ (déterministe) / references/ (doc). Illustre exécuter sans lire la source."},
+    # --- changelog-generator (exemple pure-instructions) ---
+    {"path": f"{ACS_BASE}/changelog-generator/SKILL.md", "type": "skill", "reuse": "medium",
+     "key_symbols": ["pure-instructions", "catégorisation commits → changelog"],
+     "description": "Transforme commits git en changelog user-friendly catégorisé (104 L, 0 script). Branchable sur post-hook Coder. Contre-point : skill pure-instructions (vs docx tout-script)."},
+]
+
+
 def main() -> None:
     data = json.loads(INVENTORY.read_text(encoding="utf-8"))
 
-    data["projects_audited"] = 17
+    data["projects_audited"] = 18
     data["audit_date"] = "2026-08-01"
 
     updated = []
@@ -340,10 +386,19 @@ def main() -> None:
                 "summary": "Collection de system prompts extraits/leakés d'outils IA commerciaux + open-source (32 dossiers, 83 txt + 17 json). Bibliothèque de patterns pour les system_prompts du projet. ~15 prompts d'agents de coding exploitables (Codex CLI, Manus, Augment, Claude Code 2.0, Gemini CLI, Devin, Cursor, Cline). 10 invariants universels identifiés (read-before-write, pas whole-file rewrite, test-first, approval gating, anti-boucle...). Réserves : biais JS/TS/React (80%), prompts leakés (préférer open-source pour citation verbatim), padding dans les gros fichiers.",
                 "files": SP_FILES,
             }
+        elif pid == "awesome-claude-skills":
+            project = {
+                "id": "awesome-claude-skills", "name": "awesome-claude-skills",
+                "path": "references/awesome-claude-skills",
+                "category": "skills",
+                "reuse_rating": "medium",
+                "summary": "Marketplace officielle Claude de skills (ComposioHQ). 30 skills top-level + 832 composio-skills SaaS. Valeur = patrimoine méthodologique, pas le contenu métier (25/30 skills sont business/marketing). Pivot : skill-creator (modèle 3-niveaux Progressive Disclosure = caution externe de P10) + init_skill.py/quick_validate.py (outillage) + mcp-builder (manuel MCP). Gap identifié : nos skills sont mono-fichiers (pas de scripts/references/assets) et chargées eager — P10 corrige ça.",
+                "files": ACS_FILES,
+            }
         updated.append(project)
         seen_ids.add(pid)
 
-    # Sécurité : si qm/claude-code/learn-claude-code/system-prompts n'étaient pas déjà présents, on les ajoute.
+    # Sécurité : si qm/claude-code/learn-claude-code/system-prompts/awesome-claude-skills n'étaient pas déjà présents, on les ajoute.
     if "qm" not in seen_ids:
         updated.append({"id": "qm", "name": "qm", "path": "references/qm",
                         "category": "agent-harness", "reuse_rating": "high",
@@ -364,6 +419,11 @@ def main() -> None:
                         "path": "references/system-prompts-and-models-of-ai-tools",
                         "category": "system-prompts", "reuse_rating": "high",
                         "summary": "(ajouté par update_inventory.py)", "files": SP_FILES})
+    if "awesome-claude-skills" not in seen_ids:
+        updated.append({"id": "awesome-claude-skills", "name": "awesome-claude-skills",
+                        "path": "references/awesome-claude-skills",
+                        "category": "skills", "reuse_rating": "medium",
+                        "summary": "(ajouté par update_inventory.py)", "files": ACS_FILES})
 
     data["projects"] = updated
 

@@ -4207,7 +4207,142 @@
           "description": "Schéma de function-calling (JSON). Référence pour concevoir les signatures d'outils DSPy/smolagents."
         }
       ]
+    },
+    {
+      "id": "awesome-claude-skills",
+      "name": "awesome-claude-skills",
+      "path": "references/awesome-claude-skills",
+      "category": "skills",
+      "reuse_rating": "medium",
+      "summary": "Marketplace officielle Claude de skills (ComposioHQ). 30 skills top-level + 832 composio-skills SaaS. Valeur = patrimoine méthodologique, pas le contenu métier (25/30 skills sont business/marketing). Pivot : skill-creator (modèle 3-niveaux Progressive Disclosure = caution externe de P10) + init_skill.py/quick_validate.py (outillage) + mcp-builder (manuel MCP). Gap identifié : nos skills sont mono-fichiers (pas de scripts/references/assets) et chargées eager — P10 corrige ça.",
+      "files": [
+        {
+          "path": "references/awesome-claude-skills/skill-creator/SKILL.md",
+          "type": "skill",
+          "reuse": "high",
+          "key_symbols": [
+            "Anatomy",
+            "Progressive Disclosure",
+            "three-level loading",
+            "Metadata",
+            "SKILL.md body",
+            "Bundled resources"
+          ],
+          "description": "Méta-skill pivot (209 L). Définit l'anatomie d'une skill ET le modèle 3-niveaux (Progressive Disclosure) : Metadata ~100 mots toujours en contexte → corps SKILL.md <5k mots au déclenchement → resources illimitées (scripts exécutés sans être lus). Caution externe du modèle P10."
+        },
+        {
+          "path": "references/awesome-claude-skills/skill-creator/scripts/init_skill.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "init_skill",
+            "scaffolding",
+            "SKILL.md + scripts/ + references/ + assets/"
+          ],
+          "description": "Génère le squelette canonique d'une skill (303 L) : SKILL.md + 3 dossiers. Réutilisable en l'état comme scripts/new_skill.py pour normaliser la création de nos skills."
+        },
+        {
+          "path": "references/awesome-claude-skills/skill-creator/scripts/quick_validate.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "validate_frontmatter",
+            "regex ^[a-z0-9-]+$",
+            "check chevrons <>"
+          ],
+          "description": "Valide (64 L) : name en hyphen-case strict, pas de --, pas de chevrons dans description, description explicite. À adopter comme gate CI/pre-commit sur notre dossier skills/."
+        },
+        {
+          "path": "references/awesome-claude-skills/skill-creator/scripts/package_skill.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "package_skill",
+            "zip bundling"
+          ],
+          "description": "Packaging zip d'une skill pour distribution marketplace. Mécanisme utile à comprendre ; moins pertinent pour nous."
+        },
+        {
+          "path": "references/awesome-claude-skills/mcp-builder/SKILL.md",
+          "type": "skill",
+          "reuse": "high",
+          "key_symbols": [
+            "Research",
+            "Implementation",
+            "Review",
+            "Evaluation",
+            "Build for Workflows",
+            "Optimize for Limited Context"
+          ],
+          "description": "Guide 4 phases (328 L) pour bâtir des serveurs MCP. Principes de design d'outils pour agents transposables à nos Hands smolagents : Build for Workflows Not Just API, Optimize for Limited Context, Actionable Error Messages, Evaluation-Driven Development."
+        },
+        {
+          "path": "references/awesome-claude-skills/mcp-builder/reference/mcp_best_practices.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [
+            "Build for Workflows",
+            "Optimize for Limited Context",
+            "Actionable Error Messages"
+          ],
+          "description": "Bonnes pratiques MCP. Principes de design d'outils transposables aux tools smolagents."
+        },
+        {
+          "path": "references/awesome-claude-skills/mcp-builder/reference/evaluation.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [
+            "10 questions XML",
+            "vérification"
+          ],
+          "description": "Pattern créer 10 questions d'évaluation XML + vérifier les réponses. Transposable au nœud Judge (création de cas de vérification)."
+        },
+        {
+          "path": "references/awesome-claude-skills/webapp-testing/SKILL.md",
+          "type": "skill",
+          "reuse": "medium",
+          "key_symbols": [
+            "Playwright",
+            "reconnaissance-then-action",
+            "screenshot → sélecteurs"
+          ],
+          "description": "Test de webapps locales via Playwright (95 L) avec gestion cycle de vie serveur. Complément Playwright-native à notre web_tester (Puppeteer MCP)."
+        },
+        {
+          "path": "references/awesome-claude-skills/webapp-testing/scripts/with_server.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "wait_for_port",
+            "multi-serveur",
+            "cycle de vie serveur"
+          ],
+          "description": "Démarre/arrête un serveur local proprement pendant les tests Playwright, attend que le port soit prêt. Pattern réutilisable pour le nœud Tester."
+        },
+        {
+          "path": "references/awesome-claude-skills/document-skills/docx/ooxml/scripts/pack.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "pack",
+            "unpack",
+            "validate",
+            "manipulation zip OOXML"
+          ],
+          "description": "Manipulation OOXML complète (~30 .py dans document-skills). Exemple le plus abouti de skill scripts-heavy : modèle de découplage SKILL.md (instructions) / scripts/ (déterministe) / references/ (doc). Illustre exécuter sans lire la source."
+        },
+        {
+          "path": "references/awesome-claude-skills/changelog-generator/SKILL.md",
+          "type": "skill",
+          "reuse": "medium",
+          "key_symbols": [
+            "pure-instructions",
+            "catégorisation commits → changelog"
+          ],
+          "description": "Transforme commits git en changelog user-friendly catégorisé (104 L, 0 script). Branchable sur post-hook Coder. Contre-point : skill pure-instructions (vs docx tout-script)."
+        }
+      ]
     }
   ],
-  "projects_audited": 17
+  "projects_audited": 18
 }

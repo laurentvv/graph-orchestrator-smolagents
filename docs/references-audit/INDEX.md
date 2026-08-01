@@ -9,8 +9,8 @@
 | Métrique | Valeur |
 |---|---|
 | **Date de l'audit** | 2026-08-01 |
-| **Projets/dossiers audités** | 17 |
-| **Entrées de fichiers inventoriées** | 391 (inventaire machine : [`inventory.json`](./inventory.json)) |
+| **Projets/dossiers audités** | 18 |
+| **Entrées de fichiers inventoriées** | 402 (inventaire machine : [`inventory.json`](./inventory.json)) |
 | **Fichiers pertinents scannés** (base) | ~10 000 (hors `.git/`, `node_modules/`, médias, fixtures) |
 | **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css`) + JSON/YAML de spec/contrat |
 | **Exclusions** | `.git/` (~730 MB), `node_modules/`, médias (1 293 SVG, 16 mp4…), fixtures de tests, traductions de README (1 conservée/projet) |
@@ -19,7 +19,7 @@
 
 ---
 
-## 🧭 Navigation — les 17 fiches
+## 🧭 Navigation — les 18 fiches
 
 | # | Projet | Réutilisabilité | Fiche | Résumé en 1 ligne |
 |---|---|---|---|---|
@@ -40,6 +40,7 @@
 | 15 | **claude-code-unified-agents** | 🟡 Moyenne | [15-claude-code-unified-agents](./projects/15-claude-code-unified-agents.md) | 53 (et non 54) agents Claude Code — ~8 prompts purs alignés avec les rôles Router/Coder/Tester/Judge/Security ; reste = code TS non portable |
 | 16 | **learn-claude-code** | 🟢 Haute | [16-learn-claude-code](./projects/16-learn-claude-code.md) | Cours 20 leçons déconstruisant Claude Code en harness engineering — **Python natif** : hooks, compaction, error recovery, skill loading, task DAG (patterns directement portables) |
 | 17 | **system-prompts-and-models-of-ai-tools** | 🟢 Haute | [17-system-prompts-and-models-of-ai-tools](./projects/17-system-prompts-and-models-of-ai-tools.md) | Collection de system prompts extraits d'outils IA (32 dossiers) — **bibliothèque de patterns** pour nos prompts : Codex CLI, Manus, Claude Code 2.0, Gemini CLI, Cursor + 10 invariants universels |
+| 18 | **awesome-claude-skills** | 🟡 Moyenne | [18-awesome-claude-skills](./projects/18-awesome-claude-skills.md) | Marketplace officielle Claude de skills — **doctrine du format SKILL.md** (modèle 3-niveaux Progressive Disclosure) + outillage (`init_skill.py`/`quick_validate.py`) + `mcp-builder`. Caution externe de P10 |
 
 ---
 
@@ -52,7 +53,7 @@
 `axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm)**, **patterns harness Python natifs (learn-claude-code)**.
 
 ### 3. 📚 Ressources & outils
-`Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante), `claude-code-unified-agents` (prompts de spécialisation), `system-prompts-and-models-of-ai-tools` (**bibliothèque de system prompts** d'outils commerciaux/open-source).
+`Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante), `claude-code-unified-agents` (prompts de spécialisation), `system-prompts-and-models-of-ai-tools` (**bibliothèque de system prompts** d'outils commerciaux/open-source), `awesome-claude-skills` (**doctrine du format SKILL.md** + outillage).
 
 ---
 
@@ -172,6 +173,20 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | `…/Traycer AI/phase_mode_prompts.txt` | **Architect pur** | **Read-only tech lead** (« You DO NOT write code »), 46 lignes. Modèle du Read-Only |
 | **10 invariants universels** (section fiche 17) | **Tous les rôles** | read-before-write, pas whole-file rewrite, format d'édition formel, NEVER assume lib, test-first, approval gating, anti-boucle, concision, todo tracking, parallel tool calls |
 
+### Doctrine du format SKILL.md (awesome-claude-skills)
+> 🎓 **Patrimoine méthodologique** (pas du contenu métier — 25/30 skills sont business). La valeur : le **modèle 3-niveaux** (Progressive Disclosure) qui formalise exactement notre P10 (lazy loading), l'**outillage** de création/validation des skills, et `mcp-builder`. Gap identifié : nos skills sont mono-fichiers + chargées eager ; P10 corrige ça.
+
+| Fichier | Symbole(s) clé(s) | Apport |
+|---|---|---|
+| `…/skill-creator/SKILL.md` | `Progressive Disclosure`, `three-level loading`, `Metadata`, `SKILL.md body`, `Bundled resources` | **Doctrine du modèle 3-niveaux** : Metadata ~100 mots (toujours en contexte) → corps <5k mots (au déclenchement) → resources illimitées (scripts exécutés sans être lus). **Caution externe de P10** |
+| `…/skill-creator/scripts/init_skill.py` | `init_skill`, scaffolding `SKILL.md` + 3 dossiers | Génère le squelette canonique d'une skill. À adapter en `scripts/new_skill.py` |
+| `…/skill-creator/scripts/quick_validate.py` | `validate_frontmatter`, regex `^[a-z0-9-]+$`, check `<>` | Valide name/description/hyphen-case. **À adopter comme gate CI** sur `skills/` |
+| `…/mcp-builder/SKILL.md` + `reference/mcp_best_practices.md` | `Build for Workflows`, `Optimize for Limited Context`, `Actionable Error Messages` | Manuel MCP + principes de design d'outils transposables aux « Hands » smolagents |
+| `…/mcp-builder/reference/evaluation.md` | pattern « 10 QA XML + vérification » | Input pour le **nœud Judge** (cas de vérification) |
+| `…/document-skills/docx/ooxml/scripts/pack.py` (+ `unpack.py`, `validate.py`) | manipulation zip OOXML | **Exemple le plus abouti de skill « scripts-heavy »** : découplage SKILL.md / scripts / references. « Exécuter sans lire la source » |
+| `…/webapp-testing/scripts/with_server.py` | `wait_for_port`, cycle de vie serveur | Complément Playwright au **nœud Tester** (notre `web_tester` est Puppeteer) |
+| **Format SKILL.md canonique** (section fiche 18) | frontmatter `name`+`description`, `When to Use`, `scripts/`+`references/`+`assets/` | Structure récurrente adoptée par la marketplace officielle Claude. Nos SKILL.md sont déjà compatibles (même frontmatter) |
+
 ---
 
 ## 📊 Matrice réutilisabilité croisée
@@ -195,13 +210,15 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | **claude-code-unified-agents** | **7** | **5** | **1** | 🟡 **Moyenne** |
 | **learn-claude-code** | **11** | **5** | **2** | 🟢 **Haute** |
 | **system-prompts-and-models-of-ai-tools** | **12** | **5** | **0** | 🟢 **Haute** |
-| **Total** | **166** | **141** | **82** | — |
+| **awesome-claude-skills** | **5** | **6** | **0** | 🟡 **Moyenne** |
+| **Total** | **171** | **147** | **82** | — |
 
 **Constats** :
 - **axon** (23 Haute) et **aider** (17 Haute) restent les mines d'or côté Python.
 - **qm** (17 Haute) rejoint le peloton de tête : malgré le TypeScript, ses algorithmes de **compaction de contexte, mémoire durable, idempotency et queues à leases** sont portables. (L'ancienne fiche la notait Moyenne à tort.)
 - **learn-claude-code** (11 Haute, 🟢 Haute) : la référence la plus **directement exploitable** pour les briques transversales (hooks, compaction, error recovery, skill loading, task DAG) car **Python natif** — portage quasi littéral, contrairement à qm (TS).
 - **system-prompts-and-models-of-ai-tools** (12 Haute, 🟢 Haute) : **bibliothèque de patterns** pour les system_prompts. 10 invariants universels identifiés (read-before-write, test-first, approval gating…). À utiliser comme matière première pour P0 (spécialisation) et P6 (Judge/TDD).
+- **awesome-claude-skills** (5 Haute, 🟡 Moyenne) : valeur = **patrimoine méthodologique** (format SKILL.md, modèle 3-niveaux, outillage) pas le contenu métier (25/30 skills business). Pivot pour P10.
 - **deer-flow** (21 Haute) malgré une note globale Moyenne — la valeur est dans les contracts/plans/middlewares.
 - **claude-code-unified-agents** : 7 prompts purs 🟢 (alignés avec les rôles du graphe), mais la majorité des 53 fichiers est du code TS non portable → note Moyenne. (L'ancienne fiche la notait Haute à tort.)
 - **opencode/openfox** (TS) : peu de Haute, leurs **specs/docs** restent des références conceptuelles au mieux.
@@ -246,6 +263,10 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | Un **patron d'approval gating** pour actions destructives | Fiche **17-system-prompts** → `Cline` (`requires_approval`), `Replit` (`is_dangerous`), `Codex CLI` (4 modes approval) |
 | Une **spec du format SEARCH/REPLACE** (règles exhaustives) | Fiche **17-system-prompts** → `Cline/Prompt.txt` (règles 1-4 + move/delete) |
 | Des **schémas de function-calling** pour concevoir nos tools | Fiche **17-system-prompts** → `Cursor Prompts/Agent Tools v1.0.json`, `Replit/Tools.json` |
+| La **doctrine du format SKILL.md** (modèle 3-niveaux, progressive disclosure) | Fiche **18-awesome-claude-skills** → `skill-creator/SKILL.md` (§Progressive Disclosure) |
+| Un **outil de scaffolding/validation** pour nos skills | Fiche **18-awesome-claude-skills** → `skill-creator/scripts/init_skill.py` + `quick_validate.py` |
+| Un **manuel pour construire un serveur MCP** | Fiche **18-awesome-claude-skills** → `mcp-builder/SKILL.md` + `reference/python_mcp_server.md` |
+| Un **pattern de cycle de vie serveur** pour le Tester (Playwright) | Fiche **18-awesome-claude-skills** → `webapp-testing/scripts/with_server.py` |
 
 ---
 
@@ -255,8 +276,8 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 docs/references-audit/
 ├── README.md              ← Mode d'emploi (start ici)
 ├── INDEX.md               ← CE DOCUMENT (navigation + synthèse + Hall of Fame)
-├── inventory.json         ← Inventaire machine-lisible (391 entrées, filtrable)
-└── projects/              ← 17 fiches détaillées (1 par projet)
+├── inventory.json         ← Inventaire machine-lisible (402 entrées, filtrable)
+└── projects/              ← 18 fiches détaillées (1 par projet)
     ├── 01-prompt-vault.md
     ├── 02-aider.md
     ├── ...
@@ -264,7 +285,8 @@ docs/references-audit/
     ├── 14-qm.md
     ├── 15-claude-code-unified-agents.md
     ├── 16-learn-claude-code.md
-    └── 17-system-prompts-and-models-of-ai-tools.md
+    ├── 17-system-prompts-and-models-of-ai-tools.md
+    └── 18-awesome-claude-skills.md
 ```
 
 **Pour recherche programmatique** : `inventory.json` est consommable directement :
