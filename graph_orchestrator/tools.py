@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import subprocess
 from smolagents import tool
 
@@ -97,8 +98,7 @@ def write_file(path: str, content: str) -> str:
             )
         
         # Garde anti-squelette HTML (bug "incremental" des petits modèles distants).
-        import re
-        if bool(re.search(r"<body[^>]*>\s*(?:<!--.*?-->\s*)*</body>", stripped, re.IGNORECASE)) or (
+        if bool(re.search(r"<body[^>]*>\s*(?:<!--.*?-->\s*)*</body>", stripped, re.IGNORECASE | re.DOTALL)) or (
             path.endswith(".html") and len(stripped) < 200 and "<html" in stripped.lower()
         ):
             return (
