@@ -1709,3 +1709,34 @@ unitaires (pas encore par run réel — étape suivante).
 - **Sources web consignées** : doc Kilo Code Enhance Prompt, discussion Cline #2552 Prompt
   Refiner Agent — confirment le design (template ${userInput} réécrit, objectifs clarté/contexte/
   format/désambiguïsation/cohérence).
+
+## [2026-08-01] eval | TEST RÉEL du PromptRefiner (vrai gemma-12B localhost GPU) — VALIDÉ ✅
+*Avant merge PR #16 : premier test réel (jusqu'ici tous les tests étaient mockés). Script standalone
+_test_prompt_refiner_real.py (supprimé après) sur 2 prompts contrastés.*
+
+### Prompt VAGUE → transformation spectaculaire (ROI prouvé)
+- Brut : "fais une belle app de todo list moderne et rapide en html css js"
+- Raffiné (1894 car, 3 ambiguïtés) :
+  - Détection termes vagues : ['belle', 'moderne', 'rapide'] ✅ (claude-code requirements-analyst).
+  - Fonctionnalités structurées : ajout/marquer/supprimer + localStorage (PERSISTANCE inférée
+    intelligemment, pas inventée) + filtrage Toutes/En cours/Terminées.
+  - Contraintes : stack vanilla + CITE frontend-design (catalogue capacités fonctionne !) + 3 fichiers.
+  - Critères Given/When/Then : "Étant donné qu'un utilisateur saisit du texte et clique sur 'Ajouter'...".
+  - Section "À clarifier" : palette couleurs, icônes — a reconnu les manques SANS les inventer.
+  → Règle "Tu STRUCTURES, tu n'INVENTES PAS" respectée. L'Architect planifiera beaucoup mieux.
+
+### Prompt DÉJÀ CLAIR → non dégradé, enrichi
+- Brut : visualiseur tri à bulles, 20 barres, Start, orange/vert.
+- Raffiné (1775 car) : préserve TOUTES les exigences originales + ajoute délai animation (50-100ms),
+  génération aléatoire au chargement, responsive, CITE web-tester pour validation.
+  → Règle "ne dégrade pas une bonne entrée" respectée. ✅
+
+### ⚠️ Point d'attention : LATENCE
+- Prompt vague : 318s (~5 min). Prompt clair : 247s (~4 min).
+- ÉNORME sur le chemin critique (avant l'Architect). Un run complet coûterait ~10 min de plus.
+- Cause probable : max_tokens=8192 dans _configure_dspy laisse gemma générer un long CoT + spec.
+
+### Décision (choix user)
+- MERGE TEL QUEL. Le toggle PROMPT_REFINER_ENABLED=false permet de le désactiver en attendant.
+- OPTIMISATION LATENCE = cycle suivant (réduire max_tokens ~2000, ou passer en FAST, ou opt-in
+  par défaut). À évaluer : la qualité de la spec reste-t-elle bonne avec moins de tokens ?
