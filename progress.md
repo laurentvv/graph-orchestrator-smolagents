@@ -175,6 +175,27 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape 3 : Application des modifications au plan_usine_logicielle.md.
 - [x] Étape 4 : Mise à jour de log.md, progress.md, et feature_list.json.
 
+## Jalons de l'Itération (nœud PromptRefiner — F-39, meta-prompt avant l'Architect)
+- [x] Étape PR-1 : Exploration (Router/Architect DSPy, checkpoint, test patterns) + recherche web
+  Kilo Code/Cline "Enhance Prompt" (sources consignées log.md). Plan approuvé (Phase 1 seule ;
+  Phase 2 MIPROv2 écartée — signal biaisé mono-modèle 6 Go VRAM).
+- [x] Étape PR-2 : models.py PromptRefinerOutput (refined_prompt + ambiguities_detected).
+- [x] Étape PR-3 : dspy_nodes.py — PromptRefinerSignature (2 inputs, docstring pipeline aligné
+  Kilo/Cline/open-swe) + _build_capabilities_summary (catalogue complet via list_skills, repli
+  défensif dossier skills/, statut Context7, testers statiques) + execute_prompt_refiner_node
+  (clone execute_router_node, gemma REASONING, dégradation None,None).
+- [x] Étape PR-4 : config.py + .env.example — prompt_refiner_enabled (défaut True).
+- [x] Étape PR-5 : workflows.py — branchement APRÈS run_id (critique : hash stable) AVANT Router +
+  checkpoint refined_prompt (skip LLM à la reprise).
+- [x] Étape PR-6 : tests/test_prompt_refiner.py (8 tests). BUG DÉCOUVERT + CORRIGÉ : les 3 helpers
+  E2E existants (test_escalation/test_checkpoint/test_feedback_integration) ne mockaient pas
+  execute_prompt_refiner_node → le workflow appelait le VRAI LLM en test → hang. Correctif :
+  ajout d'un mock passe-through (None → repli prompt brut) dans les 3 helpers.
+- [x] Étape PR-7 : Suite pytest complète → 379 passed / 0 failed (371 avant + 8 nouveaux). 0 régression.
+- [x] Étape PR-8 : État disque synchronisé (contract.md +9 critères 96-104, feature_list.json
+  +F-39, progress.md, plan_usine_logicielle.md +Priorité 12 +Phase 2 chantier futur, README.md,
+  .env.example, log.md). Commit + push + PR.
+
 ## Jalons de l'Itération (cycle 3 tâches rapides : Anti-Loop P3 + Nettoyage DOM P6 + Guard bash P8-bis)
 - [x] Étape TR-1 : Sélection des 2 tâches les plus rapides et isolées du plan (P3 ligne 73
   + P6 ligne 108). Écart de l'Anti-Loop SHA256 (nodes.py) et du Nettoyage DOM (web_tester.py).

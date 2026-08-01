@@ -159,6 +159,21 @@ class Settings:
     # Valeur par défaut True : on sécurise par défaut (fail-safe).
     bash_guard_enabled: bool = True
 
+    # --- Nœud PromptRefiner (meta-prompt avant l'Architect) ---
+    # Un nœud DSPy (gemma REASONING) reformule le prompt utilisateur brut en spec structurée
+    # AVANT l'Architect, inspiré du pattern "Enhance Prompt" (Kilo Code / Cline / Roo Code).
+    # Connaît le catalogue des capacités (skills + statut Context7 + testers) pour orienter la
+    # spec. Si False, l'Architect reçoit le prompt brut tel quel (comportement historique).
+    # Opt-out utile si la latence du nœud supplémentaire n'est pas acceptable.
+    prompt_refiner_enabled: bool = True
+
+    # --- Modèle dédié pour le PromptRefiner (optionnel) ---
+    # Si vide (défaut), le PromptRefiner utilise reasoning_model_id (gemma-12B). Test réel :
+    # le 12B met ~5min/prompt (overkill pour de la reformulation). Sur GPU 6 Go, le gemma-4-E4B
+    # (5.2 Go, ~8× plus rapide pour qualité équivalente — voir log.md test comparatif) est un
+    # bien meilleur choix. Setter PROMPT_REFINER_MODEL_ID dans .env pour cibler un modèle dédié.
+    prompt_refiner_model_id: str = ""
+
 
 def load_settings() -> Settings:
     """Construit les settings depuis l'environnement (avec valeurs par défaut)."""
@@ -199,6 +214,8 @@ def load_settings() -> Settings:
         loop_guard_enabled=_get_bool("LOOP_GUARD_ENABLED", True),
         loop_guard_threshold=_get_int("LOOP_GUARD_THRESHOLD", 3),
         bash_guard_enabled=_get_bool("BASH_GUARD_ENABLED", True),
+        prompt_refiner_enabled=_get_bool("PROMPT_REFINER_ENABLED", True),
+        prompt_refiner_model_id=_get_str("PROMPT_REFINER_MODEL_ID", ""),
     )
 
 

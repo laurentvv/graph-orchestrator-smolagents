@@ -52,6 +52,11 @@ class TestTruncationInLoop:
             return RouterOutput(language="HTML"), None
         monkeypatch.setattr(dspy_mod, "execute_router_node", fake_router)
 
+        # F-39 : mocke le PromptRefiner (pas d'appel LLM en test E2E ; repli prompt brut).
+        async def fake_prompt_refiner(raw, model, s):
+            return None, None
+        monkeypatch.setattr(dspy_mod, "execute_prompt_refiner_node", fake_prompt_refiner)
+
         # Architect : 1 seule sous-tâche (on veut isoler la boucle de feedback).
         async def fake_architect(task, model, s):
             return ArchitectOutput(

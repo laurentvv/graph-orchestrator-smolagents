@@ -147,6 +147,11 @@ def _setup_workflow_mocks(monkeypatch, kg_path=":memory:", approve=True,
         return RouterOutput(language="HTML"), None
     monkeypatch.setattr(dspy_mod, "execute_router_node", fake_router)
 
+    # F-39 : mocke le PromptRefiner (pas d'appel LLM en test E2E ; repli prompt brut).
+    async def fake_prompt_refiner(raw, model, s):
+        return None, None
+    monkeypatch.setattr(dspy_mod, "execute_prompt_refiner_node", fake_prompt_refiner)
+
     # Architect : 2 sous-tâches déterministes.
     async def fake_architect(task, model, s):
         plan = ArchitectOutput(
