@@ -268,3 +268,13 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape OP-5 : Tests — `tests/test_orphan_repair.py` 11 tests ; vérif `orphan+guard+loop_guard` = 35 passed ; suite complète = 405 passed / 0 failed (0 régression).
 - [x] Étape OP-6 : État disque synchronisé — feature_list.json +F-41, contract.md +critères 114-121, plan_usine_logicielle.md P8 [x], progress.md, README.md, log.md.
 
+## Jalons de l'Itération (P8 — Sanitizer, Auto-typage des arguments d'outil, F-42)
+- [x] Étape SZ-1 : Contexte — petit LLM émet des args malformés (offset="1, 80", replace_all="true") → TypeError validation smolagents → retries gaspillés. Flux de validation tracé (agents.py:1476 validate_tool_arguments). Chemin CodeAgent confirmé : executor local expose les outils et les appelle via `__call__` directement (PAS execute_tool_call/validate_tool_arguments) → proxy `__call__` intercepte avant `forward`.
+- [x] Étape SZ-2 : `sanitizer.py` niveau coercition — `_parse_string_to_structure` (json.loads→ast.literal_eval fallback), `_coerce_integer` (dernier entier d'une chaîne), `_coerce_number`, `_coerce_boolean` (true/1/yes/on→True), `coerce_value` (array/object/string/None respecté, best-effort), `sanitize_tool_arguments` (clés connues seulement, non-dict intact).
+- [x] Étape SZ-3 : `sanitizer.py` niveau proxy — `SanitizedTool(BaseTool)` copie name/description/inputs/output_type, intercepte `__call__` pour coerçer kwargs avant de déléguer à l'outil réel ; `wrap_tool` + `sanitize_tools(enabled)` no-op quand disabled.
+- [x] Étape SZ-4 : Config `sanitizer_enabled` (env `SANITIZER_ENABLED`, défaut True) dans `config.py` (champ dataclass + load_settings).
+- [x] Étape SZ-5 : Branchement `nodes.execute_coder_node` + `execute_architect_node` via `sanitize_tools(..., enabled=settings.sanitizer_enabled)`.
+- [x] Étape SZ-6 : Tests — `tests/test_sanitizer.py` 23 tests (coercion 13 + sanitize 4 + proxy 3 + wrap 3) ; 23/23 PASS.
+- [x] Étape SZ-7 : Suite pytest complète → 417 passed / 0 failed (394 baseline + 23 nouveaux), 0 régression. web_tester_functional désélectionné (nécessite Chrome/npx).
+- [x] Étape SZ-8 : État disque synchronisé — feature_list.json +F-42, contract.md +critères 122-129, progress.md, README.md, log.md.
+

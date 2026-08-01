@@ -150,6 +150,13 @@ class Settings:
     loop_guard_enabled: bool = True
     loop_guard_threshold: int = 3
 
+    # --- Sanitizer (Auto-typage, Priorité 8 / F-42) ---
+    # Coerce best-effort les arguments d'outil malformés émis par un petit LLM
+    # (ex: `"1, 80"` → `80` pour un champ integer) AVANT l'appel d'outil, pour
+    # éviter les retries gaspillés sur les erreurs de validation de type.
+    # Déterministe, 0 LLM. Opt-out `SANITIZER_ENABLED=0` pour A/B ou debug.
+    sanitizer_enabled: bool = True
+
     # --- Guard bash denylist (Priorité 8-bis : robustesse runtime) ---
     # `bash_command` exécute des commandes issues du LLM via shell=True. Un guard
     # denylist bloque les commandes destructrices (rm -rf /, format, mkfs, dd vers
@@ -221,6 +228,7 @@ def load_settings() -> Settings:
         auto_install_deps=_get_bool("AUTO_INSTALL_DEPS", True),
         loop_guard_enabled=_get_bool("LOOP_GUARD_ENABLED", True),
         loop_guard_threshold=_get_int("LOOP_GUARD_THRESHOLD", 3),
+        sanitizer_enabled=_get_bool("SANITIZER_ENABLED", True),
         bash_guard_enabled=_get_bool("BASH_GUARD_ENABLED", True),
         prompt_refiner_enabled=_get_bool("PROMPT_REFINER_ENABLED", True),
         prompt_refiner_model_id=_get_str("PROMPT_REFINER_MODEL_ID", ""),

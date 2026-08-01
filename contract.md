@@ -153,6 +153,16 @@
 - [ ] Critère 120 : L'intégration dans `nodes.run_with_retry` est défensive (bloc `try/except Exception`) et répare la mémoire avant chaque exécution d'agent — vérifié par lecture du code (P8 block, lignes ~174-189).
 - [ ] Critère 121 : La suite pytest complète passe toujours (0 régression ; `tests/test_orphan_repair.py` 11 tests + `test_guard.py` + `test_loop_guard.py`, total 405 passed / 0 failed).
 
+## Critères du Sanitizer (Auto-typage des arguments d'outil — F-42)
+- [ ] Critère 122 : `coerce_value("1, 80", {"type": "integer"})` renvoie `80` (dernier entier de la chaîne) — le cas cible F-42, testé `test_coerce_integer_extracts_last_number`.
+- [ ] Critère 123 : `coerce_value` préserve les valeurs déjà typées (int→int, float→int tronqué, bool→bool) et laisse les valeurs non coercibles inchangées (`"abc"`→`"abc"`) — testé `test_coerce_integer_already_int_and_float` + `test_coerce_integer_uncoercible_left_intact` + `test_coerce_integer_bool_preserved`.
+- [ ] Critère 124 : `coerce_value` gère `number` (string→float), `boolean` (`"true"`/`"1"`/`"yes"`/`"on"`→True ; `"false"`/`"0"`/`"no"`/`"off"`→False ; non reconnu→inchangé), `string` (non-str→str()) — testé `test_coerce_number` + `test_coerce_boolean` + `test_coerce_string`.
+- [ ] Critère 125 : `coerce_value` parse les structures `array`/`object` depuis une string JSON (`json.loads`→`ast.literal_eval` fallback) et laisse une string non parsable inchangée ; `None` respecté (nullable) — testé `test_coerce_array_from_json_string` + `test_coerce_object_from_json_string` + `test_coerce_unparseable_structure_left_intact` + `test_coerce_none_respected`.
+- [ ] Critère 126 : `sanitize_tool_arguments` coerce uniquement les clés connues du schéma `inputs` ; les clés inconnues restent inchangées ; les arguments non-dict et les `inputs` non-dict sont renvoyés inchangés — testé `test_sanitize_known_keys_only` + `test_sanitize_unknown_keys_untouched` + `test_sanitize_non_dict_arguments_untouched` + `test_sanitize_non_dict_inputs_noop`.
+- [ ] Critère 127 : `SanitizedTool` copie `name`/`description`/`inputs`/`output_type` de l'outil sous-jacent et délègue à son `__call__` en coerçant les kwargs (l'outil réel reçoit des arguments typés, pas les strings) — testé `test_sanitized_tool_copies_metadata` + `test_sanitized_tool_coerces_and_delegates`.
+- [ ] Critère 128 : `SanitizedTool` reste un `BaseTool` (satisfait les `isinstance` du framework) ; `wrap_tool` enveloppe un `BaseTool` ; `sanitize_tools(enabled=True)` enveloppe tous, `sanitize_tools(enabled=False)` est no-op (même objet liste) — testé `test_sanitized_tool_valid_callable_isinstance` + `test_wrap_tool_wraps_base_tool` + `test_sanitize_tools_enabled_wraps_all` + `test_sanitize_tools_disabled_is_noop`.
+- [ ] Critère 129 : Le branchement dans `nodes.execute_coder_node` et `execute_architect_node` enveloppe les tool sets via `sanitize_tools(..., enabled=settings.sanitizer_enabled)` ; config `sanitizer_enabled` (env `SANITIZER_ENABLED`, défaut True) ajoutée à `config.py` — vérifié par lecture du code (lignes ~424-427 Architect, ~488-491 Coder ; config.py champ + load_settings).
+
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.
 * Validation process : `uv run python -m graph_orchestrator.workflows` (WORKFLOW_MODE=coding) →
