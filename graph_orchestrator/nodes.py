@@ -34,6 +34,7 @@ from .tools import read_file, write_file, append_file, edit_file, bash_command, 
 from .skills_loader import build_skills_block
 from .loop_guard import LoopGuard, extract_tool_calls_from_step
 from .orphan_repair import repair_orphan_steps
+from .sanitizer import sanitize_tools
 
 @tool
 def query_duckdb_knowledge_graph(sql_query: str) -> str:
@@ -416,8 +417,14 @@ async def execute_architect_node(
 ) -> Tuple[Optional[ArchitectOutput], Optional[NodeMetrics]]:
     """Nœud Architecte : planifie et décompose une tâche globale en sous-tâches isolées."""
     from smolagents import DuckDuckGoSearchTool, CodeAgent
+    # F-42 (Sanitizer) : les arguments d'outil du petit LLM (Architect sur gemma
+    # local) sont coerce best-effort vers le type déclaré avant exécution, pour
+    # éviter les retries gaspillés sur les erreurs de validation de type.
     local_architect = CodeAgent(
-        tools=[list_directory, read_file, bash_command, DuckDuckGoSearchTool(), query_duckdb_knowledge_graph],
+        tools=sanitize_tools(
+            [list_directory, read_file, bash_command, DuckDuckGoSearchTool(), query_duckdb_knowledge_graph],
+            enabled=settings.sanitizer_enabled,
+        ),
         model=reasoning_model,
         name=f"architect_{task['id'].replace('-', '_')}",
         description="Architecte Logiciel Senior qui analyse le projet et décompose la tâche en modules JSON.",
@@ -478,6 +485,10 @@ async def execute_coder_node(
         # skill context7-research (dormant sur vanilla, actif sur libs externes).
         coder_tools = [list_directory, read_file, write_file, append_file, edit_file, search_replace, DuckDuckGoSearchTool()]
         coder_tools.extend(c7_tools)
+        # F-42 (Sanitizer) : coerce best-effort les arguments malformés du petit
+        # LLM (ex: offset="1, 80" → 80) avant l'appel d'outil → moins de retries
+        # gaspillées sur les erreurs de validation de type. Opt-out via settings.
+        coder_tools = sanitize_tools(coder_tools, enabled=settings.sanitizer_enabled)
 
         # P1 : migration ToolCallingAgent → CodeAgent. Les petits modèles locaux (gemma)
         # ne savent pas émettre de tool_call JSON fiable (tool_calls=None, finish_reason=
