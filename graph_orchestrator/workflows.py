@@ -247,11 +247,35 @@ async def run_coding_workflow(
         execute_security_reviewer_node,
         execute_code_judge_node,
         execute_escalation_node,
-        execute_router_node
+        execute_router_node,
+        execute_prompt_refiner_node,
     )
     
     # Routine initiale de routage
     task_content = seed_tasks[0]['content'] if seed_tasks else ""
+
+    # --- Nœud PromptRefiner (F-39, meta-prompt avant l'Architect) ---------------
+    # Reformule le prompt brut en spec structurée AVANT le Router et l'Architect, inspiré
+    # du pattern "Enhance Prompt" (Kilo Code / Cline). ORDE CRITIQUE : ce bloc s'exécute
+    # APRÈS le calcul du run_id (l.221, hash du prompt BRUT) — sinon le hash deviendrait
+    # non-déterministe (le LLM génère du texte différent à chaque run) et casserait la
+    # reprise après crash. Ici on mute task_content, pas le run_id.
+    #
+    # Skip LLM si checkpoint contient déjà le refined_prompt (économie à la reprise).
+    if checkpoint and checkpoint.get("refined_prompt"):
+        task_content = checkpoint["refined_prompt"]
+        if seed_tasks:
+            seed_tasks[0]['content'] = task_content
+        print(f"[↩] PromptRefiner : spec RECHARGÉE depuis le checkpoint ({len(task_content)} caractères).")
+    elif settings.prompt_refiner_enabled and seed_tasks:
+        refined, m_refine = await execute_prompt_refiner_node(task_content, reasoning_model, settings)
+        if m_refine:
+            all_metrics.append(m_refine)
+        if refined and refined.refined_prompt.strip():
+            task_content = refined.refined_prompt
+            seed_tasks[0]['content'] = task_content
+        # Si refined est None (LLM down), on garde task_content brut (dégradation gracieuse).
+
     print(f"[*] Analyse de la requête par le routeur ultra-rapide ({settings.fast_model_id})...")
     router_res, m0 = await execute_router_node(task_content, fast_model, settings)
     if m0: all_metrics.append(m0)
@@ -299,6 +323,11 @@ async def run_coding_workflow(
             "completed_subtasks": list(coding_state["completed_subtasks"]),
             "current_subtask_idx": subtask_idx,
             "current_iteration": iteration,
+            # F-39 : on persiste le prompt raffiné par le PromptRefiner pour skipper ce
+            # nœud LLM à la reprise (même logique que architect_result). task_content a
+            # déjà été muté au point d'insertion du PromptRefiner, donc coding_state
+            # ["seed_content"] contient la version raffinée (ou brute si désactivé/down).
+            "refined_prompt": coding_state["seed_content"],
         })
 
     async def process_subtask_loop(subtask, start_iteration: int = 1) -> Tuple[dict, List[NodeMetrics]]:

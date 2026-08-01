@@ -55,6 +55,23 @@ class ArchitectOutput(BaseModel):
     subtasks: List[ArchitectTask]
 
 
+class PromptRefinerOutput(BaseModel):
+    """Spec structurée produite par le PromptRefiner, à consommer par l'Architect.
+
+    Le PromptRefiner (dspy_nodes.py) reformule le prompt utilisateur brut en une spec
+    claire et structurée AVANT l'Architect, en s'inspirant du pattern "Enhance Prompt"
+    de Kilo Code / Cline / Roo Code (réécriture LLM du prompt). Le `refined_prompt`
+    remplace le prompt brut dans `seed_tasks[0]['content']` et est propagé à l'Architect,
+    au Tester (via original_content) et au Judge (via task_requirements).
+
+    `ambiguities_detected` est une liste de transparence (termes vagues repérés dans le
+    prompt brut type 'fast', 'user-friendly', 'flexible'...) : elle ne sert pas en aval,
+    mais permet d'observer la qualité du raffinement dans les logs.
+    """
+    refined_prompt: str
+    ambiguities_detected: List[str] = []
+
+
 class CoderOutput(BaseModel):
     """Résultat d'un nœud Coder (exécution de code / modification de fichiers)."""
     task_id: str

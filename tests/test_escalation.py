@@ -164,6 +164,12 @@ def _setup_workflow_mocks(monkeypatch, approve=True, escalation_output=None,
         return RouterOutput(language="HTML"), None
     monkeypatch.setattr(dspy_mod, "execute_router_node", fake_router)
 
+    # F-39 : mocke le PromptRefiner pour ne pas joindre l'API LLM en test E2E.
+    # Passe-through None → repli sur prompt brut (comportement historique des tests).
+    async def fake_prompt_refiner(raw, model, s):
+        return None, None
+    monkeypatch.setattr(dspy_mod, "execute_prompt_refiner_node", fake_prompt_refiner)
+
     async def fake_architect(task, model, s):
         return ArchitectOutput(
             plan_id="p1", global_architecture="1 fichier",

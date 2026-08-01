@@ -26,6 +26,7 @@ from .models import (
     ArchitectOutput,
     CodeJudgeOutput,
     EscalationOutput,
+    PromptRefinerOutput,
     RouterOutput,
     SecurityOutput,
 )
@@ -45,6 +46,42 @@ class RouterSignature(dspy.Signature):
     """
     task_content: str = dspy.InputField(desc="La requête initiale ou directive de l'utilisateur fournie au graphe")
     output: RouterOutput = dspy.OutputField(desc="Décision de routage structurée, typée strictement par le schéma Pydantic RouterOutput")
+
+
+class PromptRefinerSignature(dspy.Signature):
+    """Tu es un PromptRefiner : tu reformules le prompt utilisateur brut en une SPEC STRUCTURÉE
+    et NON-AMBIGUË, directement exploitable par un Architect logiciel. Inspiré du pattern
+    "Enhance Prompt" (Kilo Code / Cline / Roo Code).
+
+    Pipeline obligatoire :
+    1. CLARTÉ & DÉSAMBIGUÏSATION : détecte les termes VAGUES du prompt brut (ex: 'rapide',
+       'user-friendly', 'flexible', 'moderne', 'optimisé', 'beau') et liste-les dans
+       `ambiguities_detected`. Reformule-les en exigences mesurables (ex: 'rapide' →
+       'temps de réponse < 200ms' SI chiffrable, sinon supprime/nuance).
+    2. CONTEXTE : utilise `available_capabilities` pour ORIENTER la spec vers ce qui est
+       faisable (web-tester → critères testables via navigateur ; python-tester → critères
+       pytest ; context7 → note 'consulter la doc de la lib'). Tu ne fais que CITER, tu ne
+       consommes pas ces capacités toi-même.
+    3. FORMATAGE : structure la spec en sections fixes EXACTES :
+         ## Objectif (1-3 phrases : outcome visible attendu)
+         ## Fonctionnalités attendues (puces, chacune testable)
+         ## Contraintes techniques (stack, format imposé, taille max si précisée)
+         ## Critères de validation (Given/When/Then quand pertinent, sinon puces concrètes)
+    4. COMPLÉTION LÉGÈRE : ajoute UNIQUEMENT les manques évidents et basiques (edge cases
+       types : champ vide, données invalides, cas limite). N'AJOUTE JAMAIS de fonctionnalité
+       que l'utilisateur n'a pas demandée (anti-hallucination de scope).
+
+    RÈGLES CRITIQUES :
+    - Tu STRUCTURES, tu n'INVENTES PAS. Si une exigence est absente du prompt brut, ne la
+      fabrique pas — contente-toi de la signaler comme manquante dans une section 'À clarifier'.
+    - CONCISION : ~30 lignes max. Une spec est un brief, pas un roman.
+    - PRÉSERVE toute exigence EXPLICITE du prompt brut (stack imposée, format, nb d'éléments...).
+    - Si le prompt brut est DÉJÀ clair et structuré, renvoie une spec quasi identique (ne dégrade
+      pas une bonne entrée).
+    """
+    raw_prompt: str = dspy.InputField(desc="Le prompt utilisateur brut, souvent vague ou incomplet")
+    available_capabilities: str = dspy.InputField(desc="Catalogue des capacités disponibles (skills, statut Context7, testers) pour orienter la spec vers ce qui est faisable")
+    output: PromptRefinerOutput = dspy.OutputField(desc="Spec structurée (refined_prompt) + termes vagues détectés (ambiguities_detected)")
 
 
 class ArchitectSignature(dspy.Signature):
@@ -183,6 +220,136 @@ async def execute_router_node(task_content: str, fast_model, settings: Settings)
         return result.output, metrics
     except Exception as e:
         print(f"[-] Erreur critique DSPy (Router) : {e}")
+        return None, None
+
+
+def _build_capabilities_summary(settings: Settings) -> str:
+    """Construit le résumé des capacités disponibles injecté au PromptRefiner.
+
+    Le PromptRefiner oriente la spec vers ce qui est faisable : pour ça il doit connaître
+    le catalogue des skills + le statut Context7 + les testers. On construit une chaîne
+    compacte (~15-25 lignes) à partir de 3 sources :
+
+    1. SKILLS — on veut le catalogue COMPLET (choix utilisateur). La source la plus légère
+       est `agent_server.skills.list_skills()` qui renvoie [{name, description}] en parsant
+       le frontmatter (sans charger le corps complet, trop lourd pour ce nœud).
+       COUPLAGE : `agent_server` est un package SÉPARÉ de `graph_orchestrator` (l'UI WebSocket
+       vs le graphe). L'import est donc DÉFENSIF (local + try/except) pour ne jamais casser
+       le graphe si l'UI est absente. Repli : lecture directe du dossier `skills/` via
+       `skills_loader.SKILLS_DIR` + parse du frontmatter name/description.
+    2. CONTEXT7 — statut dispo via la clé API (sans connexion réseau, juste un getenv).
+       L'Architect fait déjà le pré-fetch Context7 (dspy_nodes.py:225) ; le PromptRefiner ne
+       fait que CITER sa disponibilité (pas de duplication).
+    3. TESTERS — statiques (capacités fixes du graphe) : Puppeteer web + pytest subprocess.
+
+    Dégradation gracieuse : si tout échoue, renvoie "" (le PromptRefiner tourne sans
+    catalogue — il structure quand même, juste sans orienter par les capacités).
+    """
+    lines: List[str] = []
+
+    # 1. Skills (catalogue complet).
+    skills_items: list[tuple[str, str]] = []  # [(name, description)]
+    try:
+        # Source privilégiée : agent_server.skills.list_skills (parse frontmatter propre).
+        from agent_server.skills import list_skills  # type: ignore
+        for s in list_skills() or []:
+            name = (s.get("name") or "").strip()
+            desc = (s.get("description") or "").strip()
+            if name:
+                skills_items.append((name, desc))
+    except Exception:
+        # Repli : lecture directe du dossier skills/ (même logique, indépendante de agent_server).
+        try:
+            from .skills_loader import SKILLS_DIR, _strip_frontmatter
+            import os as _os
+            if SKILLS_DIR and _os.path.isdir(SKILLS_DIR):
+                for d in sorted(_os.listdir(SKILLS_DIR)):
+                    skill_md = _os.path.join(SKILLS_DIR, d, "SKILL.md")
+                    if not _os.path.isfile(skill_md):
+                        continue
+                    with open(skill_md, "r", encoding="utf-8") as f:
+                        raw = f.read()
+                    # Parse léger du frontmatter name/description (les 2 champs clés).
+                    name, desc = "", ""
+                    if raw.startswith("---"):
+                        end = raw.find("---", 3)
+                        if end != -1:
+                            front = raw[3:end]
+                            for line in front.splitlines():
+                                if line.lower().startswith("name:") and not name:
+                                    name = line.split(":", 1)[1].strip()
+                                elif line.lower().startswith("description:") and not desc:
+                                    desc = line.split(":", 1)[1].strip()
+                    if name:
+                        skills_items.append((name, desc))
+        except Exception:
+            pass  # dossier skills/ inaccessible → skills_items reste vide
+
+    for name, desc in skills_items:
+        lines.append(f"- {name}" + (f": {desc}" if desc else ""))
+
+    # 2. Context7 (statut dispo, sans connexion).
+    import os as _os
+    c7_on = bool(_os.getenv("CONTEXT7_API_KEY"))
+    lines.append(f"- context7 (doc libs à jour): {'DISPONIBLE' if c7_on else 'désactivé (pas de clé)'}")
+
+    # 3. Testers (capacités fixes du graphe).
+    lines.append("- web-tester: test navigateur (Puppeteer + assertions fonctionnelles)")
+    lines.append("- python-tester: test pytest subprocess (déterministe)")
+
+    header = "### CAPACITÉS DISPONIBLES (oriente la spec vers ce qui est faisable, ne les consomme pas toi-même)"
+    return header + "\n" + "\n".join(lines)
+
+
+async def execute_prompt_refiner_node(
+    raw_prompt: str,
+    reasoning_model,
+    settings: Settings,
+) -> Tuple[Optional[PromptRefinerOutput], Optional[NodeMetrics]]:
+    """Exécute le nœud PromptRefiner (modèle de raisonnement).
+
+    Reformule le prompt brut en spec structurée AVANT l'Architect. Clone du pattern
+    execute_router_node (dspy.ChainOfThought + asyncio.to_thread + dégradation gracieuse),
+    mais sur le modèle REASONING (gemma, plus coûteux mais meilleur pour la reformulation)
+    et avec 2 inputs (raw_prompt + available_capabilities).
+
+    Args:
+        raw_prompt: Le prompt utilisateur brut (souvent vague).
+        reasoning_model: Le modèle de raisonnement (non utilisé directement — on lit
+            settings.reasoning_model_id via _configure_dspy, comme les autres nœuds DSPy).
+        settings: Configuration globale.
+
+    Returns:
+        (PromptRefinerOutput | None, NodeMetrics | None). None,None si le LLM down
+        (dégradation gracieuse : l'appelant repliera sur le prompt brut).
+    """
+    print("[*] DSPy PromptRefiner en cours (reformulation du prompt brut en spec)...")
+    lm = _configure_dspy(settings, settings.reasoning_model_id)
+    capabilities = _build_capabilities_summary(settings)
+    start_time = time.time()
+    try:
+        with dspy.context(lm=lm):
+            predictor = dspy.ChainOfThought(PromptRefinerSignature)
+            result = await asyncio.to_thread(
+                predictor,
+                raw_prompt=raw_prompt,
+                available_capabilities=capabilities,
+            )
+        refined = result.output
+        n_amb = len(refined.ambiguities_detected) if refined.ambiguities_detected else 0
+        print(f"[+] PromptRefiner : spec produite ({len(refined.refined_prompt)} caractères"
+              f"{f', {n_amb} ambiguïté(s) détectée(s)' if n_amb else ''}).")
+
+        metrics = NodeMetrics(
+            node="prompt_refiner_dspy",
+            model=settings.reasoning_model_id,
+            duration_s=time.time() - start_time,
+            input_tokens=0,
+            output_tokens=0,
+        )
+        return refined, metrics
+    except Exception as e:
+        print(f"[-] Erreur critique DSPy (PromptRefiner) : {e} — repli sur prompt brut.")
         return None, None
 
 

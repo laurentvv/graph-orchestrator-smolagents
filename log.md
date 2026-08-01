@@ -1638,3 +1638,74 @@ unitaires (pas encore par run réel — étape suivante).
   sandbox complète (process cloisonné fs/cwd, qm docker-exec) reste un chantier séparé.
   Le guard ne protège pas contre une commande malicieuse *inédite*, mais élimine les
   failure modes les plus probables (hallucination `rm -rf /` ou zèle `git push --force`).
+
+## [2026-08-01] gen | Démarrage nœud PromptRefiner (F-39, meta-prompt LLM avant Architect)
+- **Objectif** : insérer un nœud DSPy `execute_prompt_refiner_node` entre `task_content` (l.254) et le
+  Router (l.256) dans `run_coding_workflow`. Reformule/structure le prompt brut en spec claire
+  avant l'Architect, en connaissant le catalogue des capacités. Modèle REASONING (gemma GPU),
+  opt-out, checkpoint (skip à la reprise), dégradation gracieuse.
+- **Recherche web (prompt éprouvés)** — au lieu d'écrire le prompt à la main, j'ai consulté les
+  outils prod qui font du "Enhance Prompt" :
+  - Kilo Code "Enhance Prompt" (https://kilo.ai/docs/code-with-ai/features/enhance-prompt) :
+    template `${userInput}` réécrit par LLM. Objectifs publics = clarté + contexte + formatage +
+    réduction ambiguïtés + cohérence. Modèle léger recommandé (mais user a choisi REASONING).
+  - Cline/Roo Code : même pattern ✨ (https://github.com/cline/cline/discussions/2552 propose un
+    "Prompt Refiner Agent" = exactement notre design). Prompt exact privé, objectifs publics.
+  - Synthèse : notre docstring (sections Objectif/Fonctionnalités/Contraintes/Critères + liste
+    noire termes vagues + catalogue capacités) est ALIGNÉE avec ces outils prod.
+- **Références internes consolidées** : open-swe (template sortie compact) + claude-code
+  requirements-analyst (liste noire termes vagues + Given/When/Then).
+- **Décisions arrêtées (choix user)** : modèle REASONING (gemma) ; capacités = catalogue complet
+  (agent_server.skills.list_skills) ; Context7 = citer seulement (Architect fait déjà pré-fetch
+  en dspy_nodes.py:225, pas de duplication) ; Phase 2 MIPROv2 ÉCARTÉE (signal biaisé en
+  mono-modèle 6 Go VRAM, ROI incertain, noté chantier futur).
+- **Point critique archi** : le nœud s'insère APRÈS le calcul du run_id (l.221, hash du prompt
+  BRUT) — sinon le hash deviendrait non-déterministe et casserait la reprise après crash.
+
+## [2026-08-01] eval | Fin nœud PromptRefiner (F-39) — 379 tests PASS, 0 régression
+*Cycle terminé. 1 nouvelle feature (F-39) + 1 bug test découvert et corrigé.*
+
+- **models.py** : `PromptRefinerOutput` (refined_prompt + ambiguities_detected pour transparence).
+- **dspy_nodes.py** :
+  - `PromptRefinerSignature` (2 inputs : raw_prompt + available_capabilities ; output PromptRefinerOutput).
+    Docstring = pipeline 4 étapes aligné Kilo/Cline/open-swe : (1) détection termes vagues →
+    ambiguities_detected ; (2) orientation selon capacités ; (3) structuration sections fixes
+    (Objectif/Fonctionnalités/Contraintes/Critères Given-When-Then) ; (4) complétion légère SANS
+    inventer. Règle "Tu STRUCTURES, tu n'INVENTES PAS" + concision ~30 lignes.
+  - `_build_capabilities_summary(settings)` : catalogue complet des skills (agent_server.skills
+    .list_skills, repli défensif lecture dossier skills/ via skills_loader.SKILLS_DIR + parse
+    frontmatter si import agent_server échoue, chaîne vide si tout échoue) + statut Context7
+    (bool(CONTEXT7_API_KEY), sans connexion) + testers statiques (Puppeteer/pytest). Dégradation
+    gracieuse à 3 niveaux.
+  - `execute_prompt_refiner_node` : clone pattern execute_router_node (_configure_dspy + dspy
+    .ChainOfThought + asyncio.to_thread), gemma REASONING, node="prompt_refiner_dspy", retourne
+    (None,None) sur exception (l'appelant replie sur prompt brut).
+- **config.py + .env.example** : `prompt_refiner_enabled` (défaut True, opt-out, ne casse pas les
+  Settings(...) positionnels en test).
+- **workflows.py** : branchement ENTRE task_content (l.254) et Router (l.256). POINT CRITIQUE :
+  le nœud s'exécute APRÈS le calcul du run_id (l.221, hash du prompt BRUT) → le hash reste
+  stable (sinon, le LLM génère du texte différent à chaque run → run_id non-déterministe →
+  reprise après crash cassée). Si checkpoint["refined_prompt"] → skip LLM (économie reprise).
+  Sinon si enabled → appel ; succès → task_content muté ; échec → repli brut. Persistance :
+  clé refined_prompt ajoutée au payload save_coding_state.
+- **Context7 = citer seulement** : l'Architect fait déjà le pré-fetch (dspy_nodes.py:225) ;
+  le PromptRefiner ne fait que CITER la dispo de Context7 dans le catalogue, ne consomme pas
+  (pas de duplication d'appel). Choix user.
+- **BUG DÉCOUVERT + CORRIGÉ** : les 3 helpers E2E existants (test_escalation.py:151
+  _setup_workflow_mocks, test_checkpoint.py:128, test_feedback_integration.py:51) mockaient
+  tous les nœuds SAUF execute_prompt_refiner_node. Conséquence : le workflow coding appelait le
+  VRAI nœud DSPy → tentative de connexion à l'API LLM Ollama → HANG indéfini en test (détecté
+  via lance fichier par fichier : test_escalation bloquait à test_escalation_fires_on_circuit_
+  breaker). Correctif : ajout d'un mock passe-through (fake_prompt_refiner renvoie None,None →
+  repli prompt brut, comportement historique des tests préservé) dans les 3 helpers. 21 tests
+  E2E passent en 5.7s après correctif.
+- **Tests test_prompt_refiner.py (8 PASS)** : exécuteur mock LLM + available_capabilities
+  propagé, dégradation gracieuse, helper capabilities (avec/sans clé Context7/repli dossier),
+  E2E toggle off, E2E toggle on + propagation prompt raffiné à l'Architect, E2E checkpoint skip.
+- **Suite pytest complète** : **379 passed / 0 failed** (371 avant + 8 nouveaux). 0 régression.
+- **Phase 2 (MIPROv2) ÉCARTÉE** : notée chantier futur. Raisons : signal biaisé en mono-modèle
+  GPU 6 Go (juge = architecte = même gemma qui se juge lui-même), risque overfit sur 8 prompts
+  hétérogènes, coût GPU élevé pour gain incertain. À réévaluer si besoin constaté en prod.
+- **Sources web consignées** : doc Kilo Code Enhance Prompt, discussion Cline #2552 Prompt
+  Refiner Agent — confirment le design (template ${userInput} réécrit, objectifs clarté/contexte/
+  format/désambiguïsation/cohérence).

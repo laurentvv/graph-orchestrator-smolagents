@@ -24,6 +24,7 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 > | 🟢 9. Optimisation de l'État (Reducers/Compaction) | ❌ à faire |
 > | 🔵 10. Contexte à la Demande (Skills) | ❌ à faire |
 > | 🟠 11. Observabilité (Event Stream) | ❌ à faire |
+> | ✨ 12. Meta-prompt (PromptRefiner avant Architect) | **✅ TERMINÉ (Phase 1)** — nœud DSPy F-39 (Kilo/Cline "Enhance Prompt" pattern). Phase 2 MIPROv2 écartée (signal biaisé mono-modèle 6 Go VRAM). |
 >
 > **Levier hors-plan majeur découvert et appliqué** : température du Coder 0.2 (vs 1.0 serveur) — a éliminé la moitié de la corruption.
 
@@ -164,3 +165,12 @@ Plus d'information : `system_prompts_analysis.md`
 > **🚀 Pourquoi ce sera mieux :** Un flux d'événements strict permet l'observabilité et l'intégration de TUIs.
 
 - [ ] **Run Event Stream (Inspiré de Deer Flow)** : Définir un contrat JSON strict (versionné) pour les événements du graphe (trace, message, tool_call, error, subagent_status). Cela permettra de brancher facilement une UI de monitoring, un TUI (terminal UI), ou de faire de l'analyse post-mortem avancée sans parser des logs texte. — *Spec concrète à ne pas réinventer : fiche **08-deer-flow** → `references/deer-flow/contracts/run_event_stream_contract.json` (17 Ko, contrat versionné avec règles frozen/additive/breaking). C'est exactement le contrat d'événements cherché. (OpenFox écarté : référence 🔴 non production-éprouvée.)*
+
+## ✨ Priorité 12 : Meta-prompt (PromptRefiner avant l'Architect)
+*L'Architect planifie mieux sur une spec bien structurée que sur un prompt utilisateur vague.*
+
+> **🔎 État Actuel :** Le prompt utilisateur passe tel quel du fichier de tâches au Router puis à l'Architect. Aucune étape de clarification/structuration.
+> **🚀 Pourquoi ce sera mieux :** Un nœud LLM qui reformule/enrichit le prompt avant l'Architect améliore la qualité du plan sur tous les runs (pattern "Enhance Prompt" éprouvé : Kilo Code, Cline, Roo Code).
+
+- [x] **Phase 1 — Nœud PromptRefiner (F-39)** : nœud DSPy `execute_prompt_refiner_node` (gemma REASONING, `ChainOfThought`) inséré entre `task_content` et le Router dans `run_coding_workflow`. Reformule le prompt brut en spec structurée (sections Objectif/Fonctionnalités/Contraintes/Critères Given-When-Then) en connaissant le catalogue des capacités (skills + statut Context7 + testers via `_build_capabilities_summary`). Détection termes vagues (`ambiguities_detected`). Anti-invention. Branché APRÈS le `run_id` (hash sur prompt brut → reprise stable). Persistance checkpoint (`refined_prompt` skip LLM à la reprise). Opt-out `PROMPT_REFINER_ENABLED`. Dégradation gracieuse (repli prompt brut si LLM down). Context7 = citer seulement (Architect fait déjà le pré-fetch, pas de duplication). — *Inspiré de : Kilo Code/Cline/Roo Code "Enhance Prompt" + open-swe (template sortie) + claude-code requirements-analyst (liste noire termes vagues). 8 tests PASS.*
+- [ ] **Phase 2 — Optimisation MIPROv2 (CHANETIER FUTUR, non démarré)** : optimiser le prompt du PromptRefiner via DSPy MIPROv2 sur métrique **end-to-end** (juger le plan produit par l'Architect, jamais le prompt réécrit isolément — doc `dspy_prompt_inconnu.md`). **Écarté ce cycle** car : (1) signal biaisé en mono-modèle GPU 6 Go (juge = architecte = même gemma qui se juge lui-même) ; (2) risque d'overfit sur 8 prompts hétérogènes du Prompt-Vault ; (3) coût GPU élevé (~75 appels) pour gain incertain. **À réévaluer** si besoin constaté en prod (specs systématiquement mauvaises sur un type de prompt récurrent) + avec un vrai dataset accumulé. La Phase 1 est la base nécessaire à toute optimisation future.
