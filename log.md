@@ -1982,3 +1982,32 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
 - **Décision C (approuvée par l'utilisateur)** : `write_file` et `bash_command` ne sont PAS wrappés. `write_file` est idempotent par écrasement par design (le docstring de `save_coding_state` le documente : « Coder écrase le fichier = idempotent »). `bash_command` au replay a besoin de la sortie réelle (ex: résultat pytest) — la skippé renverrait "already done" au LLM au lieu du feedback. La sécurité bash reste sur `bash_guard` (denylist F-38) + `loop_guard` (anti-boucle F-36).
 
 
+## [2026-08-01] rch  | Ajout référence system-prompts-and-models-of-ai-tools (fiche 17) + intégration au plan
+*Nouvelle référence : collection de system prompts extraits/leakés d'outils IA commerciaux + open-source.*
+- **Nature** : 32 dossiers d'outils, 83 .txt + 17 .json (schémas de function-calling, PAS des configs
+  de modèles). Bibliothèque de patterns pour system_prompts. Note 🟢 Haute (matière première texte).
+- **Top 6 identifié** : Codex CLI (342 L, le plus aligned CLI), Manus (topologie multi-agent
+  Planner/Knowledge/Datasource), Augment (catégorisation outils), Claude Code 2.0 (Coder/Judge/Security),
+  Gemini CLI (workflow 5 étapes), Devin (<think> tool reasoning).
+- **Vraie valeur transversale : 10 invariants universels** extraits par grep croisé sur ~12 prompts
+  (read-before-write, pas whole-file rewrite, format d'édition, NEVER assume lib, test-first, approval
+  gating, anti-boucle, concision, todo tracking, parallel tool calls) + 2 bonus (professional objectivity
+  = base Judge, defensive security = base Security).
+- **Fiche 17 créée** (~100 lignes) au format des 16 autres.
+- **inventory.json** : 374 → 391 entrées (17 pour system-prompts, chemins vérifiés). INDEX.md/README.md
+  rafraîchis (17 fiches/projets, matrice étendue, Hall of Fame + nouvelle section « Bibliothèque de
+  system prompts », guide +7 entrées). update_inventory.py étendu (bloc SP_FILES + logique main).
+- **plan_usine_logicielle.md enrichi** (4 références + 1 nouvelle sous-section) :
+  - P0 Spécialisation → system-prompts comme bibliothèque de patterns (bases par rôle).
+  - **P0-bis Invariants universels (NOUVEAU)** : sous-section dédiée codifiant les 10 patterns à injecter
+    dans TOUS les system_prompts (choix : sous-section P0 plutôt que priorité séparée pour éviter
+    l'alourdissement de numérotation — les invariants relèvent du « Cadre Système »).
+  - P6 Code Review → « professional objectivity » de Claude Code 2.0 (posture du Judge).
+  - P6 TDD → Devin « ne pas modifier tests » + Gemini CLI workflow verify-after + Codex « fix root cause ».
+- **Réserves signalées dans la fiche** : biais JS/TS/React (80%), prompts leakés (préférer open-source
+  pour citation verbatim : Codex CLI, Gemini CLI, Cline, RooCode), padding dans les gros fichiers,
+  anti-pattern Z.ai « do not write test code » (contraire à P6 TDD).
+- Validation : chiffres cohérents (17/391 partout), script idempotent.
+- **Aucune modification du code du projet** — travail documentaire + plan.
+
+

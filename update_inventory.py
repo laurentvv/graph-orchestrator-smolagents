@@ -233,10 +233,71 @@ LCC_FILES = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# 17 — system-prompts-and-models-of-ai-tools : 17 entrées (prompts + invariants)
+# ---------------------------------------------------------------------------
+SP_BASE = "references/system-prompts-and-models-of-ai-tools"
+SP_FILES = [
+    # --- Top 6 prompts d'agents de coding (🟢 Haute) ---
+    {"path": f"{SP_BASE}/Open Source prompts/Codex CLI/openai-codex-cli-system-prompt-20250820.txt", "type": "prompt", "reuse": "high",
+     "key_symbols": ["Testing your work", "3 modes sandbox", "4 modes approval", "apply_patch", "fix root cause not surface"],
+     "description": "Le plus aligned avec notre stack CLI (342 L, open-source). Philosophie de test start specific → broaden, 3 modes sandbox (read-only/workspace-write/danger), 4 modes approval (untrusted/on-failure/on-request/never), format apply_patch. Sections Testing + Sandbox exploitables telles quelles pour Coder + Tester."},
+    {"path": f"{SP_BASE}/Manus Agent Tools & Prompt/Prompt.txt", "type": "prompt", "reuse": "high",
+     "key_symbols": ["Planner", "Knowledge", "Datasource", "agent loop", "todo.md"],
+     "description": "Architecture multi-module (Planner/Knowledge/Datasource séparés dans l'event stream) + agent loop formel Analyze→Select→Wait→Iterate→Submit→Standby. Blueprint direct pour Router→Architect→Coders fan-out. Notre topologie."},
+    {"path": f"{SP_BASE}/Manus Agent Tools & Prompt/Modules.txt", "type": "prompt", "reuse": "high",
+     "key_symbols": ["Planner", "Knowledge", "Datasource", "event stream"],
+     "description": "Détaille l'architecture multi-module (Planner/Knowledge/Datasource séparés). Modèle pour la séparation des rôles et le fan-out."},
+    {"path": f"{SP_BASE}/Manus Agent Tools & Prompt/Agent loop.txt", "type": "prompt", "reuse": "high",
+     "key_symbols": ["Analyze", "Select", "Wait", "Iterate", "Submit", "Standby"],
+     "description": "Agent loop formel en 6 phases (33 L). Skeleton de boucle agent réutilisable."},
+    {"path": f"{SP_BASE}/Augment Code/gpt-5-agent-prompts.txt", "type": "prompt", "reuse": "high",
+     "key_symbols": ["Tasklist Triggers", "Information-gathering tools", "Package Management", "view", "grep-search", "codebase-retrieval"],
+     "description": "Très structuré (241 L). Catégorisation des outils par purpose (view/grep-search/codebase-retrieval), Tasklist Triggers (multi-file, >2 itérations), Package Management par langage (pip/poetry pour Python), escalade si rabbit hole. Parfait pour Router + Coder Python."},
+    {"path": f"{SP_BASE}/Anthropic/Claude Code 2.0.txt", "type": "prompt", "reuse": "high",
+     "key_symbols": ["Git Safety Protocol", "professional objectivity", "read-before-edit", "anti-syscall", "no preamble/postamble"],
+     "description": "Référence Coder + Judge + Security (1150 L). Git Safety Protocol (jamais --force/--no-verify/amend sans check), professional objectivity (truth > validation = base du Reviewer), read-before-edit (Edit échoue si non lu), concision radicale. Verbeux — voir la version courte Claude Code/Prompt.txt (191 L)."},
+    {"path": f"{SP_BASE}/Anthropic/Claude Code/Prompt.txt", "type": "prompt", "reuse": "high",
+     "key_symbols": ["concision", "tool usage policy", "Git Safety"],
+     "description": "Condensé du Claude Code (191 L). Bonne densité directive sans le padding de la version 2.0."},
+    {"path": f"{SP_BASE}/Open Source prompts/Gemini CLI/google-gemini-cli-system-prompt.txt", "type": "prompt", "reuse": "high",
+     "key_symbols": ["Understand", "Plan", "Implement", "Verify Tests", "Verify Standards", "NEVER assume standard test commands"],
+     "description": "Ultra-dense (188 L, open-source). Workflow 5 étapes explicite, NEVER assume standard test commands (check README/package.json), auto-vérification post-edit (lint+typecheck OBLIGATOIRE). Squelette du cycle Coder→Tester→Judge."},
+    {"path": f"{SP_BASE}/Devin AI/Prompt.txt", "type": "prompt", "reuse": "high",
+     "key_symbols": ["<think> tool", "10 cas d'usage", "ne jamais modifier les tests", "report environment issues"],
+     "description": "(402 L) <think> tool avec 10 cas d'usage obligatoires (avant git critique, avant code changes, avant completion) = base du reasoning Architect/Judge. Règle ne jamais modifier les tests = critique pour le Tester. Data Security section."},
+    {"path": f"{SP_BASE}/Cursor Prompts/Agent Prompt 2025-09-03.txt", "type": "prompt", "reuse": "high",
+     "key_symbols": ["status_update_spec", "maximize_parallel_tool_calls", "gate avant edit", "anti-boucle linter max 3", "Clean Code"],
+     "description": "Récent et dense (229 L). status_update cadencé (avant batch, après todo = tracing inter-agent), gate avant edit (reconcile TODO), anti-boucle linter (max 3 puis ask user), code_style Clean Code. Implémente concrètement notre P3/P8 anti-boucle."},
+    {"path": f"{SP_BASE}/Open Source prompts/Cline/Prompt.txt", "type": "prompt", "reuse": "high",
+     "key_symbols": ["SEARCH/REPLACE blocks", "requires_approval", "règles 1-4", "move/delete"],
+     "description": "Spec de référence du format SEARCH/REPLACE (607 L, open-source). Règles 1-4 documentées exhaustivement + opérations move/delete. requires_approval booléen par commande. Déjà porté en P1 côté édition."},
+    {"path": f"{SP_BASE}/Traycer AI/phase_mode_prompts.txt", "type": "prompt", "reuse": "high",
+     "key_symbols": ["You DO NOT write code", "read-only tech lead", "phases high-level", "decision tree"],
+     "description": "Architect PUR (46 L). Read-only tech lead (ne écrit pas de code), breakdown en phases, decision tree clarification. Modèle du Read-Only déjà appliqué dans notre Architect DSPy."},
+    # --- Prompts Moyenne (utilses mais alignement partiel) ---
+    {"path": f"{SP_BASE}/Windsurf/Prompt Wave 11.txt", "type": "prompt", "reuse": "medium",
+     "key_symbols": ["create_memory", "update_plan", "gate unsafe commands", "browser_preview"],
+     "description": "Concis (125 L). Memory system persistant + plan mastermind + gate unsafe commands. Utile si on ajoute persistence inter-turns."},
+    {"path": f"{SP_BASE}/Replit/Prompt.txt", "type": "prompt", "reuse": "medium",
+     "key_symbols": ["proposed_file_replace_substring", "is_dangerous", "protocole XML"],
+     "description": "Format XML intéressant (137 L) : proposed_file_replace_substring, proposed_shell_command is_dangerous=true. Alternative à SEARCH/REPLACE + approval gating."},
+    {"path": f"{SP_BASE}/Kiro/Spec_Prompt.txt", "type": "prompt", "reuse": "medium",
+     "key_symbols": ["spec/design documents", "ABSOLUTE MINIMAL code", "PII substitution"],
+     "description": "Architect (spec) + Security (PII substitution). 514 L."},
+    {"path": f"{SP_BASE}/Open Source prompts/RooCode/Prompt.txt", "type": "prompt", "reuse": "medium",
+     "key_symbols": ["multi-mode", "Code/Architect/Ask/Debug", ".roo/rules-*"],
+     "description": "Variante de Cline (665 L, open-source) + multi-mode (Code/Architect/Ask/Debug) + custom instructions par mode. Patron de spécialisation (P0)."},
+    {"path": f"{SP_BASE}/Cursor Prompts/Agent Tools v1.0.json", "type": "spec", "reuse": "medium",
+     "key_symbols": ["codebase_search", "read_file", "function-calling"],
+     "description": "Schéma de function-calling (JSON). Référence pour concevoir les signatures d'outils DSPy/smolagents."},
+]
+
+
 def main() -> None:
     data = json.loads(INVENTORY.read_text(encoding="utf-8"))
 
-    data["projects_audited"] = 16
+    data["projects_audited"] = 17
     data["audit_date"] = "2026-08-01"
 
     updated = []
@@ -269,10 +330,20 @@ def main() -> None:
                 "summary": "Cours didactique en 20 leçons qui déconstruit Claude Code en harness engineering. PYTHON NATIF (contrairement à qm) : patterns portables quasi littéralement. Couvre P8 (hooks s04 + error recovery s11), P9 (compaction s08), P10 (skill loading s07), P11 (event stream via hooks), P6 (task DAG s12 + todo s05), P0 (subagent s06). Lacunes assumées : P3 anti-loop (crush), P6 Judge/DuckDB (open-swe), P8-bis sandbox stricte (qm).",
                 "files": LCC_FILES,
             }
+        elif pid == "system-prompts-and-models-of-ai-tools":
+            project = {
+                "id": "system-prompts-and-models-of-ai-tools",
+                "name": "system-prompts-and-models-of-ai-tools",
+                "path": "references/system-prompts-and-models-of-ai-tools",
+                "category": "system-prompts",
+                "reuse_rating": "high",
+                "summary": "Collection de system prompts extraits/leakés d'outils IA commerciaux + open-source (32 dossiers, 83 txt + 17 json). Bibliothèque de patterns pour les system_prompts du projet. ~15 prompts d'agents de coding exploitables (Codex CLI, Manus, Augment, Claude Code 2.0, Gemini CLI, Devin, Cursor, Cline). 10 invariants universels identifiés (read-before-write, pas whole-file rewrite, test-first, approval gating, anti-boucle...). Réserves : biais JS/TS/React (80%), prompts leakés (préférer open-source pour citation verbatim), padding dans les gros fichiers.",
+                "files": SP_FILES,
+            }
         updated.append(project)
         seen_ids.add(pid)
 
-    # Sécurité : si qm/claude-code/learn-claude-code n'étaient pas déjà présents, on les ajoute.
+    # Sécurité : si qm/claude-code/learn-claude-code/system-prompts n'étaient pas déjà présents, on les ajoute.
     if "qm" not in seen_ids:
         updated.append({"id": "qm", "name": "qm", "path": "references/qm",
                         "category": "agent-harness", "reuse_rating": "high",
@@ -287,6 +358,12 @@ def main() -> None:
                         "path": "references/learn-claude-code",
                         "category": "harness-engineering", "reuse_rating": "high",
                         "summary": "(ajouté par update_inventory.py)", "files": LCC_FILES})
+    if "system-prompts-and-models-of-ai-tools" not in seen_ids:
+        updated.append({"id": "system-prompts-and-models-of-ai-tools",
+                        "name": "system-prompts-and-models-of-ai-tools",
+                        "path": "references/system-prompts-and-models-of-ai-tools",
+                        "category": "system-prompts", "reuse_rating": "high",
+                        "summary": "(ajouté par update_inventory.py)", "files": SP_FILES})
 
     data["projects"] = updated
 

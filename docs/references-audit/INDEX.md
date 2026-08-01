@@ -9,8 +9,8 @@
 | Métrique | Valeur |
 |---|---|
 | **Date de l'audit** | 2026-08-01 |
-| **Projets/dossiers audités** | 16 |
-| **Entrées de fichiers inventoriées** | 374 (inventaire machine : [`inventory.json`](./inventory.json)) |
+| **Projets/dossiers audités** | 17 |
+| **Entrées de fichiers inventoriées** | 391 (inventaire machine : [`inventory.json`](./inventory.json)) |
 | **Fichiers pertinents scannés** (base) | ~10 000 (hors `.git/`, `node_modules/`, médias, fixtures) |
 | **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css`) + JSON/YAML de spec/contrat |
 | **Exclusions** | `.git/` (~730 MB), `node_modules/`, médias (1 293 SVG, 16 mp4…), fixtures de tests, traductions de README (1 conservée/projet) |
@@ -19,7 +19,7 @@
 
 ---
 
-## 🧭 Navigation — les 16 fiches
+## 🧭 Navigation — les 17 fiches
 
 | # | Projet | Réutilisabilité | Fiche | Résumé en 1 ligne |
 |---|---|---|---|---|
@@ -39,6 +39,7 @@
 | 14 | **qm** | 🟢 Haute | [14-qm](./projects/14-qm.md) | Plateforme agent multi-joueur (TS) — **algorithmes portables** : compaction de contexte duale, mémoire durable deux-tiers (LLM-juge de consolidation), idempotency, queues à leases typés |
 | 15 | **claude-code-unified-agents** | 🟡 Moyenne | [15-claude-code-unified-agents](./projects/15-claude-code-unified-agents.md) | 53 (et non 54) agents Claude Code — ~8 prompts purs alignés avec les rôles Router/Coder/Tester/Judge/Security ; reste = code TS non portable |
 | 16 | **learn-claude-code** | 🟢 Haute | [16-learn-claude-code](./projects/16-learn-claude-code.md) | Cours 20 leçons déconstruisant Claude Code en harness engineering — **Python natif** : hooks, compaction, error recovery, skill loading, task DAG (patterns directement portables) |
+| 17 | **system-prompts-and-models-of-ai-tools** | 🟢 Haute | [17-system-prompts-and-models-of-ai-tools](./projects/17-system-prompts-and-models-of-ai-tools.md) | Collection de system prompts extraits d'outils IA (32 dossiers) — **bibliothèque de patterns** pour nos prompts : Codex CLI, Manus, Claude Code 2.0, Gemini CLI, Cursor + 10 invariants universels |
 
 ---
 
@@ -51,7 +52,7 @@
 `axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm)**, **patterns harness Python natifs (learn-claude-code)**.
 
 ### 3. 📚 Ressources & outils
-`Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante), `claude-code-unified-agents` (prompts de spécialisation).
+`Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante), `claude-code-unified-agents` (prompts de spécialisation), `system-prompts-and-models-of-ai-tools` (**bibliothèque de system prompts** d'outils commerciaux/open-source).
 
 ---
 
@@ -155,6 +156,22 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | `references/learn-claude-code/s20_comprehensive/code.py` (ou `agents/s_full.py`) | boucle agrégée | **Référence d'intégration** : compose hooks + compaction + task graph + error recovery dans une seule boucle. Point d'entrée recommandé |
 | `references/learn-claude-code/skills/code-review/SKILL.md` | checklist Security/Correctness/… | Skill de revue réutilisable tel quel comme prompt de Judge (P6) |
 
+### Bibliothèque de system prompts (system-prompts-and-models-of-ai-tools)
+> 📚 **Matière première textuelle** (prompts extraits d'outils IA commerciaux + open-source). La valeur : (1) ~15 prompts d'agents de coding exploitables, (2) **10 invariants universels** identifiés (read-before-write, pas whole-file rewrite, test-first, approval gating, anti-boucle…). ⚠️ Biais JS/TS/React (80%) ; prompts leakés (préférer open-source pour citation verbatim). Pour P0 (spécialisation) et P6 (Judge/TDD).
+
+| Fichier | Rôle(s) | Apport |
+|---|---|---|
+| `…/Open Source prompts/Codex CLI/openai-codex-cli-system-prompt-20250820.txt` | **Coder + Tester + Architect** | **Le plus aligned CLI** (342 L, open-source). 3 modes sandbox, 4 modes approval, philosophie test « specific→broad », format `apply_patch` |
+| `…/Manus Agent Tools & Prompt/Prompt.txt` + `Modules.txt` + `Agent loop.txt` | **Router + Architect** | **Topologie multi-agent** (Planner/Knowledge/Datasource) + agent loop formel Analyze→Select→Wait→Iterate→Submit→Standby = blueprint Router→Architect→Coders |
+| `…/Augment Code/gpt-5-agent-prompts.txt` | **Router + Coder** | Catégorisation des outils par purpose + Tasklist Triggers + Package Management (pip/poetry pour Python) |
+| `…/Anthropic/Claude Code 2.0.txt` | **Coder + Judge + Security** | Git Safety Protocol, **professional objectivity** (truth > validation = base du Reviewer), read-before-edit, anti-syscall |
+| `…/Open Source prompts/Gemini CLI/google-gemini-cli-system-prompt.txt` | **Coder + Tester + Judge** | Workflow **5 étapes** Understand→Plan→Implement→Verify Tests→Verify Standards. Ultra-dense (188 L, open-source) |
+| `…/Devin AI/Prompt.txt` | **Architect + Tester** | **`<think>` tool 10 cas d'usage obligatoires** = base reasoning Architect/Judge ; « ne jamais modifier les tests » = règle Tester |
+| `…/Cursor Prompts/Agent Prompt 2025-09-03.txt` | **Coder + Router** | status_update cadencé (tracing inter-agent), **anti-boucle linter max 3** puis ask user, maximize_parallel_tool_calls |
+| `…/Open Source prompts/Cline/Prompt.txt` | **Coder + Security** | **Spec de référence SEARCH/REPLACE** (règles 1-4), `requires_approval` booléen par commande |
+| `…/Traycer AI/phase_mode_prompts.txt` | **Architect pur** | **Read-only tech lead** (« You DO NOT write code »), 46 lignes. Modèle du Read-Only |
+| **10 invariants universels** (section fiche 17) | **Tous les rôles** | read-before-write, pas whole-file rewrite, format d'édition formel, NEVER assume lib, test-first, approval gating, anti-boucle, concision, todo tracking, parallel tool calls |
+
 ---
 
 ## 📊 Matrice réutilisabilité croisée
@@ -177,12 +194,14 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | **qm** | **17** | **10** | **1** | 🟢 **Haute** |
 | **claude-code-unified-agents** | **7** | **5** | **1** | 🟡 **Moyenne** |
 | **learn-claude-code** | **11** | **5** | **2** | 🟢 **Haute** |
-| **Total** | **154** | **136** | **82** | — |
+| **system-prompts-and-models-of-ai-tools** | **12** | **5** | **0** | 🟢 **Haute** |
+| **Total** | **166** | **141** | **82** | — |
 
 **Constats** :
 - **axon** (23 Haute) et **aider** (17 Haute) restent les mines d'or côté Python.
 - **qm** (17 Haute) rejoint le peloton de tête : malgré le TypeScript, ses algorithmes de **compaction de contexte, mémoire durable, idempotency et queues à leases** sont portables. (L'ancienne fiche la notait Moyenne à tort.)
 - **learn-claude-code** (11 Haute, 🟢 Haute) : la référence la plus **directement exploitable** pour les briques transversales (hooks, compaction, error recovery, skill loading, task DAG) car **Python natif** — portage quasi littéral, contrairement à qm (TS).
+- **system-prompts-and-models-of-ai-tools** (12 Haute, 🟢 Haute) : **bibliothèque de patterns** pour les system_prompts. 10 invariants universels identifiés (read-before-write, test-first, approval gating…). À utiliser comme matière première pour P0 (spécialisation) et P6 (Judge/TDD).
 - **deer-flow** (21 Haute) malgré une note globale Moyenne — la valeur est dans les contracts/plans/middlewares.
 - **claude-code-unified-agents** : 7 prompts purs 🟢 (alignés avec les rôles du graphe), mais la majorité des 53 fichiers est du code TS non portable → note Moyenne. (L'ancienne fiche la notait Haute à tort.)
 - **opencode/openfox** (TS) : peu de Haute, leurs **specs/docs** restent des références conceptuelles au mieux.
@@ -220,6 +239,13 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | **Charger les skills à la demande** (lazy, Python natif) | Fiche **16-learn-claude-code** → `s07_skill_loading/code.py` (`load_skill`, `_scan_skills`) |
 | **Un système de tâches avec dépendances** (DAG) | Fiche **16-learn-claude-code** → `s12_task_system/code.py` (`blockedBy`, `can_start`) |
 | **Instancier un subagent isolé** (contexte frais, cap tours) | Fiche **16-learn-claude-code** → `s06_subagent/code.py` (`spawn_subagent`) |
+| Un **system prompt** de référence pour agent de coding | Fiche **17-system-prompts** → `Codex CLI` (342 L, le plus aligned CLI), `Gemini CLI` (188 L), `Claude Code 2.0` |
+| Une **topologie multi-agent** (Planner/modules/agent loop) | Fiche **17-system-prompts** → `Manus/Prompt.txt` + `Modules.txt` + `Agent loop.txt` |
+| Une base pour le **reasoning** de l'Architect (`<think>` tool) | Fiche **17-system-prompts** → `Devin AI/Prompt.txt` (10 cas d'usage obligatoires) |
+| Les **invariants universels** des prompts d'agents de coding | Fiche **17-system-prompts** → section « 10 invariants universels » (read-before-write, test-first, approval gating, anti-boucle…) |
+| Un **patron d'approval gating** pour actions destructives | Fiche **17-system-prompts** → `Cline` (`requires_approval`), `Replit` (`is_dangerous`), `Codex CLI` (4 modes approval) |
+| Une **spec du format SEARCH/REPLACE** (règles exhaustives) | Fiche **17-system-prompts** → `Cline/Prompt.txt` (règles 1-4 + move/delete) |
+| Des **schémas de function-calling** pour concevoir nos tools | Fiche **17-system-prompts** → `Cursor Prompts/Agent Tools v1.0.json`, `Replit/Tools.json` |
 
 ---
 
@@ -229,15 +255,16 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 docs/references-audit/
 ├── README.md              ← Mode d'emploi (start ici)
 ├── INDEX.md               ← CE DOCUMENT (navigation + synthèse + Hall of Fame)
-├── inventory.json         ← Inventaire machine-lisible (374 entrées, filtrable)
-└── projects/              ← 16 fiches détaillées (1 par projet)
+├── inventory.json         ← Inventaire machine-lisible (391 entrées, filtrable)
+└── projects/              ← 17 fiches détaillées (1 par projet)
     ├── 01-prompt-vault.md
     ├── 02-aider.md
     ├── ...
     ├── 13-deer-flow-analysis.md
     ├── 14-qm.md
     ├── 15-claude-code-unified-agents.md
-    └── 16-learn-claude-code.md
+    ├── 16-learn-claude-code.md
+    └── 17-system-prompts-and-models-of-ai-tools.md
 ```
 
 **Pour recherche programmatique** : `inventory.json` est consommable directement :
