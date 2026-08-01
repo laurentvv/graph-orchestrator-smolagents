@@ -1,7 +1,9 @@
 # AGENTS.md - Spécifications de l'Agent : Gestion de l'État sur Disque
 
+# PARTIE 1 : DIRECTIVES POUR L'AGENT (PROMPT)
+
 ## 1. Principe Fondamental
-Tu ne dois jamais te fier uniquement à ta fenêtre de contexte pour suivre l'avancement du projet. Le contexte s'altère, se compresse et s'efface. L'unique source de vérité concernant l'état du système réside dans quatre fichiers stockés sur le disque. À chaque initialisation, plantage ou redémarrage, tu dois lire ces fichiers pour reconstruire ton état de manière déterministe.
+Tu ne dois jamais te fier uniquement à ta fenêtre de contexte pour suivre l'avancement du projet. Le contexte s'altère, se compresse et s'efface. L'unique source de vérité concernant l'état du système réside dans quatre fichiers de suivi, stockés à la racine du projet. À chaque initialisation, plantage ou redémarrage, tu dois lire ces fichiers pour reconstruire ton état de manière déterministe.
 
 ## 2. Architecture des Fichiers à Initialiser
 
@@ -59,14 +61,14 @@ Tu ne dois jamais te fier uniquement à ta fenêtre de contexte pour suivre l'av
 ### D. `log.md`
 * **Rôle** : Journal d'exécution chronologique en mode ajout seul (append-only). Rien ne doit y être effacé. Chaque événement majeur y est empilé.
 * **Cycle de vie** : Une entrée est ajoutée au début et à la fin de chaque action.
-* **Format strict obligatoire** :
+* **Format strict obligatoire** (inclure l'heure exacte) :
     ```markdown
     # Journal d'Exécution (Append-Only)
 
-    ## [AAAA-MM-JJ] init | Initialisation du workspace et négociation du contrat.md
-    ## [AAAA-MM-JJ] gen  | Écriture du script principal et génération des structures JSON.
-    ## [AAAA-MM-JJ] eval | Échec de la validation du contrat sur le critère 2 (Structure incorrecte).
-    ## [AAAA-MM-JJ] fix  | Correction de la sérialisation et ré-exécution de la boucle.
+    ## [AAAA-MM-JJ HH:MM:SS] init | Initialisation du workspace et négociation du contrat.md
+    ## [AAAA-MM-JJ HH:MM:SS] gen  | Écriture du script principal et génération des structures JSON.
+    ## [AAAA-MM-JJ HH:MM:SS] eval | Échec de la validation du contrat sur le critère 2 (Structure incorrecte).
+    ## [AAAA-MM-JJ HH:MM:SS] fix  | Correction de la sérialisation et ré-exécution de la boucle.
     ```
 
 ## 3. Directives Opérationnelles pour la Boucle d'Exécution
@@ -75,7 +77,9 @@ Tu ne dois jamais te fier uniquement à ta fenêtre de contexte pour suivre l'av
 2. **Phase d'Action** : Avant d'exécuter une tâche, écris la ligne correspondante dans le `log.md`.
 3. **Phase de Synchronisation** : Après chaque écriture de fichier ou test, mets à jour le fichier de statut associé (`progress.md` ou `feature_list.json`).
 4. **Gestion des Erreurs** : Si une exception survient ou si le processus s'interrompt, l'état valide est celui extrait de la dernière ligne du `log.md` combiné aux assertions de `progress.md`.
-5. **`README.md`** : PUSH = mise à jour `README.md` si nouvelle fonctionnalité ou modification importante.
+5. **Mise à jour du `README.md`** : À chaque fois que tu termines une nouvelle fonctionnalité importante, tu dois impérativement mettre à jour le fichier `README.md` avant de terminer ta tâche.
+
+# PARTIE 2 : GUIDE D'UTILISATION POUR LE DÉVELOPPEUR
 
 ## 4. Banque de Prompts de Test (Prompt-Vault)
 
@@ -87,19 +91,18 @@ Tu ne dois jamais te fier uniquement à ta fenêtre de contexte pour suivre l'av
 
 Chaque `.md` est un cahier des charges structuré (souvent "1 fichier `index.html`, HTML+CSS+JS vanilla"). Voir `references/Prompt-Vault/README.md` pour le tableau récapitulatif.
 
-**Comment brancher un prompt dans le système graph** (pour tester le coding workflow) :
-1. Ouvrir le `.md` du prompt choisi et copier son contenu (la partie "requirements").
-2. Éditer `tasks.json` → section `"coding"` → y coller le prompt dans `"content"`.
-   - Adapter `"target_files"` au prompt (souvent `["index.html"]` ; si le prompt impose une arborescence, la lister explicitement, ex. `["index.html", "styles.css", "script.js"]`).
-3. S'assurer que `.env` a `WORKFLOW_MODE=coding`.
-4. Lancer : `uv run agent_graph.py` (équivalent : `uv run python -m graph_orchestrator.workflows`). En contexte pipe/non-TTY, préfixer par `PYTHONUNBUFFERED=1` pour le flush temps réel.
-   `agent_graph.py` délègue à `graph_orchestrator.workflows.main()`, qui dispatche selon `WORKFLOW_MODE`. (Historique : avant correction, il pointait sur `runner.main()` = one-shot hardcodé qui ignorait `WORKFLOW_MODE`.)
-5. Le workflow exécute : Routeur → Architect → Coder → Tester → Judge (jusqu'à `MAX_ITERATIONS`, défaut 3), avec persistance DuckDB + checkpoints. Signatures distinctives dans les logs : `CODING WORKFLOW` = coding OK ; `Démarrage du graphe avec N tâches` + `Fan-out asynchrone` = mode one-shot.
+## 5. Projets de Référence
+**Code et audits** : Consulter `docs/references-audit/` (lié au code GitHub stocké dans `references/`). C'est une véritable mine d'or d'implémentations déjà faites, fiables et prêtes à l'emploi. N'hésitez pas à y piocher du code et à vous inspirer de ces solutions existantes plutôt que de tout réinventer.
 
-**Recommandations (ordre de difficulté croissante pour valider le graphe)** :
-1. **Bubble_Sort_Visualizer** (Easy) — le plus borné : 1 fichier, algo déterministe, périmètre fixe. **Point d'entrée idéal pour tester le graphe.**
-2. Color_Palette_Generator (Easy) — clipboard + calcul de luminance.
-3. ToDo_List (Easy) — 7 étapes + localStorage (génération plus large).
-4. Puis Medium/Hard/Advanced selon besoin de monter en charge.
+## 6. Git & GitHub
+- **Kilo Code Review** : L'agent GitHub doit approuver la PR avant le merge. *(Note pour l'agent IA : une fois la PR soumise, arrête-toi. Ne reste pas en boucle d'attente. Tu seras réveillé une fois la review validée pour supprimer la branche et retourner sur `main`).*
 
-**Avant un run réel** : vérifier la disponibilité des endpoints LLM (`curl http://<host>:11434/api/tags`) — FAST sur `OLLAMA_API_BASE`, REASONING sur `OLLAMA_REASONING_API_BASE`. Run CPU-only distant = plusieurs minutes, prévenir l'utilisateur.
+## 7. Tests du Graphe (Workflow Coding)
+1. **Préparation** : Copier un prompt depuis `references/Prompt-Vault/`. Le coller dans `tasks.json` (`coding.content`) et adapter `target_files`.
+2. **Configuration** : `WORKFLOW_MODE=coding` dans `.env`. Vérifier les LLMs (`curl http://<host>:11434/api/tags`).
+3. **Exécution** : `uv run agent_graph.py` (ajouter `PYTHONUNBUFFERED=1` si pipe).
+4. **Déroulement** : Routeur → Architect → Coder → Tester → Judge (max 3 itérations). Logs : `CODING WORKFLOW` (succès) ou `Fan-out asynchrone` (one-shot).
+
+*Notes* : 
+- Pour valider le graphe, commencer par **Bubble_Sort_Visualizer** (Easy, 1 fichier, borné).
+- **En cas de modification `.env.example`** : il faut reporter les ajouts dans `.env` local (sans toucher au contenu "secret").
