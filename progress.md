@@ -155,6 +155,29 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - F-34 : Nœud d'Audit Dette Technique (python-health-audit via uvx) en fin de workflow.
 - File viewer fenêtré SWE-agent ACI (lourd, optionnel).
 - 5 nœuds sans tools (Worker/Judge/Synth/Adversary) : CodeAgent inutile, ne pas migrer.
+- **F-50 : Scripts d'isolation « l'agent joue le rôle du nœud » pour dépannage/validation rapide.**
+  Idée : systématiser le pattern qui a si bien marché sur F-49 (l'agent injecte des
+  entrées buggées et valide la sortie en <6s, au lieu de lancer le workflow complet de
+  ~25 min). Un script d'isolation par nœud, qui fournit le contexte minimal et appelle
+  la VRAIE fonction de production (zéro dérive de comportement). Bénéfices :
+  - **Dépannage rapide** : itérer sur un nœud (prompt, skill, logique) sans relancer tout
+    le graphe. Retour en secondes, pas en dizaines de minutes.
+  - **Détection de régressions** : inputs buggés connus → assertion sur le verdict.
+  - **Onboarding/debug** : comprendre le contrat entrée/sortie d'un nœud en l'exécutant
+    isolément avec des données contrôlées.
+  Nœuds candidats (par ordre de valeur) :
+  1. **Tester** (`run_tester.py` existe déjà F-46) — étendre aux autres runners.
+  2. **Coder** (`run_coder.py` / `prompts/bubble_sort_spec.md` existe déjà isolation) —
+     formaliser en script réutilisable avec spec en entrée.
+  3. **Static Tester** (`debug/validate_static_tester_live.py` existe déjà F-49) — garder.
+  4. **Linter** — injecter fichiers buggés (TS, Python IndentationError, contenu après
+     </html>) et valider le court-circuit.
+  5. **Architect / Router / Judge** — injecter specs/prompt et valider le JSON de sortie
+     (DSPy, moins évident à isoler mais faisable via signature directe).
+  6. **Security Reviewer** — injecter code vulnérable (XSS, eval) et valider le verdict.
+  Convention : un dossier `debug/isolation/` avec un script par nœud, documentation du
+  contrat d'entrée (quoi fournir) et d'attentes (quoi vérifier). Réutilise les fixtures
+  déjà écrites dans les tests unitaires.
 
 ## Jalons bootstrap (faits)
 - [x] Création agent.md (specs gestion d'état).
