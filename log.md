@@ -2597,3 +2597,97 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
   Le Static Tester court-circuite le LLM sur 80% des bugs en <6s vs 25 min. Le LLM ne
   s'active plus que pour le visuel + les comportements subtils (son vrai rôle).
 
+
+## [2026-08-02 20:44:33] plan | F-55 Scripts isolation « l'agent joue le nœud » (backlog P4)
+- OBJECTIF : systématiser le pattern qui a marché sur F-54 (Static Tester) — un script
+  d'isolation par nœud qui fournit le contexte minimal et appelle la VRAIE fonction de
+  production, pour itérer/dépanner sans relancer le workflow complet (~25 min).
+- DÉCISIONS UTILISATEUR : (1) périmètre = Linter (déterministe 0-LLM) + 4 nœuds DSPy
+  principaux (Router, Architect, Judge, Security). PromptRefiner/Escalation hors périmètre
+  (non listés dans F-55). (2) Convention debug/isolation/ (conforme description F-55),
+  scripts existants (run_tester.py, run_coder_*, validate_static_tester_live.py) laissés
+  à la racine mais référencés depuis un README centralisé.
+- EXPLORATION (3 agents en parallèle) : signatures exactes des nœuds (dspy_nodes.py +
+  linter.py + nodes.py), clés du dict task/subtask réellement lues (via .get()), sites
+  d'appel dans workflows.py, tests mockés (fixtures réutilisables), config settings.
+- LEÇON CLÉ : les nœuds DSPy instancient eux-mêmes leur LLM via _configure_dspy (le
+  paramètre *_model reçu est IGNORE, relicat d'API). Router=think=False, Architect=
+  think=True (le seul), Judge/Security=think=False (F-47). Aucune dépendance KG dans
+  les nœuds (persistance escalation déléguée à l'appelant). Linter miroir parfait du
+  Static Tester (déterministe, lit juste id+target_files, retour CoderOutput).
+- Branche feat/isolation-scripts créée. Dossier debug/isolation/ créé.
+
+## [2026-08-02 20:49:50] gen  | F-55 — 5 scripts d'isolation créés dans debug/isolation/
+- run_linter.py (déterministe 0-LLM, ms) — miroir de validate_static_tester_live. 7 scénarios
+  (3 buggés : Python IndentationError/py_compile, JS TS-in-vanilla/tree-sitter, HTML contenu
+  après </html>/structure ; 3 corrects ; 1 multi-fichiers). VALIDÉ en exécution : 7/7 ✅.
+- run_router.py (DSPy, entrée str, think=False) — classifie prompt→language. Mode démo
+  (4 prompts : javascript/python/html/ambigu) + prompt CLI.
+- run_architect.py (DSPy, think=True le seul) — découpe sous-tâches + stratégie F-29
+  (simple/incremental/multifile). Support @fichier pour cahier de charges.
+- run_judge.py (DSPy, 3 entrées : subtask + test_res + security_res) — 3 scénarios
+  --scenario pass/fail/vuln avec findings F-44 (Finding/Severity depuis models.py).
+- run_security.py (DSPy) — code vulnérable (XSS innerHTML + eval + SQL concat) vs défensif
+  (textContent + paramétré), 2 scénarios vuln/safe, rubric OWASP F-44.
+- debug/isolation/README.md — convention + tableau d'usage + contrat entrée/sortie
+  EXHAUSTIF par nœud (clés dict task/subtask réellement lues via .get() + retour Pydantic).
+- py_compile OK pour les 5 (après correction f-string apostrophe dans run_router.py).
+- AUCUN code de production modifié (nouveaux fichiers seulement dans debug/isolation/).
+- Leçon confirmée : les nœuds DSPy instancient eux-mêmes leur LLM via _configure_dspy
+  (param *_model reçu IGNORE). Les scripts passent None comme model + settings réel.
+
+## [2026-08-02 21:48:12] fix  | F-55 — CORRECTION MAJEURE de design après feedback user
+- MAL ENTENDU du besoin initial : j'avais créé 5 scripts Python qui APPELAIENT LE LLM DU
+  GRAPHE (execute_router_node → gemma 4B/12B). Validation : py_compile + 1 exécution Router
+  réelle (18.9s). MAIS c'était MAUVAIS : "l'agent joue le nœud" signifie MOI (ZCode) qui
+  joue le nœud à la main, PAS le LLM du graphe via un script.
+- FEEDBACK USER (« tu es sensé être un node », « tu simules le Node comme pour le coder et
+  le tester ! ») → pointeur vers debug/MANUAL_TESTER_METHODOLOGY.md : la doc qui décrit
+  EXACTEMENT ce que je fais quand je teste un HTML à la main (Read/grep/node --check/
+  DevTools, étapes fail-fast, biais de confirmation). C'est LE pattern à calquer.
+- PATTERN DÉCOUVERT : (1) debug/MANUAL_TESTER_METHODOLOGY.md = le Tester joué à la main
+  (doc d'étapes), (2) audit_coder/audit_coder_report.md = le Coder joué avec screenshots.
+  Les deux montrent MOI (agent) jouant le nœud avec mes propres capacités, sans LLM graphe.
+- CORRECTION : suppression des 4 scripts DSPy (run_router/architect/judge/security.py —
+  tous appelaient le LLM graphe). GARDÉ run_linter.py (déterministe 0-LLM, valide la vraie
+  fct prod, 7/7 scénarios ✅ — un nœud déterministe n'a pas besoin d'un LLM ni de moi pour
+  être joué). Création de 5 docs MANUAL_<NODE>_METHODOLOGY.md (Router/Architect/Judge/
+  Security/Linter) calquées sur MANUAL_TESTER_METHODOLOGY.md : étapes fail-fast, outils
+  utilisés (Read/grep/node/jugement), échecs types détectés, biais vécus, comparatif vs
+  LLM graphe. README isolation réécrit (convention doc méthodologie + run_linter.py seul
+  script). README racine corrigé (tableau des docs au lieu des scripts supprimés).
+- LEÇON : toujours relire le pattern existant (MANUAL_TESTER_METHODOLOGY.md) AVANT de
+  concevoir un nouveau mécanisme d'isolation. J'ai fait l'inverse — j'ai supposé "appelle
+  la vraie fct prod" (pattern des scripts racine run_coder_tca.py) au lieu de "je joue le
+  nœud à la main" (pattern MANUAL_TESTER_METHODOLOGY.md). Les 2 patterns coexistent dans le
+  projet mais servent des buts différents.
+
+## [2026-08-02 21:54:50] eval  | F-55 — Audit comparatif méthode manuelle vs nœuds prod
+- OBJECTIF (feedback user) : utiliser les docs méthodologiques comme BENCHMARK pour comparer
+  ma version (je joue le nœud) à celle implémentée dans chaque nœud de production — en
+  prenant en compte TOUS les composants branchés (prompt DSPy + rôles/invariants F-44 +
+  skills + MCP Context7/DevTools + ajouts truncate/sanitizer/loop_guard).
+- MÉTHODE : 5 agents en parallèle (1 par nœud) font le gap analysis (lecture doc + code prod).
+- CARTOGRAPHIE préalable : Router (0 skill/0 MCP/0 ajout), Architect (Context7 pré-fetch +
+  think=True, 0 skill), Judge (truncate_output + security_res, 0 skill), Security (0 ajout,
+  0 truncate), Linter (code déterministe).
+- RÉSULTATS (debug/isolation/COMPARISON_AUDIT.md) :
+  * Router 🔴 ma doc > prod : mots-clés canoniques, règle "extensions gagnent", justification
+    manquent au prompt prod (RouterSignature L43-47 générique).
+  * Architect 🟡 BIDIRECTIONNEL : ma doc était OBSOLÈTE sur F-15 ("1 fichier = 1 sous-tâche"
+    alors que prod dit "1 livrable testable = 1 sous-tâche", le failure mode n°1). CORRIGÉ
+    ce cycle (étape 1 + biais n°1 réécrits). Ma doc > prod sur sections (squelette 1ère,
+    fourchette 3-7, biais multifile vs incremental).
+  * Judge 🟡 ma doc > prod sur procédure : ordre fail-fast, grep par fonctionnalité,
+    croisement défiant Tester/ma-lecture (la démo a localisé l'opérateur fautif ligne 11).
+  * Security 🟡 ma doc > prod sur couverture : grille OWASP concrète (patterns grep) vs
+    prod abstrait ; vérif input externe vs contrôlé ; A09 Logging omis par prod.
+  * Linter 🟢 doc fidèle, 1 VRAI GAP CODE : fichier absent = is_valid=True silencieux
+    (linter.py:226-227) → le Coder peut "réussir" sans livrer. Recommandation : missing→False.
+- PATTERN RÉCURRENT : prompts prod bons sur les principes (rubric, in-diff, OWASP) mais
+  manquent de PROCÉDURE OPÉRATOIRE CONCRÈTE (ordre fail-fast, patterns/grep concrets, biais
+  nommés). Hypothèse : cause probable des failure modes observés (Router→javascript par
+  défaut, Security rate pickle/secrets, Judge valide sans vérifier couverture).
+- LEÇON F-55 confirmée : la valeur des docs méthodologiques = jouer les nœuds à la main ET
+  servir de benchmark d'audit. ~15 recommandations d'amélioration des prompts prod générées
+  (potentiel cycle F-56 : "durcir les prompts prod avec la procédure concrète des docs").
