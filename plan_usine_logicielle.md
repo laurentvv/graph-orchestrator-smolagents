@@ -22,7 +22,7 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 > | ⚪ 8. Middlewares d'Auto-Réparation | ❌ à faire |
 > | 🔧 8-bis. Robustesse Runtime (Sandbox + Idempotence) | **PARTIEL** ❌→🟡 *(Guard bash denylist ✅ F-38 ; Idempotence replays ✅ F-43 ; reste Sandbox Docker)* |
 > | 🟢 9. Optimisation de l'État (Reducers/Compaction) | ❌ à faire |
-> | 🔵 10. Contexte à la Demande (Skills) | ❌ à faire |
+> | 🔵 10. Contexte à la Demande (Skills) | ❌ à faire — **synergie avec F-56/P14** : les docs méthodologiques F-55 (MANUAL_<NODE>) sont déjà écrits comme des skills potentiels ; P10 = infrastructure pour les injecter aux nœuds DSPy (Router/Judge/Security) en lazy loading (actuellement seuls Coder/Tester reçoivent des skills). Voir §'Synergie P10↔P14' à Priorité 14. |
 > | 🟠 11. Observabilité (Event Stream) | ❌ à faire |
 > | ✨ 12. Meta-prompt (PromptRefiner avant Architect) | **✅ TERMINÉ (Phase 1)** — nœud DSPy F-39 (Kilo/Cline "Enhance Prompt" pattern). Phase 2 MIPROv2 écartée (signal biaisé mono-modèle 6 Go VRAM). |
 > | 📁 13. Output daté par run (isolation des artefacts) | **✅ TERMINÉ** — `chdir` vers `runs/YYYY-MM-DD_HHMM_slug/` (F-40). Reprise via checkpoint (même dossier). DB DuckDB stable (kg_path absolu avant chdir). Restoration cwd auto (`_scoped_chdir` finally). |
@@ -248,3 +248,20 @@ Plus d'information : `system_prompts_analysis.md`
 - [ ] **F-56f** : Validation run Bubble Sort + prompt multi-techno (Python) pour vérifier le Router corrigé ne déborde plus vers javascript.
 
 > **Priorité relative** : P14 est une **optimisation de qualité** (résout des failure modes récurrents), pas un chantier structurel comme P0-P3. Effort faible (ajouts ciblés de lignes), peut se faire en 1-2 cycles. Le gap Linter (P14-E) est le plus urgent car c'est un **vrai bug** potentiel (validation d'une non-livraison).
+
+> **🔗 SYNERGIE P10 ↔ P14 (décidée 2026-08-02)** : P14 (durcir les prompts) et P10 (contexte à la demande / skills lazy) ne sont **pas en concurrence, ils sont complémentaires** — et F-55 est le pont entre les deux.
+>
+> **Le constat** : l'audit F-55 (`debug/isolation/COMPARISON_AUDIT.md`) révèle que les nœuds DSPy (Router/Architect/Judge/Security) manquent de **procédure concrète** (ordre fail-fast, patterns/grep explicites, biais nommés). Or ce contenu est **riche** (tableau de couverture du Judge, grille OWASP du Security — chacun ~50-100 lignes). L'injecter directement dans le prompt DSPy (P14 seul) le **gonflerait pour TOUS les appels**, même quand le cas ne se présente pas.
+>
+> **La double stratégie** :
+> - **P14 (prompt inline)** = les règles **courtes et toujours pertinentes** vont dans le docstring du nœud (ex: anti-biais Router "ne pas déborder vers javascript", règle Judge "is_approved ssi 0 critical/high"). Toujours actives, ~3-8 lignes.
+> - **P10 (skill à la demande)** = les procédures **longues et conditionnelles** deviennent des skills chargés via le middleware P10 quand le nœud en a besoin (ex: grille OWASP complète du Security = ~50 lignes, seulement utile si le code audité contient des patterns dangereux ; tableau de couverture du Judge = ~30 lignes, seulement utile sur les grosses sous-tâches).
+>
+> **Le pivot F-55** : les docs `MANUAL_<NODE>_METHODOLOGY.md` sont **déjà écrits** comme des skills potentiels (étapes + patterns grep + biais + contre-mesures). P10 serait l'infrastructure pour les injecter aux nœuds DSPy exactement comme les skills sont déjà injectés au Coder/Tester (`build_skills_block`), mais en lazy loading. Concrètement :
+> - État actuel : `BASE_SKILLS_BY_NODE` (skills_loader.py) ne branche des skills QUE sur Coder + Tester. Les nœuds DSPy (Router/Architect/Judge/Security) reçoivent `[]`.
+> - Cible P10 : les nœuds DSPy reçoivent un skill dérivé de `MANUAL_<NODE>_METHODOLOGY.md`, chargé à la demande (pas en permanence — c'est tout l'intérêt du lazy loading vs l'inline de P14).
+>
+> **Décision de séquençage** :
+> 1. **P14 d'abord** (F-56) — durcir les prompts avec les règles courtes (toujours pertinentes) + corriger le bug Linter P14-E. Effort faible, ROI immédiat.
+> 2. **P10 ensuite** — implémenter le middleware lazy loading, puis migrer les procédures longues des docstrings vers des skills `node-<role>-methodology` (dérivés des docs F-55). Permet de **dégonfler** les prompts que P14 aura partiellement alourdis, et d'injecter le contenu riche (grille OWASP, tableau couverture) seulement quand nécessaire.
+> 3. La **source unique de vérité** reste les `MANUAL_<NODE>_METHODOLOGY.md` : les prompts P14 (résumé court) et les skills P10 (version complète) en sont tous deux des projections, ce qui évite la dérive.

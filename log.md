@@ -2709,3 +2709,23 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
   * P14-F : validation (ré-audit + runs).
 - DÉCISION : P14-E en priorité (bug potentiel), le reste = optimisation qualité (effort
   faible, ajouts ciblés de lignes, ROI élevé sur les failure modes récurrents).
+
+## [2026-08-02 22:05:14] plan | Synergie P10↔P14 formalisée (F-56 + contexte à la demande)
+- FEEDBACK USER : la Priorité 10 (Contexte à la Demande / Skills lazy loading) est LIÉE à F-56.
+- ANALYSE : P14 (durcir prompts) et P10 (skills à la demande) ne sont PAS en concurrence —
+  complémentaires. P14 = règles COURTES et toujours pertinentes dans le docstring (ex: anti-
+  biais Router). P10 = procédures LONGUES et conditionnelles en skills lazy (ex: grille OWASP
+  Security ~50 lignes, tableau couverture Judge ~30 lignes — seulement utiles au cas par cas).
+- CONSTAT : le mécanisme de skills existe déjà (build_skills_block) mais n'est branché QUE sur
+  Coder + Tester (BASE_SKILLS_BY_NODE). Les nœuds DSPy (Router/Judge/Security) reçoivent [].
+  C'est exactement le gap que P10 comblerait.
+- LE PIVOT F-55 : les docs MANUAL_<NODE>_METHODOLOGY.md sont déjà écrits comme des skills
+  potentiels (étapes + patterns grep + biais + contre-mesures). P10 = infrastructure pour les
+  injecter aux nœuds DSPy en lazy loading.
+- SÉQUENÇEMENT : (1) P14/F-56 d'abord (durcir prompts + bug Linter P14-E, effort faible ROI
+  immédiat), (2) P10 ensuite (middleware lazy loading + migration des procédures longues vers
+  skills node-<role>-methodology dérivés des docs F-55, dégonfle les prompts).
+- SOURCE UNIQUE DE VÉRITÉ = docs F-55 : prompts P14 (résumé court) et skills P10 (version
+  complète) sont tous deux des projections des mêmes docs → évite la dérive.
+- MAJ : plan_usine_logicielle.md (tableau bord P10 + note Synergie P10↔P14 en §P14) +
+  feature_list.json F-56 (description enrichie synergie).
