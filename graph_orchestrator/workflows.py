@@ -110,6 +110,31 @@ def _resolve_run_output_dir(
     return os.path.join(root, f"{stamp}_{slug}")
 
 
+def _prune_old_runs(runs_root: str, retention: int):
+    """Supprime les anciens dossiers de run pour limiter la croissance (Priorité 13)."""
+    import shutil
+    if retention <= 0 or not os.path.isdir(runs_root):
+        return
+    
+    try:
+        candidates = []
+        for name in os.listdir(runs_root):
+            path = os.path.join(runs_root, name)
+            if os.path.isdir(path) and not name.startswith("."):
+                # Le pattern du dossier daté est YYYY-MM-DD_HHMM_slug
+                candidates.append((path, os.path.getmtime(path)))
+        
+        # Tri par modification la plus récente d'abord (descendant)
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        
+        if len(candidates) > retention:
+            to_delete = candidates[retention:]
+            for path, _ in to_delete:
+                shutil.rmtree(path, ignore_errors=True)
+                print(f"[🗑️] Ancien run supprimé (rétention={retention}) : {os.path.basename(path)}")
+    except Exception as e:
+        print(f"[⚠️] Échec du nettoyage des anciens runs dans {runs_root} : {e}")
+
 @contextmanager
 def _scoped_chdir(target_dir: str):
     """Change de répertoire de travail le temps d'un bloc, restore TOUJOURS à la sortie.
@@ -329,6 +354,11 @@ async def run_coding_workflow(
     os.makedirs(run_output_dir, exist_ok=True)
     _resume_tag = "REPRIS" if (checkpoint and checkpoint.get("output_dir")) else "nouveau"
     print(f"[📁] Run output dir ({_resume_tag}) : {run_output_dir}")
+
+    # Nettoyage optionnel (Priorité 13)
+    if settings.output_retention > 0:
+        root = os.path.abspath(settings.output_dir) if settings.output_dir else os.path.abspath("runs")
+        _prune_old_runs(root, settings.output_retention)
 
     # --- Idempotence des effets de bord (Priorité 8-bis : replays/retries) ---
     # Store garantissant que les effets non-idempotents (append_file, pip install)
