@@ -2225,6 +2225,241 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
 - DOCS : debug/TIMINGS_ANALYSE.md (analyse timings + frictions + recommandations priorisées).
   debug/run_gpu_*/ (log + index.html + transitions). Script parsing réutilisable.
 
+## [2026-08-01 21:39:00] plan | Fix Tester querySelector (F-45) — diagnostic empirique + 3 axes
+- SOURCE : debug/TIMINGS_ANALYSE.md (bloqueur n°1) + run GPU réel
+  (logs/run_bubble_gpu_20260801_200950.log, runs/2026-08-01_2009_bubble_sort/index.html).
+- DIAGNOSTIC EMPIRIQUE (CORRIGE vs l'hypothèse initiale du doc) : lecture du log révèle
+  que la racine n'est PAS "Puppeteer n'expose pas querySelector". Le modèle (gemma-12B)
+  a écrit `document.querySelector='input[type="range"]'` (ASSIGNATION `=`) au lieu de
+  `document.querySelector('...')` (APPEL `()`). En JS, cette assignation ÉCRASE la
+  fonction native dans le contexte page → tous les appels suivants échouent "not a
+  function" (steps 5-10, 17 occurrences). Le modèle boucle car il cherche une cause
+  externe (Puppeteer, contexte Node vs navigateur) sans réaliser qu'il a lui-même
+  corrompu `document` au step 4. Le HTML généré utilise getElementById (correct) — le
+  bug est 100% dans les scripts d'assertion du Tester, pas dans le code à valider.
+- CONSÉQUENCE : 10 steps gaspillés, 0 assertion fonctionnelle aboutie, Tester jamais
+  arrivé à final_answer (process tué au step 11 par timeout). ~30 min perdues.
+- PÉRIMÈTRE (décision utilisateur) : les 3 axes ciblés (recommandations #1/#2/#4 du
+  tableau), cap steps = 12. Refactos lourds (CodeAgent F-31, compaction contexte,
+  préchargement navigateur) laissés en échéance future.
+- 3 AXES :
+  1. Skill web-tester : directive ciblée anti "querySelector assigné au lieu d'appelé"
+     + repli getElementById/getElementsByTagName + pattern DOMContentLoaded + garde
+     anti-pollution (const local, jamis réassigner une méthode native).
+  2. Cap steps configurable TESTER_MAX_STEPS (défaut 12) dans config.py + .env.example.
+  3. Guard contextuel au Tester : LoopGuard activé (détecte répétition du même appel
+     puppeteer_evaluate) + message idle _detect_idle_step adapté au contexte Tester
+     (puppeteer_* / final_answer, pas write_file).
+
+## [2026-08-02 00:15:00] feat | Fix Tester querySelector TERMINÉ (F-45 — 3 axes, 487 tests)
+- DIAGNOSTIC EMPIRIQUE (lecture log GPU logs/run_bubble_gpu_20260801_200950.log) : la racine
+  de la friction 'document.querySelector is not a function' (10 steps gaspillés, ~30 min,
+  Tester jamais arrivé à final_answer) n'était PAS 'Puppeteer n'expose pas querySelector'
+  (hypothèse initiale de TIMINGS_ANALYSE.md, FAUSSE). Le modèle a écrit
+  `document.querySelector='...'` (ASSIGNATION =) au lieu de `document.querySelector('...')`
+  (APPEL ()) au Step 4 → écrase la fonction native dans le contexte page → tous les appels
+  suivants échouent. Le modèle bouclait car il cherchait une cause externe sans réaliser
+  qu'il avait corrompu document lui-même. Le HTML généré utilisait getElementById (correct).
+- 3 AXES IMPLÉMENTÉS :
+  1. Skill web-tester enrichi : directive ciblée anti '=' vs '()' fatal + garde anti-
+     pollution du contexte (jamais réassigner une méthode native, const locale) + replis
+     getElementById/getElementsByTagName + pattern DOMContentLoaded (anti faux échec).
+  2. Cap steps configurable TESTER_MAX_STEPS (défaut 12, avant 24 hardcoded) dans config.py
+     + .env.example + web_tester.py (max_steps=settings.tester_max_steps). Valeur par défaut
+     dataclass (convention loop_guard_threshold — ne casse pas les helpers Settings() à la main).
+  3. Guard anti-idle (F-33) étendu au Tester : LoopGuard instancié et passé au WebTestRunner
+     via run_with_retry (détecte répétition exacte du même puppeteer_evaluate) +
+     _detect_idle_step contextuel (paramètre node_kind='tester' → message cite puppeteer_*/-
+     final_answer, PAS write_file). run_with_retry accepte node_kind (défaut 'coder', rétro-compat).
+- TESTS : +5 (test_guard.py +3 : message contextuel tester/coder/productif ; test_config.py +1 :
+  tester_max_steps défaut+override ; test_guard.py +1 : run_with_retry node_kind='tester' émet
+  log idle). Suite pytest 487 passed / 0 failed (482 baseline + 5). 0 régression.
+- ÉTAT DISQUE : debug/TIMINGS_ANALYSE.md (ACTION CORRIGÉE + recommandations statutées :
+  #1/#2 ✅, #4 🟡 guard sans refacto, #3/#5 ⬜ échéance), feature_list.json +F-45 (completed,
+  deps F-27/F-33), contract.md +critères 150-155, progress.md (+cycle F-45), README.md
+  (+2 puces Anti-loop hardening + querySelector hygiene), .env.example (+TESTER_MAX_STEPS).
+- PÉRIMÈTRE (décision utilisateur) : 3 axes ciblés, cap 12. Refactos lourds laissés en
+  échéance future : Tester→CodeAgent (F-31, non urgent), compaction contexte (#5),
+  préchargement navigateur (#3).
+
+## [2026-08-02 02:35:00] diag | BUG VISUEL Coder confirmé — skill frontend-design en cause
+- SOURCE : audit utilisateur (audit_coder/test_6 → HTML propre) vs run F-45
+  (runs/2026-08-01_2009_bubble_sort/index.html → HTML visuellement cassé : titre h1
+  3.5rem→4rem énorme, layout row à 1024px illisible, pas de card).
+- PROUVE PAR LE LOG (run_bubble_f45_*.log) : le Coder applique LITTÉRALEMENT la consigne
+  du skill frontend-design ligne 20 'Échelle de type : hero 3.5rem' → il écrit
+  `h1 { font-size: 3.5rem }` (log lignes 403-405) puis `4rem` en responsive (ligne 482).
+- ROOT CAUSE : le skill frontend-design est conçu pour des LANDING PAGES / PORTFOLIOS
+  (hero, macro-layout Grid/Flex, media queries row à 1024px) — INADAPTÉ à un visualiseur
+  d'algorithme (app/tool) qui demande une UI simple, empilée verticalement, centrée.
+  Le 4B suit littéralement 'hero 3.5rem' sans discernement de contexte.
+- RÉVÉLATION ACCESSOIRE : le screenshot Puppeteer (puppeteer_screenshot) NE SERT À RIEN
+  pour le rendu — ni le Tester (12B ne voit pas fiablement les blobs base64) ni le Judge
+  ne voient visuellement la page → un bug visuel n'est JAMAIS rattrapé par la chaîne
+  actuelle. Le tester teste l'absence de crash JS, pas le rendu.
+- FIX (décision utilisateur) : corriger le skill frontend-design pour distinguer
+  app/tool (UI simple centrée) vs landing/page (hero autorisé) + remplacer 'hero 3.5rem'
+  par une fourchette conditionnelle + garde anti-titre-géant.
+
+## [2026-08-02 02:50:00] diag | 2 GAPS ouverts consignés (debug/GAPS_TESTER_JUDGE.md)
+- CONTEXTE : le run F-45 a révélé que la chaîne Coder→Tester→Judge est AVEUGLE au rendu
+  visuel et que le Judge hang sur gros contexte. Un HTML visuellement cassé (titre h1
+  3.5rem/4rem, layout row illisible — cause : skill frontend-design, cf F-46) a traversé
+  toute la chaîne sans être rattrapé.
+- GAP 1 — TESTER NE VOIT PAS LE RENDU : le Web Tester prend des puppeteer_screenshot
+  (base64) MAIS le 12B ne les exploite pas visuellement de façon fiable → les screenshots
+  sont pris (coût tokens/temps) pour rien. Le tester teste console JS + assertions DOM,
+  jamais le rendu. Un bug purement visuel (layout cassé) est INRATTRAPABLE. Pistes :
+  modèle vision (multimodal) sur les screenshots, OU assertions visuelles déterministes
+  (getBoundingClientRect), OU arrêter de prendre des screenshots inutiles tant qu'aucun
+  nœud vision n'est branché.
+- GAP 2 — JUDGE HANG SUR GROS CONTEXTE : le Judge a reçu un prompt énorme (rapport Tester
+  ~124k tokens + task_requirements + invariants) → le 12B a hang (Ollama CPU figé, connexions
+  Established en attente, jamais de verdict). Même quand il répond, trop de contexte = verdict
+  lent ET de moindre qualité. Fix : RÉDUIRE le contexte au max (verdict synthétique du Tester
+  + code tronqué + critères essentiels, PAS le cahier des charges intégral ni tout le DOM) +
+  timeout/échec gracieux + cap N tokens.
+- ARCHIVAGE : debug/GAPS_TESTER_JUDGE.md créé (analyse détaillée + pistes + priorité).
+  Gap 1 = le + impactant qualitativement (bug visuel jamais rattrapé). Gap 2 = le + bloquant
+  opérationnellement (workflow ne termine pas). À traiter dans un cycle dédié.
+- FIX F-45 (Tester querySelector) reste VALIDE pour son périmètre (boucle querySelector
+  résolue : 0 erreur vs 17 avant, directives skill appliquées, cap steps 12 fonctionnel).
+  Mais ces 2 gaps montrent que régler querySelector ne suffit pas à avoir une QA fiable.
+
+## [2026-08-02 03:10:00] diag | GAPS CORRIGÉS par analyse des logs réels (F-45)
+- ANALYSE du log F-45 (logs/run_bubble_f45_*.log) — les hypothèses initiales étaient
+  PARTIELLEMENT FAUSSES, corrigées par les données mesurées :
+- GAP 1 (Tester) — PROUVÉ : le screenshot puppeteer N'EST MÊME PAS TRANSMIS au modèle.
+  L'observation retournée est un message texte "Screenshot 'initial_ui' taken at 1280x800",
+  PAS le blob base64. Donc le screenshot est pris (7× sur le run, coûte du temps) mais
+  littéralement personne ne le voit. Bug visuel inrattrapable par construction.
+- GAP 2 (Judge) — DIAGNOSTIC CORRIGÉ : le hang ne vient PAS d'un prompt trop gros. Mesure
+  réelle du prompt Judge = ~4039 tokens SEULEMENT (instruction F-44 935 + code 2229 +
+  tests tronqué 500 + requirements tronqué 375). Le rapport Tester→Judge est DÉJÀ tronqué
+  par truncate_output. VRAIE CAUSE = le mode 'thinking' de Gemma 3/4 (canal <|channel>thought
+  confirmé par test direct curl) + max_tokens=8192 (dspy_nodes _configure_dspy) laisse le
+  Judge raisonner indéfiniment avant le verdict JSON. 12B @ ~6 tok/s × 8192 = ~23 min →
+  semblerait hangé, timeout 600s peut couper en plein milieu.
+- FIX CANDIDATS Gap 2 (borné, facile) : max_tokens 8192→~2000 pour nœuds DSPy (le JSON
+  verdict fait 500-1000 tok) + tester mode thinking off (/no_think) + vérifier propagation
+  du timeout. FIX Gap 1 (décision) : modèle vision sur les screenshots OU assertions
+  déterministes (getBoundingClientRect) OU arrêter screenshots inutiles tant que pas de vision.
+- DOC MAJ : debug/GAPS_TESTER_JUDGE.md mis à jour avec les mesures réelles + priorité revue
+  (Gap 2 = le + bloquant ET le + facile à fixer ; Gap 1 = le + impactant qualitativement).
+
+## [2026-08-02 03:40:00] diag | Gap 2 thinking — blocant Ollama 0.32.5 /v1 identifié
+- MODEL CARD (HF google/gemma-4-12B-it-qat-q4_0-gguf) lu : thinking DÉSACTIVÉ par défaut
+  (enable_thinking default false), s'active via token <|think|>. Reco temp=1.0 MAIS pour
+  chat général — pour le code, temp basse (0.3) est CORRECTE (ne pas changer).
+- TESTS EXPÉRIMENTAUX (localhost Ollama 0.32.5) :
+  * /api/chat + think:false → MARCHE (4.8s, 6 tokens, réponse directe).
+  * /v1 (endpoint DSPy) → thinking FORCÉ malgré think:false / chat_template_kwargs /
+    Modelfile TEMPLATE minimal. Le thinking va dans un champ 'reasoning', content vide,
+    finish_reason=length. NON désactivable sur cette version d'Ollama.
+  * Contrôle /v1 SANS think off : 200 tokens générés (tout num_predict), réponse vide,
+    38s. C'est EXACTEMENT le hang du Judge (à 8192 tokens = ~23 min).
+- CONCLUSION : le hang vient du thinking Gemma activé auto sur /v1 + max_tokens=8192 qui
+  laisse le modèle raisonner indéfiniment. La température n'est PAS en cause (laissée à 0.3).
+- OPTIONS (par ordre de pragmatisme) : (1) MAJ Ollama >=0.13 (supporte think sur /v1) →
+  then think=False dans dspy.LM kwargs ; (2) max_tokens 8192→~2000 DSPy (borne la casse) ;
+  (3) bypass /v1 vers /api/chat via wrapper LM custom ; (4) timeout+échec gracieux (à faire
+  de toute façon, défense en profondeur).
+- DOC MAJ : debug/GAPS_TESTER_JUDGE.md (constat technique + options réalistes).
+- MODÈLE DÉRIVÉ créé pour tests : gemma-12B-nothink (TEMPLATE sans thinking) — n'a PAS
+  résolu le problème côté /v1 (proxy Ollama force le thinking indépendamment du template).
+
+## [2026-08-02 03:55:00] diag | GAP 1 CORRIGÉ — modèle A la vision, smolagents jette l'image
+- MODEL CARD Google Gemma 4 (relevé par utilisateur) : MULTIMODAL natif — "Image
+  Understanding – screen and UI understanding, OCR...". Le 12B VOIT les images. Mon
+  diagnostic initial "le modèle ne voit pas" était FAUX.
+- RACINE RÉELLE (prouvée par le log F-45) : le screenshot EST capturé par puppeteer, MAIS
+  smolagents le jette. Trace : 'tool puppeteer_screenshot returned multiple content, using
+  the first one' → smolagents garde le TextContent ("Screenshot taken") et jette
+  l'ImageContent (base64). grep base64 log = 0. Le modèle ne reçoit que le texte.
+- DONC : le pipeline vision est COMPLET (modèle multimodal + capture screenshot) SAUF la
+  transmission de l'ImageContent au modèle. Bug d'intégration localisé côté smolagents,
+  pas une limite modèle. Fix = conserver l'ImageContent et le réinjecter comme message
+  image (format OpenAI image_url data:image/png;base64). Gemma 4 le consommera nativement.
+- PRIORITÉ REVUE : Gap 1 devient le + impactant ET + réparable (fix localisé, pas de MAJ
+  externe). Gap 2 reste bloquant MAIS dépend MAJ Ollama 0.32.5→≥0.13 (think sur /v1).
+- DOC MAJ : debug/GAPS_TESTER_JUDGE.md (racine corrigée, fix candidat smolagents wrapper).
+
+## [2026-08-02 04:10:00] diag | Ollama 0.32.5 = DERNIÈRE version (pas de MAJ à faire)
+- CORRECTION de mon erreur : j'avais écrit "MAJ Ollama >=0.13" en imaginant un vieux
+  schéma de versionnage. Vérifié : 0.32.5 = la dernière release GitHub (publiée 2026-07-27,
+  il y a 5 jours). L'utilisateur est À JOUR. Pas de MAJ à faire.
+- CONSÉQUENCE : le thinking forcé sur /v1 n'est PAS un problème de vieille version. C'est
+  le comportement actuel d'Ollama 0.32.5 (dernière version). Tests exhaustifs (tous négatifs) :
+  think:false, extra_body, chat_template_kwargs, Modelfile TEMPLATE minimal, sans system,
+  sans tools, template Jinja forcé (erreur fonctions) → RIEN ne désactive le thinking sur /v1.
+  Seul /api/chat natif + think:false marche (mais DSPy utilise /v1).
+- CONCLUSION Gap 2 : pas de levier endpoint. Contournements code uniquement : (1) bypass
+  /v1 → /api/chat avec think:false via adapter LM custom, (2) max_tokens 8192→~2000 DSPy
+  (borne la casse), (3) timeout+échec gracieux (défense en profondeur). Option 4 : remonter
+  à Ollama (thinking forcé sur /v1 sans disable = manque pour les usages structured-output).
+- DOC MAJ : debug/GAPS_TESTER_JUDGE.md (constat définitif, options code uniquement).
+
+## [2026-08-02 04:30:00] feat | Fix Gap 2 — désactiver thinking sauf Architect (F-47)
+- DIAGNOSTIC DÉFINITIF (cf. entries précédentes) : thinking Gemma 4 forcé sur /v1 (Ollama
+  0.32.5 dernière version), non désactivable via endpoint OpenAI-compat. Seul /api/chat +
+  think:false top-level marche (test : 3.8s, 6 tokens, réponse directe vs 23min de thinking).
+- PERCÉE TECHNIQUE : le provider litellm 'ollama/' (prefix au lieu de 'openai/') parle
+  /api/chat natif ET passe think=False. Testé via dspy.LM('ollama/...', think=False) →
+  réponse directe {"approved": true} sans thinking parasite.
+- DÉCISION UTILISATEUR : thinking gardé UNIQUEMENT pour l'Architect (le raisonnement aide
+  au découpage/stratégie). Désactivé pour Router/PromptRefiner/Security/Judge/Escalation
+  (tâches de classification/formatage/verdict → thinking = gaspi + hang bloquant).
+- IMPLÉMENTATION : _configure_dspy (dspy_nodes.py) passe à ollama/ + retire /v1 de
+  l'api_base + accepte paramètre think. Chaque appelant passe la valeur selon son nœud.
+- CRITIQUE : penser à MAJ le Coder (smolagents) ? Non ce cycle (le Coder marche, FAST=4B,
+  on n'y touche pas — question laissée en suspens).
+
+## [2026-08-02 05:00:00] plan | F-48 PROCHAIN CYCLE — Vision Coder (auto-validation visuelle)
+- IDÉE (utilisateur) : le Coder (4B) a la vision (cf. model card Gemma 4 multimodal). Il
+  pourrait capturer un screenshot de son propre output après write_file et s'auto-valider
+  visuellement (verify-after, invariant F-44 appliqué au visuel) avant le Judge.
+- PRÉREQUIS DÉCOUVERT ce cycle :
+  * Le 4B A la vision — confirmé via /api/chat + think=false + screenshot test_6 →
+    "dark-themed web interface... Title: 'Visualiseur Bubble Sort'...". Description parfaite.
+  * MAIS le Coder subit AUSSJ le thinking forcé sur /v1 (confirmé : content vide, reasoning,
+    finish=length). Donc : (a) il gaspille du budget à 'réfléchir' inutilement à chaque step
+    (lenteur + moins de qualité code), (b) sa vision répondrait vide tant qu'il est sur /v1.
+- PREMIÈRE ÉTAPE F-48 = faire parler le Coder /api/chat + think=false (même mécanisme que F-47,
+  mais pour smolagents OpenAIServerModel). Bénéfice double : + budget code, + vision débloquée.
+- PÉRIMÈTRE F-48 (décision utilisateur "Tout 1+2+3") : (1) think=false Coder, (2) outil
+  screenshot après write_file HTML, (3) skill Coder verify-after visuel (titre lisible, layout
+  non cassé, search_replace pour fix si problème).
+- CYCLE DÉDIÉ (pas ce cycle) : le Coder = cœur du système, scope ambitieux, mérite
+  tests/validation séparés (comparatif qualité avec/sans thinking + régression Bubble/Nimbus).
+- DOC : debug/GAPS_TESTER_JUDGE.md mis à jour (F-48 planifié, prérequis, périmètre).
+
+## [2026-08-02 05:20:00] done | Cycle F-45/F-46/F-47 TERMINÉ — état disque synchronisé
+- LIVRABLES ce cycle (3 features completed + 1 planifiée) :
+  * F-45 Fix Tester querySelector (skill + cap steps 12 + guard contextuel node_kind='tester')
+    — validé empiriquement (0 erreur querySelector vs 17, Judge atteint).
+  * F-46 Fix bug visuel Coder (skill frontend-design réécrit : APP/TOOL vs LANDING/PAGE,
+    fourchettes, garde anti-titre-géant) + bug FRESH_START (load_dotenv override=False).
+  * F-47 Fix Judge hang (Gap 2 résolu) — _configure_dspy provider ollama/ + think sélectif
+    (False sauf Architect). Validé : 5.8s vs 23min. Cause : thinking Gemma forcé sur /v1
+    (Ollama 0.32.5 = dernière version).
+  * F-48 planifiée (prochain cycle) — Vision Coder (think=false Coder + outil screenshot +
+    skill verify-after). Prérequis découvert : le Coder subit aussi le thinking sur /v1.
+- DIAGNOSTICS CONSIGNÉS : debug/GAPS_TESTER_JUDGE.md (2 gaps avec données réelles : Gap 1
+  screenshot jetté par smolagents [non résolu, piste F-48], Gap 2 thinking [résolu F-47]).
+  Mes honnêtes erreurs de diagnostic initial corrigées par les données : modèle A la vision
+  (Gemma 4 multimodal), prompt Judge petit (4k), température 0.3 correcte, Ollama à jour.
+- TESTS : suite pytest 487 passed / 0 failed (482 baseline + 5 nouveaux F-45). F-46/F-47
+  n'ajoutent pas de tests (skill Markdown + config : pas testable unitairement ; _configure_dspy
+  validé en intégration directe).
+- ÉTAT DISQUE : feature_list.json (50 features : 45 completed + 5 pending, JSON valide),
+  contract.md +critères 156-163, progress.md (+cycle F-46/F-47 + roadmap F-48), README.md
+  (+balle thinking sélectif F-47), debug/TIMINGS_ANALYSE.md (mise à jour F-47), log.md.
+- NON FAIT ce cycle (volontaire) : run complet de re-validation F-46+F-47 (Coder+Judge
+  ensemble). Laissé au cycle F-48 — pertinent de valider la qualité visuelle APRÈS avoir
+  donné la vision au Coder (sinon le run reproduirait juste le bug visuel non rattrapé).
+- MODÈLE dérivé créé pour tests : gemma-12B-nothink / gemma-12B-nothink2 (TEMPLATE override)
+  — n'ont PAS résolu le thinking côté /v1 (proxy Ollama force indépendamment du template).
+  Peuvent être supprimés (ollama rm) — non utilisés en prod (F-47 utilise le provider litellm).
 ---
 ## [2026-08-02 10:56:42] feat | Début F-45 : Chrome DevTools MCP + validation visuelle (Coder & Tester)
 - Objectif : auto-validation visuelle du Coder (screenshot vu par gemma-4-E4B multimodal,

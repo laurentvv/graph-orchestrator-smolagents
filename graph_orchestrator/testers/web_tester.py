@@ -35,8 +35,9 @@ class WebTestRunner:
         from mcp import StdioServerParameters
         from smolagents import ToolCollection, ToolCallingAgent
 
-        from ..nodes import run_with_retry, resolve_verbosity
+        from ..nodes import run_with_retry, resolve_verbosity, _detect_idle_step
         from ..skills_loader import load_skill_body
+        from ..loop_guard import LoopGuard
 
         env = os.environ.copy()
         env["PUPPETEER_EXECUTABLE_PATH"] = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
@@ -81,8 +82,9 @@ class WebTestRunner:
                 refutations = task.get("refutations", [])
                 iteration = task.get("iteration", 1)
                 use_targeted = should_use_targeted_retest(iteration, refutations)
-                # max_steps adaptatif : 6 en mode ciblé (re-test), 12 en mode complet.
-                tester_max_steps = TARGETED_MAX_STEPS if use_targeted else 12
+                # max_steps adaptatif : 6 en mode ciblé (re-test), settings.tester_max_steps
+                # (défaut 12, configurable) en mode complet.
+                tester_max_steps = TARGETED_MAX_STEPS if use_targeted else settings.tester_max_steps
                 mode_label = "CIBLÉ (re-test bugs)" if use_targeted else "complet"
                 print(f"    [>] Tester mode: {mode_label} (max_steps={tester_max_steps})")
 
@@ -92,7 +94,8 @@ class WebTestRunner:
                     name=f"tester_{task['id'].replace('-', '_')}",
                     description="Agent QA chargé de tester les interfaces web avec le MCP Puppeteer.",
                     verbosity_level=resolve_verbosity("HIGH"),
-                    # max_steps adaptatif (F-47) : 6 en mode ciblé, 12 en complet.
+                    # max_steps adaptatif (F-47) : 6 en mode ciblé, settings.tester_max_steps
+                    # (défaut 12, configurable via TESTER_MAX_STEPS) en complet.
                     # Rationnel complet : au-delà de 12, le contexte du ToolCallingAgent
                     # explose (observations DOM accumulées : +18k tokens/step observé
                     # sur run F-45, 405k tokens au step 21). Or gemma-4-12B perd en
@@ -219,4 +222,16 @@ Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_an
   }}
 }}
 """
-                return await run_with_retry(local_tester, prompt, CoderOutput, settings.worker_max_retries)
+                # Guard anti-loop (fix TIMINGS_ANALYSE) : le Tester peut aussi boucler sur
+                # le même appel puppeteer_evaluate (ex: même script JS échouant répétitivement
+                # à cause d'une assignation `=` au lieu d'un appel `()` sur querySelector).
+                # Le guard détecte la répétition exacte et injecte un message de rupture.
+                # node_kind="tester" : le message idle cite les outils Puppeteer, pas write_file.
+                guard = LoopGuard(
+                    threshold=settings.loop_guard_threshold,
+                    enabled=settings.loop_guard_enabled,
+                )
+                return await run_with_retry(
+                    local_tester, prompt, CoderOutput, settings.worker_max_retries,
+                    loop_guard=guard, node_kind="tester",
+                )

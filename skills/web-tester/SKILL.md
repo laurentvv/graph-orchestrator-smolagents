@@ -45,11 +45,67 @@ comme `button:has-text("...")` ou `text="..."` sont **INVALIDES** → erreur. Ut
 ```
 Attention : pas de `return` au top-level (cf. section 4 sur la syntaxe IIFE).
 
+### ⚠️ CRITICAL — `querySelector(...)` s'APPELLE, ne s'ASSIGNE PAS (sinon boucle fatale)
+`document.querySelector` / `document.querySelectorAll` sont des **fonctions natives**. La
+cause n°1 de l'erreur `document.querySelector is not a function` (observée 17× sur un run
+réel) est d'écrire par erreur une **assignation** `=` au lieu d'un **appel** `()` :
+
+```javascript
+// ❌ FAUX — assignation : écrase la fonction native dans le contexte de la page !
+const slider = document.querySelector='input[type="range"]';   // querySelector est maintenant détruit
+// Tous les appels suivants échoueront : "document.querySelector is not a function"
+
+// ✅ CORRECT — appel avec parenthèses :
+const slider = document.querySelector('input[type="range"]');
+```
+
+**Pourquoi c'est fatal** : une fois `document.querySelector = ...` exécuté dans le
+contexte de la page, la fonction native est **définitivement écrasée** pour tous les
+`puppeteer_evaluate` suivants. Le modèle boucle car il cherche une cause externe
+(Puppeteer, environnement) sans réaliser qu'il a lui-même corrompu `document`.
+
+**Garde anti-pollution du contexte (TOUJOURS appliquer)** :
+- NE JAMAIS réassigner une méthode native (`document.querySelector=...`, `window.alert=...`).
+- Stocke toujours le RÉSULTAT dans une `const` locale : `const el = document.querySelector(...)`.
+- Si tu reçois `... is not a function` sur une API native standard, suppose D'ABORD une
+  faute de syntaxe dans ton script (assignation oubliée, parenthèse manquante), PAS un
+  problème de l'environnement Puppeteer. Relis ton script précédent avant de réessayer.
+
+**Repli robuste si tu doutes de tes sélecteurs** — préfère les APIs qui ne risquent pas
+l'assignation accidentelle, surtout quand le code à tester utilise lui-même `getElementById` :
+```javascript
+// ✅ Replis sûrs (jamais d'ambiguïté appel vs assignation) :
+(() => {
+  const startBtn = document.getElementById('startButton');     // 1 élément par ID
+  const resetBtn = document.getElementById('resetButton');
+  const buttons  = Array.from(document.getElementsByTagName('button'));   // tous les boutons
+  const inputs   = Array.from(document.getElementsByTagName('input'));    // tous les inputs
+  return JSON.stringify({
+    start: !!startBtn, reset: !!resetBtn,
+    buttons: buttons.map(b => ({ id: b.id, text: b.innerText.trim() })),
+    inputs: inputs.map(i => ({ id: i.id, type: i.type })),
+  });
+})()
+```
+
 ## Mandatory Testing Workflow
 
 ### 1. Launch & Navigate
 Use `puppeteer_navigate` with the **absolute file path** given in your prompt
 (`file:///D:/.../index.html`). DO NOT use a relative path.
+
+**DOM ready avant toute assertion** : les pages initialisent souvent leur DOM dans un
+handler `DOMContentLoaded` (cf. le code à tester). Avant ta première assertion
+`puppeteer_evaluate`, confirme que le DOM est peuplé — sinon tu lirais un état vide et
+produirais un **faux échec**. Le plus simple : attends un petit délai puis vérifie qu'un
+élément attendu existe :
+```javascript
+(async () => {
+  await new Promise(r => setTimeout(r, 300));           // laisse le DOM se peupler
+  const ready = !!document.getElementById('startButton') || document.getElementsByTagName('button').length > 0;
+  return ready ? 'DOM ready' : 'DOM vide (page non initialisée)';
+})()
+```
 
 ### 2. Visual Inspection
 `puppeteer_screenshot` to verify the UI renders. **Use a realistic desktop resolution**:

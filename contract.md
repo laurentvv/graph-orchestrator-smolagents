@@ -187,53 +187,65 @@
 - [ ] Critère 148 : Suppression des ~180 lignes de nœuds smolagents DÉPRÉCIÉS (versions mortes de `execute_router_node`/`execute_architect_node`/`execute_security_reviewer_node`/`execute_code_judge_node` dans `nodes.py`, jamais appelées par `run_coding_workflow`) + imports morts nettoyés (`RouterOutput`/`ArchitectOutput`/`SecurityOutput`/`CodeJudgeOutput` retirés de l'import `nodes.py`) — vérifié par import (4 fonctions absentes, fonctions actives Coder/Tester/Worker/Reduce/Judge/Synth/Adversary préservées).
 - [ ] Critère 149 : La suite pytest complète passe (0 régression, 482 passed = 442 baseline + 40 nouveaux `test_prompts.py`).
 
-## Critères de Chrome DevTools MCP + validation visuelle (Priorité 14 — F-45)
-- [ ] Critère 150 : `build_chrome_devtools_params()` retourne `StdioServerParameters` (command="npx", args contient "chrome-devtools-mcp@latest", "--isolated", "1280x800", "jpeg") si `CHROME_DEVTOOLS_ENABLED=1` ; `None` si `CHROME_DEVTOOLS_ENABLED=0` — testé `TestBuildParams`.
-- [ ] Critère 151 : `CHROME_PATH` set → ajoute `--executable-path <path>` aux args ; `CHROME_DEVTOOLS_HEADLESS=1` → ajoute `--headless` ; absent par défaut (visible pour debug) — testé `test_chrome_path_ajoute_executable_path` + `test_headless_*`.
-- [ ] Critère 152 : `chrome_devtools_tools()` yield `[]` si params None (désactivé) OU si `ToolCollection.from_mcp` lève (Chrome absent/réseau down) — pas de crash, dégradation gracieuse — testé `TestChromeDevtoolsToolsDegration`.
-- [ ] Critère 153 : `chrome_devtools_tools()` yield la liste des outils MCP si connexion OK — testé `TestChromeDevtoolsToolsMocked::test_connexion_ok_yield_outils`.
-- [ ] Critère 154 : `wrap_screenshot_tools()` wrap UNIQUEMENT les outils `take_screenshot`/`puppeteer_screenshot` (pas les autres), capture l'image PIL retournée dans le holder, préserve le comportement original (retourne quand même l'image) — testé `TestWrapScreenshotTools` + `TestScreenshotCapture`.
-- [ ] Critère 155 : `make_screenshot_callback()` peuple `memory_step.observations_images` avec le dernier screenshot, reset le holder après push, noop si holder vide — testé `TestScreenshotCallback`.
-- [ ] Critère 156 : `list_mcp_servers_status()` inclut l'entrée `chrome-devtools` (name + transport="stdio" + configured reflète l'état) — testé `TestMcpStatusDiagnostic`.
-- [ ] Critère 157 : `_is_web_task()` détecte le web via `router_lang` OU extensions des `target_files` (.html/.htm/.css/.js) ; false pour Python — testé `TestCoderWebDetection`.
-- [ ] Critère 158 : `_build_devtools_blocks()` retourne ("","") si pas d'outils DevTools (backward-compat) ; block preview + doc outils si web+outils dispos ; doc seule si non-web+outils — testé `test_build_devtools_blocks_*`.
-- [ ] Critère 159 : Skill `devtools-preview` routé pour les tâches web (regex frontend-design), absent pour Python ; son body se charge depuis `skills/devtools-preview/SKILL.md` — testé `TestSkillRouting`.
-- [ ] Critère 160 : Suite pytest complète passe (0 régression, 521 passed = 493 baseline + 28 nouveaux test_chrome_devtools_tool + 1 mis à jour test_skills_and_mcp).
+## Critères du Fix Tester querySelector (F-45 — 3 axes)
+- [ ] Critère 150 : Le skill `web-tester` contient une directive explicite ciblant la racine réelle de la friction `document.querySelector is not a function` — l'assignation `=` au lieu de l'appel `()` (ex `document.querySelector='...'` écrase la fonction native) — avec exemple ❌/✅, garde anti-pollution du contexte (jamais réassigner une méthode native, stocker dans une `const` locale), et replis robustes (`getElementById`/`getElementsByTagName` quand on doute des sélecteurs).
+- [ ] Critère 151 : Le skill `web-tester` documente un pattern DOMContentLoaded avant la 1re assertion (attendre un délai puis vérifier qu'un élément attendu existe) — évite les faux échecs sur une page qui initialise son DOM dans un handler `DOMContentLoaded`.
+- [ ] Critère 152 : `config.py` expose `tester_max_steps` (env `TESTER_MAX_STEPS`, défaut 12) — borne la durée du Web Tester (le défaut historique 24 laissait boucler ~30 min) ; valeur par défaut dans la dataclass (même convention que `loop_guard_threshold`, ne casse pas les helpers de test) ; `web_tester.py` l'utilise (`max_steps=settings.tester_max_steps`) — testé `test_tester_max_steps_default_and_override`.
+- [ ] Critère 153 : `run_with_retry` accepte un paramètre `node_kind` (défaut `"coder"`) qui adapte le message idle au contexte ; `_detect_idle_step(agent, node_kind="tester")` produit un message citant `puppeteer_*`/`final_answer` (PAS `write_file`/`append_file`) — testé `test_detect_idle_step_tester_message_mentions_puppeteer` ; le message Coder est inchangé (rétro-compat) — testé `test_detect_idle_step_coder_message_keeps_write_file`.
+- [ ] Critère 154 : Le `WebTestRunner` instancie un `LoopGuard` et le passe à `run_with_retry` (via `loop_guard=guard, node_kind="tester"`) — le Tester bénéficie désormais de la détection anti-idle ET anti-boucle (avant : guard absent, le Tester était le seul nœud d'outils sans protection) — vérifié par lecture du code (`web_tester.py`).
+- [ ] Critère 155 : La suite pytest complète passe (0 régression, 487 passed = 482 baseline + 5 nouveaux : test_guard.py +3 + test_config.py +1 + test_guard.py +1).
 
-## Critères de la Checklist de fonctionnalités + Fixes robustesse GPU-local (F-46)
-- [ ] Critère 161 : `extract_functionalities(spec)` parse la section `## Fonctionnalités attendues` en liste Python (regex), s'arrête à la prochaine section `##`, dédoublonne — testé `TestExtractFunctionalities`.
-- [ ] Critère 162 : Robustesse — spec vide/prompt brut/section sans puces → `[]` (fallback historique, pas de crash) — testé `TestExtractRobustesse`. Insensible casse/accents (Fonctionnalité/Fonctionnalités).
-- [ ] Critère 163 : `build_checklist_block(funcs)` produit un bloc qui compte les N exigences, numérote 1..N, impose un tableau verdict (PASS/FAIL/N-A), et rappelle « 1 FAIL = failure » — testé `TestBuildChecklistBlock`.
-- [ ] Critère 164 : Le WebTester importe et injecte `checklist_block` dans son prompt après le cahier des charges — testé `TestTesterInjection::test_web_tester_importe_le_module`.
-- [ ] Critère 165 : `AUDIT_PARALLEL=false` (défaut) séquentialise Tester PUIS Security ; `AUDIT_PARALLEL=true` restaure le `asyncio.gather` — vérifié par lecture code workflows.py:554-575.
-- [ ] Critère 166 : `max_steps` Tester = 12 (GPU-local, anti-explosion contexte observée à 24 steps/405k tokens) — testé `test_run_max_steps_12`.
-- [ ] Critère 167 : Skill `coding` contient la règle anti-TypeScript (tableau syntaxes interdites : `: type`, `as`, `: void`, `interface`) avec exemples — vérifié par lecture skill.
-- [ ] Critère 168 : Skill `devtools-preview` met `list_console_messages` OBLIGATOIRE AVANT `take_screenshot` (le screenshot seul ne révèle pas un JS cassé) — vérifié par lecture skill.
-- [ ] Critère 169 : Skill `web-tester` contient la règle des 2 essais (conclure FAILURE vite sur bug réel, ne pas explorer 15 sélecteurs) — vérifié par lecture skill.
-- [ ] Critère 170 : Suite pytest complète passe (0 régression, 535 passed = 521 baseline + 14 nouveaux test_requirements_checklist).
+## Critères du Fix bug visuel Coder + FRESH_START (F-46)
+- [ ] Critère 156 : Le skill `frontend-design` commence par une ÉTAPE 0 obligatoire distinguant APP/TOOL (défaut : UI simple empilée centrée dans une card, titre 1.5-2rem) vs LANDING/PAGE (hero autorisé, 2.5-3rem max) — la consigne 'hero 3.5rem' littérale est remplacée par une fourchette conditionnelle.
+- [ ] Critère 157 : Garde anti-titre-géant explicite dans le skill — `h1 > 3rem` est interdit sauf hero unique d'une landing page ; directive layout APP : NE PAS faire de row à 1024px, rester une colonne (corrige le bug observé : titre 3.5rem/4rem + layout row cassé).
+- [ ] Critère 158 : `load_dotenv()` appelé sans `override=True` (override=False par défaut) — l'env shell prime sur .env ; `FRESH_START=1` au shell est respecté (testé) ; .env reste lu en l'absence d'override shell.
+- [ ] Critère 159 : La suite pytest complète passe (0 régression, 487 passed après F-46). Skill non re-validé par run complet ce cycle (laissé à F-48 qui donnera la vision au Coder pour auto-valider).
 
-## Critères du Re-test ciblé + Git diff (F-47, F-48)
-- [ ] Critère 171 : `should_use_targeted_retest(iter, refs)` active le mode ciblé si iter>1 ET refs non vides ; sinon mode complet — testé `TestShouldUseTargeted`.
-- [ ] Critère 172 : `extract_bug_points(refs)` extrait les réfutations (plus récentes d'abord, tronquées à max_chars) ou None si vide — testé `TestExtractBugPoints`.
-- [ ] Critère 173 : `build_targeted_retest_block(bugs, iter, git_diff)` produit un prompt ciblé (max_steps 6, assertions par bug, smoke-test, section diff si fourni) — testé `TestBuildTargetedRetestBlock` + `TestTargetedRetestWithDiff`.
-- [ ] Critère 174 : Le web_tester a un max_steps ADAPTATIF (TARGETED_MAX_STEPS=6 ciblé, 12 complet) et remplace checklist_block par targeted_block en mode ciblé — testé `TestWebTesterIntegration`.
-- [ ] Critère 175 : Le workflow propage `refutations` (brutes) et `git_diff` dans sub_dict pour le Tester — testé `TestWorkflowPropagation`.
-- [ ] Critère 176 : `init_run_git()` crée un .git local (idempotent) ; `commit_iteration()` commit après Coder — testé `TestInitRunGit` + `TestCommitAndGetDiff`.
-- [ ] Critère 177 : `get_last_diff()` retourne git diff HEAD~1..HEAD (vides si <2 commits ou git absent) ; tronque au-delà de max_chars avec marqueur — testé `TestDiffTruncation` + `TestRobustesse`.
-- [ ] Critère 178 : Skill coding contient la règle CSS `height: %` (failure mode isolation #1 : barres invisibles) — vérifié par lecture skill.
-- [ ] Critère 179 : Suite pytest complète passe (0 régression, 563 passed = 551 + 12 nouveaux test_git_snapshot).
+## Critères du Fix Judge hang — thinking sélectif (F-47)
+- [ ] Critère 160 : `_configure_dspy(settings, model_id, think=False)` utilise le provider litellm `ollama/` (parle `/api/chat` natif Ollama au lieu de `/v1`), retire le suffixe `/v1` de l'api_base, et passe le paramètre `think` au LM — validé : `think=False` répond en 5.8s sans thinking (vs ~23 min avec thinking forcé sur /v1).
+- [ ] Critère 161 : Thinking DÉSACTIVÉ (think=False) pour Router/PromptRefiner/Security/Judge/Escalation (verdicts/classification, le thinking était du gaspi bloquant) ; thinking CONSERVÉ (think=True) UNIQUEMENT pour l'Architect (le raisonnement aide au découpage/stratégie) — vérifié par lecture des 6 appels `_configure_dspy` dans dspy_nodes.py.
+- [ ] Critère 162 : Diagnostic documenté (debug/GAPS_TESTER_JUDGE.md Gap 2) — le hang ne venait PAS du prompt (mesuré ~4k tokens, déjà tronqué) NI de la température (0.3 correcte pour le code), mais du thinking Gemma 4 forcé sur /v1 (Ollama 0.32.5 = dernière version, pas de MAJ à faire).
+- [ ] Critère 163 : La suite pytest complète passe (0 régression, 487 passed ; 2 tests test_prompt_refiner.py mis à jour : assertions `_configure_dspy(..., think=False)`).
 
-## Critères du Static Tester déterministe (F-49)
-- [ ] Critère 180 : `extract_inline_js(html)` extrait le JS des `<script>` SANS `src` (ignore les externes) — testé `test_extract_inline_js_*`.
-- [ ] Critère 181 : `_check_js_syntax` lance `node --check` et détecte TS-in-vanilla (`: type`, `as Cast`) → SyntaxError — testé `test_ts_annotation_in_script` + `test_ts_as_cast_in_script`.
-- [ ] Critère 182 : `_check_event_wiring` flagge un contrôle interactif (button/input/select) avec id mais AUCUN handler (le piège n°1 : slider non branché, indétectable par screenshot) — testé `test_slider_not_wired`.
-- [ ] Critère 183 : Tolérances wiring légitimes : onclick inline, `<button type=submit>` en form, `<a href>`, `<input type=hidden>` — testés `test_*_not_flagged`.
-- [ ] Critère 184 : Tier 2 DevTools détecte les éléments créés en JS mais INVISIBLES (height=0 = bug CSS height:% sur conteneur sans hauteur), APRES déclenchement de l'action primaire (clic bouton start) — testé `test_invisible_bars_height_percent`.
-- [ ] Critère 185 : Dégradation `node` absent → Tier 1a skip silencieux (pas d'échec faux, le LLM Tester prend le relais) — testé `test_node_absent_degrades`.
-- [ ] Critère 186 : Dégradation Chrome absent/opt-out → tier_reached="tier1" (Tier 2 skip, Tier 1 reste actif) — testé `test_tier2_skipped_when_devtools_off`.
-- [ ] Critère 187 : Non-HTML pass-through (target `.py` → success immédiat, le Static Tester est web-only) — testé `test_non_html_passthrough`.
-- [ ] Critère 188 : Opt-out `STATIC_TESTER_ENABLED=0` désactive le nœud (pass-through) ; `STATIC_TESTER_DEVTOOLS=0` désactive le Tier 2 seul — testés `test_opt_out_flag_disables` + `test_devtools_disabled_still_runs_tier1`.
-- [ ] Critère 189 : Le workflow intègre le Static Tester entre le Linter et le Tester LLM, avec court-circuit (réfutation DuckDB + continue) sur failure — vérifié par lecture workflows.py.
+## Critères de Chrome DevTools MCP + validation visuelle (F-50, ex-F-45 branche locale)
+- [ ] Critère 164 : `build_chrome_devtools_params()` retourne `StdioServerParameters` (command="npx", args contient "chrome-devtools-mcp@latest", "--isolated", "1280x800", "jpeg") si `CHROME_DEVTOOLS_ENABLED=1` ; `None` si `CHROME_DEVTOOLS_ENABLED=0` — testé `TestBuildParams`.
+- [ ] Critère 165 : `CHROME_PATH` set → ajoute `--executable-path <path>` aux args ; `CHROME_DEVTOOLS_HEADLESS=1` → ajoute `--headless` ; absent par défaut (visible pour debug) — testé `test_chrome_path_ajoute_executable_path` + `test_headless_*`.
+- [ ] Critère 166 : `chrome_devtools_tools()` yield `[]` si params None (désactivé) OU si `ToolCollection.from_mcp` lève (Chrome absent/réseau down) — pas de crash, dégradation gracieuse — testé `TestChromeDevtoolsToolsDegration`.
+- [ ] Critère 167 : `chrome_devtools_tools()` yield la liste des outils MCP si connexion OK — testé `TestChromeDevtoolsToolsMocked::test_connexion_ok_yield_outils`.
+- [ ] Critère 168 : `wrap_screenshot_tools()` wrap UNIQUEMENT les outils `take_screenshot`/`puppeteer_screenshot` (pas les autres), capture l'image PIL retournée dans le holder, préserve le comportement original (retourne quand même l'image) — testé `TestWrapScreenshotTools` + `TestScreenshotCapture`.
+- [ ] Critère 169 : `make_screenshot_callback()` peuple `memory_step.observations_images` avec le dernier screenshot, reset le holder après push, noop si holder vide — testé `TestScreenshotCallback`.
+- [ ] Critère 170 : `list_mcp_servers_status()` inclut l'entrée `chrome-devtools` (name + transport="stdio" + configured reflète l'état) — testé `TestMcpStatusDiagnostic`.
+- [ ] Critère 171 : `_is_web_task()` détecte le web via `router_lang` OU extensions des `target_files` (.html/.htm/.css/.js) ; false pour Python — testé `TestCoderWebDetection`.
+- [ ] Critère 172 : `_build_devtools_blocks()` retourne ("","") si pas d'outils DevTools (backward-compat) ; block preview + doc outils si web+outils dispos ; doc seule si non-web+outils — testé `test_build_devtools_blocks_*`.
+- [ ] Critère 173 : Skill `devtools-preview` routé pour les tâches web (regex frontend-design), absent pour Python ; son body se charge depuis `skills/devtools-preview/SKILL.md` — testé `TestSkillRouting`.
+
+## Critères de la Checklist de fonctionnalités + Fixes robustesse GPU-local (F-51, ex-F-46)
+- [ ] Critère 174 : `extract_functionalities(spec)` parse la section `## Fonctionnalités attendues` en liste Python (regex), s'arrête à la prochaine section `##`, dédoublonne — testé `TestExtractFunctionalities`.
+- [ ] Critère 175 : Robustesse — spec vide/prompt brut/section sans puces → `[]` (fallback historique, pas de crash) — testé `TestExtractRobustesse`. Insensible casse/accents.
+- [ ] Critère 176 : `build_checklist_block(funcs)` produit un bloc qui compte les N exigences, numérote 1..N, impose un tableau verdict (PASS/FAIL/N-A), et rappelle « 1 FAIL = failure » — testé `TestBuildChecklistBlock`.
+- [ ] Critère 177 : Le WebTester importe et injecte `checklist_block` dans son prompt après le cahier des charges — testé `TestTesterInjection::test_web_tester_importe_le_module`.
+- [ ] Critère 178 : Skill `coding` contient la règle anti-TypeScript (tableau syntaxes interdites : `: type`, `as`, `: void`, `interface`) avec exemples — vérifié par lecture skill.
+- [ ] Critère 179 : Skill `web-tester` contient la règle des 2 essais (conclure FAILURE vite sur bug réel, ne pas explorer 15 sélecteurs) — vérifié par lecture skill.
+
+## Critères du Re-test ciblé + Git diff (F-52/F-53, ex-F-47/F-48)
+- [ ] Critère 180 : `should_use_targeted_retest(iter, refs)` active le mode ciblé si iter>1 ET refs non vides ; sinon mode complet — testé `TestShouldUseTargeted`.
+- [ ] Critère 181 : `extract_bug_points(refs)` extrait les réfutations (plus récentes d'abord, tronquées à max_chars) ou None si vide — testé `TestExtractBugPoints`.
+- [ ] Critère 182 : `build_targeted_retest_block(bugs, iter, git_diff)` produit un prompt ciblé (max_steps 6, assertions par bug, smoke-test, section diff si fourni) — testé `TestBuildTargetedRetestBlock` + `TestTargetedRetestWithDiff`.
+- [ ] Critère 183 : Le web_tester a un max_steps ADAPTATIF (TARGETED_MAX_STEPS=6 ciblé, settings.tester_max_steps complet) et remplace checklist_block par targeted_block en mode ciblé — testé `TestWebTesterIntegration`.
+- [ ] Critère 184 : `init_run_git()` crée un .git local (idempotent) ; `commit_iteration()` commit après Coder — testé `TestInitRunGit` + `TestCommitAndGetDiff`.
+- [ ] Critère 185 : `get_last_diff()` retourne git diff HEAD~1..HEAD (vides si <2 commits ou git absent) ; tronque au-delà de max_chars avec marqueur — testé `TestDiffTruncation` + `TestRobustesse`.
+
+## Critères du Static Tester déterministe (F-54, ex-F-49)
+- [ ] Critère 186 : `extract_inline_js(html)` extrait le JS des `<script>` SANS `src` (ignore les externes) — testé `test_extract_inline_js_*`.
+- [ ] Critère 187 : `_check_js_syntax` lance `node --check` et détecte TS-in-vanilla (`: type`, `as Cast`) → SyntaxError — testé `test_ts_annotation_in_script` + `test_ts_as_cast_in_script`.
+- [ ] Critère 188 : `_check_event_wiring` flagge un contrôle interactif (button/input/select) avec id mais AUCUN handler (le piège n°1 : slider non branché, indétectable par screenshot) — testé `test_slider_not_wired`.
+- [ ] Critère 189 : Tolérances wiring légitimes : onclick inline, `<button type=submit>` en form, `<a href>`, `<input type=hidden>` — testés `test_*_not_flagged`.
+- [ ] Critère 190 : Tier 2 DevTools détecte les éléments créés en JS mais INVISIBLES (height=0 = bug CSS height:% sur conteneur sans hauteur), APRES déclenchement de l'action primaire (clic bouton start) — testé `test_invisible_bars_height_percent`.
+- [ ] Critère 191 : Dégradation `node` absent → Tier 1a skip silencieux (pas d'échec faux, le LLM Tester prend le relais) — testé `test_node_absent_degrades`.
+- [ ] Critère 192 : Dégradation Chrome absent/opt-out → tier_reached="tier1" (Tier 2 skip, Tier 1 reste actif) — testé `test_tier2_skipped_when_devtools_off`.
+- [ ] Critère 193 : Non-HTML pass-through (target `.py` → success immédiat, le Static Tester est web-only) — testé `test_non_html_passthrough`.
+- [ ] Critère 194 : Opt-out `STATIC_TESTER_ENABLED=0` désactive le nœud (pass-through) ; `STATIC_TESTER_DEVTOOLS=0` désactive le Tier 2 seul — testés `test_opt_out_flag_disables` + `test_devtools_disabled_still_runs_tier1`.
+- [ ] Critère 195 : Le workflow intègre le Static Tester entre le Linter et le Tester LLM, avec court-circuit (réfutation DuckDB + continue) sur failure — vérifié par lecture workflows.py.
 
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.

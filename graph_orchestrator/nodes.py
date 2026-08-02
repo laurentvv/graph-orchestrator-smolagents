@@ -103,7 +103,7 @@ def build_reasoning_model(settings: Settings) -> OpenAIServerModel:
 # Retry + métriques
 # ==========================================
 
-def _detect_idle_step(agent) -> Optional[str]:
+def _detect_idle_step(agent, node_kind: str = "coder") -> Optional[str]:
     """F-33 (guard logiciel) : détecte un tour SANS tool call exécuté (modèle réfléchit sans agir).
 
     Inspecte le dernier step de agent.memory.steps. Si ce step n'a produit AUCUN appel
@@ -114,6 +114,12 @@ def _detect_idle_step(agent) -> Optional[str]:
 
     Un ActionStep smolagents est "productif" s'il a : tool_calls (TCA), code_action
     (CodeAgent), ou des observations (résultat d'outil). Un step "idle" = aucun des 3.
+
+    ``node_kind`` adapte le message au contexte : le Coder parle de write_file/search_replace,
+    le Tester de puppeteer_evaluate/puppeteer_navigate (fix TIMINGS_ANALYSE — le Tester
+    souffrait du "does not contain any JSON blob", modèle thinking sans tool call, car le
+    guard était codé en dur avec les outils du Coder et n'existait qu'à l'intérieur de
+    run_with_retry sans différenciation).
     """
     try:
         steps = getattr(getattr(agent, "memory", None), "steps", None)
@@ -128,6 +134,16 @@ def _detect_idle_step(agent) -> Optional[str]:
             or bool(getattr(last, "observations", None))
         )
         if not has_tool_use:
+            if node_kind == "tester":
+                return (
+                    "ATTENTION : ta dernière réponse ne contenait AUCUN appel d'outil exécuté "
+                    "(tu as réfléchi sans agir). Tu DOIS appeler un outil Puppeteer "
+                    "(puppeteer_navigate, puppeteer_screenshot, puppeteer_evaluate, "
+                    "puppeteer_click, puppeteer_fill) ou final_answer dans ton prochain tour. "
+                    "Si tu penses à un script JS à exécuter, utilise DIRECTEMENT "
+                    "puppeteer_evaluate au lieu de le décrire en texte. Une réponse sans "
+                    "action est un ÉCHEC."
+                )
             return (
                 "ATTENTION : ta dernière réponse ne contenait AUCUN appel d'outil exécuté "
                 "(tu as réfléchi sans agir). Tu DOIS appeler un outil (write_file, append_file, "
@@ -145,6 +161,7 @@ async def run_with_retry(
     model_class: type,
     max_retries: int,
     loop_guard: Optional["LoopGuard"] = None,
+    node_kind: str = "coder",
 ) -> Tuple[Optional[object], Optional[NodeMetrics]]:
     """Exécute un agent avec retry. Retourne (données_validées, métriques).
 
@@ -162,6 +179,11 @@ async def run_with_retry(
     chaque tool call exécuté. Quand l'agent répète EXACTEMENT le même appel
     `threshold` fois, on interrompt immédiatement (circuit-breaker) au lieu de
     le laisser brûler des tokens. Inspiré de Crush.
+
+    ``node_kind`` (fix TIMINGS_ANALYSE) : adapte le message idle au contexte (coder =
+    write_file/search_replace, tester = puppeteer_*). Le Tester souffrait du failure mode
+    "does not contain any JSON blob" (modèle thinking sans tool call) que le guard F-33
+    n'existait que pour le Coder. Désormais tout agent appelant run_with_retry en bénéficie.
     """
     last_metrics: Optional[NodeMetrics] = None
     # Détecte si l'agent est un CodeAgent (P1) pour adapter le message de retry
@@ -230,7 +252,7 @@ async def run_with_retry(
                     return validated, last_metrics
 
             # F-33 (1) : tour sans tool call exécuté ? (modèle réfléchit sans agir)
-            idle_msg = _detect_idle_step(agent)
+            idle_msg = _detect_idle_step(agent, node_kind=node_kind)
             if idle_msg:
                 print(
                     f"[!] Tentative {attempt + 1}/{max_retries} : tour sans appel d'outil "

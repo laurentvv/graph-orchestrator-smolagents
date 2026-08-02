@@ -347,6 +347,60 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape VC-8 : Analyse timings (debug/TIMINGS_ANALYSE.md) — Tester identifié comme goulot (querySelector, ~30 min).
 - [x] Étape VC-9 : Audit utilisateur intégré (audit_coder/ — 7 tests + screenshots, confirme Coder one-shot).
 - [x] Étape VC-10 : Suite pytest 482 passed / 0 failed après tous les fixes. Commit.
+- [x] Étape VC-11 (cycle suivant) : Fix Tester querySelector (ACTION IMMÉDIATE documentée).
+
+## Jalons de l'Itération (cycle Fix Tester querySelector — F-45)
+- [x] Étape F45-1 : Diagnostic empirique (lecture log GPU) — racine corrigée vs hypothèse
+  initiale du doc : le modèle écrit `document.querySelector='...'` (assignation `=`) au lieu
+  de `document.querySelector('...')` (appel `()`) → écrase la fonction native → boucle fatale.
+  Ce n'est PAS "Puppeteer n'expose pas querySelector". Le HTML généré utilise getElementById.
+- [x] Étape F45-2 (Axe 1 — Skill web-tester) : directive ciblée anti "querySelector assigné
+  vs appelé" (= fatal vs ()) + garde anti-pollution du contexte (jamais réassigner une méthode
+  native) + replis robustes getElementById/getElementsByTagName + pattern DOMContentLoaded.
+- [x] Étape F45-3 (Axe 2 — Cap steps) : config.py `tester_max_steps` (défaut 12, avant 24
+  hardcoded) + .env.example + web_tester.py (max_steps=settings.tester_max_steps).
+- [x] Étape F45-4 (Axe 3 — Guard contextuel) : LoopGuard instancié et passé au WebTestRunner
+  via run_with_retry + _detect_idle_step contextuel (node_kind='tester' → message puppeteer_*
+  /final_answer, pas write_file) ; run_with_retry accepte node_kind (défaut 'coder').
+- [x] Étape F45-5 (Tests) : test_guard.py +3 (message contextuel tester/coder, productif
+  no-message, run_with_retry node_kind='tester' émet le log idle) + test_config.py +1
+  (tester_max_steps défaut+override).
+- [x] Étape F45-6 (Suite) : pytest 487 passed / 0 failed (482 baseline + 5 nouveaux).
+- [x] Étape F45-7 (État disque) : debug/TIMINGS_ANALYSE.md (ACTION CORRIGÉE + recommandations
+  statutées), feature_list.json +F-45, contract.md +critères 150-155, progress.md, log.md.
+
+## Jalons de l'Itération (cycle Fix bug visuel Coder + Judge hang — F-46/F-47)
+- [x] Étape F46-1 : Diagnostic bug visuel — lecture log F-45 prouve que le Coder applique
+  LITTÉRALEMENT 'hero 3.5rem' du skill frontend-design (log lignes 403-405 + 482). Le skill
+  était conçu pour landing pages, inadapté à un visualiseur (app/tool).
+- [x] Étape F46-2 : Skill frontend-design réécrit — ÉTAPE 0 (APP/TOOL vs LANDING/PAGE),
+  fourchettes conditionnelles (remplacent 'hero 3.5rem'), garde anti-titre-géant, directive
+  layout APP (pas de row à 1024px, une colonne).
+- [x] Étape F46-3 : Bug FRESH_START corrigé — load_dotenv(override=True) écrasait l'env shell
+  → FRESH_START=1 au shell inopérant. Passé à override=False (défaut). Validé.
+- [x] Étape F47-1 : Diagnostic Gap 2 (Judge hang) — analyse log + tests exhaustifs. Prompt
+  Judge PETIT (~4k tokens, déjà tronqué). Température 0.3 CORRECTE (ne pas changer). VRAIE
+  cause : thinking Gemma 4 FORCÉ sur /v1 (Ollama 0.32.5 = dernière version). Non désactivable
+  via /v1 (think/chat_template_kwargs/Modelfile testés, tous ignorés).
+- [x] Étape F47-2 : Percée technique — provider litellm 'ollama/' parle /api/chat natif +
+  paramètre think. Testé : think=false → 3.8s, réponse directe (vs 23min thinking).
+- [x] Étape F47-3 : _configure_dspy migre vers ollama/ + retrait /v1 + paramètre think.
+  Décision utilisateur : think=True uniquement Architect, think=False pour les 5 autres
+  nœuds DSPy (Router/PromptRefiner/Security/Judge/Escalation).
+- [x] Étape F47-4 : Tests — 2 tests test_prompt_refiner.py mis à jour (assertions think=False).
+  Suite pytest 487 passed / 0 failed.
+- [x] Étape F4647-5 : debug/GAPS_TESTER_JUDGE.md — 2 gaps consignés avec DONNÉES RÉELLES
+  (Gap 1 screenshot jetté par smolagents, Gap 2 thinking résolu par F-47).
+
+## Prochain cycle planifié — F-48 : Vision Coder (auto-validation visuelle)
+- [ ] Étape F48-1 : think=false Coder — smolagents OpenAIServerModel → /api/chat (prérequis :
+  débloque vision + gain budget code). Le Coder subit AUSSI le thinking forcé sur /v1.
+- [ ] Étape F48-2 : Outil screenshot pour le Coder — capture la page HTML générée après
+  write_file, l'expose au Coder comme image (Gemma 4 multimodal).
+- [ ] Étape F48-3 : Skill Coder verify-after visuel — après write_file UI, screenshot +
+  auto-éval (titre lisible, layout non cassé) + search_replace si fix nécessaire.
+- [ ] Étape F48-4 : Validation — comparatif qualité code avec/sans thinking + régression
+  Bubble Sort et Nimbus.
 - [ ] Étape VC-11 (cycle suivant) : Fix Tester querySelector (ACTION IMMÉDIATE documentée).
 
 ## Jalons de l'Itération (cycle Chrome DevTools MCP + validation visuelle — F-45)

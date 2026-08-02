@@ -81,6 +81,47 @@ def test_detect_idle_step_inspects_last_step_only():
 
 
 # ==========================================
+# Message contextuel (fix TIMINGS_ANALYSE — node_kind="tester")
+# ==========================================
+def test_detect_idle_step_tester_message_mentions_puppeteer():
+    """node_kind='tester' → le message cite les outils Puppeteer, PAS write_file.
+
+    Le Tester souffrait du failure mode 'does not contain any JSON blob' (modèle thinking
+    sans tool call). Le message idle historique ne parlait que de write_file/search_replace
+    (outils du Coder) → non pertinent pour le Tester. Désormais node_kind='tester' produit
+    un message qui guide vers puppeteer_evaluate/final_answer.
+    """
+    agent = _make_agent([_make_step()])  # idle
+    msg = _detect_idle_step(agent, node_kind="tester")
+    assert msg is not None
+    assert "puppeteer_evaluate" in msg
+    assert "puppeteer_navigate" in msg
+    assert "final_answer" in msg
+    # Le message tester ne doit PAS parler des outils du Coder (sinon confusion).
+    assert "write_file" not in msg
+    assert "append_file" not in msg
+
+
+def test_detect_idle_step_coder_message_keeps_write_file():
+    """node_kind='coder' (défaut) → message historique préservé (write_file/search_replace).
+
+    Rétro-compatibilité : le Coder ne doit pas voir son message changer.
+    """
+    agent = _make_agent([_make_step()])  # idle
+    msg_coder = _detect_idle_step(agent, node_kind="coder")
+    msg_default = _detect_idle_step(agent)  # défaut = coder
+    assert msg_coder is not None
+    assert "write_file" in msg_coder
+    assert msg_coder == msg_default  # le défaut est bien 'coder'
+
+
+def test_detect_idle_step_tester_productive_step_no_message():
+    """node_kind='tester' mais step productif → None (le contexte ne change rien à la détection)."""
+    agent = _make_agent([_make_step(tool_calls=[{"name": "puppeteer_evaluate"}])])
+    assert _detect_idle_step(agent, node_kind="tester") is None
+
+
+# ==========================================
 # run_with_retry : guard idle ré-injecte le bon message
 # ==========================================
 @pytest.mark.anyio
@@ -132,3 +173,38 @@ async def test_run_with_retry_code_agent_emits_retry_log():
     # Le log "Tentative ... échouée" doit être émis (la logique retry tourne).
     printed = " ".join(str(c) for c in mock_print.call_args_list)
     assert "Tentative" in printed
+
+
+# ==========================================
+# run_with_retry : node_kind="tester" active le guard idle Puppeteer
+# ==========================================
+@pytest.mark.anyio
+async def test_run_with_retry_tester_idle_emits_puppeteer_log():
+    """node_kind='tester' + step idle → le guard se déclenche (log 'tour sans appel d'outil').
+
+    Fix TIMINGS_ANALYSE : le Tester souffrait du failure mode 'does not contain any JSON blob'
+    (modèle thinking sans tool call). Le guard idle n'existait qu'à l'intérieur de run_with_retry
+    mais sans différenciation — désormais tout agent appelant run_with_retry en bénéficie.
+    On valide que le guard se déclenche (print) sans crash.
+    """
+    agent = MagicMock()
+    agent.__class__ = type("ToolCallingAgent", (), {})
+    agent.name = "tester_test"
+    agent.model = MagicMock(model_id="test")
+    agent.memory = SimpleNamespace(steps=[_make_step()])  # idle
+
+    run_result = MagicMock()
+    run_result.output = "invalide"
+    run_result.timing = MagicMock(duration=1.0)
+    run_result.token_usage = MagicMock(input_tokens=10, output_tokens=5)
+
+    with patch("graph_orchestrator.nodes.asyncio.to_thread", new=AsyncMock(return_value=run_result)):
+        with patch("graph_orchestrator.nodes.extract_and_validate", return_value=None):
+            with patch("builtins.print") as mock_print:
+                await run_with_retry(
+                    agent, "PROMPT", MagicMock, max_retries=1, node_kind="tester"
+                )
+
+    # Le guard idle émet son log spécifique (ré-injection d'une consigne d'action).
+    printed = " ".join(str(c) for c in mock_print.call_args_list)
+    assert "tour sans appel d'outil" in printed
