@@ -301,7 +301,7 @@ _DYNAMIC_CONTAINER_HINTS = (
 # Noms de boutons « primaire » (démarre l'action principale = peuple le DOM).
 # GÉNÉRIQUE : on cherche des mots communs, pas un id spécifique.
 _PRIMARY_ACTION_RE = re.compile(
-    r'id\s*=\s*["\']?(start|go|run|play|generate|init|launch|submit)\w*',
+    r'id\s*=\s*["\']?((?:start|go|run|play|generate|init|launch|submit)[\w-]*)',
     re.IGNORECASE,
 )
 
@@ -582,7 +582,7 @@ def static_check_html(path: str, run_devtools: bool = True, devtools_url: Option
     # --- Tier 1 (toujours, statique pur) ---
     errors.extend(_check_js_syntax(html))
     errors.extend(_check_event_wiring(html))
-    tier = "tier1" if not errors else "tier1"  # on continue vers Tier 2 même si Tier 1 FAIL ?
+    tier = "tier1"
 
     # Décision : si Tier 1 a déjà trouvé un bug SYNTAXE (page blanche garantie),
     # on NE lance pas le Tier 2 (Chrome afficherait juste une page blanche —
