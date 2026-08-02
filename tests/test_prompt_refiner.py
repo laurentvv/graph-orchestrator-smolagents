@@ -115,8 +115,10 @@ def test_prompt_refiner_uses_dedicated_model_when_set(mock_cot, mock_configure):
         execute_prompt_refiner_node("prompt", "FAKE_REASON", settings)
     )
 
-    # _configure_dspy reçoit le modèle dédié, pas reasoning_model_id.
-    mock_configure.assert_called_once_with(settings, "dedicated-e4b-model")
+    # _configure_dspy reçoit le modèle dédié, pas reasoning_model_id. F-47 : think=False
+    # (le PromptRefiner désactive le thinking — reformulation structurée, pas besoin de
+    # raisonnement étape-par-étape, cf. debug/GAPS_TESTER_JUDGE.md Gap 2).
+    mock_configure.assert_called_once_with(settings, "dedicated-e4b-model", think=False)
     # La métrique reflète aussi le modèle réellement utilisé (pas le défaut).
     assert metrics.model == "dedicated-e4b-model"
 
@@ -135,7 +137,7 @@ def test_prompt_refiner_falls_back_to_reasoning_model_when_unset(mock_cot, mock_
     settings.prompt_refiner_model_id = ""  # vide = fallback
     asyncio.run(execute_prompt_refiner_node("prompt", "FAKE_REASON", settings))
 
-    mock_configure.assert_called_once_with(settings, "mock-reasoning-model")
+    mock_configure.assert_called_once_with(settings, "mock-reasoning-model", think=False)
 
 
 # ==========================================

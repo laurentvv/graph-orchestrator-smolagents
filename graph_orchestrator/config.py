@@ -13,8 +13,12 @@ from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
-# Charge un éventuel .env à la racine du projet, et écrase les variables d'environnement système existantes.
-load_dotenv(override=True)
+# Charge un éventuel .env à la racine du projet. Par défaut (override=False), les
+# variables d'environnement système PRIMENT sur .env — comportement attendu : les
+# secrets vivent dans .env, les overrides ponctuels (CI, FRESH_START=1 au shell,
+# tests) passent par l'env. L'ancien override=True écrasait l'env shell depuis .env,
+# ce qui rendait `FRESH_START=1 uv run ...` inopérant (toujours repris depuis .env).
+load_dotenv()
 
 
 def _get_bool(key: str, default: bool) -> bool:
@@ -117,6 +121,17 @@ class Settings:
     stderr_head_lines: int  # lignes de tête à garder (l'erreur, en haut du log)
     stderr_tail_lines: int  # lignes de queue à garder (la cause racine, en bas)
     feedback_max_chars: int  # plafond global du feedback injecté au Coder
+
+    # --- Cap steps du Web Tester (optimisation durée, fix TIMINGS_ANALYSE) ---
+    # Plafond de max_steps pour le WebTestRunner (ToolCallingAgent Puppeteer). Le défaut
+    # historique (24) laissait le modèle boucler jusqu'à 10 steps sur une friction JS
+    # (ex: `document.querySelector` écrasé par assignation) sans jamais final_answer —
+    # ~30 min perdues. Le verdict est généralement clair à 10-12 steps (smoke-test +
+    # 2-4 assertions fonctionnelles). Baisser à 12 borne la durée sans perte de
+    # couverture. Opt-out : TESTER_MAX_STEPS plus haut si les assertions le nécessitent.
+    # Valeur par défaut dans la dataclass : évite de casser les helpers de test qui
+    # construisent Settings(...) à la main (même convention que loop_guard_threshold etc.).
+    tester_max_steps: int = 12
 
     # --- Nœud d'Escalade (Priorité 3 : post-mortem sur circuit breaker) ---
     # Quand une sous-tâche épuise le Circuit Breaker (3 itérations toutes rejetées),
@@ -233,6 +248,7 @@ def load_settings() -> Settings:
         stderr_head_lines=_get_int("STDERR_HEAD_LINES", 20),
         stderr_tail_lines=_get_int("STDERR_TAIL_LINES", 20),
         feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),
+        tester_max_steps=_get_int("TESTER_MAX_STEPS", 12),
         escalation_enabled=_get_bool("ESCALATION_ENABLED", True),
         auto_install_deps=_get_bool("AUTO_INSTALL_DEPS", True),
         loop_guard_enabled=_get_bool("LOOP_GUARD_ENABLED", True),
