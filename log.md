@@ -2729,3 +2729,47 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
   complète) sont tous deux des projections des mêmes docs → évite la dérive.
 - MAJ : plan_usine_logicielle.md (tableau bord P10 + note Synergie P10↔P14 en §P14) +
   feature_list.json F-56 (description enrichie synergie).
+
+## [2026-08-02 22:09:58] plan | F-56 durcissement prompts nœuds (P14) — plan approuvé
+- DÉCISIONS UTILISATEUR (AskUserQuestion) :
+  * P14-E Linter : WARNING non bloquant (pas is_valid=False). L'exploration a révélé que
+    fichier-absent=is_valid=True est un CHOIX DÉLIBÉRÉ (défense contre échec silencieux du
+    Coder, test_linter.py:152). Le changer naïvement causerait une boucle (mode correction
+    Coder coincé en read_file sur un fichier absent). On ajoute un AVERTISSEMENT dans details
+    pour l'observabilité, sans court-circuit.
+  * F-57 (P10) : PLANIFIÉ mais implémenté APRÈS F-56 (cycle suivant). F-56 durcit en inline
+    (toujours actif, simple) ; F-57 migre le contenu long vers skills lazy loading.
+- EXPLORATION clé (1 agent) : le seul test qui asserte le CONTENU des docstrings DSPy est
+  test_prompts.py (classe TestDSPySignaturesHaveInvariants, L151-198) — assertions de
+  présence de marqueurs (INVARIANTS UNIVERSELS, strategy/incremental/multifile pour Architect,
+  OWASP/CVSS/critical pour Security, critical/IN-DIFF ONLY/ANTI-NITS pour Judge). Ajouter des
+  lignes aux docstrings NE CASSE AUCUN TEST tant qu'on préserve ces marqueurs. Les autres
+  tests (test_dspy_nodes.py etc.) mockent ChainOfThought → insensibles au durcissement.
+- Branche feat/node-prompt-hardening créée. Ordre : P14-E (Linter isolé) puis A/B/D/C (prompts
+  du + simple au + structurant) puis F (validation).
+
+## [2026-08-02 22:14:48] feat | F-56 durcissement prompts nœuds IMPLÉMENTÉ (P14) + F-57 planifié
+- P14-E Linter WARNING (linter.py) : fichier absent reste is_valid=True (défense conservée)
+  MAIS avertissement non bloquant remonté dans details. lint_file ajoute l'erreur warning,
+  execute_linter_node affiche section "AVERTISSEMENTS (non bloquants)" sans changer le statut.
+  2 tests (test_missing_file_is_valid mis à jour + test_missing_file_warning_in_details).
+- P14-A Router (dspy_nodes.py RouterSignature) : MOTS-CLÉS CANONIQUES (tableau par langage) +
+  RÈGLE DE PRIORITÉ (extensions priment sur mots-clés) + ANTI-BIAIS (3 biais : javascript par
+  défaut, html≠js, ignorer TS). RouterOutput.justification REPOUSSÉ (changement schéma trop invasif).
+- P14-B Architect (ArchitectSignature) : RÈGLES POUR 'incremental' (squelette structural 1ère
+  section + fourchette 3-7 sections ~50-100 lignes) + BIAIS 'incremental' vs 'multifile'
+  (jamais incremental sur multifichier Python/TS).
+- P14-D Security (SecuritySignature) : PATTERNS DANGEREUX À CHERCHER ACTIVEMENT (tableau
+  OWASP concret : innerHTML/eval/os.system/pickle.loads/md5/verify=False/CORS*/debug=True) +
+  DISCRIMINATION INPUT (externe vs contrôlé élimine FP) + A09 Logging + ATTENTION FAUX POSITIFS.
+- P14-C Judge (CodeJudgeSignature) : PROCÉDURE OBLIGATOIRE (5 étapes : liste exigences→vérifie
+  présence/implémentée→CROISE test_results→applique security→décide) + règle croisement défiant
+  (test PASS mais exigence absente = critical) + LOCALISATION OBLIGATOIRE (ligne/fragment exact).
+- P14-F validation : pytest 587 passed / 0 failed (586 baseline + 1 nouveau). Marqueurs
+  test_prompts.py préservés (grep 3/3 par nœud). run_linter.py 7/7 ✅. Correspondance 1:1
+  recommandations audit COMPARISON_AUDIT.md → implémentation vérifiée.
+- F-57 (P10) PLANIFIÉ (feature_list pending + plan_usine §P10) : middleware lazy loading pour
+  dégonfler les prompts alourdis par F-56. Skills node-<role>-methodology dérivés des docs F-55.
+  BASE_SKILLS_BY_NODE étendu aux nœuds DSPy (actuellement router/judge/security=[]).
+- Aucune modif prompts.py (rôles/invariants inchangés), models.py, nodes.py, skills_loader.py.
+- Branche feat/node-prompt-hardening prête à merger sur main.

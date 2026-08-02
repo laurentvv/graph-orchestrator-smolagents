@@ -44,6 +44,26 @@ class RouterSignature(dspy.Signature):
 
         Cette signature agit comme le premier filtre de l'orchestrateur. Elle détermine :
         - Quel langage de programmation principal est concerné (ex: 'python', 'javascript').
+
+        MOTS-CLÉS CANONIQUES (signaux forts — un seul suffit la plupart du temps) :
+        - python/.py/pandas/numpy/pytest/flask/django/fastapi → 'python'
+        - react/vue/svelte/next.js/.tsx/typescript/: type/interface → 'typescript'
+        - .html/.htm/landing page/page web/HTML5/CSS3 (sans JS métier) → 'html'
+        - vanilla js/javascript/DOM/navigateur/canvas/<script>/addEventListener → 'javascript'
+        - rust/cargo/tokio/actix → 'rust' ; go/golang/gin/echo → 'go'
+        - node.js/express/npm (backend) → 'javascript'
+
+        RÈGLE DE PRIORITÉ : si la requête mentionne des EXTENSIONS de fichiers (.py/.ts/.html...),
+        elles PRIMENT sur les mots-clés (l'extension est la source de vérité — comme la
+        détection redondante F-27 côté Tester).
+
+        ANTI-BIAIS (failure modes récurrents observés) :
+        - NE déborde PAS vers 'javascript' par défaut — si python/.py apparaît ne serait-ce
+          qu'une fois, c'est 'python', pas du web.
+        - HTML/CSS pur SANS JS métier = 'html' (pas 'javascript') — le Linter traite les deux
+          différemment (tree-sitter-html vs tree-sitter-javascript).
+        - React/Next.js = 'typescript' (pas 'javascript') — sinon le Linter ne vérifie pas les
+          annotations de type, perte d'un garde-fou.
         """,
     )
     task_content: str = dspy.InputField(desc="La requête initiale ou directive de l'utilisateur fournie au graphe")
@@ -127,6 +147,22 @@ class ArchitectSignature(dspy.Signature):
         - Python/TS 1 module → 'simple'. Plusieurs modules liés → 'multifile'.
         - Gros monolithe (> 500 lignes) imposé → 'incremental' (dernier recours).
 
+        RÈGLES POUR 'incremental' (sections) :
+        - La 1ère section DOIT être le squelette structural complet (ex: `<!DOCTYPE html>…
+          </body></html>` pour HTML) — c'est le socle sur lequel les autres sections
+          s'appendent via append_file. Sans ça, le Coder risque d'inventer du contenu après
+          </html> (le bug dashboard observé en prod).
+        - Vise 3-7 sections par fichier incremental, chacune ~50-100 lignes (gérable pour un
+          petit Coder local). Ne fais pas de sections trop fines (surchauffe le nombre de
+          steps) ni trop grosses (risque de troncature).
+
+        ATTENTION — BIAIS 'incremental' vs 'multifile' (failure mode observé) :
+        'incremental' = UN gros fichier monolithique construit par morceaux (ex: dashboard
+        dans un seul index.html). 'multifile' = PLUSIEURS fichiers séparés (ex: app.py +
+        utils.py). Ne mets JAMAIS 'incremental' sur un projet multifichier Python/TS —
+        sinon le Coder écrirait un seul gros .py au lieu de le modulariser. 'incremental'
+        est exclusif aux fichiers MONOLITHIQUES IMPOSÉS par la spec.
+
         Le Coder suivra ta stratégie à la lettre. Chaque sous-tâche doit avoir des critères
         d'acceptation vérifiables (comportements attendus testables, pas juste un nom de fichier).
         """,
@@ -142,6 +178,31 @@ class SecuritySignature(dspy.Signature):
 
         TAXONOMIE OWASP Top 10 : couvre XSS, injection (SQL/commande), broken auth, data
         exposure, security misconfig, etc. Sois exhaustif mais PRIORISE par sévérité.
+
+        PATTERNS DANGEREUX À CHERCHER ACTIVEMENT (par catégorie — ne te contente pas d'être
+        « exhaustif » en abstrait, scanne ces patterns concrets dans le code) :
+        - A03 XSS (DOM) : ``innerHTML``, ``outerHTML``, ``document.write``, ``insertAdjacentHTML``
+          avec une donnée utilisateur.
+        - A03 Injection commande : ``os.system``, ``subprocess.run(shell=True)``, ``eval()``,
+          ``exec()`` sur une entrée externe → RCE (critical).
+        - A03 Injection SQL : concaténation de string (``"... " + var``) ou f-string dans une
+          requête SQL → critical si input externe.
+        - A02 Crypto / secrets : ``hashlib.md5``/``sha1``, ``password = "..."``, ``api_key = "..."``
+          en dur, ``random`` (pas ``secrets``) pour des tokens.
+        - A08 Désérialisation : ``pickle.loads``, ``yaml.load`` (sans Loader safe).
+        - A05 Misconfig : ``verify=False`` (TLS), ``CORS "*"``/``ALLOWED_HOSTS=['*']``,
+          ``debug=True`` (Flask/Django prod).
+        - A09 Logging : logs de données sensibles (mot de passe, token) → low/medium.
+
+        DISCRIMINATION INPUT (élimine les faux positifs) : avant de flagger un pattern, confirme
+        la SOURCE de la donnée. ``innerHTML = "<b>" + name`` où ``name`` vient de
+        ``URLSearchParams``/utilisateur/base = vuln (high). ``innerHTML = "<b>Page</b>"``
+        (constante littérale) = PAS une vuln (input contrôlé). La sévérité dépend de la source,
+        pas seulement du pattern.
+
+        ATTENTION FAUX POSITIFS : un pattern dangereux sur une CONSTANTE n'est pas une vuln.
+        Le JS côté navigateur est par nature exposé — un ``eval`` sur une constante locale n'est
+        pas une RCE serveur. Ajuste la sévérité au contexte (client vs serveur).
 
         RUBRIC DE SÉVÉRITÉ (rubrique ``findings``, échelle CVSS) :
         - 'critical' : exploitable sans interaction, fuite de données / RCE / crash.
@@ -181,6 +242,22 @@ class CodeJudgeSignature(dspy.Signature):
           confirmer que les comportements clés sont implémentés ET testés (pas juste l'absence
           de crash). Un test qui passe sans couvrir le comportement attendu = échec de couverture.
         - ``is_approved=True`` si et seulement si AUCUN finding critical/high.
+
+        PROCÉDURE OBLIGATOIRE (procède dans cet ordre, ne juge pas avant d'avoir vérifié) :
+        1. LISTS chaque exigence de ``task_requirements`` (cahier des charges).
+        2. Pour CHAQUE exigence, vérifie dans ``code`` : (a) Présente ? (b) Implémentée (pas
+           juste déclarée) ? Atteste explicitement Présente/Implémentée pour chacune AVANT de
+           conclure — une exigence absente du code = finding critical/high.
+        3. CROISE avec ``test_results`` : ne fais PAS confiance aveugle au test. Si
+           ``test_results`` dit PASS mais qu'une exigence n'est pas implémentée dans ``code``
+           → finding critical, ``is_approved=False``. Le test peut rater des choses ou faire
+           des faux PASS ; ton œil sur le code est l'arbitre final.
+        4. APPLIQUE ``security_vulnerabilities`` : toute vuln critical/high = ``is_approved=False``.
+        5. DÉCIDE : ``is_approved`` ssi 0 critical/high.
+
+        LOCALISATION OBLIGATOIRE : chaque finding DOIT citer la ligne ou le fragment exact du
+        code soumis (ancre in-diff) — pas de remarque générique. Permet au Coder d'agir
+        directement sur le feedback.
 
         Remplis ``findings`` (structuré) ET ``final_feedback`` (résumé actionnable pour le Coder
         à la prochaine itération, si rejet).

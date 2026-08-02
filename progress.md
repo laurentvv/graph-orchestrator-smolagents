@@ -488,3 +488,19 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
   contract C196-C204, progress, log). Suite pytest 586 passed / 0 failed (0 régression).
   Commit + PR.
 
+## Jalons de l'Itération (cycle F-56 durcissement prompts nœuds — P14)
+- [x] Étape P14-1 : Plan approuvé (2 décisions user : P14-E=warning non bloquant, F-57=planifié
+  après F-56). Exploration clé : seul test_prompts.py asserte le contenu des docstrings (tests
+  de présence de marqueurs) → durcir les docstrings ne casse aucun test si marqueurs préservés.
+- [x] Étape P14-E : Linter warning fichier absent (linter.py + execute_linter_node + 2 tests).
+  Défense is_valid=True conservée + avertissement remonté dans details pour observabilité.
+- [x] Étape P14-A : Router — MOTS-CLÉS CANONIQUES + RÈGLE DE PRIORITÉ + ANTI-BIAIS.
+- [x] Étape P14-B : Architect — RÈGLES sections incremental + BIAIS incremental/multifile.
+- [x] Étape P14-D : Security — PATTERNS OWASP concrets + DISCRIMINATION INPUT + A09 + FP.
+- [x] Étape P14-C : Judge — PROCÉDURE OBLIGATOIRE 5 étapes + croisement défiant + localisation.
+- [x] Étape P14-F : Validation — pytest 587 passed / 0 failed. Marqueurs préservés (grep 3/3).
+  run_linter 7/7 ✅. Correspondance 1:1 audit→implémentation vérifiée.
+- [x] Étape F-57 : PLANIFIÉ (feature_list pending + plan_usine §P10) — lazy loading cycle suivant.
+- [x] Étape P14-9 : État disque synchronisé (feature_list F-56 completed + F-57 pending,
+  contract, progress, log, plan_usine P14 coché).
+

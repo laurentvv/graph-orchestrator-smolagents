@@ -224,7 +224,19 @@ def lint_file(path: str) -> LintResult:
     vérifs structurelles (HTML) — le Linter reste utile même partiellement outillé.
     """
     if not os.path.exists(path):
-        return LintResult(path=path, language="missing", is_valid=True, errors=[])
+        # F-56/P14-E : fichier absent reste is_valid=True (défense contre échec silencieux
+        # du Coder — ne pas court-circuiter, le Tester/Judge détecteront l'absence de façon
+        # plus contextuelle ; et en mode correction le Coder est en read_file+search_replace
+        # sur un fichier qu'il croit créé, le bloquer ici causerait une boucle). MAIS on
+        # remonte un AVERTISSEMENT non bloquant dans errors pour l'observabilité (ex: le Coder
+        # a déclaré success sans write_file, ou a écrit dans un autre chemin).
+        return LintResult(
+            path=path,
+            language="missing",
+            is_valid=True,
+            errors=["[avertissement] Fichier attendu non trouvé — le Coder ne l'a "
+                    "peut-être pas créé (ou l'a écrit sous un autre chemin)."],
+        )
 
     lang = _detect_language(path)
     if lang == "unknown":
@@ -300,6 +312,15 @@ def execute_linter_node(subtask: dict, settings) -> Tuple[Optional[CoderOutput],
         details = "OK — syntaxe valide"
         if linted:
             details += " (" + ", ".join(f"{r.path}:{r.language}" for r in linted) + ")"
+        # F-56/P14-E : avertissements non bloquants (fichiers attendus absents). On les
+        # remonte dans details pour l'observabilité SANS changer le statut (la défense
+        # is_valid=True sur fichier absent est conservée — cf. lint_file commentaire).
+        warnings = [r for r in results if r.is_valid and r.errors and r.language == "missing"]
+        if warnings:
+            details += "\n\nAVERTISSEMENTS (non bloquants) :"
+            for r in warnings:
+                for e in r.errors:
+                    details += f"\n  - {r.path}: {e}"
         status = "success"
     else:
         # Agrège les erreurs : chaque fichier + ses erreurs, lisible par le Coder.

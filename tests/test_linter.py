@@ -149,10 +149,28 @@ def test_unknown_extension_is_valid(tmp_path):
 
 
 def test_missing_file_is_valid(tmp_path):
-    """Fichier absent → valide (le Coder n'a peut-être pas encore créé ce fichier)."""
+    """Fichier absent → valide (défense : ne pas bloquer le workflow, le Coder peut être en
+    cours ou avoir écrit sous un autre chemin) MAIS avertissement non bloquant (F-56/P14-E)
+    pour l'observabilité — détecte l'échec silencieux du Coder (success sans write_file)."""
     r = lint_file(str(tmp_path / "absent.py"))
     assert r.language == "missing"
-    assert r.is_valid
+    assert r.is_valid  # non bloquant (conserve la défense historique, pas de court-circuit)
+    assert r.errors  # F-56 : avertissement remonté pour l'observabilité
+    assert any("non trouvé" in e.lower() or "absent" in e.lower() or "créé" in e.lower()
+               for e in r.errors)
+
+
+def test_missing_file_warning_in_details(tmp_path):
+    """F-56/P14-E : le nœud execute_linter_node remonte les fichiers absents comme
+    AVERTISSEMENTS non bloquants dans details (statut reste success). Permet au Judge/humain
+    de voir qu'un fichier attendu n'a pas été créé, sans court-circuiter le Tester."""
+    ok = _write(tmp_path, "ok.py", "x = 1\n")
+    absent = str(tmp_path / "absent.html")
+    subtask = {"id": "st1", "target_files": [ok, absent]}
+    res, _ = execute_linter_node(subtask, settings=None)
+    assert res.status == "success"  # non bloquant
+    assert "AVERTISSEMENTS" in res.details  # mais visible
+    assert "absent.html" in res.details
 
 
 # ==========================================
