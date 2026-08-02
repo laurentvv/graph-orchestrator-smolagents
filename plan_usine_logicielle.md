@@ -26,6 +26,7 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 > | 🟠 11. Observabilité (Event Stream) | ❌ à faire |
 > | ✨ 12. Meta-prompt (PromptRefiner avant Architect) | **✅ TERMINÉ (Phase 1)** — nœud DSPy F-39 (Kilo/Cline "Enhance Prompt" pattern). Phase 2 MIPROv2 écartée (signal biaisé mono-modèle 6 Go VRAM). |
 > | 📁 13. Output daté par run (isolation des artefacts) | **✅ TERMINÉ** — `chdir` vers `runs/YYYY-MM-DD_HHMM_slug/` (F-40). Reprise via checkpoint (même dossier). DB DuckDB stable (kg_path absolu avant chdir). Restoration cwd auto (`_scoped_chdir` finally). |
+> | 🎯 14. Durcissement des prompts de nœuds (procédure concrète) | **PLANIFIÉ** (F-56) — issue de l'audit comparatif F-55. ~15 gaps : prompts prod bons sur principes mais manquent de procédure concrète (ordre fail-fast, patterns/grep explicites, biais nommés). 5 sous-chantiers P14-A..E. Le + urgent = P14-E (bug Linter : fichier absent = is_valid=True silencieux). |
 >
 > **Levier hors-plan majeur découvert et appliqué** : température du Coder 0.2 (vs 1.0 serveur) — a éliminé la moitié de la corruption.
 
@@ -206,3 +207,44 @@ Plus d'information : `system_prompts_analysis.md`
 - [x] *(complément)* **Slug du nom de run** : dériver un slug lisible depuis le contenu de la tâche (ex: `bubble_sort_visualizer`) plutôt que seulement le `run_id` (hash). Éviter les caractères interdits sur Windows (`:`, `?`, `*`). — *FAIT : `_slugify` (lowercase, `[^a-z0-9]→_`, collapse `__+`, truncate 24, fallback 'run'). Source = `seed_tasks[0]['id']`.*
 - [x] *(complément)* **Nettoyage optionnel** : config `OUTPUT_RETENTION` (nb de runs à garder, ex: 10) pour éviter que le dossier `runs/` ne grossisse indéfiniment. À ajouter dans `.gitignore` (`runs/` déjà implicitement non versionné mais à expliciter). — *FAIT : `runs/` ajouté au `.gitignore`. Config `OUTPUT_RETENTION` (défaut 10) ajoutée dans `.env.example` et `config.py`. Fonction `_prune_old_runs` appelée à la création du run directory pour nettoyer les plus anciens.*
 - [x] *(référence)* **Point d'insertion** : `run_coding_workflow` (`workflows.py`), après calcul du `run_id` et AVANT la première écriture Coder. Le `run_id` (hash du contenu de tâche, PAS du cwd) reste stable — il ne faut PAS le dériver du cwd (sinon un déplacement du projet casserait la reprise). — *FAIT : chdir après le chargement du checkpoint (pour la décision reprise/nouveau), corps du workflow wrappé dans `with _scoped_chdir(run_output_dir):`.*
+
+## 🎯 Priorité 14 : Durcissement des prompts de nœuds (procédure concrète)
+*Source : audit comparatif F-55 (`debug/isolation/COMPARISON_AUDIT.md`).*
+
+> **🔎 État Actuel :** Les prompts des nœuds DSPy (`dspy_nodes.py` + rôles/invariants F-44 dans `prompts.py`) sont **bons sur les principes** (rubric critical/high/medium/low, in-diff only, anti-nits, mention OWASP Top 10) mais **manquent de procédure opératoire concrète**. L'audit comparatif entre les méthodes manuelles (`MANUAL_<NODE>_METHODOLOGY.md`, l'agent qui joue le nœud à la main) et les nœuds de production a révélé ~15 gaps : les prompts prod laissent le LLM **libre de sa séquence** et parlent en **abstrait** ("sois exhaustif") là où ma méthode impose un **ordre fail-fast** et des **patterns/grep concrets**. Hypothèse : ces gaps sont la cause probable des failure modes observés en prod (Router qui déborde vers javascript par défaut, Security qui rate pickle/secrets, Judge qui valide sans vérifier la couverture).
+> **🚀 Pourquoi ce sera mieux :** Injecter la procédure concrète (ordre des étapes, patterns explicites, biais nommés) directement dans les prompts prod aligne le comportement du LLM sur la méthode manuelle de référence — qui a prouvé sa valeur (démo Judge : localisation d'un opérateur fautif ligne 11 qu'un rapport Tester imprécis n'avait pas signalé). Effort faible (ajouts ciblés de quelques lignes par prompt), ROI élevé (résout des failure modes récurrents).
+
+### P14-A : Router — mots-clés canoniques + règle extensions + justification
+- [ ] **F-56a** : Injecter dans `RouterSignature` (`dspy_nodes.py:40-50`) un mini-tableau de tokens canoniques par langage (python/.py/pandas → python ; react/.tsx/typescript → typescript ; .html/landing page → html ; vanilla js/canvas → javascript ; rust/cargo → rust ; go/golang → go). ~6 lignes.
+- [ ] **F-56a** : Règle de priorité explicite : "si le prompt mentionne des extensions de fichiers (.py/.ts/.html...), elles priment sur les mots-clés." (Actuellement le Router ne reçoit même pas `target_files` — envisager de propager cette info, ou au minimum apprendre au LLM à la chercher dans le prompt.)
+- [ ] **F-56a** : Anti-biais (3 lignes) : ne pas déborder vers javascript par défaut ; HTML/CSS pur sans JS métier = html ; React/Next.js = typescript.
+- [ ] **F-56a** *(optionnel)* : Ajouter `justification: str = ""` à `RouterOutput` (`models.py:78-80`) pour rendre les verdicts auditables (coût minimal, conformité avec l'esprit Finding du Judge/Security).
+
+### P14-B : Architect — sections incremental + biais multifile/incremental
+- [x] **F-56b** *(pré-corrigé ce cycle)* : Doc `MANUAL_ARCHITECT_METHODOLOGY.md` alignée sur F-15 prod ("1 livrable testable = 1 sous-tâche", pas "1 fichier = 1 sous-tâche").
+- [ ] **F-56b** : Ajouter après `ArchitectSignature` L116 : "La 1ère section DOIT être le squelette structural (ex: `<!DOCTYPE>…</body></html>` pour HTML) — socle sur lequel les autres s'appendent." (évite le bug contenu après `</html>`).
+- [ ] **F-56b** : Ajouter après L116 : "Vise 3-7 sections par fichier incremental (~50-100 lignes chacune, gérable pour un petit Coder)."
+- [ ] **F-56b** : Avertissement biais explicite : "ATTENTION : 'incremental' = UN gros fichier par morceaux (HTML monolithique). Ne mets JAMAIS 'incremental' sur un projet multifichier Python/TS — utilise 'multifile'."
+
+### P14-C : Judge — procédure ordonnée + couverture par exigence + croisement défiant
+- [ ] **F-56c** : Imposer procédure ordonnée dans `CodeJudgeSignature` (`dspy_nodes.py:163-194`) : "Procède dans cet ordre : (1) liste chaque exigence de `task_requirements` ; (2) vérifie présence+implémentation dans `code` ; (3) croise avec `test_results` ; (4) applique `security_vulnerabilities` ; (5) décide." (actuellement le LLM est libre de sa séquence).
+- [ ] **F-56c** : Exiger check couverture par exigence : "Pour CHAQUE exigence de `task_requirements`, atteste Présente/Implémentée/Testée avant de conclure."
+- [ ] **F-56c** : Règle croisement défiant : "Si `test_results` dit PASS mais qu'une exigence n'est pas implémentée dans `code` → finding critical, `is_approved=False`. Ne fais pas confiance aveugle au test." (C'est ce qui a permis à la démo Judge de localiser l'opérateur fautif ligne 11.)
+- [ ] **F-56c** : Localisation obligatoire : "Chaque finding DOIT citer ligne/fragment exact (ancre in-diff)."
+
+### P14-D : Security — grille OWASP concrète + vérif input + A09
+- [ ] **F-56d** : Ajouter liste de patterns dangereux concrets par catégorie OWASP dans `SecuritySignature` (`dspy_nodes.py:138-160`) — reprendre le tableau `MANUAL_SECURITY_METHODOLOGY.md:20-30` : `innerHTML`/`document.write` (A03 XSS), `os.system`/`subprocess shell=True`/`eval` (A03 cmd), concat SQL/f-strings, `pickle.loads`/`yaml.load` (A08), `md5`/`sha1`/`password=`/`api_key=` (A02), `verify=False`/`CORS *`/`debug=True` (A05). Pousse le modèle à chercher activement plutôt que d'"être exhaustif" en abstrait.
+- [ ] **F-56d** : Clause discrimination input : "Confirme la source de la donnée avant de flagger (externe = vuln, littérale = faux positif)." (élimine les FP sur innerHTML constant).
+- [ ] **F-56d** : Ajouter A09 Logging explicitement (absent du prompt prod).
+- [ ] **F-56d** : Avertissement faux positifs (constantes, JS client où eval n'est pas une RCE serveur).
+- [ ] **F-56d** *(optionnel)* : `truncate_output` sur `code_content` (`dspy_nodes.py:516`) par parité avec Judge/Escalation (sécurité contexte sur gros fichiers).
+
+### P14-E : Linter — bug fichier absent (vrai gap code, pas prompt)
+- [ ] **F-56e** : `linter.py:226-227` — traiter `language="missing"` (fichier absent) comme `is_valid=False` au lieu de `is_valid=True` silencieux. Actuellement le Coder peut "réussir" sans livrer son fichier car le Linter passe. C'est le **seul vrai gap fonctionnel** révélé par l'audit (les autres sont des améliorations de prompt).
+- [ ] **F-56e** *(complément)* : Documenter le fail-open actuel (fichier illisible/encodage cassé → `is_valid=True` silencieux, `linter.py:238-239`) — soit le garder explicite, soit le durcir.
+
+### P14-F : Validation des durcissements
+- [ ] **F-56f** : Après P14-A..E, relancer l'audit comparatif (réappliquer `MANUAL_<NODE>_METHODOLOGY.md` vs prompts durcis) pour vérifier que les gaps sont comblés.
+- [ ] **F-56f** : Validation run Bubble Sort + prompt multi-techno (Python) pour vérifier le Router corrigé ne déborde plus vers javascript.
+
+> **Priorité relative** : P14 est une **optimisation de qualité** (résout des failure modes récurrents), pas un chantier structurel comme P0-P3. Effort faible (ajouts ciblés de lignes), peut se faire en 1-2 cycles. Le gap Linter (P14-E) est le plus urgent car c'est un **vrai bug** potentiel (validation d'une non-livraison).

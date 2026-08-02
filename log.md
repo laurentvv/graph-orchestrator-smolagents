@@ -2691,3 +2691,21 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
 - LEÇON F-55 confirmée : la valeur des docs méthodologiques = jouer les nœuds à la main ET
   servir de benchmark d'audit. ~15 recommandations d'amélioration des prompts prod générées
   (potentiel cycle F-56 : "durcir les prompts prod avec la procédure concrète des docs").
+
+## [2026-08-02 22:03:30] plan | F-55 MERGÉ sur main + F-56 planifié (corrections globales nœuds)
+- F-55 MERGÉ directement sur main (commit 6880d7b) sur demande utilisateur (bypass review).
+  Branche feat/isolation-scripts supprimée, PR #26 fermée. Rebase clean (pas de conflit,
+  main avait avancé avec PR #25 output retention).
+- F-56 CRÉÉ dans feature_list.json + plan_usine_logicielle.md §'Priorité 14' : durcissement
+  des prompts de nœuds suite aux ~15 gaps révélés par l'audit comparatif F-55
+  (debug/isolation/COMPARISON_AUDIT.md). 5 sous-chantiers :
+  * P14-A Router : mots-clés canoniques + règle extensions + anti-biais + justification
+  * P14-B Architect : sections incremental (squelette 1ère, fourchette 3-7, biais multifile)
+    — doc MANUELLE déjà corrigée F-55
+  * P14-C Judge : procédure ordonnée + couverture par exigence + croisement défiant
+  * P14-D Security : grille OWASP concrète + vérif input externe + A09 Logging
+  * P14-E Linter BUG (le + urgent, seul vrai gap CODE) : fichier absent = is_valid=True
+    silencieux → le Coder peut réussir sans livrer. Corriger : missing → is_valid=False.
+  * P14-F : validation (ré-audit + runs).
+- DÉCISION : P14-E en priorité (bug potentiel), le reste = optimisation qualité (effort
+  faible, ajouts ciblés de lignes, ROI élevé sur les failure modes récurrents).
