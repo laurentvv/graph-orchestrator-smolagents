@@ -460,3 +460,31 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
       0 régression. web_tester_functional désélectionné (nécessite Chrome/npx live).
 - [ ] Étape ST-7 : Validation run live (HTML corrompu → FAILURE ciblé, HTML correct → SUCCESS).
 
+## Jalons de l'Itération (cycle Scripts isolation « l'agent joue le nœud » — F-55)
+- [x] Étape ISO-1 : Plan approuvé (périmètre = Linter + 4 DSPy Router/Architect/Judge/Security ;
+  PromptRefiner/Escalation hors périmètre). Convention debug/isolation/ (conforme F-55).
+  Exploration (3 agents parallèles) : signatures exactes nœuds, clés dict task lues, sites
+  d'appel workflows.py, tests mockés, config. Leçon clé : nœuds DSPy instancient eux-mêmes
+  leur LLM via _configure_dspy (param *_model reçu IGNORÉ, relicat d'API).
+- [x] Étape ISO-2 (première version, CORRIGÉE ensuite) : 5 scripts Python appelant le LLM du
+  graphe (run_router.py etc.). VALIDÉS par py_compile + 1 exécution Router réelle (18.9s).
+- [x] Étape ISO-2b (CORRECTION MAJEURE après feedback user) : « l'agent joue le nœud » =
+  MOI (ZCode) qui joue le nœud à la main, PAS un script qui appelle le LLM du graphe.
+  Pattern découvert : debug/MANUAL_TESTER_METHODOLOGY.md (le Tester joué à la main, doc
+  d'étapes fail-fast + biais) + audit_coder/ (le Coder joué avec screenshots). Les 4 scripts
+  DSPy (router/architect/judge/security) SUPPRIMÉS — design mauvais. run_linter.py GARDÉ
+  (déterministe, valide la vraie fct prod, 7/7 ✅).
+- [x] Étape ISO-3 : MANUAL_ROUTER_METHODOLOGY.md — étapes fail-fast (mots-clés → extensions
+  → résolution multi-techno → décision), tableau de décision par langage, 3 biais.
+- [x] Étape ISO-4 : MANUAL_ARCHITECT_METHODOLOGY.md — 3 stratégies F-29 (techno-driven),
+  5 étapes (livrables/stratégie/sections/description/assemblage), 4 biais.
+- [x] Étape ISO-5 : MANUAL_JUDGE_METHODOLOGY.md — rubric sévérité F-44, 6 étapes (Read
+  in-diff/couverture/test_res/security_res/décision/feedback), 5 biais.
+- [x] Étape ISO-6 : MANUAL_SECURITY_METHODOLOGY.md — grille OWASP Top 10, 6 étapes
+  (Read/grep OWASP/contexte input/CVSS/findings defensive/is_secure), 5 biais.
+- [x] Étape ISO-7 : MANUAL_LINTER_METHODOLOGY.md (compléter le set, cohérence).
+- [x] Étape ISO-8 : README isolation réécrit (convention doc méthodologie + run_linter.py
+  seul script). README racine corrigé. État disque synchronisé (feature_list F-55,
+  contract C196-C204, progress, log). Suite pytest 586 passed / 0 failed (0 régression).
+  Commit + PR.
+

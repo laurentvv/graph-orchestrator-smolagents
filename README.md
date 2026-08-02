@@ -241,13 +241,32 @@ uv run pytest tests/ -v          # 535 tests, ~25s
 
 ### Node isolation scripts (iterate on ONE node without the full workflow)
 
-To iterate quickly on the Coder or Tester (skill, prompt, checklist) without relaunching the ~25-min full workflow (Architect → Coder → Tester → Judge), use these standalone runners. They call the **same production functions** (`execute_coder_node`, `execute_tester_node`) — zero behavior drift.
+To iterate quickly on a node (skill, prompt, logic) without relaunching the ~25-min full workflow (Architect → Coder → Tester → Judge), use these standalone runners. They call the **same production functions** (`execute_*_node`) — zero mock, zero behavior drift. Known-buggy inputs → assertion on the verdict (pattern proven by `debug/validate_static_tester_live.py` for the Static Tester).
 
-| Script | Purpose | Example |
+**Root scripts** (Coder / Tester / Static Tester — predate F-55):
+
+| Script | Node | Example |
 |---|---|---|
-| `run_tester.py` | Test the Tester on a given HTML file, with the requirements checklist (F-46) active | `uv run python run_tester.py` (auto-detects latest `runs/*/index.html`) |
-| `run_tester.py` | Test a specific file with a custom spec | `uv run python run_tester.py runs/.../index.html "$(cat spec.md)"` |
-| `run_coder_tca.py` | Test the Coder (production CodeAgent, F-45 DevTools included) on a task | `uv run python run_coder_tca.py "Bubble sort visualizer"` |
+| `run_tester.py` | Tester (LLM, Puppeteer/DevTools) | `uv run python run_tester.py` (auto-detects latest `runs/*/index.html`) |
+| `run_tester.py` | Tester, specific file + custom spec | `uv run python run_tester.py runs/.../index.html "$(cat spec.md)"` |
+| `run_coder_tca.py` | Coder (production CodeAgent, F-45 DevTools) | `uv run python run_coder_tca.py "Bubble sort visualizer"` |
+| `run_coder_codeagent.py` | Coder (experimental CodeAgent mode) | `uv run python run_coder_codeagent.py "..."` |
+| `debug/validate_static_tester_live.py` | Static Tester (F-54, deterministic) | `uv run python debug/validate_static_tester_live.py` |
+
+**`debug/isolation/`** (F-55 — play a node by hand, no LLM call):
+
+Per-node **methodologies** (`MANUAL_<NODE>_METHODOLOGY.md`) describing exactly what *the agent* does when playing that node by hand — fail-fast steps, tools used (`Read`/`grep`/`node`/DevTools/judgment), failure modes caught, and confirmation biases. Calqued on `debug/MANUAL_TESTER_METHODOLOGY.md` (the original Tester pattern).
+
+| File | Node played | Output |
+|---|---|---|
+| `debug/isolation/MANUAL_ROUTER_METHODOLOGY.md` | Router (F-01) | `RouterOutput(language)` |
+| `debug/isolation/MANUAL_ARCHITECT_METHODOLOGY.md` | Architect (F-15/F-29) | `ArchitectOutput(subtasks[strategy])` |
+| `debug/isolation/MANUAL_LINTER_METHODOLOGY.md` | Linter (F-30) | `CoderOutput(status)` |
+| `debug/isolation/MANUAL_SECURITY_METHODOLOGY.md` | Security (F-44 OWASP) | `SecurityOutput(is_secure, findings)` |
+| `debug/isolation/MANUAL_JUDGE_METHODOLOGY.md` | Judge (F-44 rubric) | `CodeJudgeOutput(is_approved, findings)` |
+| `debug/isolation/run_linter.py` | Linter (automated validation) | `CoderOutput(status)` — validates the Linter methodology in execution (7/7 scenarios ✅) |
+
+See `debug/isolation/README.md` for the full input/output contract of each node and how to play a node by hand.
 
 **`run_tester.py` details** — auto-detects the most recent `runs/*/index.html`, displays the extracted checklist (so you see exactly which features the Tester must verify), and runs the Tester in isolation:
 ```bash
