@@ -1,8 +1,10 @@
 """Connexion aux serveurs MCP (Model Context Protocol) au lifespan FastAPI.
 
-Deux serveurs câblés (configurables via env) :
+Trois serveurs câblés (configurables via env) :
   - Context7 (HTTP) : documentation de libs à jour (anti-hallucination d'API)
   - crawl4ai-mcp-llm (stdio via uvx) : crawling web de pages dynamiques
+  - chrome-devtools-mcp (stdio via npx) : pilotage Chrome live (screenshots, console,
+    clics, Lighthouse) — auto-validation visuelle du Coder + Tester web. F-45.
 
 Pattern repris de my-claw : ToolCollection.from_mcp() dans le lifespan, avec
 tolérance aux pannes (fallback liste vide + warning) si un serveur est indisponible.
@@ -53,6 +55,52 @@ def build_crawl4ai_params() -> Optional[Any]:
     )
 
 
+def build_chrome_devtools_params() -> Optional[Any]:
+    """Construit la config MCP pour chrome-devtools-mcp (stdio via npx). F-45.
+
+    Chrome DevTools MCP : pilotage d'un Chrome live (Puppeteer sous le capot) pour
+    navigate/screenshot/click/fill/console/Lighthouse. Sert à l'auto-validation
+    visuelle du Coder (le modèle vision vérifie sa page avant final_answer) et au
+    complément d'outils du WebTester (console structurée + Lighthouse).
+
+    Options notables :
+      - `--isolated` : profil temporaire (cleanup auto, pas de pollution entre runs).
+      - `--viewport 1280x800` : résolution réaliste (le défaut 800x600 tronque les
+        layouts responsives — même correction que pour Puppeteer web_tester.py).
+      - `--screenshot-format jpeg` : JPEG ~3-5x plus petit que PNG → économise le
+        contexte du petit LLM vision (gemma-4-E4B). Crucial pour ne pas saturer.
+      - `--executable-path` : chemin Chrome (si non set, le serveur cherche lui-même).
+
+    Transport : stdio via `npx -y chrome-devtools-mcp@latest`. Si la connexion
+    échoue, le context manager chrome_devtools_tools() yield [] (dégradation gracieuse).
+
+    Config env :
+      - CHROME_DEVTOOLS_ENABLED=0 : désactive totalement (opt-out global).
+      - CHROME_PATH : chemin Chrome (remplace le hardcode web_tester.py:42).
+      - CHROME_DEVTOOLS_HEADLESS=1 : mode headless (CI/sans UI).
+    """
+    if StdioServerParameters is None:
+        return None
+    if os.getenv("CHROME_DEVTOOLS_ENABLED", "1").strip().lower() in {"0", "false", "no", "off"}:
+        return None
+
+    args = ["-y", "chrome-devtools-mcp@latest", "--isolated", "--viewport", "1280x800",
+            "--screenshot-format", "jpeg"]
+    # Headless optionnel (défaut : visible, utile pour débugger en dev).
+    if os.getenv("CHROME_DEVTOOLS_HEADLESS", "0").strip().lower() in {"1", "true", "yes", "on"}:
+        args.append("--headless")
+    # Chemin Chrome optionnel (sinon le serveur détecte l'installation système).
+    chrome_path = os.getenv("CHROME_PATH")
+    if chrome_path:
+        args += ["--executable-path", chrome_path]
+
+    return StdioServerParameters(
+        command="npx",
+        args=args,
+        env={**os.environ},
+    )
+
+
 @contextmanager
 def connect_mcp_server(name: str, params) -> List[Tool]:
     """Context manager qui connecte un serveur MCP et yield ses outils.
@@ -87,6 +135,7 @@ def connect_all_mcp():
     servers = [
         ("context7", build_context7_params()),
         ("crawl4ai", build_crawl4ai_params()),
+        ("chrome-devtools", build_chrome_devtools_params()),
     ]
 
     all_tools: List[Tool] = []
@@ -102,7 +151,9 @@ def list_mcp_servers_status() -> List[dict]:
     """Diagnostic pour /health : quels serveurs MCP sont configurés/dispos ?"""
     c7 = build_context7_params()
     crawl = build_crawl4ai_params()
+    cdt = build_chrome_devtools_params()
     return [
         {"name": "context7", "configured": c7 is not None, "transport": "http"},
         {"name": "crawl4ai", "configured": crawl is not None, "transport": "stdio"},
+        {"name": "chrome-devtools", "configured": cdt is not None, "transport": "stdio"},
     ]

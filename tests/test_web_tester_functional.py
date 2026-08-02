@@ -77,10 +77,14 @@ class TestTesterPromptPropagation:
         source = inspect.getsource(WebTestRunner.run)
         assert "Functional Logic Testing" in source or "assertions fonctionnelles" in source.lower()
 
-    def test_run_max_steps_24(self):
-        """Le tester doit avoir max_steps=24 (marge pour les assertions assertionnelles)."""
+    def test_run_max_steps_adaptatif(self):
+        """Le tester a un max_steps ADAPTATIF (F-47) : 6 en mode ciblé (re-test bugs),
+        12 en mode complet. borne le temps d'investigation (GPU-local, anti-explosion
+        de contexte ToolCallingAgent observée à 24 steps — 405k tokens)."""
         source = inspect.getsource(WebTestRunner.run)
-        assert "max_steps=24" in source
+        # max_steps est maintenant dynamique (tester_max_steps), pas en dur.
+        assert "max_steps=tester_max_steps" in source
+        assert "TARGETED_MAX_STEPS" in source  # mode ciblé (6 steps)
 
 
 # ==========================================

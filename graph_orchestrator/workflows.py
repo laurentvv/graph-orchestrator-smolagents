@@ -350,6 +350,15 @@ async def run_coding_workflow(
     with _scoped_chdir(run_output_dir), _scoped_idempotency(_idem_store):
         # Tout le corps ci-dessous (imports, nœuds, boucle Coder/Judge) s'exécute dans le
         # dossier du run. Les target_files relatifs y atterrissent naturellement.
+
+        # F-48 : git local propre au run pour suivre les modifications du Coder.
+        # Chaque itération commit l'état des fichiers ; en iter N+1, git diff HEAD
+        # donne les lignes EXACTES modifiées (re-test ciblé Tester + Judge in-diff).
+        # Tolérant : si git absent, has_git_history() retourne False partout → fallback
+        # sur les réfutations texte (F-47). Le .git vit dans runs/<dated>/ (gitignored).
+        from .git_snapshot import init_run_git
+        git_ok = init_run_git()
+
         results = []
         from .nodes import execute_tester_node, execute_coder_node
         from .linter import execute_linter_node
@@ -464,6 +473,7 @@ async def run_coding_workflow(
                 # le même dedup_key (hash SHA1) et le 2e serait ignoré silencieusement.
                 from .feedback_utils import truncate_history
                 historique = ""
+                refutations_raw = []  # F-47 : brut pour le Tester (mode re-test ciblé)
                 if iteration > 1:
                     claims = kg.get_claims(entity_id)
                     refutations = [c for c in claims if c.get('kind') == 'refutation']
@@ -474,6 +484,10 @@ async def run_coding_workflow(
                             max_chars=settings.feedback_max_chars,
                             header="[TICKETS DE BUGS ACTIFS (LU DEPUIS DUCKDB)] :",
                         )
+                        # F-47 : garde les réfutations brutes pour le Tester (il en fait
+                        # un re-test ciblé : ne tester QUE les bugs signalés + smoke-test,
+                        # en 6 steps au lieu de 12). Évite le re-test from-scratch coûteux.
+                        refutations_raw = refutations
 
                 sub_dict = {
                     "id": subtask.task_id,
@@ -498,6 +512,11 @@ async def run_coding_workflow(
                     # Sans ça, le Coder réécrit le fichier from-scratch à chaque itération
                     # au lieu de corriger les bugs signalés par le Linter/Judge.
                     "iteration": iteration,
+                    # F-47 : réfutations brutes pour le re-test ciblé. Le Tester les lit
+                    # (should_use_targeted_retest) et, si itération >1, bascule en mode
+                    # ciblé (max_steps 6, prompt priorise les bugs, smoke-test rapide).
+                    # Vide en itération 1 → Tester en mode complet (checklist F-46).
+                    "refutations": refutations_raw,
                 }
 
                 # 1. Coder (smolagents, modèle FAST)
@@ -507,6 +526,15 @@ async def run_coding_workflow(
                 if not coder_res or coder_res.status == "failure":
                     print(f"    [-] Le Coder a échoué techniquement sur {subtask.task_id}.")
                     return {"status": "failure", "reason": "Coder crash"}, sub_metrics
+
+                # F-48 : commit l'état post-Coder dans le git local du run. Permet
+                # d'extraire le diff (lignes modifiées) pour le Tester (re-test ciblé
+                # précis) et le Judge (in-diff-only). Le diff est calculé APRÈS le commit
+                # (HEAD~1..HEAD). En itération 1, pas de diff (création initiale).
+                if git_ok:
+                    from .git_snapshot import commit_iteration, get_last_diff
+                    commit_iteration(iteration)
+                    sub_dict["git_diff"] = get_last_diff()
 
                 print(f"    [>] Coder terminé. Déclenchement des Audits parallèles (Tester & Sécurité)...")
 
@@ -551,13 +579,62 @@ async def run_coding_workflow(
                     # On passe à l'itération suivante SANS Tester/Judge (économie de cycles LLM).
                     continue
 
-                print(f"    [>] Coder terminé. Déclenchement des Audits parallèles (Tester & Sécurité)...")
+                # --- Nœud Static Tester (F-49) ----------------------------------
+                # Gatekeeper déterministe WEB (0 LLM, <6s) qui valide la SÉMANTIQUE
+                # web AVANT le Tester LLM coûteux. Implémente la méthodologie prouvée
+                # de debug/MANUAL_TESTER_METHODOLOGY.md :
+                #   Tier 1 (<1s) : node --check sur le JS inline (attrape TS-in-vanilla =
+                #                 le bug n°1 du Coder = page blanche) + wiring addEventListener
+                #                 (attrape slider non branché = indétectable par screenshot).
+                #   Tier 2 (~5s) : visibilité DOM via DevTools (attrape barres invisibles =
+                #                 bug CSS height:% que le LLM a raté par biais de confirmation).
+                # Complémentaire du Linter (qui SAUTE le JS inline du HTML — tree-sitter-html
+                # trop tolérant). Court-circuite le Tester LLM (25 min) sur les bugs évidents.
+                # Dégradation gracieuse : node/Chrome absents → skip silencieux (le LLM prend
+                # le relais). STATIC_TESTER_ENABLED=0 désactive le nœud entièrement.
+                from .static_tester import execute_static_tester_node
+                static_res, m_st = execute_static_tester_node(sub_dict, settings)
+                if m_st: sub_metrics.append(m_st)
 
-                # 2. Vérifications Contradictoires (Parallèle)
-                t_task = execute_tester_node(sub_dict, reasoning_model, settings)
-                s_task = execute_security_reviewer_node(sub_dict, reasoning_model, settings)
+                if static_res and static_res.status == "failure":
+                    print(f"    [⚠] Static Tester a détecté un bug web évident sur "
+                          f"{subtask.task_id} — court-circuit du Tester LLM (économie cycle).")
+                    if obs_id: kg.mark_status(obs_id, "rejected")
+                    # Le feedback devient une réfutation (lue par le Coder à l'itération
+                    # suivante via kg.get_claims, comme Linter/Judge — mécanisme réutilisé).
+                    ref_id = kg.add_claim(
+                        entity_id=entity_id,
+                        content=f"[STATIC TESTER] {static_res.details}",
+                        kind="refutation",
+                        confidence=None,
+                        source="static_tester",
+                        model_id="static-tester",
+                        run_id=run_id,
+                    )
+                    if ref_id and obs_id:
+                        kg.add_edge(ref_id, obs_id, "REFUTES")
+                    # On passe à l'itération suivante SANS Tester/Judge LLM.
+                    continue
 
-                (test_res, m2), (sec_res, m3) = await asyncio.gather(t_task, s_task)
+                # 2. Vérifications Contradictoires (Tester + Security Reviewer)
+                # GPU-local : on séquentialise par défaut ( Tester PUIS Security)
+                # car lancer 2× le reasoning_model (gemma-12B) en parallèle sature
+                # la VRAM → swap lent, timeouts, et le Security devient "silencieux"
+                # (observé run F-45 : Tester à 201k tokens pendant que Security
+                # n'a jamais rendu de verdict). AUDIT_PARALLEL=true restaure le
+                # comportement historique (gather) sur les grosses machines.
+                audit_parallel = os.getenv("AUDIT_PARALLEL", "false").strip().lower() in {"1", "true", "yes", "on"}
+
+                if audit_parallel:
+                    print(f"    [>] Coder terminé. Déclenchement des Audits parallèles (Tester & Sécurité)...")
+                    t_task = execute_tester_node(sub_dict, reasoning_model, settings)
+                    s_task = execute_security_reviewer_node(sub_dict, reasoning_model, settings)
+                    (test_res, m2), (sec_res, m3) = await asyncio.gather(t_task, s_task)
+                else:
+                    print(f"    [>] Coder terminé. Audit séquentiel (GPU-local) : Tester PUIS Sécurité...")
+                    test_res, m2 = await execute_tester_node(sub_dict, reasoning_model, settings)
+                    print(f"    [>] Tester terminé. Security Reviewer en cours...")
+                    sec_res, m3 = await execute_security_reviewer_node(sub_dict, reasoning_model, settings)
                 if m2: sub_metrics.append(m2)
                 if m3: sub_metrics.append(m3)
 

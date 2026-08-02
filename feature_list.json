@@ -156,6 +156,15 @@
       ]
     },
     {
+      "id": "F-20",
+      "name": "Tester fonctionnel (assertions comportementales)",
+      "description": "Le tester ne testait que l'absence de crash (console JS), pas le comportement attendu → bugs de logique validés à tort (run Bubble Sort: SUCCESS sur un bug visuel). IMPLÉMENTÉ : (1) skill web-tester réécrit avec noms puppeteer_* corrects (avant: noms Chrome-DevTools-MCP inexistants) + étape 'Functional Logic Testing' via puppeteer_evaluate (scripts d'assertion sur les comportements clés du cahier des charges). (2) Propagation du cahier des charges complet (original_content) au tester via workflows.py → sub_dict → prompt bloc 'CAHIER DES CHARGES COMPLET'. (3) Judge (CodeJudgeSignature) reçoint task_requirements pour juger couverture/comportement. (4) max_steps tester 20→24 (marge pour les assertions). Verdict success requiert 0 erreur console + TOUTES assertions passent. 11 tests PASS.",
+      "status": "completed",
+      "dependencies": [
+        "F-16"
+      ]
+    },
+    {
       "id": "F-21",
       "name": "Capture robuste du stderr et Troncature",
       "description": "Capture/troncature du feedback anti Context-Overflow. IMPLÉMENTÉ : module feedback_utils.py (truncate_output head+tail + truncate_history) branché aux 3 points de la boucle (Tester→Judge via dspy_nodes, Judge→DuckDB→Coder via workflows, bash_command). Troncature à la LECTURE (contenu DuckDB intégral, pas de collision dedup_key). 4 nouveaux settings (test_timeout_s, stderr_head/tail_lines, feedback_max_chars). 15+ tests PASS.",
@@ -212,15 +221,6 @@
       "status": "completed",
       "dependencies": [
         "F-02"
-      ]
-    },
-    {
-      "id": "F-20",
-      "name": "Tester fonctionnel (assertions comportementales)",
-      "description": "Le tester ne testait que l'absence de crash (console JS), pas le comportement attendu → bugs de logique validés à tort (run Bubble Sort: SUCCESS sur un bug visuel). IMPLÉMENTÉ : (1) skill web-tester réécrit avec noms puppeteer_* corrects (avant: noms Chrome-DevTools-MCP inexistants) + étape 'Functional Logic Testing' via puppeteer_evaluate (scripts d'assertion sur les comportements clés du cahier des charges). (2) Propagation du cahier des charges complet (original_content) au tester via workflows.py → sub_dict → prompt bloc 'CAHIER DES CHARGES COMPLET'. (3) Judge (CodeJudgeSignature) reçoint task_requirements pour juger couverture/comportement. (4) max_steps tester 20→24 (marge pour les assertions). Verdict success requiert 0 erreur console + TOUTES assertions passent. 11 tests PASS.",
-      "status": "completed",
-      "dependencies": [
-        "F-16"
       ]
     },
     {
@@ -375,28 +375,92 @@
       "name": "Fix Tester querySelector (3 axes : skill + cap steps + guard contextuel)",
       "description": "Corrige le bloqueur n°1 identifié dans debug/TIMINGS_ANALYSE.md : le Web Tester (gemma-12B + MCP Puppeteer) bouclait ~10 steps (~30 min) sur l'erreur 'document.querySelector is not a function' sans jamais atteindre final_answer. DIAGNOSTIC EMPIRIQUE (corrigé vs l'hypothèse initiale) : lecture du log GPU révèle que la racine n'était PAS 'Puppeteer n'expose pas querySelector'. Le modèle a écrit document.querySelector='...' (ASSIGNATION =) au lieu de document.querySelector('...') (APPEL ()) au Step 4. Cette assignation écrase la fonction native dans le contexte page → tous les appels suivants échouent. Le modèle bouclait car il cherchait une cause externe sans réaliser qu'il avait corrompu document lui-même. Le HTML généré utilisait getElementById (correct) — le bug était 100% dans les scripts d'assertion du Tester. 3 AXES : (1) Skill web-tester enrichi — directive ciblée anti 'querySelector assigné au lieu d'appelé' (= fatal vs ()) + garde anti-pollution du contexte (jamais réassigner une méthode native, stocker le résultat dans une const locale) + replis robustes (getElementById/getElementsByTagName quand on doute des sélecteurs, surtout si le code à tester les utilise) + pattern DOMContentLoaded (anti faux échec sur DOM non peuplé, attendre un délai puis vérifier qu'un élément attendu existe). (2) Cap steps configurable TESTER_MAX_STEPS (défaut 12, avant 24 hardcoded) dans config.py + .env.example — le verdict est clair à 10-12 steps, borne la durée sans perte de couverture. Valeur par défaut dans la dataclass (même convention que loop_guard_threshold — évite de casser les helpers de test qui construisent Settings() à la main). (3) Guard anti-idle (F-33) étendu au Tester — LoopGuard désormais instancié et passé au WebTestRunner via run_with_retry (détecte la répétition exacte du même puppeteer_evaluate, ex: même script JS échouant répétitivement) + _detect_idle_step devient contextuel via paramètre node_kind='tester' (message cite puppeteer_*/final_answer, PAS write_file — avant le guard n'existait que pour le Coder et ne différenciait pas). 5 tests PASS (test_guard.py +3 : message contextuel tester/coder, productif no-message ; test_config.py +1 : tester_max_steps défaut+override ; test_guard.py +1 : run_with_retry node_kind='tester' émet le log idle). Suite pytest complète 487 passed / 0 failed (482 baseline + 5 nouveaux). 0 régression. Périmètre (décision utilisateur) : 3 axes ciblés, cap 12. Refactos lourds laissés en échéance future : Tester→CodeAgent (F-31, non urgent), compaction contexte, préchargement navigateur.",
       "status": "completed",
-      "dependencies": ["F-27", "F-33"]
+      "dependencies": [
+        "F-27",
+        "F-33"
+      ]
     },
     {
       "id": "F-46",
       "name": "Fix bug visuel Coder (skill frontend-design) + bug FRESH_START",
       "description": "Corrige le bug visuel du Coder révélé par comparaison audit_coder/test_6 (HTML propre) vs runs/2026-08-01_2009_bubble_sort/index.html (HTML visuellement cassé : titre h1 3.5rem/4rem énorme, layout row à 1024px illisible, pas de card). DIAGNOSTIC (prouvé par le log run_bubble_f45) : le Coder applique LITTÉRALEMENT la consigne du skill frontend-design 'Échelle de type : hero 3.5rem' → il écrit h1 { font-size: 3.5rem } (log lignes 403-405) puis 4rem en responsive (ligne 482). Le skill était conçu pour des LANDING PAGES (hero, macro-layout) — INADAPTÉ à un visualiseur d'algorithme (app/tool). FIX : skill frontend-design réécrit avec (1) ÉTAPE 0 obligatoire distinguant APP/TOOL (défaut, UI simple empilée centrée dans une card, titre 1.5-2rem) vs LANDING/PAGE (hero autorisé, 2.5-3rem) ; (2) fourchettes typographiques conditionnelles remplaçant 'hero 3.5rem' littéral ; (3) garde anti-titre-géant explicite (h1 > 3rem interdit sauf hero unique de landing) ; (4) directive layout APP (NE PAS faire de row à 1024px, rester une colonne). BONUS : bug FRESH_START corrigé — load_dotenv(override=True) écrasait l'env shell depuis .env → FRESH_START=1 au shell était inopérant (le run reprenait toujours le checkpoint). Passé à load_dotenv() (override=False par défaut) : l'env shell prime sur .env (comportement attendu : secrets dans .env, overrides CI/shell via env). Validé : FRESH_START=1 respecté, .env toujours lu sans override. Suite pytest 487 passed / 0 failed (0 régression). Skill non encore re-validé par un run complet (laissé au cycle F-48 qui donnera la vision au Coder pour auto-valider).",
       "status": "completed",
-      "dependencies": ["F-44"]
+      "dependencies": [
+        "F-44"
+      ]
     },
     {
       "id": "F-47",
       "name": "Fix Judge hang (thinking Gemma forcé sur /v1) — provider ollama/ + think sélectif",
       "description": "Corrige le Gap 2 (debug/GAPS_TESTER_JUDGE.md) : le Judge ne rendait jamais de verdict (hang indéfini, run F-45 bloqué). DIAGNOSTIC DÉFINITIF (mesures réelles + tests exhaustifs) : (a) le prompt Judge n'était PAS trop gros (~4039 tokens seulement : instruction F-44 935 + code 2229 + tests tronqué 500 + requirements tronqué 375 — déjà tronqué par truncate_output). (b) La température basse (0.3) est CORRECTE pour le code, ne pas changer (la reco 1.0 du model card est pour le chat général). (c) VRAIE CAUSE : le mode thinking de Gemma 4 est FORCÉ sur l'endpoint /v1 d'Ollama (testé 0.32.5 = BIEN la dernière release GitHub 2026-07-27, pas une vieille version). AUCUNE méthode ne le désactive via /v1 : think:false (ignoré), extra_body (ignoré), chat_template_kwargs (ignoré), Modelfile TEMPLATE minimal (thinking quand même), sans system/tools (thinking quand même), template Jinja forcé (erreur fonctions). Le thinking va dans un champ reasoning séparé, content reste vide, finish_reason=length (modèle coupé en plein thinking avant le verdict). À max_tokens=8192 sur le 12B (~6 tok/s) = ~23 min de thinking → hang perçu / timeout. PERCÉE TECHNIQUE : le provider litellm 'ollama/' (prefix au lieu de 'openai/') parle l'API native /api/chat d'Ollama qui accepte le paramètre think (booléen top-level). Testé : /api/chat + think:false → 3.8s, 6 tokens, réponse directe {\"approved\": true}. FIX : _configure_dspy (dspy_nodes.py) passe au provider ollama/ (parle /api/chat natif), retire le suffixe /v1 de l'api_base (sinon 404), et accepte un paramètre think. DÉCISION UTILISATEUR : thinking conservé UNIQUEMENT pour l'Architect (le raisonnement aide au découpage/stratégie simple/incremental/multifile) — think=True. Désactivé (think=False) pour Router/PromptRefiner/Security/Judge/Escalation (tâches de classification/formatage/verdict où le thinking est du gaspi bloquant). Validé en intégration : _configure_dspy(think=False) répond en 5.8s sans thinking parasite (vs ~23 min avant). 2 tests test_prompt_refiner.py mis à jour (assertions _configure_dspy + think=False). Suite pytest 487 passed / 0 failed (0 régression). Note : le Coder (smolagents, 4B) subit AUSSI le thinking forcé sur /v1 (confirmé) — traité au cycle F-48 (vision Coder, prérequis think=false smolagents).",
       "status": "completed",
-      "dependencies": ["F-44"]
+      "dependencies": [
+        "F-44"
+      ]
     },
     {
       "id": "F-48",
       "name": "Vision Coder (auto-validation visuelle verify-after)",
       "description": "PROCHAIN CYCLE (planifié, non commencé). Idée : le Coder (4B) a la vision (model card Gemma 4 multimodal, confirmé via /api/chat + think=false : décrit parfaitement un screenshot — 'dark-themed web interface... Title: Visualiseur Bubble Sort'). Il pourrait capturer un screenshot de son propre output après write_file et s'auto-valider visuellement (verify-after, invariant F-44 appliqué au visuel) : titre lisible (pas géant), layout non cassé, éléments visibles. Auto-correction via search_replace si problème détecté. PRÉREQUIS découvert au cycle F-45/F-46/F-47 : le Coder subit AUSSI le thinking forcé sur /v1 (confirmé : content vide, reasoning, finish=length). Donc (a) il gaspille du budget à réfléchir inutilement à chaque step (lenteur + moins de qualité code), (b) sa vision répondrait vide tant qu'il est sur /v1. PREMIÈRE ÉTAPE F-48 = faire parler le Coder /api/chat + think=false (même mécanisme que F-47, mais pour smolagents OpenAIServerModel — passer par litellm ollama/ ou custom). Bénéfice double : + budget code utile, + vision débloquée. PÉRIMÈTRE (décision utilisateur 'Tout 1+2+3') : (1) think=false Coder, (2) outil screenshot après write_file HTML (capture la page générée, l'expose au Coder comme image), (3) skill Coder verify-after visuel (étape post-write_file : capture + auto-éval + search_replace si fix nécessaire). CYCLE DÉDIÉ (pas mélangé à F-45/F-46/F-47) car le Coder est le cœur du système (produit le code) — scope ambitieux mérite tests/validation séparés (comparatif qualité avec/sans thinking + régression Bubble Sort et Nimbus). Diagnostic complet dans debug/GAPS_TESTER_JUDGE.md.",
       "status": "pending",
-      "dependencies": ["F-47", "F-44"]
+      "dependencies": [
+        "F-47",
+        "F-44"
+      ]
+    },
+    {
+      "id": "F-50",
+      "name": "Chrome DevTools MCP + validation visuelle (Coder & Tester)",
+      "description": "[ex-F-45, renuméroté pour éviter collision avec main PR#23] Ajout du serveur MCP chrome-devtools-mcp (stdio via npx) au Coder (auto-validation visuelle) et au WebTester (complément d'outils), SANS supprimer Puppeteer (cumul). Permet au Coder d'ouvrir sa page HTML générée dans Chrome, de prendre un screenshot (vu par le modèle gemma-4-E4B, validé multimodal runtime) et de vérifier la console JS AVANT final_answer — évite d'envoyer une page visuellement ratée au Tester. Implémentation : (1) agent_server/mcp.build_chrome_devtools_params() — source unique de vérité stdio (npx chrome-devtools-mcp@latest --isolated --viewport 1280x800 --screenshot-format jpeg), opt-out CHROME_DEVTOOLS_ENABLED, CHROME_PATH optionnel, CHROME_DEVTOOLS_HEADLESS. (2) graph_orchestrator/chrome_devtools_tool.py — context manager miroir de context7_tool (yield [] si KO, dégradation gracieuse). (3) graph_orchestrator/vision_callback.py — CŒUR : wrapper _ScreenshotCapturingTool autour des outils take_screenshot/puppeteer_screenshot qui capture l'image PIL, + make_screenshot_callback() step_callback qui peuple memory_step.observations_images. Nécessaire car smolagents v1.26.0 ne pousse PAS auto les images des outils MCP dans le contexte multimodal (le LLM recevait 'Stored image.png in memory.' au lieu de voir l'image). Pattern inspiré de smolagents/vision_web_browser.py (seul mécanisme intégré qui peuple observations_images). (4) Coder (CodeAgent) : outils DevTools + step_callback + prompt section VALIDATION VISUELLE (conditionnelle tâche web via _is_web_task), max_steps 12→14 (marge preview). (5) WebTester (ToolCallingAgent) : cumul Puppeteer + DevTools, step_callback vision actif. (6) Skill devtools-preview routé dynamiquement (même regex que frontend-design). 28 tests PASS (test_chrome_devtools_tool.py). Suite pytest complète 521 passed / 0 failed (493 baseline + 28 nouveaux + 1 maj). Risque : 2 navigateurs (Puppeteer + DevTools) — profils isolés (--isolated).",
+      "status": "completed",
+      "dependencies": [
+        "F-02"
+      ]
+    },
+    {
+      "id": "F-51",
+      "name": "Checklist de fonctionnalités parsée (couverture Tester) + Fixes robustesse GPU-local",
+      "description": "[ex-F-46, renuméroté pour éviter collision avec main PR#23] Deux chantiers issus des runs de validation Bubble Sort (3 runs). (A) CHECKLIST FONCTIONNALITÉS : le Tester recevait le cahier des charges en texte libre et testait 2-3 fonctionnalités au hasard (ex: compteur de comparaisons manquant non détecté). graph_orchestrator/requirements_checklist.py parse la section '## Fonctionnalités attendues' de la spec PromptRefiner en liste Python déterministe (regex, 0 LLM) et build_checklist_block() force le Tester à tester CHACUNE (1 assertion/fonctionnalité + tableau verdict PASS/FAIL/N-A). Vide si section absente (fallback historique). 14 tests PASS (test_requirements_checklist.py). (B) FIXES ROBUSTESSE GPU-local observés sur runs : (1) AUDIT_PARALLEL=false (défaut) séquentialise Tester PUIS Security — avant, les 2× reasoning_model (gemma-12B) en parallèle saturaient la VRAM → Security silencieux (jamais de verdict) + Tester 3× plus lent (Step 1: 428s→146s après fix). (2) max_steps Tester 24→12 — à 24 steps, le contexte ToolCallingAgent explosait (405k tokens au step 21, modèle au-delà de sa fenêtre). (3) skill coding : règle anti-TypeScript (: type, as, : void INTERDITS en <script> vanilla) — failure mode n°1 du Coder (gemma-4 écrit du TS par réflexe, le navigateur lève SyntaxError, TOUT le script échoue silencieusement). (4) skill devtools-preview : list_console_messages OBLIGATOIRE AVANT take_screenshot (le screenshot CSS 'joli' ne révèle pas un JS cassé). (5) skill web-tester : règle des 2 essais (conclure FAILURE vite sur un bug réel confirmé, ne pas explorer 15 sélecteurs). Validation run #3 : anti-TS FONCTIONNE (HTML généré 0 annotation TS, JS valide), tri correct, mais Tester a épuisé max_steps sans conclure (modèle verbose) — la checklist F-46 (pas encore active ce run) doit être validée au prochain. Suite pytest complète 535 passed / 0 failed (521 + 14 nouveaux).",
+      "status": "completed",
+      "dependencies": [
+        "F-44",
+        "F-45"
+      ]
+    },
+    {
+      "id": "F-52",
+      "name": "Re-test ciblé façon git diff (ne re-valider QUE les bugs signalés en iter >1)",
+      "description": "[ex-F-47, renuméroté pour éviter collision avec main PR#23] En itération N+1, le Tester re-validait TOUT from scratch (~25 min, 233k tokens) pour vérifier 2-3 fragments corrigés. gaspillage : 90% re-vérifie ce qui marchait déjà. graph_orchestrator/targeted_retest.py : en iter >1 avec réfutations DuckDB, le Tester bascule en mode ciblé (max_steps 12→6, prompt priorise les bugs signalés + smoke-test console). extract_bug_points() lit les réfutations (plus récentes d'abord, tronquées à 1200 cars), build_targeted_retest_block() construit le prompt ciblé (navigate + console + assertions par bug + screenshot). should_use_targeted_retest() décide du mode. En iter 1 ou sans réfutations → mode complet (checklist F-46, fallback). 16 tests PASS (test_targeted_retest.py). Branchement workflow : propagation refutations brutes dans sub_dict + web_tester max_steps adaptatif + checklist_block remplacé par targeted_block en mode ciblé.",
+      "status": "completed",
+      "dependencies": [
+        "F-46"
+      ]
+    },
+    {
+      "id": "F-53",
+      "name": "Git local du run pour suivre les modifications du Coder (diff exact)",
+      "description": "[ex-F-48, renuméroté pour éviter collision avec main PR#23] graph_orchestrator/git_snapshot.py : git init dans le dossier du run (runs/<dated>/, gitignored du repo principal) pour suivre les modifications du Coder itération par itération. commit_iteration() après chaque Coder ; get_last_diff() extrait git diff HEAD~1..HEAD (lignes EXACTES modifiées). Propagation au Tester (F-47) : le diff est injecté dans build_targeted_retest_block(git_diff=...) pour que le Tester concentre ses assertions sur les zones réellement modifiées (source de vérité plus précise que les bugs texte du Judge). En iter 1, pas de diff (création initiale). Tolérant : si git absent/corrompu, fallback sur réfutations texte. 12 tests PASS (test_git_snapshot.py). Bénéficiaires : Tester (re-test ciblé précis), Judge (in-diff-only), Coder (auto-vérif de son diff). Skill coding enrichi : règle CSS 'height: X% requiert parent heighté' (bug isolation #1 : barres invisibles car container sans hauteur, height: % résolu à 0).",
+      "status": "completed",
+      "dependencies": [
+        "F-47"
+      ]
+    },
+    {
+      "id": "F-54",
+      "name": "Static Tester déterministe (node --check + wiring + visibilité DOM)",
+      "description": "[ex-F-49, renuméroté pour éviter collision avec main PR#23] Gatekeeper WEB 0-LLM (<6s) inséré entre le Linter et le Tester LLM. Implémente la méthodologie prouvée debug/MANUAL_TESTER_METHODOLOGY.md : Tier 1 (node --check sur le JS inline = attrape TS-in-vanilla, le bug n°1 du Coder = page blanche ; wiring addEventListener = attrape slider non branché, indétectable par screenshot) ; Tier 2 (visibilité DOM via Chrome DevTools getBoundingClientRect().height = attrape barres invisibles, le bug CSS height:% que le LLM a raté par biais de confirmation). Court-circuite le Tester LLM (25 min, 233k tokens) sur les bugs évidents — même pattern que le Linter F-30. Complémentaire du Linter (qui SAUTE le JS inline du HTML car tree-sitter-html trop tolérant). Générique (analyse le HTML/JS réellement produit, ne connaît pas la demande). Dégradation gracieuse : node/Chrome absents = skip silencieux, le LLM Tester prend le relais. Opt-out STATIC_TESTER_ENABLED=0 / STATIC_TESTER_DEVTOOLS=0.",
+      "status": "completed",
+      "dependencies": [
+        "F-30",
+        "F-45"
+      ]
+    },
+    {
+      "id": "F-55",
+      "name": "Scripts isolation 'l'agent joue le nœud' (backlog, dépannage rapide)",
+      "description": "Backlog P4. Systématiser le pattern qui a marché sur F-54 (Static Tester) : un script d'isolation par nœud qui fournit le contexte minimal et appelle la VRAIE fonction de production, pour itérer/dépanner sans relancer le workflow complet (~25 min). Entrées buggées connues → assertion sur le verdict. Nœuds candidats : Tester, Coder, Linter, Architect/Router/Judge, Security. Convention debug/isolation/. NB : ce backlog référençait initialement F-45..F-48 pour les features DevTools ; ceux-ci ont été renumérotés F-50..F-53 suite au merge de main (PR#23) qui utilisait déjà ces IDs pour les fixes querySelector/visuel/judge/vision.",
+      "status": "pending",
+      "dependencies": []
     }
   ]
 }

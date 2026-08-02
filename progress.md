@@ -4,6 +4,16 @@
 - [x] Valider le coding workflow de bout en bout sur un prompt "landing page premium"
       (Architect → Coder → Tester → Judge → verdict). ATTEINT (run #12 HTML propre,
       run #13 cycle complet + reprise après crash multi-crash).
+- [x] Cycle CHROME DEVTOOLS MCP + VALIDATION VISUELLE (F-45) : auto-validation visuelle
+      du Coder (screenshot vu par gemma-4-E4B multimodal avant final_answer) + complément
+      d'outils DevTools au WebTester (cumul avec Puppeteer, pas de suppression).
+      Implémentation TERMINÉE (28 tests, 521 passed / 0 failed). Validation run à venir.
+- [x] Cycle CHECKLIST FONCTIONNALITÉS + FIXES ROBUSTESSE GPU-LOCAL (F-46) : 3 runs de
+      validation Bubble Sort ont révélé Security silencieux (VRAM saturée par parallélisme),
+      Coder générant du TypeScript en vanilla, et Tester oubliant des fonctionnalités.
+      Fixes (AUDIT_PARALLEL=false, max_steps 24→12, anti-TS, console obligatoire, règle 2
+      essais) + checklist parsée forcée (1 assertion/fonctionnalité). Implémentation
+      TERMINÉE (14 tests, 535 passed / 0 failed).
 - [ ] Cycle TESTER POLYVALENT + AUTO-CORRECTION stderr (Priorité 2) : dispatch
       multi-techno (web+python) + troncature anti Context-Overflow. En cours.
 - [ ] Cycle CONTEXT7 (doc libs à jour, anti-hallucination d'API) : intégration sur
@@ -145,6 +155,29 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - F-34 : Nœud d'Audit Dette Technique (python-health-audit via uvx) en fin de workflow.
 - File viewer fenêtré SWE-agent ACI (lourd, optionnel).
 - 5 nœuds sans tools (Worker/Judge/Synth/Adversary) : CodeAgent inutile, ne pas migrer.
+- **F-50 : Scripts d'isolation « l'agent joue le rôle du nœud » pour dépannage/validation rapide.**
+  Idée : systématiser le pattern qui a si bien marché sur F-49 (l'agent injecte des
+  entrées buggées et valide la sortie en <6s, au lieu de lancer le workflow complet de
+  ~25 min). Un script d'isolation par nœud, qui fournit le contexte minimal et appelle
+  la VRAIE fonction de production (zéro dérive de comportement). Bénéfices :
+  - **Dépannage rapide** : itérer sur un nœud (prompt, skill, logique) sans relancer tout
+    le graphe. Retour en secondes, pas en dizaines de minutes.
+  - **Détection de régressions** : inputs buggés connus → assertion sur le verdict.
+  - **Onboarding/debug** : comprendre le contrat entrée/sortie d'un nœud en l'exécutant
+    isolément avec des données contrôlées.
+  Nœuds candidats (par ordre de valeur) :
+  1. **Tester** (`run_tester.py` existe déjà F-46) — étendre aux autres runners.
+  2. **Coder** (`run_coder.py` / `prompts/bubble_sort_spec.md` existe déjà isolation) —
+     formaliser en script réutilisable avec spec en entrée.
+  3. **Static Tester** (`debug/validate_static_tester_live.py` existe déjà F-49) — garder.
+  4. **Linter** — injecter fichiers buggés (TS, Python IndentationError, contenu après
+     </html>) et valider le court-circuit.
+  5. **Architect / Router / Judge** — injecter specs/prompt et valider le JSON de sortie
+     (DSPy, moins évident à isoler mais faisable via signature directe).
+  6. **Security Reviewer** — injecter code vulnérable (XSS, eval) et valider le verdict.
+  Convention : un dossier `debug/isolation/` avec un script par nœud, documentation du
+  contrat d'entrée (quoi fournir) et d'attentes (quoi vérifier). Réutilise les fixtures
+  déjà écrites dans les tests unitaires.
 
 ## Jalons bootstrap (faits)
 - [x] Création agent.md (specs gestion d'état).
@@ -368,3 +401,62 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
   auto-éval (titre lisible, layout non cassé) + search_replace si fix nécessaire.
 - [ ] Étape F48-4 : Validation — comparatif qualité code avec/sans thinking + régression
   Bubble Sort et Nimbus.
+- [ ] Étape VC-11 (cycle suivant) : Fix Tester querySelector (ACTION IMMÉDIATE documentée).
+
+## Jalons de l'Itération (cycle Chrome DevTools MCP + validation visuelle — F-45)
+- [x] Étape CD-0 : Vérification runtime fast_model (gemma-4-E4B) multimodal — VALIDÉ
+      (image rouge 4x4 envoyée via /v1/chat/completions → réponse "Roux... rouge").
+- [x] Étape CD-1 : Config MCP build_chrome_devtools_params() (agent_server/mcp.py) —
+      source unique stdio (npx chrome-devtools-mcp@latest --isolated --viewport 1280x800
+      --screenshot-format jpeg), opt-out CHROME_DEVTOOLS_ENABLED, CHROME_PATH, HEADLESS.
+- [x] Étape CD-2 : Context manager chrome_devtools_tool.py (yield [] si KO, dégradation
+      gracieuse pattern Context7).
+- [x] Étape CD-3 : Module vision_callback.py — wrapper _ScreenshotCapturingTool (capture
+      PIL image) + make_screenshot_callback (step_callback peuple observations_images).
+      Nécessaire car smolagents v1.26.0 ne pousse pas auto les images MCP en multimodal.
+- [x] Étape CD-4 : Branchement Coder (CodeAgent) — outils DevTools + step_callback +
+      prompt section VALIDATION VISUELLE (conditionnelle web), max_steps 12→14.
+- [x] Étape CD-5 : Branchement WebTester — cumul Puppeteer + Chrome DevTools,
+      step_callback vision actif, doc outils complémentaires dans le prompt.
+- [x] Étape CD-6 : Skill devtools-preview/SKILL.md + skills_loader (routage dynamique web).
+- [x] Étape CD-7 : Config .env + .env.example (CHROME_DEVTOOLS_ENABLED, CHROME_PATH,
+      CHROME_DEVTOOLS_HEADLESS). Reporté dans .env local (AGENTS.md §7).
+- [x] Étape CD-8 : tests/test_chrome_devtools_tool.py (28 tests : params, dégradation,
+      callback, helpers Coder, skills). Suite pytest 521 passed / 0 failed (+28 vs baseline).
+- [x] Étape CD-9 : Fichiers état (feature_list F-45, contract C150-C160, progress, log).
+- [ ] Étape CD-10 : Validation run Bubble_Sort_Visualizer (borné, WORKFLOW_MODE=coding).
+
+## Jalons de l'Itération (cycle Checklist fonctionnalités + fixes robustesse — F-46)
+- [x] Étape CD-11 : 3 runs de validation Bubble Sort (diagnostic des failure modes).
+- [x] Étape CD-12 : Fix AUDIT_PARALLEL=false (séquentialise Tester PUIS Security, GPU-local).
+- [x] Étape CD-13 : Fix max_steps Tester 24→12 (anti-explosion contexte 405k→233k tokens).
+- [x] Étape CD-14 : Skill coding anti-TypeScript (tableau syntaxes interdites en vanilla).
+- [x] Étape CD-15 : Skill devtools-preview — list_console_messages OBLIGATOIRE avant screenshot.
+- [x] Étape CD-16 : Skill web-tester — règle des 2 essais (conclure FAILURE vite).
+- [x] Étape CD-17 : requirements_checklist.py (parser regex + build_checklist_block).
+- [x] Étape CD-18 : Injection checklist dans web_tester.py (checklist_block après cahier charges).
+- [x] Étape CD-19 : tests/test_requirements_checklist.py (14 tests). Suite 535 passed / 0 failed.
+- [x] Étape CD-20 : Doc — README.md §"Node Graph & Data Flow" (diagramme ASCII complet
+      avec tiering modèles + flux données) + AGENTS.md (séquence + référence).
+- [x] Étape CD-21 : Fichiers état (feature_list F-46, contract C161-C170, log, progress).
+- [ ] Étape CD-22 : Validation run Bubble Sort avec checklist F-46 active (cycle suivant).
+
+## Jalons de l'Itération (cycle Static Tester déterministe — F-49)
+- [x] Étape ST-1 : Module `graph_orchestrator/static_tester.py` — Tier 1a (`node --check`
+      sur JS inline → TS-in-vanilla, bug n°1 = page blanche), Tier 1b (wiring
+      `addEventListener` → slider non branché, piège n°1 indétectable par screenshot),
+      Tier 2 (visibilité DOM DevTools `getBoundingClientRect().height` → barres invisibles,
+      le bug CSS height:% que le LLM a raté par biais de confirmation). Déclenchement de
+      l'action primaire (clic start) combiné au probe en UN appel synchrone (éléments créés
+      au clic, pas au load). Générique (découvre sélecteurs + ids depuis le HTML, ne hardcode rien).
+- [x] Étape ST-2 : Intégration `workflows.py` — inséré entre Linter et Tester LLM, même
+      pattern de court-circuit (réfutation DuckDB source='static_tester' + continue).
+- [x] Étape ST-3 : Tests `tests/test_static_tester.py` — 29 tests (l'agent joue le Coder
+      avec des HTML bubble-sort buggés). 29/29 PASS. Bug barres invisibles ATTRAPÉ.
+- [x] Étape ST-4 : Config `.env` + `.env.example` — STATIC_TESTER_ENABLED, STATIC_TESTER_DEVTOOLS.
+- [x] Étape ST-5 : Fichiers état synchronisés (feature_list F-49, contract C180-C189, README,
+      AGENTS.md, log, progress).
+- [x] Étape ST-6 : Suite pytest complète → 592 passed / 0 failed (563 baseline + 29 nouveaux).
+      0 régression. web_tester_functional désélectionné (nécessite Chrome/npx live).
+- [ ] Étape ST-7 : Validation run live (HTML corrompu → FAILURE ciblé, HTML correct → SUCCESS).
+

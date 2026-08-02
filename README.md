@@ -30,6 +30,7 @@ Instead of letting a single agent write and evaluate its own code, this system s
 - **DSPy Architect Node**: A heavy reasoning model that takes a complex prompt, designs the global architecture, and breaks it down into granular JSON subtasks using strict Pydantic constraints. It also emits a **build strategy per subtask** (`simple` | `incremental` | `multifile`) telling the Coder *how* to construct the files — not just *what* to build.
 - **Fan-out Coder Nodes (smolagents `CodeAgent`)**: For each subtask, a Coder agent is spawned asynchronously to write code by generating **Python that calls tools** (`write_file(path=..., content=...)`). CodeAgent was chosen over ToolCallingAgent after empirical comparison: small local models (gemma) reliably generate Python but fail to emit valid JSON tool-calls. A **guard software** detects idle steps (model reasons without acting), broken code blocks (unclosed strings), and **empty HTML skeletons** (preventing small models from failing at incremental generation), re-injecting targeted correction messages. A **cryptographic anti-loop** (SHA-256 fingerprint of `tool + arguments`) trips a circuit-breaker when the Coder repeats the *exact same* tool call N times in a row — stopping token hemorrhage from "spinning in circles" failures. Configurable via `LOOP_GUARD_ENABLED` / `LOOP_GUARD_THRESHOLD`. An **Orphan Repair** layer (`orphan_repair.py`) additionally guards the conversation history: if a `tool_use` call has no matching `tool_result` (e.g. the agent was interrupted mid-tool-call and the memory was restored from a checkpoint), it injects a fake `{"status": "error", "error": "Interrompu"}` response **before** the agent runs, so the asymmetric tool-call pair never crashes the LLM API on replay. Both the generic "messages" form and the smolagents `memory.steps` form are handled; the integration is defensive (never blocks the main flow). A **Sanitizer** layer (`sanitizer.py`) automatically **auto-types** tool arguments: small models often emit malformed values (`offset="1, 80"` → coerced to `80`, `replace_all="true"` → `True`, JSON strings for `array`/`object` fields), which otherwise trigger wasted retries on Pydantic type-validation errors. It coerces *best-effort* against the real `tool.inputs` schema (never LLM inference) and leaves non-coercible values untouched so smolagents validation remains the final arbiter. Deterministic, 0-LLM. Configurable via `SANITIZER_ENABLED` (default on). An **Idempotence** layer (`idempotency.py`) guarantees that non-idempotent side effects (`append_file`, `pip install`) are applied **exactly once per run** — even after a checkpoint replay (crash recovery). Backed by DuckDB (survives a new process), with a 14-day retention and lazy pruning; a failed operation is not marked done (retryable). `write_file` is intentionally NOT wrapped (idempotent by overwrite by design); `bash_command` is covered by the guard + anti-loop instead. Opt-out via `IDEMPOTENCE_ENABLED`.
 - **Linter Node (Shift Left, deterministic)**: Right after the Coder, a **0-LLM gatekeeper** validates syntax (`tree-sitter` for Python/HTML/CSS/JS/TS/TSX + `py_compile` for Python indentation + HTML structural checks like *content after `</html>`*). On invalid syntax it **short-circuits the expensive Tester** and loops back to the Coder with the error — a syntax typo should never waste a full LLM cycle.
+- **Static Tester Node (deterministic web gatekeeper)**: A second 0-LLM gatekeeper (web-only) that validates **web semantics** the Linter cannot reach (it skips inline `<script>` JS — `tree-sitter-html` parses it as text). Three tiers in fail-fast order: **Tier 1** (`node --check` on the extracted JS catches TypeScript-in-vanilla = the #1 Coder bug = blank page; `addEventListener` wiring check catches an interactive control present but not connected — the slider-not-wired trap that a screenshot *cannot* detect); **Tier 2** (Chrome DevTools `getBoundingClientRect().height` after clicking the primary action — catches elements created in JS but rendered invisible by a CSS `height:%` on a heightless parent, the exact bug the LLM missed by confirmation bias). Implements the proven 7-step methodology from `debug/MANUAL_TESTER_METHODOLOGY.md`. Catches ~80% of web bugs in <6s vs the LLM Tester's 25 min. Graceful degradation: if `node` or Chrome is absent the affected tier skips silently (the LLM Tester takes over); opt-out via `STATIC_TESTER_ENABLED=0` / `STATIC_TESTER_DEVTOOLS=0`.
 - **Parallel Validation**: 
   - *Tester Node (smolagents, **polyvalent**)*: Detects the target technology (web → **Puppeteer MCP** for browser testing; Python → **`pytest` subprocess** with deterministic pass/fail + captured stderr) and routes to the matching runner. Captured output is **truncated** (head + tail) before feedback to protect the LLM context window from "Context Overflow".
     - **Auto-dependency resolution**: the Python tester detects `ModuleNotFoundError` in the captured stderr and **installs the missing package itself** (`pip install`, non-persistent — does *not* touch `pyproject.toml`/`uv.lock`) before re-running the tests, rather than wasting an LLM cycle on what is merely an absent dependency. Capped at 1 retry (anti-loop), module name validated against an identifier regex (defense-in-depth against command injection). Opt-out via `AUTO_INSTALL_DEPS=false`.
@@ -42,6 +43,7 @@ Instead of letting a single agent write and evaluate its own code, this system s
 - **Thinking mode, selective (F-47)**: Gemma 4's built-in *thinking* (step-by-step reasoning) is **forced on Ollama's `/v1` endpoint** and not disable there (Ollama 0.32.5, latest). All DSPy nodes therefore talk Ollama's **native `/api/chat`** via the litellm `ollama/` provider (instead of `openai/` → `/v1`), which honors the `think` parameter. Thinking is **disabled by default** (`think=False`) for Router/PromptRefiner/Security/Judge/Escalation — these are classification/verdict tasks where the rubric is in the prompt and the thinking only burns the generation budget without emitting the verdict (caused Judge hangs of ~23 min before the fix). The **Architect alone keeps thinking on** (`think=True`) — step-by-step reasoning genuinely helps the decomposition/strategy (simple/incremental/multifile). Validated: `think=False` answers in ~6 s vs ~23 min. See `debug/GAPS_TESTER_JUDGE.md`.
 - **Escalation Node (automatic post-mortem)**: When a subtask exhausts the circuit breaker (3 rejected iterations), an `EscalationSignature` DSPy node synthesizes the accumulated refutations from the Knowledge Graph into a **structured post-mortem** (root cause + lesson + severity). The diagnosis is persisted in the KG (`kind="escalation"`) and linked to the refutations it summarizes via `ESCALATES` edges — queryable by future runs to avoid repeating the same dead-ends. Controlled by `ESCALATION_ENABLED` (default on; degrades gracefully to the legacy `max_iterations_reached` status if disabled or if the reasoning endpoint is down).
 - **Context7 (up-to-date library docs)**: The Coder, Architect, and web-Tester are wired to **Context7** (`@upstash/context7-mcp`) to fetch **current library/framework documentation** — the antidote to API hallucination. Rather than relying on stale memorized APIs, agents consult official docs on demand. Controlled by the `context7-research` skill: it triggers **only for external libs** (React, Chart.js, pandas…) and **stays dormant on vanilla JS/CSS or algorithmic tasks** to avoid wasting steps. Requires `CONTEXT7_API_KEY` (degrades gracefully without it — all nodes run unchanged).
+- **Chrome DevTools MCP (visual self-validation)**: The Coder and web-Tester are wired to **`chrome-devtools-mcp`** (`npx chrome-devtools-mcp@latest`, stdio) to pilot a live Chrome instance — navigate the generated HTML page, take a screenshot, read the JS console, click/fill to test interactions. The screenshot is **returned as an image to the model** (the fast model `gemma-4-E4B` is multimodal — verified at runtime), so the Coder can **spot visual bugs (broken layout, blank page, overlapping elements) and fix them *before* `final_answer`**, instead of sending a visually broken page to the Tester. A dedicated **`vision_callback`** (`step_callback` smolagents) pushes the captured screenshot into `observations_images` — necessary because smolagents v1.26.0 does not automatically expose MCP tool images to the LLM otherwise. On the web-Tester, Chrome DevTools **complements Puppeteer** (kept for its dedicated assertion skill) by adding structured console messages (`list_console_messages` with source maps), accessibility-tree snapshots (`take_snapshot`), and Lighthouse audits. Controlled by `CHROME_DEVTOOLS_ENABLED` (degrades gracefully — all nodes run without visual preview if disabled, exactly as before F-45); `CHROME_PATH` and `CHROME_DEVTOOLS_HEADLESS` tune the Chrome binary and headless mode.
 
 ### 3. Persistent Knowledge Graph (DuckDB)
 Context windows are limited. Instead of passing massive conversation histories between the agents, **all agents read and write to a shared, persistent DuckDB Knowledge Graph**.
@@ -51,8 +53,113 @@ Context windows are limited. Instead of passing massive conversation histories b
 
 ### 4. Smart Model Tiering
 Save costs and boost speed by dynamically routing tasks to the right brain:
-- **Light Models** (`qwen3.5:2b`): Used for fan-out execution workers and rapid localized routing.
-- **Heavy Models** (`gemma-4-E4B`): Reserved for the Architect, Code Judge, and Synthesis where deep reasoning and ChainOfThought is required.
+- **Fast Model** (`FAST_MODEL_ID`, default `gemma-4-E4B`): Frequent, lower-cost operations — Coder, Router. Multimodal (vision validated at runtime, used by the Coder's visual self-validation F-45).
+- **Reasoning Model** (`REASONING_MODEL_ID`, default `gemma-4-12B`): Deep reasoning and ChainOfThought — Architect, Judge, Tester, Security Reviewer, PromptRefiner, Escalation, Adversaries, Synthesis.
+
+### 5. Node Graph & Data Flow (Coding Workflow)
+The end-to-end sequence of nodes, their LLM tier, and how data flows between them:
+
+```
+tasks.json (user prompt)
+   │
+   ▼
+┌─────────────────────────────────────────────────────────┐
+│  1. PromptRefiner    [reasoning]  DSPy                   │
+│     Rewrites raw prompt → structured spec               │
+│     (## Objectif / Fonctionnalités / Critères)          │
+│     Skipped on resume (persisted in checkpoint)         │
+└─────────────────────────────────────────────────────────┘
+   │ refined_prompt
+   ▼
+┌─────────────────────────────────────────────────────────┐
+│  2. Router           [fast]  DSPy                        │
+│     Classifies the technology (web/python/js/...)       │
+└─────────────────────────────────────────────────────────┘
+   │ router_lang
+   ▼
+┌─────────────────────────────────────────────────────────┐
+│  3. Architect        [reasoning]  DSPy                   │
+│     Splits task into subtasks (Pydantic)                │
+│     + strategy per subtask (simple/incremental/multifile)│
+└─────────────────────────────────────────────────────────┘
+   │ subtasks[]
+   ▼  (Fan-out: 1 loop per subtask, in parallel)
+┌─────────────────────────────────────────────────────────┐
+│  ┌─ AUTO-CORRECTION LOOP (max 3 iterations) ──────────┐ │
+│  │                                                     │ │
+│  │  4. Coder        [fast]  smolagents CodeAgent       │ │
+│  │     Generates code (write_file/search_replace)      │ │
+│  │     + DevTools MCP: navigate/screenshot/console     │ │
+│  │       (visual self-validation, F-45)                │ │
+│  │     Skills: coding, file-creation, frontend-design, │ │
+│  │       context7-research, devtools-preview           │ │
+│  └───────────────┬─────────────────────────────────────┘ │
+│                  │                                         │
+│                  ▼                                         │
+│  5. Linter        [NO LLM]  deterministic (tree-sitter)  │
+│     Validates syntax. If KO → back to Coder (Shift Left) │
+│                  │ (if syntax OK)                          │
+│                  ▼                                         │
+│  5b. Static Tester [NO LLM] deterministic web gatekeeper  │
+│      node --check (TS-in-vanilla) + wiring addEventListener│
+│      + DOM visibility via DevTools (invisible bars).      │
+│      If KO → back to Coder (court-circuite le Tester LLM) │
+│                  │ (if checks OK or non-HTML)              │
+│                  ▼                                         │
+│  ┌─ AUDITS (sequential if AUDIT_PARALLEL=false) ───────┐ │
+│  │  6a. Tester     [reasoning]  smolagents TCA          │ │
+│  │      Drives Chrome (Puppeteer + DevTools MCP)        │ │
+│  │      + requirements checklist (F-46)                 │ │
+│  │      Skill: web-tester (puppeteer_* assertions)      │ │
+│  │      OR PythonTestRunner (pytest subprocess, 0 LLM)  │ │
+│  │                                                       │ │
+│  │  6b. Security   [reasoning]  DSPy                    │ │
+│  │      OWASP Top 10, CVSS, defensive-only              │ │
+│  └───────────────┬─────────────────────────────────────┘ │
+│                  │ test_res + sec_res                     │
+│                  ▼                                         │
+│  7. Judge         [fast]  DSPy                             │
+│     Arbitrates: approved (merge) or feedback (re-loop)    │
+│     Rubric: severity, in-diff-only, anti-nits             │
+│  └─────────┬───────────────────────────────────────────┘ │
+│            │                                               │
+│     ┌──────┴───────┐                                      │
+│     ▼              ▼                                      │
+│  approved      rejected                                   │
+│  (subtask      → refutations written to DuckDB            │
+│   validated)   → Coder reads them next iteration          │
+│     │              (read_file + search_replace)           │
+│     │              (max 3 iterations)                     │
+│     │                    │                                │
+│     │              if 3 failures → 8. Escalation          │
+│     │              [reasoning] DSPy                        │
+│     │              post-mortem (root cause + lesson)       │
+│     │              persisted in DuckDB                     │
+│     ▼                                                      │
+└──┤ subtask done                                            │
+   ▼                                                         │
+(all subtasks validated) → DONE, global verdict              │
+```
+
+**Key data flows:**
+- **`original_content`**: the full spec (PromptRefiner output) is propagated to the Tester so it knows what to verify — and its `## Fonctionnalités attendues` section is parsed into a deterministic checklist (F-46) the Tester must tick item by item.
+- **Refutations in DuckDB**: when the Judge rejects, bugs are written to the Knowledge Graph (`kind="refutation"`); the Coder reads them back next iteration via `query_duckdb_knowledge_graph`.
+- **Checkpointing**: `coding_state` is persisted in DuckDB → crash recovery at any point.
+
+<details>
+<summary><b>Exploration mode (alternative workflow)</b></summary>
+
+When `WORKFLOW_MODE=exploration` (divergent research), a different set of nodes is used:
+
+| Node | LLM | Framework | Role |
+|---|---|---|---|
+| **Worker** | fast | smolagents ToolCallingAgent | Generates divergent leads |
+| **Reduce** | — (none) | Python | Aggregates Worker outputs |
+| **Adversary** | reasoning | DSPy | 3 skeptics refute in parallel |
+| **Synth** | reasoning | DSPy | Final synthesis of accumulated findings |
+
+These nodes are not used in coding mode.
+</details>
 
 ---
 
@@ -124,11 +231,38 @@ uv run python -m graph_orchestrator.workflows
 
 ## 🧪 Testing
 
-The unit tests (Pydantic schemas, JSON extraction, adversarial voting logic, loop termination) execute **without LLM calls** and run in < 1 second:
+### Unit tests (no LLM, < 1 second)
+
+The unit tests (Pydantic schemas, JSON extraction, adversarial voting logic, loop termination, MCP mocks, checklist parser) execute **without LLM calls**:
 
 ```bash
-uv run pytest tests/ -v
+uv run pytest tests/ -v          # 535 tests, ~25s
 ```
+
+### Node isolation scripts (iterate on ONE node without the full workflow)
+
+To iterate quickly on the Coder or Tester (skill, prompt, checklist) without relaunching the ~25-min full workflow (Architect → Coder → Tester → Judge), use these standalone runners. They call the **same production functions** (`execute_coder_node`, `execute_tester_node`) — zero behavior drift.
+
+| Script | Purpose | Example |
+|---|---|---|
+| `run_tester.py` | Test the Tester on a given HTML file, with the requirements checklist (F-46) active | `uv run python run_tester.py` (auto-detects latest `runs/*/index.html`) |
+| `run_tester.py` | Test a specific file with a custom spec | `uv run python run_tester.py runs/.../index.html "$(cat spec.md)"` |
+| `run_coder_tca.py` | Test the Coder (production CodeAgent, F-45 DevTools included) on a task | `uv run python run_coder_tca.py "Bubble sort visualizer"` |
+
+**`run_tester.py` details** — auto-detects the most recent `runs/*/index.html`, displays the extracted checklist (so you see exactly which features the Tester must verify), and runs the Tester in isolation:
+```bash
+uv run python run_tester.py
+# [*] Tester standalone
+#     Fichier testé     : runs/2026-08-02_1237_bubble_sort/index.html (7973 octets)
+#     Checklist F-46 extraite : 5 fonctionnalité(s) à tester
+#       1. Bouton « Démarrer le tri »...
+#       2. Bouton « Réinitialiser »...
+#       3. Curseur/slidebar pour régler la vitesse...
+#       4. Compteur affichant le nombre de comparaisons...
+#       5. Code couleur clair...
+```
+
+The default spec is the Bubble Sort requirements in **PromptRefiner format** (`## Fonctionnalités attendues` section) — this is what triggers the F-46 checklist. If you pass a plain-text spec (no structured section), the Tester falls back to the legacy free-text mode.
 
 ## ⚙️ Configuration
 
@@ -155,7 +289,9 @@ graph_orchestrator/
   ├── models.py                ← Pydantic schemas (ArchitectOutput, SecurityOutput, etc.)
   ├── dspy_nodes.py            ← 🧠 The Brains: DSPy 3.0 Signatures & Predictors (Router, Architect, Judge)
   ├── nodes.py                 ← 🖐️ The Hands: smolagents CodeAgents (Coders) + Tester dispatcher
-  ├── testers/                 ← 🧪 Polyvalent test runners (web: Puppeteer, python: pytest subprocess, ...)
+  ├── chrome_devtools_tool.py  ← 🖥️ Chrome DevTools MCP (visual self-validation, F-45)
+  ├── vision_callback.py       ← 📸 step_callback: screenshots → observations_images (multimodal)
+  ├── testers/                 ← 🧪 Polyvalent test runners (web: Puppeteer + DevTools, python: pytest, ...)
   ├── feedback_utils.py        ← Output truncation (head+tail) to prevent Context Overflow in the feedback loop
   ├── workflows.py             ← Complex orchestrations integrating DSPy and smolagents
   ├── knowledge_graph.py       ← DuckDB integration (claims, checkpoints)

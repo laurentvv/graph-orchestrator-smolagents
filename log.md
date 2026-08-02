@@ -2460,3 +2460,140 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
 - MODÈLE dérivé créé pour tests : gemma-12B-nothink / gemma-12B-nothink2 (TEMPLATE override)
   — n'ont PAS résolu le thinking côté /v1 (proxy Ollama force indépendamment du template).
   Peuvent être supprimés (ollama rm) — non utilisés en prod (F-47 utilise le provider litellm).
+---
+## [2026-08-02 10:56:42] feat | Début F-45 : Chrome DevTools MCP + validation visuelle (Coder & Tester)
+- Objectif : auto-validation visuelle du Coder (screenshot vu par gemma-4-E4B multimodal,
+  validé runtime) AVANT final_answer + complément d'outils DevTools au WebTester (cumul
+  avec Puppeteer, pas de suppression).
+- Branche : feat/chrome-devtools-mcp-f45.
+
+## [2026-08-02 10:58:00] eval | Validation multimodale fast_model (gemma-4-E4B)
+- Test empirique : image PNG 4x4 rouge envoyée au fast_model via /v1/chat/completions
+  (content part image_url base64) → réponse "Roux... rouge". CONFIRMÉ : gemma-4-E4B
+  voit les images. Pas besoin de tier VISION_MODEL_ID séparé.
+
+## [2026-08-02 11:05:00] gen | Constat technique smolagents v1.26.0 (exploration agents.py)
+- DÉCOUVERTE CRITIQUE : ToolCollection.from_mcp décode bien les ImageContent en PIL.Image
+  (mcpadapt), MAIS smolagents ne pousse JAMAIS ces images dans observations_images
+  (la seule porte multimodale). Le LLM recevait "Stored 'image.png' in memory." au lieu
+  de voir l'image. Cause : ToolCallingAgent fait un test type() exact (pas isinstance),
+  CodeAgent passe le retour d'outil par str(). CONCLUSION : il faut un step_callback
+  dédié (pattern vision_web_browser.py) pour faire remonter l'image. Implémenté dans
+  vision_callback.py (wrapper _ScreenshotCapturingTool + make_screenshot_callback).
+
+## [2026-08-02 11:30:00] gen | Implémentation F-45 complète (9 étapes)
+- agent_server/mcp.py : build_chrome_devtools_params() + connect_all_mcp + /health.
+- graph_orchestrator/chrome_devtools_tool.py : context manager (dégradation gracieuse).
+- graph_orchestrator/vision_callback.py : wrapper capture + step_callback observations_images.
+- nodes.py (Coder) : outils DevTools + step_callback + prompt VALIDATION VISUELLE
+  (conditionnelle _is_web_task), max_steps 12→14, helpers _build_devtools_blocks.
+- testers/web_tester.py : cumul Puppeteer + DevTools, step_callback vision, doc complémentaire.
+- skills/devtools-preview/SKILL.md + skills_loader (routage dynamique web).
+- .env + .env.example : CHROME_DEVTOOLS_ENABLED, CHROME_PATH, CHROME_DEVTOOLS_HEADLESS.
+
+## [2026-08-02 11:35:00] eval | Tests F-45
+- tests/test_chrome_devtools_tool.py : 28 tests PASS (params, dégradation, callback,
+  helpers Coder, skills). 1 test maj dans test_skills_and_mcp.py (3 serveurs au lieu de 2).
+- Suite pytest complète : 521 passed / 0 failed (493 baseline + 28 nouveaux). 0 régression.
+
+## [2026-08-02 11:36:00] sync | Fichiers état mis à jour (AGENTS.md §3)
+- feature_list.json : F-45 ajouté (status completed).
+- contract.md : critères C150-C160 ajoutés.
+- progress.md : cycle F-45 + jalons CD-0 à CD-10.
+- (README.md : à mettre à jour avant merge).
+
+## [2026-08-02 12:15:00] fix | Patch multi-content chrome-devtools-mcp (découverte E2E)
+- TEST BOUT-EN-BOUT réel : le serveur DevTools se lance (2.7s, 29 outils), navigate_page
+  fonctionne, MAIS take_screenshot retournait une STRING ("Took a screenshot...") au lieu
+  d'une PIL.Image.
+- CAUSE : chrome-devtools-mcp renvoie un CallToolResult MULTI-content (TextContent + ImageContent),
+  mais l'adaptateur mcpadapt (smolagents_adapter.py:189) ne prend QUE content[0] (le texte).
+  L'image est perdue → le modèle ne la verrait jamais.
+- FIX : _patch_forward_for_image() dans vision_callback.py. Inspecte la closure du forward de
+  l'outil MCP pour récupérer `func` (la closure qui produit le CallToolResult), et redéfinit
+  forward pour parcourir TOUS les content items et retourner le premier ImageContent (décodé
+  en PIL.Image) s'il existe. Fallback silencieux si l'inspection échoue (structure inattendue).
+- VALIDATION E2E : après patch, take_screenshot retourne une PIL.Image 1280x800 RGB, pixel
+  central = (66,134,245) ≈ #4285f4 (bleu Google de la page test). Capture dans holder OK.
+  → Le step_callback peut maintenant pousser le screenshot dans observations_images.
+- 28 tests toujours PASS après le patch (0 régression).
+
+---
+## [2026-08-02 13:03:10] feat | F-46 : Checklist fonctionnalités + Fixes robustesse GPU-local
+- 3 runs de validation Bubble Sort ont révélé 3 problèmes distincts :
+  (1) Tester+Security en parallèle saturent la VRAM GPU-local → Security silencieux.
+  (2) Coder génère du TypeScript dans <script> vanilla → SyntaxError → page cassée.
+  (3) Tester ne teste pas toutes les fonctionnalités du cahier des charges (oublis).
+- FIXES APPLIQUÉS (F-46) :
+  - AUDIT_PARALLEL=false (défaut) : séquentialise Tester PUIS Security.
+  - max_steps Tester 24→12 (anti-explosion contexte).
+  - skill coding : règle anti-TypeScript (: type, as, : void INTERDITS en vanilla).
+  - skill devtools-preview : list_console_messages OBLIGATOIRE avant take_screenshot.
+  - skill web-tester : règle des 2 essais (conclure FAILURE vite).
+  - graph_orchestrator/requirements_checklist.py : parse '## Fonctionnalités attendues'
+    en checklist obligatoire pour le Tester (1 assertion/fonctionnalité, tableau verdict).
+- RUN #3 BILAN : anti-TS FONCTIONNE (HTML valide, tri correct), mais Tester a épuisé
+  max_steps sans conclure (modèle verbose). Compteur de comparaisons toujours manquant
+  (Coder) — la checklist F-46 l'aurait attrapé si elle avait été active.
+- TESTS : 14 nouveaux (test_requirements_checklist.py). Suite complète 535 passed / 0 failed.
+- DOC : README.md §"Node Graph & Data Flow" (diagramme ASCII complet avec tiering modèles
+  + flux de données) + AGENTS.md mis à jour (séquence + référence diagramme).
+
+---
+## [2026-08-02 16:06:00] feat | F-47 (re-test ciblé) + F-48 (git diff) + validation Coder isolation
+- F-47 : targeted_retest.py — en iter >1, le Tester ne re-valide QUE les bugs signalés
+  (max_steps 12→6, prompt priorise réfutations + smoke-test). Économie ~60% temps/tokens.
+- F-48 : git_snapshot.py — git local du run (runs/<dated>/.git) suit les modifs du Coder.
+  get_last_diff() extrait les lignes EXACTES modifiées → injecté au Tester (F-47) pour
+  cibler les assertions sur les zones réellement changées.
+- VALIDATION CODER ISOLATION (#2 et #3) : 3 runs Coder standalone avec spec Bubble Sort
+  améliorée (prompts/bubble_sort_spec.md). Test manuel rigoureux (7 étapes documentées
+  dans debug/MANUAL_TESTER_METHODOLOGY.md) :
+  * Iso #1 : barres INVISIBLES (bug CSS height:% sans parent heighté) — détecté par
+    l'œil humain (l'utilisateur), pas par mon screenshot (biais de confirmation leçon).
+  * Skill coding corrigé : règle CSS height:% (failure mode visuel n°1).
+  * Iso #2 et #3 : 50/50 barres visibles, tri correct, compteur incrémenté (16, 40),
+    container heighté (322, 350px). REPRODUCTIBLE.
+- LEÇON CLÉ (documentée) : biais de confirmation du tester. Mon screenshot checkait
+  trivialement (pixels pas blancs) et concluait "page OK" alors qu'elle était vide.
+  Contre-mesure : étape 6 (evaluate_script compte les éléments rendus) > étape 7 (screenshot).
+- TESTS : 28 nouveaux (F-47: 16, F-48: 12). Suite complète 563 passed / 0 failed.
+
+---
+## [2026-08-02 16:32:10] feat | F-49 : Static Tester déterministe (méthodologie manuelle implémentée)
+- CONTEXTE : le Tester LLM (gemma-4-12B) met 25 min/run, 233k tokens, et rate des bugs
+  évidents (biais de confirmation documenté sur les barres invisibles). La méthodologie
+  manuelle (debug/MANUAL_TESTER_METHODOLOGY.md) a prouvé que 80% des bugs sont attrapables
+  de façon DÉTERMININSTE (0 LLM, <6s) : node --check, wiring addEventListener, visibilité DOM.
+- GAP CONFIRMÉ : le Linter (F-30) SAUTE le JS inline du HTML (linter.py `lang != "html"`
+  car tree-sitter-html parse le <script> comme du texte → 77 faux positifs). node --check
+  sur le JS extrait est donc RÉELLEMENT additif, pas redondant.
+- IMPLÉMENTATION `graph_orchestrator/static_tester.py` :
+  * Tier 1a : extract_inline_js + _run_node_check (subprocess, copie git_snapshot._run_git).
+    Attrape TS-in-vanilla (`: type`, `as Cast`) = le bug n°1 du Coder (page blanche).
+  * Tier 1b : _check_event_wiring scanne TOUS les contrôles (button/input/select/a),
+    vérifie addEventListener/getElementById/onclick/submit natif. GÉNÉRIQUE (pas de
+    "speedSlider" hardcodé). Attrape slider non branché = piège n°1.
+  * Tier 2 : _evaluate_visibility via chrome_devtools_tool.py. Découvre les sélecteurs
+    depuis le HTML (classes assignées en JS via className/classList.add — pas seulement
+    classes présentes au load). DÉCLENCHE l'action primaire (clic bouton start) + probe
+    de visibilité combinés en UN evaluate_script synchrone (les éléments sont créés au
+    clic, pas au load — sinon count=0 → bug invisible). hidden = height==0 ( PAS width==0
+    qui est un faux positif flex). Attrape barres invisibles = bug CSS height:%.
+  * _parse_devtools_json : parsing robuste du retour doublement échappé de chrome-devtools-mcp
+    ('Script ran on page... ```json "[...]"```'), 3 passes de déséchappement.
+- BUG TROUVÉ + CORRIGÉ pendant l'implémentation : chrome-devtools-mcp evaluate_script
+  attend une DÉCLARATION de fonction (qu'il exécute lui-même), PAS une IIFE `(() => {})()`.
+  Une IIFE → 'Error: fn is not a function'. Fix : passer `() => {...}` sans les `()` finaux.
+- DÉGRADATION GRACIEUSE à tous les étages : node absent → Tier 1a skip (0, "") ; Chrome
+  absent/opt-out → tier_reached="tier1" ; STATIC_TESTER_ENABLED=0 → nœud pass-through.
+  Aucune cassure : le Tester LLM reste l'arbitre final.
+- INTÉGRATION workflows.py : inséré entre Linter (ligne 580) et Tester LLM (593), même
+  pattern de court-circuit (réfutation DuckDB source='static_tester' + continue).
+- TESTS tests/test_static_tester.py : 29 tests (l'agent JOUE LE CODEUR avec des HTML
+  bubble-sort buggés). Les 3 bugs clés ATTRAPÉS (TS, slider non-wired, barres invisibles),
+  HTML valide PASSE. 29/29 PASS. Suite complète 592 passed / 0 failed (563 + 29, 0 régression).
+- LEÇON : la méthodologie manuelle (7 étapes) est désormais AUTOMATISÉE et GÉNÉRIQUE.
+  Le Static Tester court-circuite le LLM sur 80% des bugs en <6s vs 25 min. Le LLM ne
+  s'active plus que pour le visuel + les comportements subtils (son vrai rôle).
+

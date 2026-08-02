@@ -114,9 +114,9 @@ class TestMcpConfig:
     def test_list_mcp_servers_status(self, monkeypatch):
         monkeypatch.delenv("CONTEXT7_API_KEY", raising=False)
         status = mcp_mod.list_mcp_servers_status()
-        assert len(status) == 2
+        assert len(status) == 3
         names = {s["name"] for s in status}
-        assert names == {"context7", "crawl4ai"}
+        assert names == {"context7", "crawl4ai", "chrome-devtools"}
 
     def test_connect_mcp_server_none_yields_vide(self):
         """connect_mcp_server avec params=None doit yield [] sans crash."""

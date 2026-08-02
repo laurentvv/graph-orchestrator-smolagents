@@ -55,20 +55,56 @@ class WebTestRunner:
             # (backward-compat : le tester tourne sans Context7). Imbriqué dans un
             # `with` car la connexion MCP doit rester ouverte pendant le run du tester.
             from ..context7_tool import context7_tools
-            with context7_tools() as c7_tools:
+            from ..chrome_devtools_tool import chrome_devtools_tools
+            from ..vision_callback import wrap_screenshot_tools, make_screenshot_callback
+            with context7_tools() as c7_tools, chrome_devtools_tools() as cdt_tools:
+                # F-45 : on cumule Puppeteer (skill dédié, assertions puppeteer_evaluate)
+                # ET Chrome DevTools (console structurée avec source maps, Lighthouse,
+                # take_snapshot a11y). Les deux pilotes cohabitent (profils isolés).
                 tester_tools = [*tool_collection.tools]
                 tester_tools.extend(c7_tools)
+                tester_tools.extend(cdt_tools)
+                # F-45 : wrap les outils de screenshot (puppeteer_screenshot ET
+                # take_screenshot DevTools) pour faire remonter l'image au LLM via
+                # observations_images. Sinon le Tester "rend" le screenshot sans le
+                # voir — or le modèle reasoning (gemma-4) est multimodal et peut
+                # détecter des bugs visuels (layout cassé, superpositions).
+                screenshot_capture: list = []
+                tester_tools = wrap_screenshot_tools(tester_tools, screenshot_capture)
+
+                # F-47 : mode re-test ciblé si itération >1 ET réfutations disponibles.
+                # Le Tester ne re-valide QUE les bugs signalés par le Judge + smoke-test,
+                # en 6 steps (vs 12). Économie ~60% temps/tokens (façon git diff).
+                from ..targeted_retest import (
+                    should_use_targeted_retest, extract_bug_points,
+                    build_targeted_retest_block, TARGETED_MAX_STEPS,
+                )
+                refutations = task.get("refutations", [])
+                iteration = task.get("iteration", 1)
+                use_targeted = should_use_targeted_retest(iteration, refutations)
+                # max_steps adaptatif : 6 en mode ciblé (re-test), settings.tester_max_steps
+                # (défaut 12, configurable) en mode complet.
+                tester_max_steps = TARGETED_MAX_STEPS if use_targeted else settings.tester_max_steps
+                mode_label = "CIBLÉ (re-test bugs)" if use_targeted else "complet"
+                print(f"    [>] Tester mode: {mode_label} (max_steps={tester_max_steps})")
+
                 local_tester = ToolCallingAgent(
                     tools=tester_tools,
                     model=model,
                     name=f"tester_{task['id'].replace('-', '_')}",
                     description="Agent QA chargé de tester les interfaces web avec le MCP Puppeteer.",
                     verbosity_level=resolve_verbosity("HIGH"),
-                    # Cap configurable (fix TIMINGS_ANALYSE) : le défaut historique (24)
-                    # laissait le modèle boucler ~10 steps sur une friction JS sans
-                    # final_answer (~30 min perdues). 12 = smoke-test + 2-4 assertions,
-                    # suffisant dans la grande majorité des cas (verdict clair à 10-12).
-                    max_steps=settings.tester_max_steps,
+                    # max_steps adaptatif (F-47) : 6 en mode ciblé, settings.tester_max_steps
+                    # (défaut 12, configurable via TESTER_MAX_STEPS) en complet.
+                    # Rationnel complet : au-delà de 12, le contexte du ToolCallingAgent
+                    # explose (observations DOM accumulées : +18k tokens/step observé
+                    # sur run F-45, 405k tokens au step 21). Or gemma-4-12B perd en
+                    # qualité au-delà de ~100k tokens.
+                    max_steps=tester_max_steps,
+                    # F-45 : step_callback vision — pousse le screenshot dans
+                    # observations_images pour que le modèle le voie et détecte les
+                    # bugs visuels (pas seulement console/assertions).
+                    step_callbacks=[make_screenshot_callback(screenshot_capture)],
                 )
 
                 # Skill chargé via le loader centralisé (cohérent avec les autres nœuds) ;
@@ -98,6 +134,45 @@ class WebTestRunner:
                 # que la page s'affiche. Fallback sur content si non propagé.
                 full_requirements = task.get("original_content") or task.get("content", "")
 
+                # F-45 : hint DevTools si Chrome DevTools est disponible (en complément
+                # de Puppeteer). Vide si cdt_tools vide (backward-compat, Puppeteer seul).
+                devtools_hint = (
+                    "\n## OUTILS COMPLÉMENTAIRES Chrome DevTools (en plus de Puppeteer)\n"
+                    "Tu as AUSSI accès à des outils DevTools (SANS préfixe puppeteer_) :\n"
+                    "- `list_console_messages()` : erreurs JS avec source maps (plus précis que puppeteer_evaluate pour la console).\n"
+                    "- `take_snapshot()` : arbre a11y complet (structure de la page, IDs/textes).\n"
+                    "- `evaluate_script(function)` : JS dans la page (alternative à puppeteer_evaluate).\n"
+                    "- `take_screenshot()` : capture visuelle — l'image TE REVIENT, analyse le rendu (bugs CSS, superpositions).\n"
+                    "Priorité : garde Puppeteer pour les assertions (skill maîtrisé). Utilise DevTools pour la console et le visuel.\n"
+                    if cdt_tools else ""
+                )
+
+                # F-46 : checklist PARSÉE depuis la spec (déterministe, 0 LLM). Force le
+                # Tester à tester CHACUNE des fonctionnalités du cahier des charges, pas
+                # seulement 2-3 au hasard (failure mode observé : compteur de comparaisons
+                # manquant non détecté). Vide si la section est absente (fallback historique).
+                from ..requirements_checklist import extract_functionalities, build_checklist_block
+                functionalities = extract_functionalities(full_requirements)
+                checklist_block = build_checklist_block(functionalities)
+
+                # F-47 : en mode ciblé (itération >1 + réfutations), on REMPLACE la
+                # checklist générique F-46 par un prompt ciblé sur les bugs signalés.
+                # Le Tester ne teste QUE ces bugs + un smoke-test (console + screenshot).
+                # Rationnel : en itération >1, 90% de la checklist F-46 re-vérifie des
+                # choses qui marchaient déjà — gaspillage. Le re-test ciblé se concentre
+                # sur ce que le Coder est censé avoir corrigé.
+                if use_targeted:
+                    bugs_feedback = extract_bug_points(refutations) or ""
+                    # F-48 : diff git (lignes EXACTES modifiées) — source de vérité plus
+                    # précise que les bugs texte. Vide si git indispo ou iter 1.
+                    git_diff = task.get("git_diff", "")
+                    targeted_block = build_targeted_retest_block(
+                        bugs_feedback, iteration, git_diff
+                    )
+                    # En mode ciblé, la checklist F-46 est remplacée (sinon on double le
+                    # travail : checklist complète + re-test ciblé = trop de steps pour 6).
+                    checklist_block = targeted_block
+
                 prompt = f"""{build_role_header("web_tester")}
 
 Voici tes instructions obligatoires (Skill) :
@@ -105,7 +180,7 @@ Voici tes instructions obligatoires (Skill) :
 
 ### CAHIER DES CHARGES COMPLET (comportements attendus à vérifier)
 {full_requirements}
-
+{checklist_block}
 ### Description de la sous-tâche testée
 {task['content']}
 
@@ -133,6 +208,7 @@ pour tes assertions fonctionnelles (IDs, classes, contenu textuel, attributs ari
 Vérifie l'application web générée. N'oublie PAS l'étape 4 du skill (Functional Logic Testing) :
 identifie les comportements clés du cahier des charges ci-dessus et écris des assertions via
 'puppeteer_evaluate' pour vérifier qu'ils fonctionnent — pas seulement que la page ne crash pas.
+{devtools_hint}
 Une fois terminé, retourne ton résultat final STRICTEMENT en utilisant l'outil 'final_answer'.
 Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_answer :
 {{

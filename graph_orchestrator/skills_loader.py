@@ -60,6 +60,12 @@ DYNAMIC_SKILL_RULES: List[tuple] = [
     # (regex sur le contenu de la tâche, skill à ajouter)
     (r"\b(html5?|css|landing\s*page|front[- ]?end|landing|portfolio|interface web|page web|responsive)\b",
      "frontend-design"),
+    # F-45 : auto-validation visuelle Chrome DevTools sur les tâches web (même
+    # pattern que frontend-design). Le skill documente le workflow navigate→screenshot
+    #→console→corriger. Le preview n'agit que si le serveur DevTools est dispo
+    # (sinon cdt_tools=[] et le prompt n'affiche pas la section preview).
+    (r"\b(html5?|css|landing\s*page|front[- ]?end|landing|portfolio|interface web|page web|responsive)\b",
+     "devtools-preview"),
     (r"\bpython\b", "python-health-audit"),
     # Libs/frameworks externes → force le skill context7-research (double sécurité
     # avec le socle). Le skill lui-même dit "ne cherche PAS pour du vanilla" : ces
