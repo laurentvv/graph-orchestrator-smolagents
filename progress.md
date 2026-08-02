@@ -363,3 +363,23 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
       avec tiering modèles + flux données) + AGENTS.md (séquence + référence).
 - [x] Étape CD-21 : Fichiers état (feature_list F-46, contract C161-C170, log, progress).
 - [ ] Étape CD-22 : Validation run Bubble Sort avec checklist F-46 active (cycle suivant).
+
+## Jalons de l'Itération (cycle Static Tester déterministe — F-49)
+- [x] Étape ST-1 : Module `graph_orchestrator/static_tester.py` — Tier 1a (`node --check`
+      sur JS inline → TS-in-vanilla, bug n°1 = page blanche), Tier 1b (wiring
+      `addEventListener` → slider non branché, piège n°1 indétectable par screenshot),
+      Tier 2 (visibilité DOM DevTools `getBoundingClientRect().height` → barres invisibles,
+      le bug CSS height:% que le LLM a raté par biais de confirmation). Déclenchement de
+      l'action primaire (clic start) combiné au probe en UN appel synchrone (éléments créés
+      au clic, pas au load). Générique (découvre sélecteurs + ids depuis le HTML, ne hardcode rien).
+- [x] Étape ST-2 : Intégration `workflows.py` — inséré entre Linter et Tester LLM, même
+      pattern de court-circuit (réfutation DuckDB source='static_tester' + continue).
+- [x] Étape ST-3 : Tests `tests/test_static_tester.py` — 29 tests (l'agent joue le Coder
+      avec des HTML bubble-sort buggés). 29/29 PASS. Bug barres invisibles ATTRAPÉ.
+- [x] Étape ST-4 : Config `.env` + `.env.example` — STATIC_TESTER_ENABLED, STATIC_TESTER_DEVTOOLS.
+- [x] Étape ST-5 : Fichiers état synchronisés (feature_list F-49, contract C180-C189, README,
+      AGENTS.md, log, progress).
+- [x] Étape ST-6 : Suite pytest complète → 592 passed / 0 failed (563 baseline + 29 nouveaux).
+      0 régression. web_tester_functional désélectionné (nécessite Chrome/npx live).
+- [ ] Étape ST-7 : Validation run live (HTML corrompu → FAILURE ciblé, HTML correct → SUCCESS).
+

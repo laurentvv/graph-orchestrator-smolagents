@@ -375,28 +375,47 @@
       "name": "Chrome DevTools MCP + validation visuelle (Coder & Tester)",
       "description": "Ajout du serveur MCP chrome-devtools-mcp (stdio via npx) au Coder (auto-validation visuelle) et au WebTester (complément d'outils), SANS supprimer Puppeteer (cumul). Permet au Coder d'ouvrir sa page HTML générée dans Chrome, de prendre un screenshot (vu par le modèle gemma-4-E4B, validé multimodal runtime) et de vérifier la console JS AVANT final_answer — évite d'envoyer une page visuellement ratée au Tester. Implémentation : (1) agent_server/mcp.build_chrome_devtools_params() — source unique de vérité stdio (npx chrome-devtools-mcp@latest --isolated --viewport 1280x800 --screenshot-format jpeg), opt-out CHROME_DEVTOOLS_ENABLED, CHROME_PATH optionnel, CHROME_DEVTOOLS_HEADLESS. (2) graph_orchestrator/chrome_devtools_tool.py — context manager miroir de context7_tool (yield [] si KO, dégradation gracieuse). (3) graph_orchestrator/vision_callback.py — CŒUR : wrapper _ScreenshotCapturingTool autour des outils take_screenshot/puppeteer_screenshot qui capture l'image PIL, + make_screenshot_callback() step_callback qui peuple memory_step.observations_images. Nécessaire car smolagents v1.26.0 ne pousse PAS auto les images des outils MCP dans le contexte multimodal (le LLM recevait 'Stored image.png in memory.' au lieu de voir l'image). Pattern inspiré de smolagents/vision_web_browser.py (seul mécanisme intégré qui peuple observations_images). (4) Coder (CodeAgent) : outils DevTools + step_callback + prompt section VALIDATION VISUELLE (conditionnelle tâche web via _is_web_task), max_steps 12→14 (marge preview). (5) WebTester (ToolCallingAgent) : cumul Puppeteer + DevTools, step_callback vision actif. (6) Skill devtools-preview routé dynamiquement (même regex que frontend-design). 28 tests PASS (test_chrome_devtools_tool.py). Suite pytest complète 521 passed / 0 failed (493 baseline + 28 nouveaux + 1 maj). Risque : 2 navigateurs (Puppeteer + DevTools) — profils isolés (--isolated).",
       "status": "completed",
-      "dependencies": ["F-02"]
+      "dependencies": [
+        "F-02"
+      ]
     },
     {
       "id": "F-46",
       "name": "Checklist de fonctionnalités parsée (couverture Tester) + Fixes robustesse GPU-local",
       "description": "Deux chantiers issus des runs de validation Bubble Sort (3 runs). (A) CHECKLIST FONCTIONNALITÉS : le Tester recevait le cahier des charges en texte libre et testait 2-3 fonctionnalités au hasard (ex: compteur de comparaisons manquant non détecté). graph_orchestrator/requirements_checklist.py parse la section '## Fonctionnalités attendues' de la spec PromptRefiner en liste Python déterministe (regex, 0 LLM) et build_checklist_block() force le Tester à tester CHACUNE (1 assertion/fonctionnalité + tableau verdict PASS/FAIL/N-A). Vide si section absente (fallback historique). 14 tests PASS (test_requirements_checklist.py). (B) FIXES ROBUSTESSE GPU-local observés sur runs : (1) AUDIT_PARALLEL=false (défaut) séquentialise Tester PUIS Security — avant, les 2× reasoning_model (gemma-12B) en parallèle saturaient la VRAM → Security silencieux (jamais de verdict) + Tester 3× plus lent (Step 1: 428s→146s après fix). (2) max_steps Tester 24→12 — à 24 steps, le contexte ToolCallingAgent explosait (405k tokens au step 21, modèle au-delà de sa fenêtre). (3) skill coding : règle anti-TypeScript (: type, as, : void INTERDITS en <script> vanilla) — failure mode n°1 du Coder (gemma-4 écrit du TS par réflexe, le navigateur lève SyntaxError, TOUT le script échoue silencieusement). (4) skill devtools-preview : list_console_messages OBLIGATOIRE AVANT take_screenshot (le screenshot CSS 'joli' ne révèle pas un JS cassé). (5) skill web-tester : règle des 2 essais (conclure FAILURE vite sur un bug réel confirmé, ne pas explorer 15 sélecteurs). Validation run #3 : anti-TS FONCTIONNE (HTML généré 0 annotation TS, JS valide), tri correct, mais Tester a épuisé max_steps sans conclure (modèle verbose) — la checklist F-46 (pas encore active ce run) doit être validée au prochain. Suite pytest complète 535 passed / 0 failed (521 + 14 nouveaux).",
       "status": "completed",
-      "dependencies": ["F-44", "F-45"]
+      "dependencies": [
+        "F-44",
+        "F-45"
+      ]
     },
     {
       "id": "F-47",
       "name": "Re-test ciblé façon git diff (ne re-valider QUE les bugs signalés en iter >1)",
       "description": "En itération N+1, le Tester re-validait TOUT from scratch (~25 min, 233k tokens) pour vérifier 2-3 fragments corrigés. gaspillage : 90% re-vérifie ce qui marchait déjà. graph_orchestrator/targeted_retest.py : en iter >1 avec réfutations DuckDB, le Tester bascule en mode ciblé (max_steps 12→6, prompt priorise les bugs signalés + smoke-test console). extract_bug_points() lit les réfutations (plus récentes d'abord, tronquées à 1200 cars), build_targeted_retest_block() construit le prompt ciblé (navigate + console + assertions par bug + screenshot). should_use_targeted_retest() décide du mode. En iter 1 ou sans réfutations → mode complet (checklist F-46, fallback). 16 tests PASS (test_targeted_retest.py). Branchement workflow : propagation refutations brutes dans sub_dict + web_tester max_steps adaptatif + checklist_block remplacé par targeted_block en mode ciblé.",
       "status": "completed",
-      "dependencies": ["F-46"]
+      "dependencies": [
+        "F-46"
+      ]
     },
     {
       "id": "F-48",
       "name": "Git local du run pour suivre les modifications du Coder (diff exact)",
       "description": "graph_orchestrator/git_snapshot.py : git init dans le dossier du run (runs/<dated>/, gitignored du repo principal) pour suivre les modifications du Coder itération par itération. commit_iteration() après chaque Coder ; get_last_diff() extrait git diff HEAD~1..HEAD (lignes EXACTES modifiées). Propagation au Tester (F-47) : le diff est injecté dans build_targeted_retest_block(git_diff=...) pour que le Tester concentre ses assertions sur les zones réellement modifiées (source de vérité plus précise que les bugs texte du Judge). En iter 1, pas de diff (création initiale). Tolérant : si git absent/corrompu, fallback sur réfutations texte. 12 tests PASS (test_git_snapshot.py). Bénéficiaires : Tester (re-test ciblé précis), Judge (in-diff-only), Coder (auto-vérif de son diff). Skill coding enrichi : règle CSS 'height: X% requiert parent heighté' (bug isolation #1 : barres invisibles car container sans hauteur, height: % résolu à 0).",
       "status": "completed",
-      "dependencies": ["F-47"]
+      "dependencies": [
+        "F-47"
+      ]
+    },
+    {
+      "id": "F-49",
+      "name": "Static Tester déterministe (node --check + wiring + visibilité DOM)",
+      "description": "Gatekeeper WEB 0-LLM (<6s) inséré entre le Linter et le Tester LLM. Implémente la méthodologie prouvée debug/MANUAL_TESTER_METHODOLOGY.md : Tier 1 (node --check sur le JS inline = attrape TS-in-vanilla, le bug n°1 du Coder = page blanche ; wiring addEventListener = attrape slider non branché, indétectable par screenshot) ; Tier 2 (visibilité DOM via Chrome DevTools getBoundingClientRect().height = attrape barres invisibles, le bug CSS height:% que le LLM a raté par biais de confirmation). Court-circuite le Tester LLM (25 min, 233k tokens) sur les bugs évidents — même pattern que le Linter F-30. Complémentaire du Linter (qui SAUTE le JS inline du HTML car tree-sitter-html trop tolérant). Générique (analyse le HTML/JS réellement produit, ne connaît pas la demande). Dégradation gracieuse : node/Chrome absents = skip silencieux, le LLM Tester prend le relais. Opt-out STATIC_TESTER_ENABLED=0 / STATIC_TESTER_DEVTOOLS=0.",
+      "status": "completed",
+      "dependencies": [
+        "F-30",
+        "F-45"
+      ]
     }
   ]
 }

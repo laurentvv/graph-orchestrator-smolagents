@@ -579,6 +579,43 @@ async def run_coding_workflow(
                     # On passe à l'itération suivante SANS Tester/Judge (économie de cycles LLM).
                     continue
 
+                # --- Nœud Static Tester (F-49) ----------------------------------
+                # Gatekeeper déterministe WEB (0 LLM, <6s) qui valide la SÉMANTIQUE
+                # web AVANT le Tester LLM coûteux. Implémente la méthodologie prouvée
+                # de debug/MANUAL_TESTER_METHODOLOGY.md :
+                #   Tier 1 (<1s) : node --check sur le JS inline (attrape TS-in-vanilla =
+                #                 le bug n°1 du Coder = page blanche) + wiring addEventListener
+                #                 (attrape slider non branché = indétectable par screenshot).
+                #   Tier 2 (~5s) : visibilité DOM via DevTools (attrape barres invisibles =
+                #                 bug CSS height:% que le LLM a raté par biais de confirmation).
+                # Complémentaire du Linter (qui SAUTE le JS inline du HTML — tree-sitter-html
+                # trop tolérant). Court-circuite le Tester LLM (25 min) sur les bugs évidents.
+                # Dégradation gracieuse : node/Chrome absents → skip silencieux (le LLM prend
+                # le relais). STATIC_TESTER_ENABLED=0 désactive le nœud entièrement.
+                from .static_tester import execute_static_tester_node
+                static_res, m_st = execute_static_tester_node(sub_dict, settings)
+                if m_st: sub_metrics.append(m_st)
+
+                if static_res and static_res.status == "failure":
+                    print(f"    [⚠] Static Tester a détecté un bug web évident sur "
+                          f"{subtask.task_id} — court-circuit du Tester LLM (économie cycle).")
+                    if obs_id: kg.mark_status(obs_id, "rejected")
+                    # Le feedback devient une réfutation (lue par le Coder à l'itération
+                    # suivante via kg.get_claims, comme Linter/Judge — mécanisme réutilisé).
+                    ref_id = kg.add_claim(
+                        entity_id=entity_id,
+                        content=f"[STATIC TESTER] {static_res.details}",
+                        kind="refutation",
+                        confidence=None,
+                        source="static_tester",
+                        model_id="static-tester",
+                        run_id=run_id,
+                    )
+                    if ref_id and obs_id:
+                        kg.add_edge(ref_id, obs_id, "REFUTES")
+                    # On passe à l'itération suivante SANS Tester/Judge LLM.
+                    continue
+
                 # 2. Vérifications Contradictoires (Tester + Security Reviewer)
                 # GPU-local : on séquentialise par défaut ( Tester PUIS Security)
                 # car lancer 2× le reasoning_model (gemma-12B) en parallèle sature

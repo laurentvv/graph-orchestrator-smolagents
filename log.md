@@ -2323,3 +2323,42 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
   trivialement (pixels pas blancs) et concluait "page OK" alors qu'elle était vide.
   Contre-mesure : étape 6 (evaluate_script compte les éléments rendus) > étape 7 (screenshot).
 - TESTS : 28 nouveaux (F-47: 16, F-48: 12). Suite complète 563 passed / 0 failed.
+
+---
+## [2026-08-02 16:32:10] feat | F-49 : Static Tester déterministe (méthodologie manuelle implémentée)
+- CONTEXTE : le Tester LLM (gemma-4-12B) met 25 min/run, 233k tokens, et rate des bugs
+  évidents (biais de confirmation documenté sur les barres invisibles). La méthodologie
+  manuelle (debug/MANUAL_TESTER_METHODOLOGY.md) a prouvé que 80% des bugs sont attrapables
+  de façon DÉTERMININSTE (0 LLM, <6s) : node --check, wiring addEventListener, visibilité DOM.
+- GAP CONFIRMÉ : le Linter (F-30) SAUTE le JS inline du HTML (linter.py `lang != "html"`
+  car tree-sitter-html parse le <script> comme du texte → 77 faux positifs). node --check
+  sur le JS extrait est donc RÉELLEMENT additif, pas redondant.
+- IMPLÉMENTATION `graph_orchestrator/static_tester.py` :
+  * Tier 1a : extract_inline_js + _run_node_check (subprocess, copie git_snapshot._run_git).
+    Attrape TS-in-vanilla (`: type`, `as Cast`) = le bug n°1 du Coder (page blanche).
+  * Tier 1b : _check_event_wiring scanne TOUS les contrôles (button/input/select/a),
+    vérifie addEventListener/getElementById/onclick/submit natif. GÉNÉRIQUE (pas de
+    "speedSlider" hardcodé). Attrape slider non branché = piège n°1.
+  * Tier 2 : _evaluate_visibility via chrome_devtools_tool.py. Découvre les sélecteurs
+    depuis le HTML (classes assignées en JS via className/classList.add — pas seulement
+    classes présentes au load). DÉCLENCHE l'action primaire (clic bouton start) + probe
+    de visibilité combinés en UN evaluate_script synchrone (les éléments sont créés au
+    clic, pas au load — sinon count=0 → bug invisible). hidden = height==0 ( PAS width==0
+    qui est un faux positif flex). Attrape barres invisibles = bug CSS height:%.
+  * _parse_devtools_json : parsing robuste du retour doublement échappé de chrome-devtools-mcp
+    ('Script ran on page... ```json "[...]"```'), 3 passes de déséchappement.
+- BUG TROUVÉ + CORRIGÉ pendant l'implémentation : chrome-devtools-mcp evaluate_script
+  attend une DÉCLARATION de fonction (qu'il exécute lui-même), PAS une IIFE `(() => {})()`.
+  Une IIFE → 'Error: fn is not a function'. Fix : passer `() => {...}` sans les `()` finaux.
+- DÉGRADATION GRACIEUSE à tous les étages : node absent → Tier 1a skip (0, "") ; Chrome
+  absent/opt-out → tier_reached="tier1" ; STATIC_TESTER_ENABLED=0 → nœud pass-through.
+  Aucune cassure : le Tester LLM reste l'arbitre final.
+- INTÉGRATION workflows.py : inséré entre Linter (ligne 580) et Tester LLM (593), même
+  pattern de court-circuit (réfutation DuckDB source='static_tester' + continue).
+- TESTS tests/test_static_tester.py : 29 tests (l'agent JOUE LE CODEUR avec des HTML
+  bubble-sort buggés). Les 3 bugs clés ATTRAPÉS (TS, slider non-wired, barres invisibles),
+  HTML valide PASSE. 29/29 PASS. Suite complète 592 passed / 0 failed (563 + 29, 0 régression).
+- LEÇON : la méthodologie manuelle (7 étapes) est désormais AUTOMATISÉE et GÉNÉRIQUE.
+  Le Static Tester court-circuite le LLM sur 80% des bugs en <6s vs 25 min. Le LLM ne
+  s'active plus que pour le visuel + les comportements subtils (son vrai rôle).
+

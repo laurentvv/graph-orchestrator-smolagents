@@ -223,6 +223,18 @@
 - [ ] Critère 178 : Skill coding contient la règle CSS `height: %` (failure mode isolation #1 : barres invisibles) — vérifié par lecture skill.
 - [ ] Critère 179 : Suite pytest complète passe (0 régression, 563 passed = 551 + 12 nouveaux test_git_snapshot).
 
+## Critères du Static Tester déterministe (F-49)
+- [ ] Critère 180 : `extract_inline_js(html)` extrait le JS des `<script>` SANS `src` (ignore les externes) — testé `test_extract_inline_js_*`.
+- [ ] Critère 181 : `_check_js_syntax` lance `node --check` et détecte TS-in-vanilla (`: type`, `as Cast`) → SyntaxError — testé `test_ts_annotation_in_script` + `test_ts_as_cast_in_script`.
+- [ ] Critère 182 : `_check_event_wiring` flagge un contrôle interactif (button/input/select) avec id mais AUCUN handler (le piège n°1 : slider non branché, indétectable par screenshot) — testé `test_slider_not_wired`.
+- [ ] Critère 183 : Tolérances wiring légitimes : onclick inline, `<button type=submit>` en form, `<a href>`, `<input type=hidden>` — testés `test_*_not_flagged`.
+- [ ] Critère 184 : Tier 2 DevTools détecte les éléments créés en JS mais INVISIBLES (height=0 = bug CSS height:% sur conteneur sans hauteur), APRES déclenchement de l'action primaire (clic bouton start) — testé `test_invisible_bars_height_percent`.
+- [ ] Critère 185 : Dégradation `node` absent → Tier 1a skip silencieux (pas d'échec faux, le LLM Tester prend le relais) — testé `test_node_absent_degrades`.
+- [ ] Critère 186 : Dégradation Chrome absent/opt-out → tier_reached="tier1" (Tier 2 skip, Tier 1 reste actif) — testé `test_tier2_skipped_when_devtools_off`.
+- [ ] Critère 187 : Non-HTML pass-through (target `.py` → success immédiat, le Static Tester est web-only) — testé `test_non_html_passthrough`.
+- [ ] Critère 188 : Opt-out `STATIC_TESTER_ENABLED=0` désactive le nœud (pass-through) ; `STATIC_TESTER_DEVTOOLS=0` désactive le Tier 2 seul — testés `test_opt_out_flag_disables` + `test_devtools_disabled_still_runs_tier1`.
+- [ ] Critère 189 : Le workflow intègre le Static Tester entre le Linter et le Tester LLM, avec court-circuit (réfutation DuckDB + continue) sur failure — vérifié par lecture workflows.py.
+
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.
 * Validation process : `uv run python -m graph_orchestrator.workflows` (WORKFLOW_MODE=coding) →
