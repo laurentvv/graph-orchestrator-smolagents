@@ -187,6 +187,26 @@
 - [ ] Critère 148 : Suppression des ~180 lignes de nœuds smolagents DÉPRÉCIÉS (versions mortes de `execute_router_node`/`execute_architect_node`/`execute_security_reviewer_node`/`execute_code_judge_node` dans `nodes.py`, jamais appelées par `run_coding_workflow`) + imports morts nettoyés (`RouterOutput`/`ArchitectOutput`/`SecurityOutput`/`CodeJudgeOutput` retirés de l'import `nodes.py`) — vérifié par import (4 fonctions absentes, fonctions actives Coder/Tester/Worker/Reduce/Judge/Synth/Adversary préservées).
 - [ ] Critère 149 : La suite pytest complète passe (0 régression, 482 passed = 442 baseline + 40 nouveaux `test_prompts.py`).
 
+## Critères du Fix Tester querySelector (F-45 — 3 axes)
+- [ ] Critère 150 : Le skill `web-tester` contient une directive explicite ciblant la racine réelle de la friction `document.querySelector is not a function` — l'assignation `=` au lieu de l'appel `()` (ex `document.querySelector='...'` écrase la fonction native) — avec exemple ❌/✅, garde anti-pollution du contexte (jamais réassigner une méthode native, stocker dans une `const` locale), et replis robustes (`getElementById`/`getElementsByTagName` quand on doute des sélecteurs).
+- [ ] Critère 151 : Le skill `web-tester` documente un pattern DOMContentLoaded avant la 1re assertion (attendre un délai puis vérifier qu'un élément attendu existe) — évite les faux échecs sur une page qui initialise son DOM dans un handler `DOMContentLoaded`.
+- [ ] Critère 152 : `config.py` expose `tester_max_steps` (env `TESTER_MAX_STEPS`, défaut 12) — borne la durée du Web Tester (le défaut historique 24 laissait boucler ~30 min) ; valeur par défaut dans la dataclass (même convention que `loop_guard_threshold`, ne casse pas les helpers de test) ; `web_tester.py` l'utilise (`max_steps=settings.tester_max_steps`) — testé `test_tester_max_steps_default_and_override`.
+- [ ] Critère 153 : `run_with_retry` accepte un paramètre `node_kind` (défaut `"coder"`) qui adapte le message idle au contexte ; `_detect_idle_step(agent, node_kind="tester")` produit un message citant `puppeteer_*`/`final_answer` (PAS `write_file`/`append_file`) — testé `test_detect_idle_step_tester_message_mentions_puppeteer` ; le message Coder est inchangé (rétro-compat) — testé `test_detect_idle_step_coder_message_keeps_write_file`.
+- [ ] Critère 154 : Le `WebTestRunner` instancie un `LoopGuard` et le passe à `run_with_retry` (via `loop_guard=guard, node_kind="tester"`) — le Tester bénéficie désormais de la détection anti-idle ET anti-boucle (avant : guard absent, le Tester était le seul nœud d'outils sans protection) — vérifié par lecture du code (`web_tester.py`).
+- [ ] Critère 155 : La suite pytest complète passe (0 régression, 487 passed = 482 baseline + 5 nouveaux : test_guard.py +3 + test_config.py +1 + test_guard.py +1).
+
+## Critères du Fix bug visuel Coder + FRESH_START (F-46)
+- [ ] Critère 156 : Le skill `frontend-design` commence par une ÉTAPE 0 obligatoire distinguant APP/TOOL (défaut : UI simple empilée centrée dans une card, titre 1.5-2rem) vs LANDING/PAGE (hero autorisé, 2.5-3rem max) — la consigne 'hero 3.5rem' littérale est remplacée par une fourchette conditionnelle.
+- [ ] Critère 157 : Garde anti-titre-géant explicite dans le skill — `h1 > 3rem` est interdit sauf hero unique d'une landing page ; directive layout APP : NE PAS faire de row à 1024px, rester une colonne (corrige le bug observé : titre 3.5rem/4rem + layout row cassé).
+- [ ] Critère 158 : `load_dotenv()` appelé sans `override=True` (override=False par défaut) — l'env shell prime sur .env ; `FRESH_START=1` au shell est respecté (testé) ; .env reste lu en l'absence d'override shell.
+- [ ] Critère 159 : La suite pytest complète passe (0 régression, 487 passed après F-46). Skill non re-validé par run complet ce cycle (laissé à F-48 qui donnera la vision au Coder pour auto-valider).
+
+## Critères du Fix Judge hang — thinking sélectif (F-47)
+- [ ] Critère 160 : `_configure_dspy(settings, model_id, think=False)` utilise le provider litellm `ollama/` (parle `/api/chat` natif Ollama au lieu de `/v1`), retire le suffixe `/v1` de l'api_base, et passe le paramètre `think` au LM — validé : `think=False` répond en 5.8s sans thinking (vs ~23 min avec thinking forcé sur /v1).
+- [ ] Critère 161 : Thinking DÉSACTIVÉ (think=False) pour Router/PromptRefiner/Security/Judge/Escalation (verdicts/classification, le thinking était du gaspi bloquant) ; thinking CONSERVÉ (think=True) UNIQUEMENT pour l'Architect (le raisonnement aide au découpage/stratégie) — vérifié par lecture des 6 appels `_configure_dspy` dans dspy_nodes.py.
+- [ ] Critère 162 : Diagnostic documenté (debug/GAPS_TESTER_JUDGE.md Gap 2) — le hang ne venait PAS du prompt (mesuré ~4k tokens, déjà tronqué) NI de la température (0.3 correcte pour le code), mais du thinking Gemma 4 forcé sur /v1 (Ollama 0.32.5 = dernière version, pas de MAJ à faire).
+- [ ] Critère 163 : La suite pytest complète passe (0 régression, 487 passed ; 2 tests test_prompt_refiner.py mis à jour : assertions `_configure_dspy(..., think=False)`).
+
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.
 * Validation process : `uv run python -m graph_orchestrator.workflows` (WORKFLOW_MODE=coding) →

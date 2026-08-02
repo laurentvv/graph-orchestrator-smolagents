@@ -219,21 +219,45 @@ class EscalationSignature(dspy.Signature):
 # Configuration DSPy
 # ==========================================
 
-def _configure_dspy(settings: Settings, model_id: str):
+def _configure_dspy(settings: Settings, model_id: str, think: bool = False):
     """Configure dynamiquement DSPy pour pointer vers une instance locale Ollama.
 
     Timeout appliqué : sans lui, un endpoint Ollama distant muet fige le nœud DSPy
     (bug observé sur le serveur distant 10.201.12.50 qui répond au /api/tags mais
     timeout sur l'inférence). Le timeout permet à l'appel d'échouer proprement.
+
+    Provider ``ollama/`` (F-47, fix Gap 2) : on utilise le provider litellm ``ollama/``
+    au lieu de ``openai/``. Pourquoi :
+    - ``openai/`` parle l'endpoint OpenAI-compat ``/v1`` d'Ollama. Or sur Ollama 0.32.5
+      (dernière version), le thinking Gemma 4 est **FORCÉ** sur ``/v1`` et AUCUN paramètre
+      (think, chat_template_kwargs, Modelfile) ne le désactive côté /v1.
+    - ``ollama/`` parle l'API native ``/api/chat`` d'Ollama, qui accepte le paramètre
+      ``think`` (booléen top-level). Testé : ``think=False`` → 3.8s + 6 tokens + réponse
+      directe (vs 23 min de thinking qui consomme tout max_tokens sans jamais émettre le
+      verdict → hang du Judge).
+    Le thinking est donc désactivé par défaut (``think=False``) pour les nœuds de verdict
+    (Judge/Router/PromptRefiner/Security/Escalation) où il est du gaspi bloquant. Seul
+    l'Architect le conserve (le raisonnement aide au découpage/stratégie) — voir appelant.
+
+    ``think`` (F-47) : True = raisonnement étape-par-ante (Architect), False = réponse
+    directe (tous les autres nœuds DSPy). Le thinking consomme le budget max_tokens ; sans
+    borne stricte il peut faire hang le nœud (cf. debug/GAPS_TESTER_JUDGE.md Gap 2).
+
+    Note : l'api_base Ollama ne doit PAS contenir le suffixe ``/v1`` pour le provider
+    ``ollama/`` (litellm parle à la racine ``/api/chat``). On le retire si présent.
     """
     api_base = settings.ollama_reasoning_api_base if model_id == settings.reasoning_model_id else settings.ollama_api_base
+    # Le provider ollama/ parle /api/chat à la racine — pas de /v1 (sinon 404).
+    if api_base.endswith("/v1"):
+        api_base = api_base[:-3]
     lm = dspy.LM(
-        f"openai/{model_id}",
+        f"ollama/{model_id}",
         api_base=api_base,
-        api_key="sk-none",
+        api_key="ollama",  # requis par litellm même si Ollama ne vérifie pas la clé
         max_tokens=8192,
         temperature=0.3,
         timeout=settings.llm_timeout_s,
+        think=think,
     )
     return lm
 
@@ -254,7 +278,7 @@ async def execute_router_node(task_content: str, fast_model, settings: Settings)
         Un tuple contenant l'objet Pydantic RouterOutput (ou None si échec) et les métriques du nœud.
     """
     print("[*] DSPy Routeur en cours...")
-    lm = _configure_dspy(settings, settings.fast_model_id)
+    lm = _configure_dspy(settings, settings.fast_model_id, think=False)
     start_time = time.time()
     try:
         with dspy.context(lm=lm):
@@ -379,7 +403,7 @@ async def execute_prompt_refiner_node(
     # Modèle dédié si setté (E4B recommandé : ~8× plus rapide que le 12B pour qualité
     # équivalente — voir log.md test comparatif). Fallback sur reasoning_model_id sinon.
     refiner_model_id = settings.prompt_refiner_model_id or settings.reasoning_model_id
-    lm = _configure_dspy(settings, refiner_model_id)
+    lm = _configure_dspy(settings, refiner_model_id, think=False)
     capabilities = _build_capabilities_summary(settings)
     start_time = time.time()
     try:
@@ -434,7 +458,11 @@ async def execute_architect_node(task: dict, reasoning_model, settings: Settings
         ArchitectOutput contenant la liste des sous-tâches pour le Fan-out des codeurs.
     """
     print("[*] DSPy Architecte en cours d'élaboration du plan...")
-    lm = _configure_dspy(settings, settings.reasoning_model_id)
+    # F-47 : l'Architect est le SEUL nœud DSPy qui conserve le thinking (think=True). Le
+    # raisonnement étape-par-étape aide au découpage/stratégie (simple/incremental/multifile,
+    # sections, target_files). Tous les autres nœuds (Judge/Router/etc.) l'ont désactivé
+    # car c'était du gaspi bloquant (thinking forcé sur /v1 → hang, cf. _configure_dspy).
+    lm = _configure_dspy(settings, settings.reasoning_model_id, think=True)
     start_time = time.time()
 
     # Pré-fetch doc Context7 : l'Architect (DSPy, pas de boucle d'outils) ne peut
@@ -478,7 +506,7 @@ async def execute_security_reviewer_node(subtask: dict, reasoning_model, setting
         settings (Settings): Configuration globale.
     """
     print(f"[*] DSPy Security Reviewer sur la tâche {subtask.get('id')}...")
-    lm = _configure_dspy(settings, settings.reasoning_model_id)
+    lm = _configure_dspy(settings, settings.reasoning_model_id, think=False)
     
     # Lecture du code depuis le disque
     code_content = ""
@@ -522,7 +550,7 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
         CodeJudgeOutput dictant si le code est 'approved' ou s'il nécessite un feedback.
     """
     print(f"[*] DSPy Code Judge sur la tâche {subtask.get('id')}...")
-    lm = _configure_dspy(settings, settings.reasoning_model_id)
+    lm = _configure_dspy(settings, settings.reasoning_model_id, think=False)
     
     # Lecture du code depuis le disque
     code_content = ""
@@ -606,7 +634,7 @@ async def execute_escalation_node(subtask: dict, failure_history: str, reasoning
         historique 'max_iterations_reached' (dégradation gracieuse).
     """
     print(f"[*] DSPy Nœud d'Escalade sur la tâche {subtask.get('id')} (circuit breaker activé)...")
-    lm = _configure_dspy(settings, settings.reasoning_model_id)
+    lm = _configure_dspy(settings, settings.reasoning_model_id, think=False)
 
     # Lecture du code courant sur disque (état final après le dernier échec).
     # Comme pour le Judge, on tronque pour protéger le contexte.

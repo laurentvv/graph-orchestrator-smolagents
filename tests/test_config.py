@@ -68,3 +68,15 @@ def test_settings_is_frozen():
     import pytest
     with pytest.raises(Exception):
         s.fast_model_id = "autre"  # type: ignore
+
+
+def test_tester_max_steps_default_and_override(monkeypatch):
+    """TESTER_MAX_STEPS borne la durée du Web Tester (fix TIMINGS_ANALYSE). Défaut 12."""
+    # Défaut = 12 (borné vs l'ancien 24 hardcoded qui laissait boucler ~30 min).
+    monkeypatch.delenv("TESTER_MAX_STEPS", raising=False)
+    s = load_settings()
+    assert s.tester_max_steps == 12
+    # Override via env.
+    monkeypatch.setenv("TESTER_MAX_STEPS", "20")
+    s2 = load_settings()
+    assert s2.tester_max_steps == 20

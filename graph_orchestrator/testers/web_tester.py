@@ -35,8 +35,9 @@ class WebTestRunner:
         from mcp import StdioServerParameters
         from smolagents import ToolCollection, ToolCallingAgent
 
-        from ..nodes import run_with_retry, resolve_verbosity
+        from ..nodes import run_with_retry, resolve_verbosity, _detect_idle_step
         from ..skills_loader import load_skill_body
+        from ..loop_guard import LoopGuard
 
         env = os.environ.copy()
         env["PUPPETEER_EXECUTABLE_PATH"] = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
@@ -63,11 +64,11 @@ class WebTestRunner:
                     name=f"tester_{task['id'].replace('-', '_')}",
                     description="Agent QA chargé de tester les interfaces web avec le MCP Puppeteer.",
                     verbosity_level=resolve_verbosity("HIGH"),
-                    # 24 steps (vs défaut 20) : les tests fonctionnels assertionnels
-                    # (puppeteer_evaluate × 2-4 comportements) consomment des steps en
-                    # plus du smoke-test (navigate/screenshot/console). Sans marge, le
-                    # tester épuise son budget avant d'arriver aux assertions clés.
-                    max_steps=24,
+                    # Cap configurable (fix TIMINGS_ANALYSE) : le défaut historique (24)
+                    # laissait le modèle boucler ~10 steps sur une friction JS sans
+                    # final_answer (~30 min perdues). 12 = smoke-test + 2-4 assertions,
+                    # suffisant dans la grande majorité des cas (verdict clair à 10-12).
+                    max_steps=settings.tester_max_steps,
                 )
 
                 # Skill chargé via le loader centralisé (cohérent avec les autres nœuds) ;
@@ -145,4 +146,16 @@ Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_an
   }}
 }}
 """
-                return await run_with_retry(local_tester, prompt, CoderOutput, settings.worker_max_retries)
+                # Guard anti-loop (fix TIMINGS_ANALYSE) : le Tester peut aussi boucler sur
+                # le même appel puppeteer_evaluate (ex: même script JS échouant répétitivement
+                # à cause d'une assignation `=` au lieu d'un appel `()` sur querySelector).
+                # Le guard détecte la répétition exacte et injecte un message de rupture.
+                # node_kind="tester" : le message idle cite les outils Puppeteer, pas write_file.
+                guard = LoopGuard(
+                    threshold=settings.loop_guard_threshold,
+                    enabled=settings.loop_guard_enabled,
+                )
+                return await run_with_retry(
+                    local_tester, prompt, CoderOutput, settings.worker_max_retries,
+                    loop_guard=guard, node_kind="tester",
+                )
