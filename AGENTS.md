@@ -101,7 +101,9 @@ Chaque `.md` est un cahier des charges structuré (souvent "1 fichier `index.htm
 1. **Préparation** : Copier un prompt depuis `references/Prompt-Vault/`. Le coller dans `tasks.json` (`coding.content`) et adapter `target_files`.
 2. **Configuration** : `WORKFLOW_MODE=coding` dans `.env`. Vérifier les LLMs (`curl http://<host>:11434/api/tags`).
 3. **Exécution** : `uv run agent_graph.py` (ajouter `PYTHONUNBUFFERED=1` si pipe).
-4. **Déroulement** : Routeur → Architect → Coder → Tester → Judge (max 3 itérations). Logs : `CODING WORKFLOW` (succès) ou `Fan-out asynchrone` (one-shot).
+4. **Déroulement** : voir le diagramme complet du graphe (nœuds, modèles LLM, flux de données) dans `README.md` § « Node Graph & Data Flow ». En résumé : PromptRefiner → Router → Architect → (Coder → Linter → Tester+Security → Judge, max 3 itérations par sous-tâche) → Escalation si circuit breaker. Logs : `CODING WORKFLOW` (succès) ou `Fan-out asynchrone` (one-shot).
+   - **Tiering modèles** : `fast_model` (gemma-4-E4B) → Coder, Router, Judge. `reasoning_model` (gemma-4-12B) → PromptRefiner, Architect, Tester, Security, Escalation. Les deux sont multimodaux (vision).
+   - **Audits séquentiels sur GPU local** : `AUDIT_PARALLEL=false` (défaut) lance Tester PUIS Security (pas en parallèle) pour éviter la saturation VRAM.
 
 *Notes* : 
 - Pour valider le graphe, commencer par **Bubble_Sort_Visualizer** (Easy, 1 fichier, borné).

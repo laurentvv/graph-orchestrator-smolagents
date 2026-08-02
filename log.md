@@ -2224,3 +2224,102 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
   (~30 min — le 12B est déjà en VRAM, le GPU n'aide pas le Tester, mais évite le swapping).
 - DOCS : debug/TIMINGS_ANALYSE.md (analyse timings + frictions + recommandations priorisées).
   debug/run_gpu_*/ (log + index.html + transitions). Script parsing réutilisable.
+
+---
+## [2026-08-02 10:56:42] feat | Début F-45 : Chrome DevTools MCP + validation visuelle (Coder & Tester)
+- Objectif : auto-validation visuelle du Coder (screenshot vu par gemma-4-E4B multimodal,
+  validé runtime) AVANT final_answer + complément d'outils DevTools au WebTester (cumul
+  avec Puppeteer, pas de suppression).
+- Branche : feat/chrome-devtools-mcp-f45.
+
+## [2026-08-02 10:58:00] eval | Validation multimodale fast_model (gemma-4-E4B)
+- Test empirique : image PNG 4x4 rouge envoyée au fast_model via /v1/chat/completions
+  (content part image_url base64) → réponse "Roux... rouge". CONFIRMÉ : gemma-4-E4B
+  voit les images. Pas besoin de tier VISION_MODEL_ID séparé.
+
+## [2026-08-02 11:05:00] gen | Constat technique smolagents v1.26.0 (exploration agents.py)
+- DÉCOUVERTE CRITIQUE : ToolCollection.from_mcp décode bien les ImageContent en PIL.Image
+  (mcpadapt), MAIS smolagents ne pousse JAMAIS ces images dans observations_images
+  (la seule porte multimodale). Le LLM recevait "Stored 'image.png' in memory." au lieu
+  de voir l'image. Cause : ToolCallingAgent fait un test type() exact (pas isinstance),
+  CodeAgent passe le retour d'outil par str(). CONCLUSION : il faut un step_callback
+  dédié (pattern vision_web_browser.py) pour faire remonter l'image. Implémenté dans
+  vision_callback.py (wrapper _ScreenshotCapturingTool + make_screenshot_callback).
+
+## [2026-08-02 11:30:00] gen | Implémentation F-45 complète (9 étapes)
+- agent_server/mcp.py : build_chrome_devtools_params() + connect_all_mcp + /health.
+- graph_orchestrator/chrome_devtools_tool.py : context manager (dégradation gracieuse).
+- graph_orchestrator/vision_callback.py : wrapper capture + step_callback observations_images.
+- nodes.py (Coder) : outils DevTools + step_callback + prompt VALIDATION VISUELLE
+  (conditionnelle _is_web_task), max_steps 12→14, helpers _build_devtools_blocks.
+- testers/web_tester.py : cumul Puppeteer + DevTools, step_callback vision, doc complémentaire.
+- skills/devtools-preview/SKILL.md + skills_loader (routage dynamique web).
+- .env + .env.example : CHROME_DEVTOOLS_ENABLED, CHROME_PATH, CHROME_DEVTOOLS_HEADLESS.
+
+## [2026-08-02 11:35:00] eval | Tests F-45
+- tests/test_chrome_devtools_tool.py : 28 tests PASS (params, dégradation, callback,
+  helpers Coder, skills). 1 test maj dans test_skills_and_mcp.py (3 serveurs au lieu de 2).
+- Suite pytest complète : 521 passed / 0 failed (493 baseline + 28 nouveaux). 0 régression.
+
+## [2026-08-02 11:36:00] sync | Fichiers état mis à jour (AGENTS.md §3)
+- feature_list.json : F-45 ajouté (status completed).
+- contract.md : critères C150-C160 ajoutés.
+- progress.md : cycle F-45 + jalons CD-0 à CD-10.
+- (README.md : à mettre à jour avant merge).
+
+## [2026-08-02 12:15:00] fix | Patch multi-content chrome-devtools-mcp (découverte E2E)
+- TEST BOUT-EN-BOUT réel : le serveur DevTools se lance (2.7s, 29 outils), navigate_page
+  fonctionne, MAIS take_screenshot retournait une STRING ("Took a screenshot...") au lieu
+  d'une PIL.Image.
+- CAUSE : chrome-devtools-mcp renvoie un CallToolResult MULTI-content (TextContent + ImageContent),
+  mais l'adaptateur mcpadapt (smolagents_adapter.py:189) ne prend QUE content[0] (le texte).
+  L'image est perdue → le modèle ne la verrait jamais.
+- FIX : _patch_forward_for_image() dans vision_callback.py. Inspecte la closure du forward de
+  l'outil MCP pour récupérer `func` (la closure qui produit le CallToolResult), et redéfinit
+  forward pour parcourir TOUS les content items et retourner le premier ImageContent (décodé
+  en PIL.Image) s'il existe. Fallback silencieux si l'inspection échoue (structure inattendue).
+- VALIDATION E2E : après patch, take_screenshot retourne une PIL.Image 1280x800 RGB, pixel
+  central = (66,134,245) ≈ #4285f4 (bleu Google de la page test). Capture dans holder OK.
+  → Le step_callback peut maintenant pousser le screenshot dans observations_images.
+- 28 tests toujours PASS après le patch (0 régression).
+
+---
+## [2026-08-02 13:03:10] feat | F-46 : Checklist fonctionnalités + Fixes robustesse GPU-local
+- 3 runs de validation Bubble Sort ont révélé 3 problèmes distincts :
+  (1) Tester+Security en parallèle saturent la VRAM GPU-local → Security silencieux.
+  (2) Coder génère du TypeScript dans <script> vanilla → SyntaxError → page cassée.
+  (3) Tester ne teste pas toutes les fonctionnalités du cahier des charges (oublis).
+- FIXES APPLIQUÉS (F-46) :
+  - AUDIT_PARALLEL=false (défaut) : séquentialise Tester PUIS Security.
+  - max_steps Tester 24→12 (anti-explosion contexte).
+  - skill coding : règle anti-TypeScript (: type, as, : void INTERDITS en vanilla).
+  - skill devtools-preview : list_console_messages OBLIGATOIRE avant take_screenshot.
+  - skill web-tester : règle des 2 essais (conclure FAILURE vite).
+  - graph_orchestrator/requirements_checklist.py : parse '## Fonctionnalités attendues'
+    en checklist obligatoire pour le Tester (1 assertion/fonctionnalité, tableau verdict).
+- RUN #3 BILAN : anti-TS FONCTIONNE (HTML valide, tri correct), mais Tester a épuisé
+  max_steps sans conclure (modèle verbose). Compteur de comparaisons toujours manquant
+  (Coder) — la checklist F-46 l'aurait attrapé si elle avait été active.
+- TESTS : 14 nouveaux (test_requirements_checklist.py). Suite complète 535 passed / 0 failed.
+- DOC : README.md §"Node Graph & Data Flow" (diagramme ASCII complet avec tiering modèles
+  + flux de données) + AGENTS.md mis à jour (séquence + référence diagramme).
+
+---
+## [2026-08-02 16:06:00] feat | F-47 (re-test ciblé) + F-48 (git diff) + validation Coder isolation
+- F-47 : targeted_retest.py — en iter >1, le Tester ne re-valide QUE les bugs signalés
+  (max_steps 12→6, prompt priorise réfutations + smoke-test). Économie ~60% temps/tokens.
+- F-48 : git_snapshot.py — git local du run (runs/<dated>/.git) suit les modifs du Coder.
+  get_last_diff() extrait les lignes EXACTES modifiées → injecté au Tester (F-47) pour
+  cibler les assertions sur les zones réellement changées.
+- VALIDATION CODER ISOLATION (#2 et #3) : 3 runs Coder standalone avec spec Bubble Sort
+  améliorée (prompts/bubble_sort_spec.md). Test manuel rigoureux (7 étapes documentées
+  dans debug/MANUAL_TESTER_METHODOLOGY.md) :
+  * Iso #1 : barres INVISIBLES (bug CSS height:% sans parent heighté) — détecté par
+    l'œil humain (l'utilisateur), pas par mon screenshot (biais de confirmation leçon).
+  * Skill coding corrigé : règle CSS height:% (failure mode visuel n°1).
+  * Iso #2 et #3 : 50/50 barres visibles, tri correct, compteur incrémenté (16, 40),
+    container heighté (322, 350px). REPRODUCTIBLE.
+- LEÇON CLÉ (documentée) : biais de confirmation du tester. Mon screenshot checkait
+  trivialement (pixels pas blancs) et concluait "page OK" alors qu'elle était vide.
+  Contre-mesure : étape 6 (evaluate_script compte les éléments rendus) > étape 7 (screenshot).
+- TESTS : 28 nouveaux (F-47: 16, F-48: 12). Suite complète 563 passed / 0 failed.

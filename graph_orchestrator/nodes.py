@@ -349,6 +349,84 @@ async def execute_worker_node(
     return await run_with_retry(local_worker, prompt, WorkerOutput, settings.worker_max_retries)
 
 
+def _is_web_task(task: dict) -> bool:
+    """Détecte si la tâche produit du contenu web (HTML/CSS/JS) → preview DevTools pertinent.
+
+    Défense en profondeur : routeur (router_lang) OU extensions des target_files.
+    Le routeur peut se tromper (ex: prompt ambigu), les extensions sont plus fiables.
+    """
+    router_lang = (task.get("router_lang") or "").lower()
+    if any(k in router_lang for k in ("web", "html", "css", "front", "javascript")):
+        return True
+    target_files = task.get("target_files") or []
+    web_exts = (".html", ".htm", ".css", ".js")
+    return any(str(f).lower().endswith(web_exts) for f in target_files)
+
+
+def _build_devtools_blocks(task: dict, cdt_tools: list) -> tuple[str, str]:
+    """Construit les blocs prompt pour Chrome DevTools (preview + doc outils). F-45.
+
+    Retourne (preview_block, tools_doc) :
+      - Si cdt_tools est vide (serveur indisponible ou désactivé) → chaînes vides.
+        Le Coder tourne sans preview (backward-compat, comme avant F-45).
+      - Si la tâche n'est PAS web → doc outils absente, preview absent. Les outils
+        restent disponibles (au cas où) mais le prompt ne les pousse pas.
+      - Si web + outils dispos → preview block (workflow de validation visuelle) +
+        doc des outils clés (navigate_page, take_screenshot, list_console_messages).
+
+    Le screenshot pris est vu par le modèle (gemma-4-E4B est multimodal, validé runtime).
+    """
+    if not cdt_tools:
+        return "", ""
+    # Calcule l'URL file:/// absolue du fichier HTML principal (le Coder s'exécute
+    # dans le dossier du run après _scoped_chdir, donc os.getcwd() = dossier du run).
+    target_files = task.get("target_files") or ["index.html"]
+    primary_target = target_files[0]
+    primary_url = "file:///" + os.path.abspath(primary_target).replace("\\", "/")
+
+    if not _is_web_task(task):
+        # Pas web : on liste les outils mais sans workflow de preview poussé.
+        return "", _DEVTOOLS_TOOLS_DOC
+
+    preview_block = f"""### 🖥️ VALIDATION VISUELLE (Chrome DevTools — F-45)
+Tu disposes d'un navigateur Chrome pilotable pour VÉRIFIER ta page AVANT final_answer.
+Le screenshot que tu prendras te sera RENVOYÉ EN IMAGE (tu le vois) — utilise-le pour
+détecter les bugs visuels (layout cassé, éléments superposés, page blanche).
+
+⚠️ PIÈGE FRÉQUENT : une page au rendu "joli" (CSS ok) peut avoir TOUT son JS cassé
+silencieusement (boutons morts, éléments non générés). Seule la console le révèle.
+DONC vérifie la console EN PREMIER, le screenshot EN SECOND.
+
+Workflow de validation (À FAIRE après avoir créé les fichiers, AVANT final_answer) :
+1. `navigate_page(url="{primary_url}")` — ouvre ta page dans Chrome (URL absolue ci-dessous).
+2. `list_console_messages()` — OBLIGATOIRE EN PREMIER. Vérifie 0 erreur JS (SyntaxError,
+   Unexpected token, Uncaught = bug critique → corrige AVANT de continuer).
+3. `take_screenshot()` — capture l'état visuel. L'image te revient : ANALISE-LA.
+4. Teste une interaction clé (ex: `click` sur le bouton principal) pour confirmer que le
+   JS fonctionne — un screenshot seul ne prouve pas que les interactions marchent.
+5. Si erreur console/bug visuel/interaction morte : CORRIGE via search_replace, puis
+   re-`navigate_page` + re-`list_console_messages` + re-`take_screenshot`.
+6. final_answer uniquement quand : 0 erreur console ET rendu correct ET interactions OK.
+
+URL exacte de ta page (primary target) : {primary_url}
+ATTENTION : si ta page n'est pas à la racine du run, navigate_page DOIT pointer sur le
+vrai fichier (ex: landing_page/index.html), pas sur la racine du workspace."""
+    return preview_block, _DEVTOOLS_TOOLS_DOC
+
+
+# Doc compacte des outils Chrome DevTools injectée dans la section OUTILS du Coder.
+# On ne liste que les outils utiles au Coder (pas les 40+ du serveur) pour économiser
+# le contexte. Le Coder n'a pas besoin de Lighthouse/perf (ça, c'est le Tester).
+_DEVTOOLS_TOOLS_DOC = """
+- `navigate_page(url)` : ouvre une URL dans Chrome (utilise file:/// absolu pour un fichier local).
+- `take_screenshot()` : capture l'écran → l'image TE REVIENT (tu la vois). Format JPEG (léger).
+- `list_console_messages()` : liste les erreurs/warnings JS de la console (le "stderr" du web).
+- `click(uid)` / `fill(uid, value)` : interagit (utile si tu veux tester un bouton, ex: démarrer un tri).
+- `evaluate_script(function)` : exécute du JS dans la page (ex: lire une valeur du DOM).
+Note : les `uid` d'éléments viennent de `take_snapshot()` (arbre a11y). Pour un simple check visuel,
+take_screenshot + list_console_messages suffisent dans 90% des cas."""
+
+
 async def execute_coder_node(
     task: dict,
     fast_model: OpenAIServerModel,
@@ -357,6 +435,8 @@ async def execute_coder_node(
     """Nœud Coder : utilise des outils pour créer/éditer des fichiers et exécuter des commandes bash."""
     from smolagents import DuckDuckGoSearchTool, CodeAgent
     from .context7_tool import context7_tools
+    from .chrome_devtools_tool import chrome_devtools_tools
+    from .vision_callback import wrap_screenshot_tools, make_screenshot_callback
 
     import sys
     if sys.stdout.encoding.lower() != 'utf-8':
@@ -370,12 +450,24 @@ async def execute_coder_node(
     # l'agent (sinon les outils deviennent inertes). On englobe donc la création
     # ET l'exécution de l'agent dans le `with`. Tolérance aux pannes : si pas de
     # clé ou connexion échouée, c7 = [] et le Coder tourne sans doc (backward-compat).
-    with context7_tools() as c7_tools:
+    # F-45 : Chrome DevTools MCP (auto-validation visuelle) est imbriqué selon le
+    # même pattern. Si indisponible, cdt = [] et le Coder tourne sans preview.
+    with context7_tools() as c7_tools, chrome_devtools_tools() as cdt_tools:
         # Outils fichiers + recherche. Context7 (doc de libs à jour) est ajouté si
         # CONTEXT7_API_KEY est configurée. Le Coder décide QUAND l'utiliser via le
         # skill context7-research (dormant sur vanilla, actif sur libs externes).
         coder_tools = [list_directory, read_file, write_file, append_file, edit_file, search_replace, DuckDuckGoSearchTool()]
         coder_tools.extend(c7_tools)
+        # F-45 : Chrome DevTools (navigate_page, take_screenshot, list_console_messages,
+        # click, fill...) pour auto-valider visuellement la page générée AVANT
+        # final_answer. Le modèle fast (gemma-4-E4B) a la vision (validé runtime).
+        coder_tools.extend(cdt_tools)
+        # F-45 : wrap les outils de screenshot pour capturer l'image PIL et la faire
+        # remonter au LLM via observations_images (step_callback). Sans ça, smolagents
+        # garde l'image pour lui ("Stored 'image.png' in memory.") et le modèle ne la
+        # voit jamais. capture_holder est partagé entre le wrapper et le callback.
+        screenshot_capture: list = []
+        coder_tools = wrap_screenshot_tools(coder_tools, screenshot_capture)
         # F-42 (Sanitizer) : coerce best-effort les arguments malformés du petit
         # LLM (ex: offset="1, 80" → 80) avant l'appel d'outil → moins de retries
         # gaspillées sur les erreurs de validation de type. Opt-out via settings.
@@ -395,12 +487,16 @@ async def execute_coder_node(
             name=f"coder_{task['id'].replace('-', '_')}",
             description="Agent développeur capable d'explorer le projet, d'écrire, lire, modifier du code.",
             verbosity_level=resolve_verbosity("HIGH"),
-            # 12 steps : borne le temps total. Un step CodeAgent = un code block complet
-            # (peut enchaîner plusieurs write_file/append_file), donc 12 steps couvrent
-            # largement un gros projet multi-fichiers + final_answer.
-            max_steps=12,
+            # 14 steps (vs 12 avant F-45) : marge pour l'étape de validation visuelle
+            # (navigate_page + take_screenshot + analyse + corrections éventuelles).
+            # Un step CodeAgent = un code block complet, donc +2 steps couvrent le
+            # cycle preview sans trop allonger le runtime sur les tâches sans web.
+            max_steps=14,
             # On gère nous-mêmes le set d'outils (pas de python_interpreter natif ajouté).
             add_base_tools=False,
+            # F-45 : step_callback qui pousse le screenshot dans observations_images
+            # pour que le modèle vision l'analyse. No-op si pas de screenshot ce step.
+            step_callbacks=[make_screenshot_callback(screenshot_capture)],
         )
 
         target_files_instruction = ""
@@ -477,6 +573,13 @@ Construis chaque fichier cible de façon autonome (1 module logique = 1 fichier,
 1. write_file(path=..., content=...) pour créer le fichier cible (contenu complet).
 2. final_answer quand c'est terminé."""
 
+        # F-45 : section preview visuelle (Chrome DevTools) — ACTIVE uniquement pour
+        # les tâches web (HTML/CSS/JS). Pour les autres technos (Python), les outils
+        # DevTools ne sont pas pertinents (pas de page à ouvrir dans un navigateur).
+        # On détecte le web via router_lang OU extensions des target_files (défense en
+        # profondeur : le routeur peut se tromper, les extensions non).
+        devtools_preview_block, devtools_tools_doc = _build_devtools_blocks(task, cdt_tools)
+
         prompt = f"""{build_role_header("coder")}
 Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JAMAIS expliquer sans agir.
 
@@ -501,8 +604,9 @@ print(resultat)
 final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Fichiers créés."}})
 ```
 
-{strategy_block}
-{target_files_instruction}
+        {strategy_block}
+        {target_files_instruction}
+        {devtools_preview_block}
 
 ### OUTILS DISPONIBLES
 - `write_file(path, content)` : CRÉE/ÉCRASE un fichier complet. Sous-dossiers créés auto.
@@ -511,6 +615,7 @@ final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Fichi
 - `read_file(path)` / `list_directory(path)` : lecture/exploration.
 - `context7` (resolve_library_id/query_docs) : UNIQUEMENT pour une lib externe (React, Chart.js...). JAMAIS pour du vanilla.
 - Évite DuckDuckGoSearchTool (lent/imprécis).
+{devtools_tools_doc}
 
 ### EXIGENCE DE QUALITÉ
 Code prêt pour la production, respectant les conventions du langage.

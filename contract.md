@@ -187,6 +187,42 @@
 - [ ] Critère 148 : Suppression des ~180 lignes de nœuds smolagents DÉPRÉCIÉS (versions mortes de `execute_router_node`/`execute_architect_node`/`execute_security_reviewer_node`/`execute_code_judge_node` dans `nodes.py`, jamais appelées par `run_coding_workflow`) + imports morts nettoyés (`RouterOutput`/`ArchitectOutput`/`SecurityOutput`/`CodeJudgeOutput` retirés de l'import `nodes.py`) — vérifié par import (4 fonctions absentes, fonctions actives Coder/Tester/Worker/Reduce/Judge/Synth/Adversary préservées).
 - [ ] Critère 149 : La suite pytest complète passe (0 régression, 482 passed = 442 baseline + 40 nouveaux `test_prompts.py`).
 
+## Critères de Chrome DevTools MCP + validation visuelle (Priorité 14 — F-45)
+- [ ] Critère 150 : `build_chrome_devtools_params()` retourne `StdioServerParameters` (command="npx", args contient "chrome-devtools-mcp@latest", "--isolated", "1280x800", "jpeg") si `CHROME_DEVTOOLS_ENABLED=1` ; `None` si `CHROME_DEVTOOLS_ENABLED=0` — testé `TestBuildParams`.
+- [ ] Critère 151 : `CHROME_PATH` set → ajoute `--executable-path <path>` aux args ; `CHROME_DEVTOOLS_HEADLESS=1` → ajoute `--headless` ; absent par défaut (visible pour debug) — testé `test_chrome_path_ajoute_executable_path` + `test_headless_*`.
+- [ ] Critère 152 : `chrome_devtools_tools()` yield `[]` si params None (désactivé) OU si `ToolCollection.from_mcp` lève (Chrome absent/réseau down) — pas de crash, dégradation gracieuse — testé `TestChromeDevtoolsToolsDegration`.
+- [ ] Critère 153 : `chrome_devtools_tools()` yield la liste des outils MCP si connexion OK — testé `TestChromeDevtoolsToolsMocked::test_connexion_ok_yield_outils`.
+- [ ] Critère 154 : `wrap_screenshot_tools()` wrap UNIQUEMENT les outils `take_screenshot`/`puppeteer_screenshot` (pas les autres), capture l'image PIL retournée dans le holder, préserve le comportement original (retourne quand même l'image) — testé `TestWrapScreenshotTools` + `TestScreenshotCapture`.
+- [ ] Critère 155 : `make_screenshot_callback()` peuple `memory_step.observations_images` avec le dernier screenshot, reset le holder après push, noop si holder vide — testé `TestScreenshotCallback`.
+- [ ] Critère 156 : `list_mcp_servers_status()` inclut l'entrée `chrome-devtools` (name + transport="stdio" + configured reflète l'état) — testé `TestMcpStatusDiagnostic`.
+- [ ] Critère 157 : `_is_web_task()` détecte le web via `router_lang` OU extensions des `target_files` (.html/.htm/.css/.js) ; false pour Python — testé `TestCoderWebDetection`.
+- [ ] Critère 158 : `_build_devtools_blocks()` retourne ("","") si pas d'outils DevTools (backward-compat) ; block preview + doc outils si web+outils dispos ; doc seule si non-web+outils — testé `test_build_devtools_blocks_*`.
+- [ ] Critère 159 : Skill `devtools-preview` routé pour les tâches web (regex frontend-design), absent pour Python ; son body se charge depuis `skills/devtools-preview/SKILL.md` — testé `TestSkillRouting`.
+- [ ] Critère 160 : Suite pytest complète passe (0 régression, 521 passed = 493 baseline + 28 nouveaux test_chrome_devtools_tool + 1 mis à jour test_skills_and_mcp).
+
+## Critères de la Checklist de fonctionnalités + Fixes robustesse GPU-local (F-46)
+- [ ] Critère 161 : `extract_functionalities(spec)` parse la section `## Fonctionnalités attendues` en liste Python (regex), s'arrête à la prochaine section `##`, dédoublonne — testé `TestExtractFunctionalities`.
+- [ ] Critère 162 : Robustesse — spec vide/prompt brut/section sans puces → `[]` (fallback historique, pas de crash) — testé `TestExtractRobustesse`. Insensible casse/accents (Fonctionnalité/Fonctionnalités).
+- [ ] Critère 163 : `build_checklist_block(funcs)` produit un bloc qui compte les N exigences, numérote 1..N, impose un tableau verdict (PASS/FAIL/N-A), et rappelle « 1 FAIL = failure » — testé `TestBuildChecklistBlock`.
+- [ ] Critère 164 : Le WebTester importe et injecte `checklist_block` dans son prompt après le cahier des charges — testé `TestTesterInjection::test_web_tester_importe_le_module`.
+- [ ] Critère 165 : `AUDIT_PARALLEL=false` (défaut) séquentialise Tester PUIS Security ; `AUDIT_PARALLEL=true` restaure le `asyncio.gather` — vérifié par lecture code workflows.py:554-575.
+- [ ] Critère 166 : `max_steps` Tester = 12 (GPU-local, anti-explosion contexte observée à 24 steps/405k tokens) — testé `test_run_max_steps_12`.
+- [ ] Critère 167 : Skill `coding` contient la règle anti-TypeScript (tableau syntaxes interdites : `: type`, `as`, `: void`, `interface`) avec exemples — vérifié par lecture skill.
+- [ ] Critère 168 : Skill `devtools-preview` met `list_console_messages` OBLIGATOIRE AVANT `take_screenshot` (le screenshot seul ne révèle pas un JS cassé) — vérifié par lecture skill.
+- [ ] Critère 169 : Skill `web-tester` contient la règle des 2 essais (conclure FAILURE vite sur bug réel, ne pas explorer 15 sélecteurs) — vérifié par lecture skill.
+- [ ] Critère 170 : Suite pytest complète passe (0 régression, 535 passed = 521 baseline + 14 nouveaux test_requirements_checklist).
+
+## Critères du Re-test ciblé + Git diff (F-47, F-48)
+- [ ] Critère 171 : `should_use_targeted_retest(iter, refs)` active le mode ciblé si iter>1 ET refs non vides ; sinon mode complet — testé `TestShouldUseTargeted`.
+- [ ] Critère 172 : `extract_bug_points(refs)` extrait les réfutations (plus récentes d'abord, tronquées à max_chars) ou None si vide — testé `TestExtractBugPoints`.
+- [ ] Critère 173 : `build_targeted_retest_block(bugs, iter, git_diff)` produit un prompt ciblé (max_steps 6, assertions par bug, smoke-test, section diff si fourni) — testé `TestBuildTargetedRetestBlock` + `TestTargetedRetestWithDiff`.
+- [ ] Critère 174 : Le web_tester a un max_steps ADAPTATIF (TARGETED_MAX_STEPS=6 ciblé, 12 complet) et remplace checklist_block par targeted_block en mode ciblé — testé `TestWebTesterIntegration`.
+- [ ] Critère 175 : Le workflow propage `refutations` (brutes) et `git_diff` dans sub_dict pour le Tester — testé `TestWorkflowPropagation`.
+- [ ] Critère 176 : `init_run_git()` crée un .git local (idempotent) ; `commit_iteration()` commit après Coder — testé `TestInitRunGit` + `TestCommitAndGetDiff`.
+- [ ] Critère 177 : `get_last_diff()` retourne git diff HEAD~1..HEAD (vides si <2 commits ou git absent) ; tronque au-delà de max_chars avec marqueur — testé `TestDiffTruncation` + `TestRobustesse`.
+- [ ] Critère 178 : Skill coding contient la règle CSS `height: %` (failure mode isolation #1 : barres invisibles) — vérifié par lecture skill.
+- [ ] Critère 179 : Suite pytest complète passe (0 régression, 563 passed = 551 + 12 nouveaux test_git_snapshot).
+
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.
 * Validation process : `uv run python -m graph_orchestrator.workflows` (WORKFLOW_MODE=coding) →
