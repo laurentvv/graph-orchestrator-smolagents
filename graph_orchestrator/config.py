@@ -203,6 +203,9 @@ class Settings:
     # (DuckDB) pour que la reprise après crash reprenne dans le MÊME dossier (fichiers préservés).
     # Accepte un chemin relatif (résolu en absolu au runtime) ou absolu. Défaut "runs".
     output_dir: str = "runs"
+    # Nombre de runs à conserver pour éviter que le dossier ne grossisse indéfiniment.
+    # 0 = désactivé (conservation infinie).
+    output_retention: int = 10
 
     # --- Idempotence des effets de bord (Priorité 8-bis : replays/retries) ---
     # Si True, un store d'idempotence (backing DuckDB) garantit que les effets de
@@ -258,6 +261,7 @@ def load_settings() -> Settings:
         prompt_refiner_enabled=_get_bool("PROMPT_REFINER_ENABLED", True),
         prompt_refiner_model_id=_get_str("PROMPT_REFINER_MODEL_ID", ""),
         output_dir=_get_str("OUTPUT_DIR", "runs"),
+        output_retention=_get_int("OUTPUT_RETENTION", 10),
         idempotence_enabled=_get_bool("IDEMPOTENCE_ENABLED", True),
         idempotency_retention_days=_get_int("IDEMPOTENCY_RETENTION_DAYS", 14),
     )
