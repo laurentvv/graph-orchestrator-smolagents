@@ -604,14 +604,14 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
    Pour AJOUTER du contenu → append_file. Pour MODIFIER un fragment → search_replace.
 
 ### FORMAT DE SORTIE (obligatoire)
-Tu écris du code Python dans un bloc ```python``` qui appelle tes outils. Exemple one-shot :
-```python
+Tu écris du code Python dans un bloc `<code>` qui appelle tes outils. Exemple one-shot :
+<code>
 # Thought courte (1 phrase) PUIS appel immédiat — pas de longue réflexion
 resultat = write_file(path="index.html", content="<!DOCTYPE html>\\n<html>...</html>")
 print(resultat)
 # ... autres appels ...
 final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Fichiers créés."}})
-```
+</code>
 
         {strategy_block}
         {target_files_instruction}
