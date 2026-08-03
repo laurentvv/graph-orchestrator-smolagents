@@ -495,7 +495,6 @@ async def execute_prompt_refiner_node(
     capabilities = _build_capabilities_summary(settings)
     start_time = time.time()
     try:
-        _spec = settings.no_think_spec if settings.no_think_spec.model else settings.reasoning_spec
         result = await _run_dspy_node(
             signature=PromptRefinerSignature,
             predictor_kwargs={
@@ -503,8 +502,8 @@ async def execute_prompt_refiner_node(
                 "available_capabilities": capabilities,
             },
             settings=settings,
-            spec=_spec,
-            think=False,
+            spec=settings.reasoning_spec,
+            think=True,
             model_override=settings.prompt_refiner_model_id,
         )
         refined = result.output
@@ -514,7 +513,7 @@ async def execute_prompt_refiner_node(
 
         metrics = NodeMetrics(
             node="prompt_refiner_dspy",
-            model=settings.prompt_refiner_model_id or _spec.model,
+            model=settings.prompt_refiner_model_id or settings.reasoning_spec.model,
             duration_s=time.time() - start_time,
             input_tokens=0,
             output_tokens=0,
@@ -608,7 +607,6 @@ async def execute_security_reviewer_node(subtask: dict, reasoning_model, setting
 
     start_time = time.time()
     try:
-        _spec = settings.no_think_spec if settings.no_think_spec.model else settings.reasoning_spec
         result = await _run_dspy_node(
             signature=SecuritySignature,
             predictor_kwargs={
@@ -616,13 +614,13 @@ async def execute_security_reviewer_node(subtask: dict, reasoning_model, setting
                 "code": code_content or "Code manquant"
             },
             settings=settings,
-            spec=_spec,
-            think=False,
+            spec=settings.reasoning_spec,
+            think=True,
         )
         
         metrics = NodeMetrics(
-            node="security_dspy", 
-            model=_spec.model, 
+            node="security_dspy",
+            model=settings.reasoning_spec.model,
             duration_s=time.time() - start_time, 
             input_tokens=0, 
             output_tokens=0
@@ -673,7 +671,6 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
             tail_lines=10,
             max_chars=1500,
         )
-        _spec = settings.no_think_spec if settings.no_think_spec.model else settings.reasoning_spec
         result = await _run_dspy_node(
             signature=CodeJudgeSignature,
             predictor_kwargs={
@@ -684,13 +681,13 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
                 "task_requirements": task_requirements,
             },
             settings=settings,
-            spec=_spec,
-            think=False,
+            spec=settings.reasoning_spec,
+            think=True,
         )
         
         metrics = NodeMetrics(
             node="code_judge_dspy",
-            model=_spec.model,
+            model=settings.reasoning_spec.model,
             duration_s=time.time() - start_time,
             input_tokens=0,
             output_tokens=0
@@ -745,7 +742,6 @@ async def execute_escalation_node(subtask: dict, failure_history: str, reasoning
 
     start_time = time.time()
     try:
-        _spec = settings.no_think_spec if settings.no_think_spec.model else settings.reasoning_spec
         result = await _run_dspy_node(
             signature=EscalationSignature,
             predictor_kwargs={
@@ -755,13 +751,13 @@ async def execute_escalation_node(subtask: dict, failure_history: str, reasoning
                 "current_code": current_code,
             },
             settings=settings,
-            spec=_spec,
-            think=False,
+            spec=settings.reasoning_spec,
+            think=True,
         )
 
         metrics = NodeMetrics(
             node="escalation_dspy",
-            model=_spec.model,
+            model=settings.reasoning_spec.model,
             duration_s=time.time() - start_time,
             input_tokens=0,
             output_tokens=0

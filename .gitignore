@@ -47,4 +47,8 @@ web/dist/
 runs/
 debug/
 logs/
+
+# Binaires lourds bundlés (build CUDA llama.cpp, ~1 Go) — gitignoré.
+# llama_server.py le découvre automatiquement si présent (vendor/llamacpp-cuda/).
+vendor/
 python_health_report.md

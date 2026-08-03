@@ -67,6 +67,19 @@ class ModelSpec:
     api_base: str = ""             # external: endpoint http(s) ; spawn: ignoré (port dyn)
     api_key: str = ""              # external: clé API ; spawn: ignoré ; none: ""
     context: int = 8192            # spawn: taille contexte (-c) ; external: ignoré
+    # --- Offload GPU (F-58-bis : fix bridage 20% GPU) ---
+    # Nombre de layers à offloader en VRAM (-ngl). 0 = AUTO-FIT (défaut, recommandé) :
+    # llama.cpp mesure la VRAM libre et offload autant de layers que possible SANS OOM
+    # (mécanisme common_fit_params). C'est la config "sûre" qu'utilise Ollama.
+    # ATTENTION : -ngl ≥ modèle/VRAM → OOM au chargement (le backend Vulkan alloue par
+    # gros blocs contigus). Sur gemma-12B / RTX 3060 6 Go (build Vulkan), -ngl 99 crash ;
+    # -ngl 32 passe sur build CUDA mais OOM sur Vulkan. D'où auto-fit par défaut.
+    # Benchmark debug/Gemma4_Thinking_Audit.md : auto-fit ~8 tok/s, -ngl 32 ~11 tok/s
+    # (CUDA). Setter <PREFIX>_NGL (ex: REASONING_NGL=32) pour forcer si build CUDA.
+    gpu_layers: int = 0
+    # Flash Attention (--flash-attn) : accélère le préfill des longs contextes.
+    # Défaut "auto" = laisse llama-server choisir selon le modèle.
+    flash_attn: str = "auto"
 
 
 def _model_spec_from_env(prefix: str) -> ModelSpec:
@@ -93,6 +106,8 @@ def _model_spec_from_env(prefix: str) -> ModelSpec:
         api_base=_normalize_api_base(_get_str(f"{prefix}_API_BASE", "")) if _get_str(f"{prefix}_API_BASE", "") else "",
         api_key=_get_str(f"{prefix}_API_KEY", ""),
         context=_get_int(f"{prefix}_CONTEXT", 8192),
+        gpu_layers=_get_int(f"{prefix}_NGL", 0),
+        flash_attn=_get_str(f"{prefix}_FLASH_ATTN", "auto").lower(),
     )
 
 

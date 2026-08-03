@@ -36,15 +36,56 @@ import os
 import socket
 import subprocess
 import time
+from datetime import datetime
 from typing import Optional
 
 from .config import ModelSpec
 
 logger = logging.getLogger(__name__)
 
-_LLAMA_SERVER_BIN = "llama-server"  # dans le PATH Windows (WinGet). Si absent → no-op.
 import threading
 _spawn_lock = threading.Lock()  # sérialise les spawns (évite 2 modèles concurrents).
+
+
+def _resolve_llama_bin() -> str:
+    """Résout le binaire llama-server : priorise un build CUDA bundlé, puis le PATH.
+
+    Ordre de recherche (le 1er trouvé gagne) :
+      1. vendor/llamacpp-cuda/llama-server(.exe) — build CUDA précompilé inclus dans
+         le projet (gitignoré). ~2-3x plus rapide que Vulkan sur GPU NVIDIA, et gère
+         mieux l'offload (gros blocs contigus Vulkan → OOM même à -ngl 10).
+      2. llama-server dans le PATH système (fallback — ex: build Vulkan WinGet).
+
+    Retourne le chemin absolu ou "llama-server" (résolution PATH au spawn).
+    """
+    # 1. Build CUDA bundlé : vendor/llamacpp-cuda/ relatif à la racine du projet.
+    #    On remonte depuis ce fichier (graph_orchestrator/) pour trouver la racine.
+    _pkg_dir = os.path.dirname(os.path.abspath(__file__))
+    _project_root = os.path.dirname(_pkg_dir)
+    for exe_name in ("llama-server.exe", "llama-server"):
+        candidate = os.path.join(_project_root, "vendor", "llamacpp-cuda", exe_name)
+        if os.path.isfile(candidate):
+            return candidate
+    # 2. Fallback : binaire système (PATH). Résolu par subprocess au spawn.
+    return "llama-server"
+
+
+_LLAMA_SERVER_BIN = _resolve_llama_bin()
+# Détecte le backend (CUDA vs Vulkan) pour logger et adapter les flags. On sniff
+# la présence de ggml-cuda.dll/cudart64 à côté du binaire bundlé.
+def _detect_backend() -> str:
+    """Retourne 'cuda', 'vulkan' ou 'unknown' selon le binaire résolu."""
+    bin_dir = os.path.dirname(_LLAMA_SERVER_BIN)
+    if bin_dir and os.path.isdir(bin_dir):
+        files = os.listdir(bin_dir)
+        if any(f.lower().startswith("ggml-cuda") or "cudart" in f.lower() for f in files):
+            return "cuda"
+        if any("vulkan" in f.lower() for f in files):
+            return "vulkan"
+    return "unknown"
+
+
+_LLAMA_BACKEND = _detect_backend()
 
 
 def _free_port() -> int:
@@ -118,7 +159,15 @@ def _spawn(spec: ModelSpec) -> Optional[_SpawnedServer]:
         "-c", str(spec.context),
         "--reasoning", spec.reasoning or "off",
         "--alias", "default",
+        # Flash Attention : accélère le préfill des longs contextes (Architect).
+        # Configurable via <PREFIX>_FLASH_ATTN (défaut "auto").
+        "--flash-attn", spec.flash_attn or "auto",
     ]
+    # -ngl : AUTO-FIT si gpu_layers=0 (défaut, façon Ollama — s'adapte à la VRAM sans
+    # OOM). Sinon force le nombre de layers (override : REASONING_NGL=32 optimal sur
+    # gemma-12B / RTX 3060 build CUDA, cf. debug/Gemma4_Thinking_Audit.md §5).
+    if spec.gpu_layers and spec.gpu_layers > 0:
+        cmd += ["-ngl", str(spec.gpu_layers)]
     if spec.mmproj and os.path.exists(spec.mmproj):
         cmd += ["--mmproj", spec.mmproj]
 
@@ -126,12 +175,35 @@ def _spawn(spec: ModelSpec) -> Optional[_SpawnedServer]:
     # openai/ a besoin d'un model_id non-vide dans le body.
     model_id = "default"
 
-    logger.info("[llama-server] spawn blob %s (reasoning=%s, port %d)",
-                os.path.basename(blob)[:20], spec.reasoning, port)
-    print(f"[*] llama-server : chargement {os.path.basename(blob)[:25]} (port {port}, reasoning={spec.reasoning})...")
+    ngl_desc = f"ngl={spec.gpu_layers}" if spec.gpu_layers > 0 else "ngl=auto-fit"
+    bin_short = os.path.basename(_LLAMA_SERVER_BIN) if os.path.sep in _LLAMA_SERVER_BIN else _LLAMA_SERVER_BIN
+    logger.info("[llama-server] spawn blob %s (backend=%s, reasoning=%s, port %d, %s, flash=%s)",
+                os.path.basename(blob)[:20], _LLAMA_BACKEND, spec.reasoning, port, ngl_desc, spec.flash_attn)
+    print(f"[*] llama-server : chargement {os.path.basename(blob)[:25]} (backend={_LLAMA_BACKEND}, "
+          f"port {port}, reasoning={spec.reasoning}, {ngl_desc}, flash={spec.flash_attn})...")
+
+    # F-58-bis : capture des logs llama-server dans logs/llama-server/ (diag GPU/OOM).
+    # Avant, stdout/stderr → DEVNULL : impossible de diagnostiquer l'offload GPU ou un
+    # OOM. llama-server écrit sa bannière de chargement (offload layers, VRAM alloc,
+    # buffer sizes) sur stderr — on la redirige vers un fichier horodaté par spawn.
+    try:
+        llama_logs_dir = os.path.join(os.environ.get("LOGS_DIR", "logs"), "llama-server")
+        os.makedirs(llama_logs_dir, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        blob_tag = os.path.basename(blob)[:12]
+        llama_log_path = os.path.join(llama_logs_dir, f"llama-{stamp}-p{port}-{blob_tag}.log")
+        llama_log_file = open(llama_log_path, "w", encoding="utf-8", buffering=1)
+        print(f"[*] llama-server : logs → {llama_log_path}")
+    except Exception as e:
+        logger.warning("[llama-server] ouverture log fichier échouée (%s) — fallback DEVNULL", str(e)[:80])
+        llama_log_file = subprocess.DEVNULL
+        llama_log_path = None
+
     try:
         proc = subprocess.Popen(
-            cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=llama_log_file,
             start_new_session=True,  # groupe de process pour terminate() fiable
         )
     except FileNotFoundError:

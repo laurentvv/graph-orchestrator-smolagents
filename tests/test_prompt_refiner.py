@@ -123,10 +123,11 @@ def test_prompt_refiner_uses_dedicated_model_when_set(mock_cot, mock_configure):
         execute_prompt_refiner_node("prompt", "FAKE_REASON", settings)
     )
 
-    # _configure_dspy reçoit le modèle dédié, pas reasoning_model_id. F-47 : think=False
-    # (le PromptRefiner désactive le thinking — reformulation structurée, pas besoin de
-    # raisonnement étape-par-étape, cf. debug/GAPS_TESTER_JUDGE.md Gap 2).
-    mock_configure.assert_called_once_with(settings, "dedicated-e4b-model", think=False, api_base="http://localhost:11434/v1", api_key="sk-mock")
+    # _configure_dspy reçoit le modèle dédié, pas reasoning_model_id. think=True :
+    # depuis le switch vers Ornith-9B (rapide), le thinking est activé sur TOUS les
+    # nœuds de raisonnement (Architect/Refiner/Judge/Security/Escalation) — fin du
+    # compromis think=False hérité du 12B lent. Le Refiner reformule mieux avec thinking.
+    mock_configure.assert_called_once_with(settings, "dedicated-e4b-model", think=True, api_base="http://localhost:11434/v1", api_key="sk-mock")
     # La métrique reflète aussi le modèle réellement utilisé (pas le défaut).
     assert metrics.model == "dedicated-e4b-model"
 
@@ -145,7 +146,7 @@ def test_prompt_refiner_falls_back_to_reasoning_model_when_unset(mock_cot, mock_
     settings.prompt_refiner_model_id = ""  # vide = fallback
     asyncio.run(execute_prompt_refiner_node("prompt", "FAKE_REASON", settings))
 
-    mock_configure.assert_called_once_with(settings, "mock-reasoning-model", think=False, api_base="http://localhost:11434/v1", api_key="sk-mock")
+    mock_configure.assert_called_once_with(settings, "mock-reasoning-model", think=True, api_base="http://localhost:11434/v1", api_key="sk-mock")
 
 
 # ==========================================
