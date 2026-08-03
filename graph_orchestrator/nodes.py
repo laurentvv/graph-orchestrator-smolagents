@@ -165,6 +165,7 @@ async def run_with_retry(
     node_kind: str = "coder",
     model_id: Optional[str] = None,
     api_base: Optional[str] = None,
+    timeout_s: Optional[float] = None,
 ) -> Tuple[Optional[object], Optional[NodeMetrics]]:
     """Exécute un agent avec retry. Retourne (données_validées, métriques).
 
@@ -216,9 +217,20 @@ async def run_with_retry(
             # asyncio.to_thread : smolagents est synchrone, on le déporte hors de la loop.
             # IMPORTANT : return_full_result doit être nommé — sinon `True` positionnel
             # tombe sur `stream` (2e paramètre) et renvoie un générateur au lieu d'un RunResult.
-            run_result = await asyncio.to_thread(
+            #
+            # timeout_s (fix blocage Tester Chrome DevTools) : hard deadline wall-clock.
+            # Si fourni, on wrap le to_thread dans asyncio.wait_for. À l'expiration, on
+            # rend un échec propre (None) pour que le graphe continue (Judge → itération).
+            # NOTE : le thread sous-jacent (agent.run + Chrome/npx bloqué) ne peut pas être
+            # tué par Python — il reste zombie jusqu'à la fin du process. C'est un compromis
+            # accepté : strictement meilleur que le blocage total du graphe.
+            coro = asyncio.to_thread(
                 agent.run, prompt, stream=False, return_full_result=True
             )
+            if timeout_s and timeout_s > 0:
+                run_result = await asyncio.wait_for(coro, timeout=timeout_s)
+            else:
+                run_result = await coro
 
             # smolagents renvoie un RunResult quand return_full_result=True
             raw_output = run_result.output if hasattr(run_result, "output") else run_result
@@ -284,6 +296,17 @@ async def run_with_retry(
                         f"un JSON valide pour ce schéma : {model_class.model_json_schema()} "
                         f"via l'outil final_answer."
                     )
+        except asyncio.TimeoutError:
+            # Fix blocage Tester Chrome DevTools : timeout wall-clock expiré.
+            # Le thread agent.run (et le Chrome/npx bloqué) reste zombie — Python ne peut
+            # pas tuer un thread — mais on NE bloque PLUS le graphe : on rend un échec
+            # propre (None) pour que le Judge puisse enchaîner sur ce qu'il a.
+            # last_metrics peut être None (rien n'a été collecté si le 1er run a timeout).
+            print(
+                f"[-] Timeout du nœud {node_kind} après {timeout_s}s "
+                f"(Chrome/DevTools/Puppeteer bloqué ?) — passage au nœud suivant."
+            )
+            return None, last_metrics
         except Exception as e:
             # F-33 (2) : exception pendant l'exécution (code Python cassé en CodeAgent,
             # payload invalide en TCA). On renvoie un message "découpe" au lieu de planter.

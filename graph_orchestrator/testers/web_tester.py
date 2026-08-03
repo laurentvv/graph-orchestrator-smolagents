@@ -238,4 +238,5 @@ Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_an
                     return await run_with_retry(
                         local_tester, prompt, CoderOutput, settings.worker_max_retries,
                         loop_guard=guard, node_kind="tester",
+                        timeout_s=settings.tester_timeout_s,
                     )

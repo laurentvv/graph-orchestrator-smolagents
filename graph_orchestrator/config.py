@@ -200,6 +200,13 @@ class Settings:
     # Valeur par défaut dans la dataclass : évite de casser les helpers de test qui
     # construisent Settings(...) à la main (même convention que loop_guard_threshold etc.).
     tester_max_steps: int = 12
+    # Hard deadline wall-clock du Web Tester (smolagents ToolCallingAgent + MCP Puppeteer/
+    # DevTools). Fix blocage : sans ce timeout, un appel MCP bloquant (Chrome hung, npx stdio
+    # deadlock, page JS en boucle infinie) fige le Tester indéfiniment. À l'expiration,
+    # run_with_retry rend un échec propre (None) → le Judge enchaîne. 0 = désactivé (legacy).
+    # Si non setté, fallback sur test_timeout_s (rétro-compatibilité). Défaut 120 dans la
+    # dataclass pour ne pas casser les helpers de test qui construisent Settings() à la main.
+    tester_timeout_s: int = 120
 
     # --- Nœud d'Escalade (Priorité 3 : post-mortem sur circuit breaker) ---
     # Quand une sous-tâche épuise le Circuit Breaker (3 itérations toutes rejetées),
@@ -342,6 +349,7 @@ def load_settings() -> Settings:
         log_level=_get_str("LOG_LEVEL", "LOW"),
         fresh_start=_get_bool("FRESH_START", False),
         test_timeout_s=_get_int("TEST_TIMEOUT_S", 120),
+        tester_timeout_s=_get_int("TESTER_TIMEOUT_S", _get_int("TEST_TIMEOUT_S", 120)),
         stderr_head_lines=_get_int("STDERR_HEAD_LINES", 20),
         stderr_tail_lines=_get_int("STDERR_TAIL_LINES", 20),
         feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),

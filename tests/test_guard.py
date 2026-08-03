@@ -208,3 +208,66 @@ async def test_run_with_retry_tester_idle_emits_puppeteer_log():
     # Le guard idle émet son log spécifique (ré-injection d'une consigne d'action).
     printed = " ".join(str(c) for c in mock_print.call_args_list)
     assert "tour sans appel d'outil" in printed
+
+
+# ==========================================
+# run_with_retry : timeout wall-clock (fix blocage Tester Chrome DevTools)
+# ==========================================
+@pytest.mark.anyio
+async def test_run_with_retry_timeout_returns_none(monkeypatch):
+    """timeout_s expiré → rend (None, None) sans bloquer (fix blocage Chrome DevTools).
+
+    Simule un agent.run qui bloque (sleep long, façon Chrome hung). Sans timeout, le
+    test bloquerait indéfiniment. Avec timeout_s=0.1, run_with_retry doit rendre un
+    échec propre après ~0.1s pour que le graphe continue (Judge → itération suivante).
+    """
+    import asyncio as _asyncio
+
+    agent = MagicMock()
+    agent.__class__ = type("ToolCallingAgent", (), {})
+    agent.name = "tester_test"
+    agent.model = MagicMock(model_id="test-model")
+    agent.memory = SimpleNamespace(steps=[])
+
+    # Mock asyncio.to_thread : simule un agent.run qui bloque (sleep 10s > timeout).
+    async def blocking_to_thread(fn, *args, **kwargs):
+        await _asyncio.sleep(10)  # bien au-delà du timeout_s=0.1
+        return MagicMock()
+
+    monkeypatch.setattr("graph_orchestrator.nodes.asyncio.to_thread", blocking_to_thread)
+
+    result, metrics = await run_with_retry(
+        agent, "PROMPT", MagicMock, max_retries=1,
+        node_kind="tester", timeout_s=0.1,
+    )
+
+    assert result is None  # échec propre (pas de blocage)
+    assert metrics is None  # aucune métrique collectée (rien n'a terminé)
+
+
+@pytest.mark.anyio
+async def test_run_with_retry_no_timeout_when_unset(monkeypatch):
+    """timeout_s=None (défaut) → pas de timeout, comportement historique préservé.
+
+    Les nœuds qui ne passent pas timeout_s (Coder, Judge, Synth) ne doivent pas être
+    affectés par le mécanisme de timeout.
+    """
+    run_result = MagicMock()
+    run_result.output = "invalide"
+    run_result.timing = MagicMock(duration=1.0)
+    run_result.token_usage = MagicMock(input_tokens=10, output_tokens=5)
+
+    agent = MagicMock()
+    agent.__class__ = type("CodeAgent", (), {})
+    agent.name = "coder_test"
+    agent.model = MagicMock(model_id="test-model")
+    agent.memory = SimpleNamespace(steps=[])
+
+    with patch("graph_orchestrator.nodes.asyncio.to_thread", new=AsyncMock(return_value=run_result)):
+        with patch("graph_orchestrator.nodes.extract_and_validate", return_value=None):
+            # timeout_s non fourni (défaut None) → pas de timeout, s'exécute normalement.
+            result, metrics = await run_with_retry(agent, "PROMPT", MagicMock, max_retries=1)
+
+    assert result is None  # échec de validation normal (pas un timeout)
+    assert metrics is not None  # métriques collectées (le run a terminé)
+
