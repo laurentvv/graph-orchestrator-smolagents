@@ -504,9 +504,20 @@
     {
       "id": "F-61",
       "name": "Amélioration Continue automatisée (Self-Learning)",
-      "description": "Implémentation d'une boucle de feedback exploitant les rapports générés par `run_analyzer.py`. L'objectif est d'utiliser ces données pour ajuster dynamiquement les prompts des agents (nodes.py, SKILLS) et ainsi éviter les erreurs récurrentes (comme InterpreterError) lors des exécutions futures.",
-      "status": "pending",
-      "dependencies": ["F-60"]
+    },
+    {
+      "id": "F-62",
+      "name": "Correction perte de contexte Architecte (Shift Context)",
+      "description": "Vérification: L'Architecte synthétise excessivement le cahier des charges initial (perte des couleurs, valeurs numériques et contraintes techniques). Validation: Le prompt généré pour le Coder devenait trop léger, affaiblissant la qualité du code. Modification: Ajout d'une RÈGLE DE PRÉSERVATION DES DONNÉES dans ArchitectSignature et injection du 'original_content' (seed_content) directement dans le prompt du Coder pour garantir la transmission du cahier des charges complet.",
+      "status": "completed",
+      "dependencies": ["F-56"]
+    },
+    {
+      "id": "F-63",
+      "name": "Correction Fallback llama-server (Mismatch mmproj)",
+      "description": "Vérification: Diagnostic de l'erreur 404 qwen3.5:2b. Validation: Le crash initial provenait de llama-server qui tentait de charger un adaptateur de vision (mmproj) inadapté au modèle texte, causant un fallback silencieux et fautif vers Ollama. Modification: Retrait de l'export automatique de FAST_MMPROJ pour les modèles textes dans l'environnement de test afin de stabiliser le serveur.",
+      "status": "completed",
+      "dependencies": ["F-58"]
     }
   ]
 }

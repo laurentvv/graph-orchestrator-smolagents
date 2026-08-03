@@ -52,3 +52,5 @@ logs/
 # llama_server.py le découvre automatiquement si présent (vendor/llamacpp-cuda/).
 vendor/
 python_health_report.md
+
+models/

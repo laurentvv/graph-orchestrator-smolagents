@@ -187,7 +187,9 @@ def _spawn(spec: ModelSpec) -> Optional[_SpawnedServer]:
     # OOM. llama-server écrit sa bannière de chargement (offload layers, VRAM alloc,
     # buffer sizes) sur stderr — on la redirige vers un fichier horodaté par spawn.
     try:
-        llama_logs_dir = os.path.join(os.environ.get("LOGS_DIR", "logs"), "llama-server")
+        project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        base_logs_dir = os.environ.get("LOGS_DIR", os.path.join(project_root, "logs"))
+        llama_logs_dir = os.path.join(base_logs_dir, "llama-server")
         os.makedirs(llama_logs_dir, exist_ok=True)
         stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         blob_tag = os.path.basename(blob)[:12]

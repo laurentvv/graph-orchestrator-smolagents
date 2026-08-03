@@ -668,7 +668,7 @@ Code prêt pour la production, respectant les conventions du langage.
 
 ### Contenu de la tâche
 {task['content']}
-
+""" + (f"\n### Contexte global (Rappel du cahier des charges initial)\n{task['original_content']}\n" if task.get("original_content") else "") + """
 ### RAPPEL (récence)
 - AGIS via des appels d'outils Python, ne raconte pas.
 - Chaque bloc syntaxiquement complet, ≤ 60 lignes ou découpe via append_file.
@@ -701,10 +701,11 @@ Code prêt pour la production, respectant les conventions du langage.
                 name=f"coder_{task['id'].replace('-', '_')}",
                 description="Agent développeur capable d'explorer le projet, d'écrire, lire, modifier du code.",
                 verbosity_level=resolve_verbosity("HIGH"),
-                max_steps=14,
+                max_steps=25,
                 add_base_tools=False,
                 code_block_tags="markdown",
                 step_callbacks=[make_screenshot_callback(screenshot_capture)],
+                additional_authorized_imports=["os"],
             )
             return await run_with_retry(
                 local_coder, prompt, CoderOutput, settings.worker_max_retries, loop_guard=guard
