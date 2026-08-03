@@ -215,6 +215,7 @@ $env:WORKFLOW_MODE="coding"
 $env:PYTHONIOENCODING="utf-8"
 uv run python -m graph_orchestrator.workflows
 ```
+Each run is journaled automatically into `logs/run-<timestamp>-<mode>.log` (colors stripped for a clean plain-text log) — no manual redirection needed.
 
 ### Data Processing: One-shot Mode (Default)
 Executes the standard Fan-out → Reduce → Adversary → Synth flow (mode par défaut de `WORKFLOW_MODE`, aucun réglage requis):
@@ -233,7 +234,7 @@ After a run (especially End-to-End coding workflows), you can analyze the execut
 ```bash
 uv run python scripts/run_analyzer.py
 ```
-This script will auto-detect the latest log in `.system_generated/tasks/` and produce an `analysis_report.md`. This is critical for post-mortem debugging and continuous improvement of the agents (F-60 & F-61).
+Every run is auto-journaled to `logs/run-<timestamp>-<mode>.log` (via a Tee on stdout+stderr in `workflows.main()`). This script auto-detects the latest log there (cross-platform — honors `$LOGS_DIR`, or pass `--log <path>` / `--logs-dir <dir>` to override) and produces an `analysis_report.md`. This is critical for post-mortem debugging and continuous improvement of the agents (F-60 & F-61).
 
 ## 🧪 Testing
 

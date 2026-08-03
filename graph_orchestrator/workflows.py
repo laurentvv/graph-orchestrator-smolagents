@@ -902,7 +902,18 @@ def run_workflow(mode: str, settings: Settings = default_settings) -> None:
 def main() -> None:
     """Point d'entrée dispatchant selon WORKFLOW_MODE."""
     settings = default_settings
-    run_workflow(settings.workflow_mode, settings)
+    # --- Logs de run auto-capturés (Priorité 13-bis) ------------------------
+    # Tee posé ICI (dès main()) pour capturer 100% de la sortie : preamble Knowledge
+    # Graph, run_id, checkpoint, run_output_dir... Ces lignes sont imprimées AVANT
+    # la résolution du dossier de run (coding/exploration), donc on doit englober
+    # run_workflow() entier. Couvre les 3 modes + les 2 entry points (agent_graph.py
+    # et -m graph_orchestrator.workflows importent tous deux cette fonction).
+    from .run_logging import tee_run_logging, resolve_log_path
+    log_path = resolve_log_path(settings.workflow_mode, settings.logs_dir)
+    with tee_run_logging(log_path, enabled=settings.log_to_file):
+        # 1ère ligne du log : permet à l'utilisateur de retrouver le chemin du fichier.
+        print(f"[📜] Log du run : {log_path}")
+        run_workflow(settings.workflow_mode, settings)
 
 
 if __name__ == "__main__":

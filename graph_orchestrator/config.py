@@ -267,6 +267,14 @@ class Settings:
     reasoning_spec: ModelSpec = field(default_factory=ModelSpec)
     no_think_spec: ModelSpec = field(default_factory=ModelSpec)
 
+    # --- Logs de run auto-capturés (Priorité 13-bis : journalisation) ---
+    # Répertoire où chaque run écrit son log stdout/stderr via un Tee (run_logging.py).
+    # Fini la redirection manuelle (> logs/...log) et le chemin hardcodé dans run_analyzer.
+    # Gitignoré par défaut (cf. .gitignore). Accepte un chemin relatif (logs) ou absolu.
+    logs_dir: str = "logs"
+    # Active/désactive la capture du log. Opt-out pour A/B ou debug (LOG_TO_FILE=0).
+    log_to_file: bool = True
+
     # --- Output daté par run (Priorité 13 : isolation des artefacts) ---
     # Racine du dossier où chaque run écrit ses fichiers générés. Le workflow coding crée un
     # sous-dossier daté `runs/YYYY-MM-DD_HHMM_slug/` et s'y chdir avant les nœuds Coder/Tester,
@@ -338,6 +346,8 @@ def load_settings() -> Settings:
         no_think_spec=_model_spec_from_env("REASONING_NO_THINK"),
         output_dir=_get_str("OUTPUT_DIR", "runs"),
         output_retention=_get_int("OUTPUT_RETENTION", 10),
+        logs_dir=_get_str("LOGS_DIR", "logs"),
+        log_to_file=_get_bool("LOG_TO_FILE", True),
         idempotence_enabled=_get_bool("IDEMPOTENCE_ENABLED", True),
         idempotency_retention_days=_get_int("IDEMPOTENCY_RETENTION_DAYS", 14),
     )

@@ -149,24 +149,41 @@ def generate_markdown_report(metrics: dict, db_metrics: dict, log_path: str, out
                 
     print(f"[+] Rapport généré : {output_path}")
 
+def discover_latest_log(logs_dir: str) -> str | None:
+    """Retourne le log le plus récent dans ``logs_dir`` (pattern ``run-*.log``).
+
+    Découverte cross-plateforme (``os.path.join`` + ``glob``) — fini le chemin
+    Windows hardcodé (``.gemini/antigravity-cli/brain``) qui cassait le
+    Meta-Analyst (F-61) sur Linux/macOS. Les logs sont auto-capturés par
+    ``workflows.main()`` via ``run_logging.tee_run_logging``.
+
+    Returns:
+        Chemin absolu/relatif du log le plus récent, ou ``None`` si aucun trouvé.
+    """
+    search_pattern = os.path.join(logs_dir, "run-*.log")
+    logs = glob.glob(search_pattern)
+    if not logs:
+        return None
+    return max(logs, key=os.path.getmtime)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Analyse un log d'agent pour générer un post-mortem.")
-    parser.add_argument("--log", type=str, help="Chemin du fichier log (défaut : le plus récent dans .system_generated/tasks/)")
+    parser.add_argument("--log", type=str, help="Chemin du fichier log (défaut : le plus récent dans --logs-dir)")
+    parser.add_argument("--logs-dir", type=str, default=os.environ.get("LOGS_DIR", "logs"),
+                        help="Répertoire de découverte auto des logs (défaut : $LOGS_DIR ou 'logs')")
     parser.add_argument("--out", type=str, default="analysis_report.md", help="Fichier de sortie Markdown")
     parser.add_argument("--db", type=str, default="graph_orchestrator.db", help="Chemin de la base DuckDB")
     args = parser.parse_args()
-    
+
     log_file = args.log
     if not log_file:
-        # Chercher le log le plus récent
-        base_dir = r"C:\Users\lvolff\.gemini\antigravity-cli\brain"
-        # On cherche tous les répertoires de conversation, puis les logs
-        search_pattern = os.path.join(base_dir, "*", ".system_generated", "tasks", "task-*.log")
-        logs = glob.glob(search_pattern)
-        if not logs:
-            print(f"[-] Aucun fichier log trouvé avec le pattern {search_pattern}")
+        # Découverte auto du log le plus récent dans logs/ (chemin cross-plateforme).
+        log_file = discover_latest_log(args.logs_dir)
+        if not log_file:
+            print(f"[-] Aucun log trouvé dans '{args.logs_dir}' (pattern {os.path.join(args.logs_dir, 'run-*.log')}).")
+            print(f"    Lancez d'abord un run (`uv run agent_graph.py`) ou précisez --log <chemin>.")
             return
-        log_file = max(logs, key=os.path.getmtime)
         print(f"[*] Fichier log le plus récent trouvé : {log_file}")
         
     if not os.path.exists(log_file):

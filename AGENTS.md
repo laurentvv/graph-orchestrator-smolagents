@@ -113,7 +113,7 @@ Chaque `.md` est un cahier des charges structuré (souvent "1 fichier `index.htm
 Pour assurer l'amélioration continue de l'usine logicielle (Feature F-61), nous ne comptons pas sur un agent local autonome, mais sur une boucle de feedback hybride Humain + IA.
 
 **Directives pour l'Assistant IA (Antigravity) :**
-1. **Exécution Autonome** : C'est **toi (l'assistant)** qui dois lancer le script `uv run python scripts/run_analyzer.py` via ton terminal (soit après un run E2E complet, soit à la demande de l'utilisateur au début d'une session).
+1. **Exécution Autonome** : C'est **toi (l'assistant)** qui dois lancer le script `uv run python scripts/run_analyzer.py` via ton terminal (soit après un run E2E complet, soit à la demande de l'utilisateur au début d'une session). Chaque run est désormais **journalisé automatiquement** dans `logs/run-<timestamp>-<mode>.log` (Tee posé sur stdout+stderr dans `workflows.main()`) ; le script y découvre le plus récent log de lui-même (cross-plateforme, via `$LOGS_DIR`). Fini la dépendance au chemin de l'Antigravity CLI.
 2. **Analyse** : Tu dois lire la sortie du script et repérer les problèmes récurrents (ex: erreurs de parsing Pydantic, syntaxe invalide comme le top-level `await`, ou crashes d'outils MCP).
 3. **Validation Humaine** : Tu ne dois **jamais** modifier les règles à l'aveugle. Tu dois faire un résumé clair à l'utilisateur des problèmes trouvés, lui proposer une solution (ex: "Je propose d'ajouter cette règle stricte dans `nodes.py`"), et attendre son feu vert ("Go").
 4. **Application** : Une fois la validation obtenue, interviens directement dans le code source pour durcir les prompts ou les skills.
