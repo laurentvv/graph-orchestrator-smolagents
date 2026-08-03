@@ -2883,3 +2883,15 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
   périmètre).
 - PRIORITÉ 1 du plan usine logicielle → COMPLÈTE (les 4 cases cochées : SEARCH/REPLACE
   F-19, Mutex F-20, Anti-vide F-10, Read-Before-Write Gate F-67).
+
+## [2026-08-04 00:12:00] pr | PR #29 créée — feat/read-before-write-gate
+- Branche feat/read-before-write-gate poussée. Commit a0e1538 (1 commit, 11 fichiers,
+  +1467/-520). PR #29 ouverte vers main.
+- INCIDENT git corrigé : le commit avait été créé sur main par erreur (la branche
+  feature pointait sur un ancien commit orthogonal a31cc4a). Corrigé : branche
+  forcée sur a0e1538, main rembobiné sur 9dc59c0 (aligné origin/main, intact), puis
+  checkout branche. Vérifié : main = 0 commit d'avance sur origin, branche = 1 commit
+  de plus que main. Aucune perte.
+- PRIORITÉ 1 du plan usine logicielle → COMPLÈTE (les 4 cases cochées : SEARCH/REPLACE
+  F-19, Mutex F-20, Anti-vide F-10, Read-Before-Write Gate F-67).
+- ATTENTE Kilo Code Review avant merge (AGENTS.md §6).
