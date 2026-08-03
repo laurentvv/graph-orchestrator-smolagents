@@ -523,6 +523,18 @@ async def execute_coder_node(
         # voit jamais. capture_holder est partagé entre le wrapper et le callback.
         screenshot_capture: list = []
         coder_tools = wrap_screenshot_tools(coder_tools, screenshot_capture)
+        # F-66 (Read-Before-Write Gate) : bloque write_file / search_replace / edit_file /
+        # multi_replace / append_file sur un fichier EXISTANT dont le contenu n'a pas été
+        # lu (hash SHA256 du contenu complet). Inspiré de Deer Flow (issue #3857). Mode
+        # Strict : un write réussi invalide la mark → force re-read avant chaque édition.
+        # Fail-open garanti (fichier absent = création OK). Opt-out via settings.
+        # ORDRE : AVANT sanitize_tools — le sanitizer coerce les args (path str), puis
+        # délègue au gate qui check le path. Le gate voit donc des kwargs déjà typés.
+        from .read_gate import ReadGate, wrap_tools_with_read_gate
+        read_gate = ReadGate()
+        coder_tools = wrap_tools_with_read_gate(
+            coder_tools, read_gate, enabled=settings.read_before_write_enabled
+        )
         # F-42 (Sanitizer) : coerce best-effort les arguments malformés du petit
         # LLM (ex: offset="1, 80" → 80) avant l'appel d'outil → moins de retries
         # gaspillées sur les erreurs de validation de type. Opt-out via settings.

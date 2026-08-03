@@ -2819,3 +2819,67 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
 - **plan_usine_logicielle.md enrichi** (8 citations aux nouvelles fiches) : P3-bis (matière loopx anti-loop déterministe : stall detector + hash d'output + delivery_outcome), P6-bis (3 enrichissements Judge : risk score quantitatif code-review-graph + council anonymisé llm-council + deux axes mattpocock), P8 guard bash (enrichissement davidondrej 27 regex + doctrine fail-open + correction « 52→27 »), P9 compaction (complément structurel loopx whitelist de champs), P10 skill middleware (fusion doctrine P10 : mattpocock socle + davidondrej pratique + awesome-claude modèle 3-niveaux), P11 event stream (complément loopx : event sourcing idempotent + ledger 5 classes).
 - **Réserves signalées** : loopx code verbeux (extraire les algorithmes), code-review-graph runtime non portable (MCP+SQLite), llm-council vibe-coded + coût 2N+1 + OpenRouter payant, mattpocock/davidondrej philosophie « small/composable/any-model » à nuancer vs orchestrateur stateful + exemples TS-biaisés.
 - **Aucune modification du code du projet** — travail documentaire + plan. Aucun test impacté (pas de code modifié).
+
+## [2026-08-04 00:06:00] feat | READ-BEFORE-WRITE GATE IMPLÉMENTÉ (Priorité 1, F-67)
+- DERNIÈRE CASE de la Priorité 1 du plan usine logicielle (ligne 71). L'invariant n°1
+  « read-before-write » était UNIQUEMENT en prompt (nodes.py:574), AUCUN garde logiciel
+  → le Coder (CodeAgent) pouvait éditer/écraser un fichier existant sans l'avoir lu,
+  ou enchaîner write→edit sans relire = cause n°1 de corruption aveugle (Deer Flow #3857).
+- NOUVEAU MODULE graph_orchestrator/read_gate.py (~310 lignes, 100% Python natif, 0 LLM) :
+  * compute_content_hash (SHA256 contenu complet UTF-8) + _normalize_path (os.path.normpath
+    + abspath, Windows-safe pour `..` et mixed separators `/` `\`).
+  * ReadGate : dict thread-safe {norm_path: hash} (threading.Lock). record_read stamp le
+    hash du contenu COMPLET (même sur read partiel offset/limit, re-lit le disque comme
+    Deer Flow). record_write MODE STRICT supprime la mark (un write réussi invalide la
+    lecture → force re-read avant chaque édition). check_write(path) → (allowed, reason),
+    fail-open garanti (fichier absent = création OK, read impossible = laisse passer,
+    jamais briquer). « Newest mark wins ».
+  * _GatedWriteTool(BaseTool) proxy (template copié SanitizedTool F-42) sur
+    write_file/search_replace/edit_file/multi_replace/append_file : bloque SANS déléguer
+    si check_write False, sinon délègue puis record_write. __getattr__ préserve
+    to_code_prompt (Jinja CodeAgent). Intercepte __call__ ET forward.
+  * _ReadTrackingTool proxy miroir sur read_file : après délégation, re-lit le disque et
+    stamp le hash complet. Retourne bien le résultat de read_file.
+  * wrap_tools_with_read_gate(tools, gate, enabled) : no-op si disabled, wrap ciblé
+    (laisse intacts list_directory/bash_command/MCP/DuckDuckGo), ordre préservé.
+- BRANCHEMENT nodes.py execute_coder_node (~10 lignes) : gate inséré ENTRE
+  wrap_screenshot_tools et sanitize_tools. ORDRE CRITIQUE : gate AVANT sanitizer →
+  le sanitizer coerce les args (path str), puis délègue au gate qui check le path.
+- CONFIG : read_before_write_enabled (défaut True) dans config.py + .env.example + .env
+  local. Opt-out READ_BEFORE_WRITE_ENABLED=false.
+- ÉCART CONSCIENCIEUX vs Deer Flow : Deer Flow stocke la mark sur
+  ToolMessage.additional_kwargs (graphe LangGraph multi-threads, mark liée à la survie
+  du contexte). Notre Coder est un CodeAgent unique séquentiel → mark tenue en RAM dans
+  un dict partagé (pattern screenshot_capture éprouvé dans vision_callback.py). Plus
+  simple, adapté à notre archi.
+
+## [2026-08-04 00:07:30] test | TESTS READ-BEFORE-WRITE GATE — 35/35 PASS
+- tests/test_read_gate.py : 35 tests (0 LLM, 0 réseau). Couvre :
+  * helpers purs (5) : hash stable/differs, normalize dotdot/mixed-sep/absolute.
+  * ReadGate logic (4) : création ALLOW, existant non lu BLOCK, après read ALLOW,
+    read stale BLOCK.
+  * fail-open (6) : path None/vide/non-string, fichier binaire illisible, record_read/
+    record_write ne lèvent pas sur bad input.
+  * Strict mode (3) : write invalide mark, re-read restaure, write sur path sans mark
+    est no-op idempotent.
+  * newest mark wins (1) + thread-safety 20×50 parallèle (1).
+  * _GatedWriteTool (5) : bloque sans déléguer (fichier disque INCHANGÉ), allow+délègue+
+    record_write, copie metadata, __getattr__ to_code_prompt, forward aussi gated.
+  * _ReadTrackingTool (3) : stamp hash contenu COMPLET (re-lit disque peu importe
+    offset/limit), skip fichier absent, retourne bien le résultat.
+  * wrap (3) : disabled no-op (même objet), wrap ciblé uniquement, ordre préservé.
+  * E2E (4) : write existant sans read BLOCK, read puis write ALLOW, write puis edit
+    sans re-read BLOCK (Strict = cas #3857), message cite path + read_file.
+- DÉBOGAGE : 1ère exécution 7 échecs → 3 causes (faux BaseTool factice invalidé par
+  smolagents → remplacé par vrais outils + assert sur disque ; contenu test trop court
+  rejeté par garde anti-placeholder write_file ; nom DuckDuckGo = 'web_search' pas
+  'search'). Corrigés, 35/35 PASS.
+
+## [2026-08-04 00:08:54] eval | VALIDATION COMPLÈTE — 651 passed / 0 failed
+- py_compile OK (read_gate.py + nodes.py + config.py).
+- Suite pytest complète : 651 passed, 0 failed, 11 deselected (test_web_tester_functional
+  = Chrome/npx live, hors périmètre). 616 baseline + 35 nouveaux. 0 régression.
+- Warnings : DeprecationWarning DSPy + FutureWarning smolagents (PRÉEXISTANTS, hors
+  périmètre).
+- PRIORITÉ 1 du plan usine logicielle → COMPLÈTE (les 4 cases cochées : SEARCH/REPLACE
+  F-19, Mutex F-20, Anti-vide F-10, Read-Before-Write Gate F-67).

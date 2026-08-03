@@ -558,6 +558,16 @@
         "F-35",
         "F-64"
       ]
+    },
+    {
+      "id": "F-67",
+      "name": "Read-Before-Write Gate (middleware Coder, Deer Flow #3857)",
+      "description": "Priorité 1 du plan usine logicielle (dernière case décochée). L'invariant n°1 « read-before-write » était UNIQUEMENT en prompt (nodes.py:574), AUCUN garde logiciel ne l'appliquait → le Coder (CodeAgent) pouvait éditer/écraser un fichier existant sans l'avoir lu, ou enchaîner write→edit sans relire = cause n°1 de corruption aveugle (Deer Flow issue #3857 : « append/édition à partir d'une représentation mentale stale »). F-28 (append_file) avait une « version simple » (garde anti-doublon texte) — F-67 porte le middleware COMPLET. IMPLÉMENTÉ : graph_orchestrator/read_gate.py (100% Python natif, 0 LLM, déterministe). (1) compute_content_hash (SHA256 contenu complet UTF-8) + _normalize_path (os.path.normpath+abspath, Windows-safe pour `..`/mixed separators). (2) ReadGate : état partagé thread-safe (threading.Lock, dict {norm_path: hash}) ; record_read stamp le hash du contenu COMPLET (même sur read partiel offset/limit, re-lit le disque comme Deer Flow) ; record_write MODE STRICT supprime la mark (un write réussi invalide la lecture → force re-read avant chaque édition, l'invariant read-before-every-edit) ; check_write(path) → (allowed, reason), fail-open garanti (fichier absent = création OK, read impossible = on laisse passer, jamais briquer l'agent), « newest mark wins ». (3) _GatedWriteTool(BaseTool) proxy (template copié SanitizedTool F-42) sur write_file/search_replace/edit_file/multi_replace/append_file : bloque sans déléguer si check_write False, sinon délègue puis record_write ; __getattr__ préserve to_code_prompt (Jinja CodeAgent). (4) _ReadTrackingTool proxy miroir sur read_file : après délégation, re-lit le disque et stamp le hash complet. (5) wrap_tools_with_read_gate(tools, gate, enabled) no-op si disabled, wrap ciblé, ordre préservé. Branché dans execute_coder_node entre wrap_screenshot_tools et sanitize_tools (ordre : gate AVANT sanitizer → voit kwargs déjà typés). Config read_before_write_enabled (défaut True, opt-out READ_BEFORE_WRITE_ENABLED=false) + .env.example + .env. 35 tests PASS (test_read_gate.py : helpers 5, ReadGate logic 4, fail-open 6, Strict mode 3, newest-wins 1, thread-safety 1, _GatedWriteTool 5, _ReadTrackingTool 3, wrap 3, E2E 4). Suite pytest complète 651 passed / 0 failed (616 baseline + 35 nouveaux), 0 régression. Écart consciencieux vs Deer Flow : mark en RAM (notre CodeAgent = unique séquentiel, pas LangGraph multi-threads) plutôt que sur ToolMessage.additional_kwargs.",
+      "status": "completed",
+      "dependencies": [
+        "F-28",
+        "F-42"
+      ]
     }
   ]
 }
