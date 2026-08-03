@@ -193,7 +193,7 @@ class FinalSynthesis(BaseModel):
 # Extraction / validation JSON robuste
 # ==========================================
 
-def extract_and_validate(response: Any, model_class: type[BaseModel]) -> Optional[BaseModel]:
+def extract_and_validate(response: Any, model_class: type[BaseModel], api_base: Optional[str] = None, model_id: Optional[str] = None) -> Optional[BaseModel]:
     """Extrait et valide le JSON, qu'il soit dict natif, string, ou encapsulé dans
     un bloc markdown ```json ... ```.
 
@@ -237,7 +237,10 @@ def extract_and_validate(response: Any, model_class: type[BaseModel]) -> Optiona
             
             # F-58 : provider openai/ contre llama-server (avant : ollama_chat/ → /api/chat Ollama).
             # api_base garde /v1 (llama-server expose /v1, contrairement à Ollama /api/chat).
-            lm = dspy.LM(f"openai/{settings.fast_model_id}", api_base=settings.ollama_api_base, api_key=settings.ollama_api_key)
+            use_api_base = api_base or settings.ollama_api_base
+            use_model_id = model_id or settings.fast_model_id
+            
+            lm = dspy.LM(f"openai/{use_model_id}", api_base=use_api_base, api_key=settings.ollama_api_key)
             with dspy.context(lm=lm):
                 class JSONFixSignature(dspy.Signature):
                     """Extract the exact JSON fields from the broken text into the correct schema."""

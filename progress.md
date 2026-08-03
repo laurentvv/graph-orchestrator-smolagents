@@ -510,5 +510,17 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape LCP-3 : Configurations .env et config.py adaptées (backends `spawn`, `FAST_MODEL` etc.)
 - [x] Étape LCP-4 : Ajustements mock tests pour respecter les `_SpawnedServer`.
 - [x] Étape LCP-5 : Tests unitaires (598 passed).
-- [ ] Étape LCP-6 : Run E2E (Bubble Sort validé).
+- [x] Étape LCP-6 : Run E2E (Bubble Sort validé avec crash DSPy et régression Coder capturés pour F-59).
+- [x] Étape LCP-7 : Fix DSPy Rescue (ajout de l'alias dans llama_server) et Warning top-level await Web Tester.
+- [x] Étape LCP-8 : Implémentation outil multi_replace (F-59) pour le Coder et modification de nodes.py.
 
+
+## Jalons de l'Itération (cycle Analyse des Runs & Amélioration Continue — F-60 / F-61)
+- [x] Étape RAA-1 : Création de un_analyzer.py (F-60) pour parser les logs 	ask-*.log et extraire les métriques de graph_orchestrator.db. Filtres robustes contre les bordures de logs (Rich).
+- [x] Étape RAA-2 : Validation en direct du rôle de Meta-Analyste de l'assistant IA (F-61). Diagnostic des crashes InterpreterError et injection dynamique de la règle import time dans 
+odes.py et web_tester.py.
+- [x] Étape RAA-3 : Remplacement du write_file par multi_replace_file_content validé et acté (F-59) pour le Coder.
+- [x] Étape RAA-4 : Application en direct (F-61) d'un deuxième correctif : le run E2E a crashé sur le Web Tester à cause de la règle "IIFE" passée au MCP chrome-devtools. Analyse + correction de 
+odes.py et web_tester.py pour exiger une DÉCLARATION de fonction asynchrone non invoquée (sync () => { await ... }) à la place de l'IIFE.
+- [x] Étape RAA-5 : Mise à jour exhaustive des documents de suivi (eature_list.json, plan_usine_logicielle.md, README.md, progress.md, log.md).
+- [ ] Étape RAA-6 : Attente de la fin du run E2E, analyse post-mortem finale avec un_analyzer.py, rapport de validation, et préparation pour commit/PR.

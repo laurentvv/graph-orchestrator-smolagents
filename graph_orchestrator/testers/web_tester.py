@@ -126,7 +126,9 @@ class WebTestRunner:
                     "- `list_console_messages()` : erreurs JS avec source maps (plus précis que puppeteer_evaluate pour la console).\n"
                     "- `take_snapshot()` : arbre a11y complet (structure de la page, IDs/textes).\n"
                     "- `evaluate_script(function)` : JS dans la page (alternative à puppeteer_evaluate).\n"
+                    "  [WARNING CRITIQUE] : N'utilise JAMAIS 'await' au premier niveau (top-level await) dans evaluate_script. Le MCP chrome-devtools attend une DECLARATION de fonction (et l'invoque lui-même). Tu dois fournir une fonction asynchrone non invoquée. Correct : `async () => { await ... }` (NE FAIS PAS d'IIFE).\n"
                     "- `take_screenshot()` : capture visuelle — l'image TE REVIENT, analyse le rendu (bugs CSS, superpositions).\n"
+                    "  [PYTHON BUILT-INS] : Si tu utilises `time.sleep()` en Python, n'oublie pas de faire `import time` au début de ton code.\n"
                     "Priorité : garde Puppeteer pour les assertions (skill maîtrisé). Utilise DevTools pour la console et le visuel.\n"
                     if cdt_tools else ""
                 )

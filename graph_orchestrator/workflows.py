@@ -26,7 +26,7 @@ from typing import List, Optional, Tuple
 # line-buffered pour que chaque print() soit visible immédiatement.
 for _stream in (sys.stdout, sys.stderr):
     try:
-        _stream.reconfigure(line_buffering=True)
+        _stream.reconfigure(line_buffering=True, encoding="utf-8")
     except Exception:
         # Fallback : si reconfigure() n'est pas dispo, on force l'unbuffered via
         # write+flush à l'ancienne n'est pas trivial sans wrapper ; on ignore.
@@ -426,7 +426,7 @@ async def run_coding_workflow(
                 seed_tasks[0]['content'] = task_content
             # Si refined est None (LLM down), on garde task_content brut (dégradation gracieuse).
 
-        print(f"[*] Analyse de la requête par le routeur ultra-rapide ({settings.fast_model_id})...")
+        print(f"[*] Analyse de la requête par le routeur ultra-rapide...")
         router_res, m0 = await execute_router_node(task_content, fast_model, settings)
         if m0: all_metrics.append(m0)
 

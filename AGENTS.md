@@ -109,3 +109,13 @@ Chaque `.md` est un cahier des charges structuré (souvent "1 fichier `index.htm
 *Notes* : 
 - Pour valider le graphe, commencer par **Bubble_Sort_Visualizer** (Easy, 1 fichier, borné).
 - **En cas de modification `.env.example`** : il faut reporter les ajouts dans `.env` local (sans toucher au contenu "secret").
+## 8. Amélioration Continue (Le Rôle du Meta-Analyste)
+Pour assurer l'amélioration continue de l'usine logicielle (Feature F-61), nous ne comptons pas sur un agent local autonome, mais sur une boucle de feedback hybride Humain + IA.
+
+**Directives pour l'Assistant IA (Antigravity) :**
+1. **Exécution Autonome** : C'est **toi (l'assistant)** qui dois lancer le script `uv run python scripts/run_analyzer.py` via ton terminal (soit après un run E2E complet, soit à la demande de l'utilisateur au début d'une session).
+2. **Analyse** : Tu dois lire la sortie du script et repérer les problèmes récurrents (ex: erreurs de parsing Pydantic, syntaxe invalide comme le top-level `await`, ou crashes d'outils MCP).
+3. **Validation Humaine** : Tu ne dois **jamais** modifier les règles à l'aveugle. Tu dois faire un résumé clair à l'utilisateur des problèmes trouvés, lui proposer une solution (ex: "Je propose d'ajouter cette règle stricte dans `nodes.py`"), et attendre son feu vert ("Go").
+4. **Application** : Une fois la validation obtenue, interviens directement dans le code source pour durcir les prompts ou les skills.
+
+*Exemple réel : L'interdiction du top-level await dans Puppeteer et l'obligation d'utiliser des déclarations de fonction pour `evaluate_script` ont été diagnostiquées via l'analyse des crashes et fixées en direct dans les prompts des nœuds.*

@@ -117,13 +117,14 @@ def _spawn(spec: ModelSpec) -> Optional[_SpawnedServer]:
         "--port", str(port),
         "-c", str(spec.context),
         "--reasoning", spec.reasoning or "off",
+        "--alias", "default",
     ]
     if spec.mmproj and os.path.exists(spec.mmproj):
         cmd += ["--mmproj", spec.mmproj]
 
-    # model_id logique = nom de fichier du blob (le serveur s'en fiche, mais le provider
-    # openai/ a besoin d'un model_id non-vide dans le body).
-    model_id = os.path.basename(blob)[:40] or "model"
+    # model_id logique = "default" garanti de matcher l'alias côté llama-server.
+    # openai/ a besoin d'un model_id non-vide dans le body.
+    model_id = "default"
 
     logger.info("[llama-server] spawn blob %s (reasoning=%s, port %d)",
                 os.path.basename(blob)[:20], spec.reasoning, port)

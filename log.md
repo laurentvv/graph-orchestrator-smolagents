@@ -2774,3 +2774,6 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
 - Aucune modif prompts.py (rôles/invariants inchangés), models.py, nodes.py, skills_loader.py.
 - Branche feat/node-prompt-hardening prête à merger sur main.
 ## [2026-08-03 12:15:00] fix  | Coder et test_prompt_refiner corrigés (bug fix precedence mock, variables non définies). Tests pytest passent 598/598.
+## [2026-08-03 14:40:00] run | Run E2E interrompu manuellement après itération 2 du Coder. Objectif validé : le Coder survit aux backticks, mais génère une régression due au manque d'outil diff. Le plantage DSPy Rescue (model_id sha256 introuvable) est confirmé.
+## [2026-08-03 15:54:18] doc  | Documentation du cycle F-60 / F-61 (run_analyzer et boucle d'amélioration continue Antigravity), et correctif en direct du MCP chrome-devtools (IIFE vs function declaration).
+## [2026-08-03 15:55:49] doc  | Mise à jour de AGENTS.md (ajout de la section 8 sur l'utilisation du run_analyzer.py et le rôle du Meta-Analyste).
