@@ -504,6 +504,9 @@
     {
       "id": "F-61",
       "name": "Amélioration Continue automatisée (Self-Learning)",
+      "description": "Implémentation d'une boucle de feedback exploitant les rapports générés par `run_analyzer.py`. L'objectif est d'utiliser ces données pour ajuster dynamiquement les prompts des agents (nodes.py, SKILLS) et ainsi éviter les erreurs récurrentes (comme InterpreterError) lors des exécutions futures.",
+      "status": "pending",
+      "dependencies": ["F-60"]
     },
     {
       "id": "F-62",
@@ -518,6 +521,20 @@
       "description": "Vérification: Diagnostic de l'erreur 404 qwen3.5:2b. Validation: Le crash initial provenait de llama-server qui tentait de charger un adaptateur de vision (mmproj) inadapté au modèle texte, causant un fallback silencieux et fautif vers Ollama. Modification: Retrait de l'export automatique de FAST_MMPROJ pour les modèles textes dans l'environnement de test afin de stabiliser le serveur.",
       "status": "completed",
       "dependencies": ["F-58"]
+    },
+    {
+      "id": "F-64",
+      "name": "Audit complet des system prompts d'outils IA (référence externe)",
+      "description": "Lecture intégrale du contenu de 28+ prompts extraits d'outils IA (Cline, Codex CLI, Gemini CLI, RooCode, Claude Code 2.0/v1, Cursor multi-versions, Devin, Kiro Spec/Classifier, Traycer, Poke, Augment, Manus, Amp Sonnet/GPT-5, VSCode Agent, Windsurf, Qoder, Replit, Warp, Junie, CodeBuddy) depuis references/system-prompts-and-models-of-ai-tools/. Objectif : extraire les MÉCANISMES (formats d'édition, gating sécurité, routing, planification, méta-cognition, narration) indépendamment des licences. LIVRABLE : docs/system_prompts_audit_full.md — 8 sections : périmètre/taxonomie/10 invariants universels (confirme F-44)/6 catégories de mécanismes différenciants/20 pépites uniques/mapping vers nos nœuds (✅/⚠️/❌)/gaps actionnables/synthèse. CONFIRME : nos 10 invariants (F-44) et 9 rôles (F-0) sont alignés avec le corpus. IDENTIFIE : 20 pépites différenciantes non ingérées → alimente F-65.",
+      "status": "completed",
+      "dependencies": ["F-44", "F-56"]
+    },
+    {
+      "id": "F-65",
+      "name": "Ingestion des pépites prompts différenciantes (gates bloquantes + policies)",
+      "description": "Issue de l'audit F-64 : 20 mécanismes différenciants identifiés dans le corpus externe, non ingérés dans prompts.py. Actionnables priorisés : (1) GATES BLOQUANTES — requires_approval bool (Cline) + matrice sandbox×approval Codex + is_dangerous Replit ; nos rôles Judge/Security sont déclaratifs ('DEFENSIVE ONLY'), pas de mécanisme attaché → porter un mécanisme de gate par risque. (2) WRITE-LOCK PARALLEL POLICY (Amp GPT-5) — paralléliser writes iff write targets disjoints, sérialiser si contrat partagé (types/schema/API) ; notre Coder fan-out ne décide pas parallèle vs séquentiel sur ce critère. (3) SELF-CORRECTION VÉRIFIABLE (Cursor 2025-09-03) — règle tools_used_in_turn => update_emitted pour Judge. (4) CITATION <cite> OBLIGATOIRE (Devin DeepWiki) — justifier verdicts Judge par localisation code. (5) QUALITY GATES TRIAGE (VSCode gpt-5) — rapport Tester en deltas PASS/FAIL + requirements coverage line. Secondaires : EARS format Architect (Kiro), engineering mindset contract+edge cases (VSCode), {{secret_name}} placeholder + canary decoy Security (Warp/CodeBuddy), notify vs ask gating (Manus), 8 templates par type de repo Architect (Qoder). Référence complète : docs/system_prompts_audit_full.md §6-7.",
+      "status": "pending",
+      "dependencies": ["F-64", "F-44", "F-56"]
     }
   ]
 }

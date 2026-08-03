@@ -277,6 +277,24 @@ Plus d'information : `system_prompts_analysis.md`
 - [x] **F-61** : Établissement du workflow "Meta-Analyste" (documenté dans `AGENTS.md`) : exécution autonome par l'IA Antigravity, diagnostic, validation humaine, et patching chirurgical des prompts/skills. — *FAIT.*
 - [ ] **Traçabilité des itérations (Git local / Versioning)** : Afin d'éviter la perte d'informations lors des cycles de réécriture (ex: le Coder qui casse un code fonctionnel suite à un faux-positif du Tester), implémenter un versioning automatique dans le dossier `runs/`. À chaque itération de la boucle de code, l'orchestrateur effectue un commit Git local dans le dossier `runs/` (indépendant du dépôt principal) ou sauvegarde l'état dans des sous-dossiers `iter_1/`, `iter_2/`. Cela permettra de faire des `diff` post-mortem exacts pour voir comment l'IA a dégradé le code au fil des essais.
 
+## 📚 Priorité 16 : Audit des prompts externes & ingestion des pépites (référence `references/`)
+*Nos prompts F-44 (invariants) + F-0 (rôles) + F-56 (durcissement) sont-ils complets vs l'état de l'art des outils IA ?*
+
+> **🔎 État Actuel :** Le dossier `references/system-prompts-and-models-of-ai-tools/` contient 34 dossiers de prompts extraits d'outils IA (Cline, Codex CLI, Gemini CLI, Claude Code, Cursor, Devin, Kiro, Traycer, Amp, VSCode, etc.). Aucun inventaire machine ni mapping vers nos nœuds n'existait — l'ingestion était ponctuelle (F-44 a absorbé les 10 invariants, mais les mécanismes différenciants restaient dormants).
+> **🚀 Pourquoi ce sera mieux :** Un audit complet du **contenu** (pas des licences) produit une cartographie actionnable : ce qu'on a déjà, ce qui nous manque, et par où commencer.
+
+- [x] **F-64 / Audit complet (FAIT)** : Lecture intégrale du contenu de 28+ prompts → livrable `docs/system_prompts_audit_full.md` (8 sections : périmètre, taxonomie 4 archétypes, 10 invariants universels [confirme F-44], 6 catégories de mécanismes différenciants [édition/sécurité/routing/planification/méta-cognition/narration], 20 pépites uniques, mapping ✅/⚠️/❌ vers nos nœuds, gaps actionnables). — *CONFIRME : nos 10 invariants (F-44) et 9 rôles (F-0) sont alignés avec le corpus. IDENTIFIE : 20 mécanismes différenciants non ingérés → alimente F-65.*
+- [ ] **F-65 / Ingestion des pépites différenciantes** : Porter les mécanismes actionnables identifiés dans le code. **Prioritaires** (par ROI) :
+  1. **Gates bloquantes** — `requires_approval` bool (Cline) + matrice sandbox×approval (Codex) + `is_dangerous` (Replit). Nos rôles Judge/Security restent déclaratifs ("DEFENSIVE ONLY") sans mécanisme attaché. *Cible : un mécanisme de gate par niveau de risque, complétant F-56.*
+  2. **Write-lock parallel policy** (Amp GPT-5) — paralléliser le fan-out Coder *iff* write targets disjoints ; sérialiser si contrat partagé (types/schema/API public). Notre fan-out ne décide pas parallèle vs séquentiel sur ce critère.
+  3. **Self-correction vérifiable** (Cursor 2025-09-03) — règle `tools_used_in_turn => update_emitted` pour le Judge (auto-régulation mesurable).
+  4. **Citation `<cite>` obligatoire** (Devin DeepWiki) — chaque verdict Judge justifié par une localisation code (`file:line`), `<cite/>` vide même sans source. Force la preuve.
+  5. **Quality gates triage** (VSCode gpt-5) — rapport Tester en deltas PASS/FAIL + ligne de couverture des exigences (requirements coverage).
+
+  *Secondaires* (cycle suivant) : EARS format Architect (Kiro), engineering mindset contract+edge cases (VSCode), `{{secret_name}}` placeholder + canary anti-injection decoy Security (Warp/CodeBuddy), notify vs ask gating (Manus), 8 templates doc par type de repo Architect (Qoder).
+
+  **Relation avec P10/F-57** : F-65 (inline dans les prompts, toujours actif) précède logiquement F-57 (lazy loading des skills) — même séquençage que P14→P10 : on durcit d'abord en inline, puis on migre le contenu long vers les skills si besoin.
+
 
 ---
 
@@ -297,4 +315,16 @@ Plus d'information : `system_prompts_analysis.md`
 - **Vérification** : Diagnostic de l'erreur `404 model 'qwen3.5:2b' not found`. L'enquête a révélé que le crash initial provenait de `llama-server`.
 - **Validation** : Le serveur tentait de charger un adaptateur de vision `mmproj` (configuré pour Gemma) inadapté au modèle texte `Qwen3.5-9B`. Ce crash provoquait un timeout de la sonde de santé (`/health`), forçant le gestionnaire `model_lifecycle` à faire un repli (fallback) vers un serveur Ollama externe en utilisant l'identifiant par défaut `qwen3.5:2b`.
 - **Modification** : Retrait de l'export de `FAST_MMPROJ` pour l'environnement de test du modèle texte, permettant à `llama-server` de démarrer correctement sans planter.
+
+### F-64 : Audit complet des system prompts d'outils IA
+> *P16 — Cartographie de l'état de l'art des prompts d'agents pour calibrer nos nœuds.*
+
+- **Vérification** : Le dossier `references/system-prompts-and-models-of-ai-tools/` (34 outils) n'avait jamais été audité en profondeur pour en extraire les mécanismes exploitables ; seule une synthèse manuelle (`system_prompts_analysis.md`) existait.
+- **Validation** : Lecture intégrale du contenu de 28+ prompts → livrable `docs/system_prompts_audit_full.md`. Confirme nos 10 invariants (F-44) et 9 rôles (F-0) alignés avec le corpus. Identifie 20 mécanismes différenciants non ingérés (gates bloquantes, write-lock policy, self-correction, citation obligatoire, quality gates triage…).
+- **Modification** : Aucune modification de code (audit pur). Alimente F-65 (ingestion des pépites, pending).
+
+### F-65 : Ingestion des pépites prompts différenciantes *(PENDING)*
+> *P16 — Porter dans le code les 5 mécanismes actionnables prioritaires identifiés par F-64.*
+
+- Pépites ciblées : (1) gates bloquantes `requires_approval`/sandbox (Cline/Codex/Replit), (2) write-lock parallel policy (Amp GPT-5), (3) self-correction vérifiable (Cursor), (4) citation `<cite>` obligatoire (Devin DeepWiki), (5) quality gates triage (VSCode gpt-5). Détail complet : `docs/system_prompts_audit_full.md` §6-7.
 
