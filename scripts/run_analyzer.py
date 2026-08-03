@@ -35,10 +35,37 @@ def parse_log_file(log_path: str):
         
     for i, line in enumerate(lines):
         line_clean = line.strip()
-        
-        # Détection du nœud en cours
-        if line_clean.startswith("[*] DSPy") or line_clean.startswith("[*] Code Judge") or line_clean.startswith("[*] Coder ") or line_clean.startswith("[*] Tester "):
-            current_node = line_clean
+
+        # Détection du nœud en cours. On normalise un nom court lisible au lieu
+        # de stocker toute la ligne (qui peut faire 80+ caractères et pollue le
+        # rapport). Patterns réels observés dans les logs (cf. workflows.py) :
+        #   "[*] DSPy Architecte en cours..."          → Architect
+        #   "[*] DSPy PromptRefiner en cours..."       → PromptRefiner
+        #   "[*] DSPy Routeur en cours..."             → Router
+        #   "[>] Itération 1/3 pour ts-001 (Coder)..." → Coder
+        #   "[*] Tester polyvalent : techno..."        → Tester
+        #   "[*] DSPy Security Reviewer sur..."        → Security
+        #   "Audits terminés. Juge ... en cours"       → Judge
+        _node_name = None
+        if line_clean.startswith("[*] DSPy Architecte"):
+            _node_name = "Architect (reasoning)"
+        elif line_clean.startswith("[*] DSPy PromptRefiner"):
+            _node_name = "PromptRefiner (reasoning)"
+        elif line_clean.startswith("[*] DSPy Routeur"):
+            _node_name = "Router (fast)"
+        elif line_clean.startswith("[*] DSPy Security"):
+            _node_name = "Security (reasoning)"
+        elif line_clean.startswith("[*] Tester polyvalent") or line_clean.startswith("[*] Tester mode"):
+            _node_name = "Tester (fast/multimodal)"
+        elif "(Coder)" in line_clean and "Itération" in line_clean:
+            _node_name = "Coder (fast/multimodal)"
+        elif "Juge" in line_clean and "en cours" in line_clean:
+            _node_name = "Judge (reasoning)"
+        elif line_clean.startswith("[*] DSPy Nœud d'Escalade"):
+            _node_name = "Escalation (reasoning)"
+
+        if _node_name:
+            current_node = _node_name
             if current_node not in metrics["nodes"]:
                 metrics["nodes"][current_node] = {
                     "duration_s": 0.0,
