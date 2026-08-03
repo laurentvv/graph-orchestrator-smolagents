@@ -176,16 +176,15 @@ These nodes are not used in coding mode.
 This project uses `uv` for seamless dependency and virtual environment management.
 
 ```bash
-# 1. Download the required GGUF blobs for llama-server (models are launched dynamically)
-#    - Fast model (Fan-out / Workers / Router) :
-#    Download a small model (e.g. gemma-4-E4B.gguf)
-#    - Heavy reasoning model (Architect / Coder / Judge) :
-#    Download a larger model (e.g. gemma-4-12B.gguf)
-#    Set their absolute paths in the .env file.
+# 1. Download the required GGUF blobs for llama-server
+#    You can use the provided PowerShell script to download them directly from HuggingFace
+#    into the models/ directory (bypassing Ollama).
+powershell .\scripts\download_models.ps1
+
 # 2. Sync Python dependencies via uv (including DSPy, smolagents, etc.)
 uv sync
 
-# 3. Copy the configuration template
+# 3. Copy the configuration template (the download script tells you how to update it)
 cp .env.example .env
 ```
 

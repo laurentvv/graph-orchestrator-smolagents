@@ -239,6 +239,8 @@ def extract_and_validate(response: Any, model_class: type[BaseModel], api_base: 
             # api_base garde /v1 (llama-server expose /v1, contrairement à Ollama /api/chat).
             use_api_base = api_base or settings.ollama_api_base
             use_model_id = model_id or settings.fast_model_id
+            if use_model_id == "default":
+                use_model_id = "llama"
             
             lm = dspy.LM(f"openai/{use_model_id}", api_base=use_api_base, api_key=settings.ollama_api_key)
             with dspy.context(lm=lm):

@@ -166,6 +166,13 @@ class ArchitectSignature(dspy.Signature):
 
         Le Coder suivra ta stratégie à la lettre. Chaque sous-tâche doit avoir des critères
         d'acceptation vérifiables (comportements attendus testables, pas juste un nom de fichier).
+
+        RÈGLE DE PRÉSERVATION DES DONNÉES (CRITIQUE) :
+        Ne résume JAMAIS le cahier des charges de manière abstraite. Tu dois IMPÉRATIVEMENT copier-coller dans la `description` de la sous-tâche toutes les valeurs techniques explicites du prompt d'origine :
+        - Les valeurs chiffrées (ex: 30 éléments, 15ms).
+        - Les codes couleurs (ex: #4fc3f7).
+        - Les contraintes technologiques strictes.
+        Si tu les résumes, le Coder n'y aura pas accès et la tâche échouera.
         """,
     )
     task_content: str = dspy.InputField(desc="Le cahier des charges global de la fonctionnalité ou du projet à développer")

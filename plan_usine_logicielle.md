@@ -277,3 +277,24 @@ Plus d'information : `system_prompts_analysis.md`
 - [x] **F-61** : Établissement du workflow "Meta-Analyste" (documenté dans `AGENTS.md`) : exécution autonome par l'IA Antigravity, diagnostic, validation humaine, et patching chirurgical des prompts/skills. — *FAIT.*
 - [ ] **Traçabilité des itérations (Git local / Versioning)** : Afin d'éviter la perte d'informations lors des cycles de réécriture (ex: le Coder qui casse un code fonctionnel suite à un faux-positif du Tester), implémenter un versioning automatique dans le dossier `runs/`. À chaque itération de la boucle de code, l'orchestrateur effectue un commit Git local dans le dossier `runs/` (indépendant du dépôt principal) ou sauvegarde l'état dans des sous-dossiers `iter_1/`, `iter_2/`. Cela permettra de faire des `diff` post-mortem exacts pour voir comment l'IA a dégradé le code au fil des essais.
 
+
+---
+
+## 🎯 Amélioration Continue : Log de Modifications Récentes
+
+### F-62 : Correction perte de contexte Architecte (Shift Context)
+> *Suite à une analyse post-mortem, l'Architecte s'est avéré trop zélé dans sa synthèse, perdant les contraintes métier du prompt initial.*
+
+- **Vérification** : En examinant le log d'un run, on constate que l'Architecte a résumé un cahier des charges très détaillé en un paragraphe générique de 3 lignes, omettant les tailles, couleurs et délais précis.
+- **Validation** : Le Coder recevait un prompt beaucoup trop "léger", ce qui le forçait à deviner les paramètres et empêchait la restitution parfaite du besoin utilisateur.
+- **Modification** :
+  1. Durcissement du prompt de `ArchitectSignature` dans `dspy_nodes.py` (RÈGLE DE PRÉSERVATION DES DONNÉES) pour interdire le résumé des valeurs techniques explicites.
+  2. Injection dynamique du contexte global initial (`original_content`) directement dans le prompt système du Coder (`execute_coder_node` dans `nodes.py`) pour garantir la transmission de l'intégralité de la demande.
+
+### F-63 : Correction Fallback llama-server (Mismatch mmproj)
+> *Suite à l'échec d'un test d'exécution du Coder isolé sur Qwen3.5-9B, une analyse a révélé un crash backend silencieux.*
+
+- **Vérification** : Diagnostic de l'erreur `404 model 'qwen3.5:2b' not found`. L'enquête a révélé que le crash initial provenait de `llama-server`.
+- **Validation** : Le serveur tentait de charger un adaptateur de vision `mmproj` (configuré pour Gemma) inadapté au modèle texte `Qwen3.5-9B`. Ce crash provoquait un timeout de la sonde de santé (`/health`), forçant le gestionnaire `model_lifecycle` à faire un repli (fallback) vers un serveur Ollama externe en utilisant l'identifiant par défaut `qwen3.5:2b`.
+- **Modification** : Retrait de l'export de `FAST_MMPROJ` pour l'environnement de test du modèle texte, permettant à `llama-server` de démarrer correctement sans planter.
+
