@@ -116,6 +116,7 @@ def _spawn(spec: ModelSpec) -> Optional[_SpawnedServer]:
         "--host", "127.0.0.1",
         "--port", str(port),
         "-c", str(spec.context),
+        "-ngl", "99",
         "--reasoning", spec.reasoning or "off",
     ]
     if spec.mmproj and os.path.exists(spec.mmproj):
