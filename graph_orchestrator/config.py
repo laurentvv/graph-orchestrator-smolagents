@@ -9,7 +9,7 @@ Usage :
 """
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
 
@@ -41,6 +41,74 @@ def _get_float(key: str, default: float) -> float:
 def _get_str(key: str, default: str) -> str:
     raw = os.getenv(key)
     return raw.strip() if raw and raw.strip() else default
+
+
+# ==========================================
+# Spécification d'un modèle (F-58 : backend-agnostique)
+# ==========================================
+# Chaque rôle du graphe (fast/reasoning/no_think) pointe vers un ModelSpec qui décrit
+# COMMENT contacter le modèle. 3 backends possibles (détectés via FAST_BACKEND etc.) :
+# - "spawn"    : GPU local, llama-server. Le graphe spawn/tue un process par nœud
+#                (model_lifecycle). blob = chemin absolu du .gguf. reasoning on/off via flag.
+# - "external" : endpoint déjà lancé (Ollama local, serveur distant, API cloud OpenAI/
+#                OpenRouter). Le graphe ne spawn rien — il pointe vers api_base externe.
+#                model = nom chez le provider (ex: "gpt-4o", "gemma-4-e4b" sur Ollama).
+# - "none"/""  : pas de modèle (tests unitaires mockés). model_lifecycle = no-op.
+# Tout est piloté par le .env (1 var par attribut, préfixe par rôle : FAST_, REASONING_,
+# REASONING_NO_THINK_). Aucune dépendance à models.ini côté runtime (models.ini reste une
+# doc/référence des chemins blobs, mais le code ne le lit plus).
+@dataclass(frozen=True)
+class ModelSpec:
+    """Description complète d'un modèle pour un rôle du graphe."""
+    backend: str = "none"          # "spawn" | "external" | "none"
+    model: str = ""                # spawn: chemin .gguf ; external: nom provider ; none: ""
+    reasoning: str = "off"         # spawn: "on"/"off" (flag --reasoning) ; external: ignoré
+    mmproj: str = ""               # spawn: chemin .mmproj (vision) ; external: ignoré
+    api_base: str = ""             # external: endpoint http(s) ; spawn: ignoré (port dyn)
+    api_key: str = ""              # external: clé API ; spawn: ignoré ; none: ""
+    context: int = 8192            # spawn: taille contexte (-c) ; external: ignoré
+    # --- Offload GPU (F-58-bis : fix bridage 20% GPU) ---
+    # Nombre de layers à offloader en VRAM (-ngl). 0 = AUTO-FIT (défaut, recommandé) :
+    # llama.cpp mesure la VRAM libre et offload autant de layers que possible SANS OOM
+    # (mécanisme common_fit_params). C'est la config "sûre" qu'utilise Ollama.
+    # ATTENTION : -ngl ≥ modèle/VRAM → OOM au chargement (le backend Vulkan alloue par
+    # gros blocs contigus). Sur gemma-12B / RTX 3060 6 Go (build Vulkan), -ngl 99 crash ;
+    # -ngl 32 passe sur build CUDA mais OOM sur Vulkan. D'où auto-fit par défaut.
+    # Benchmark debug/Gemma4_Thinking_Audit.md : auto-fit ~8 tok/s, -ngl 32 ~11 tok/s
+    # (CUDA). Setter <PREFIX>_NGL (ex: REASONING_NGL=32) pour forcer si build CUDA.
+    gpu_layers: int = 0
+    # Flash Attention (--flash-attn) : accélère le préfill des longs contextes.
+    # Défaut "auto" = laisse llama-server choisir selon le modèle.
+    flash_attn: str = "auto"
+
+
+def _model_spec_from_env(prefix: str) -> ModelSpec:
+    """Construit un ModelSpec depuis les vars d'env <PREFIX>_BACKEND/MODEL/REASONING/....
+
+    prefix = "FAST" | "REASONING" | "REASONING_NO_THINK". Lit :
+      <PREFIX>_BACKEND, <PREFIX>_MODEL, <PREFIX>_REASONING, <PREFIX>_MMPROJ,
+      <PREFIX>_API_BASE, <PREFIX>_API_KEY, <PREFIX>_CONTEXT.
+    Valeurs par défaut non-bloquantes (none) pour ne pas casser les helpers de test qui
+    construisent Settings() sans ces vars.
+    """
+    backend = _get_str(f"{prefix}_BACKEND", "none").lower()
+    # Rétro-compatibilité : si BACKEND n'est pas setté mais MODEL_ID l'est (ancienne config
+    # Ollama/llama-server router), on déduit "external". Sinon "none".
+    if backend == "none":
+        legacy = _get_str(f"{prefix}_MODEL_ID", "")
+        if legacy:
+            backend = "external"
+    return ModelSpec(
+        backend=backend,
+        model=_get_str(f"{prefix}_MODEL", ""),
+        reasoning=_get_str(f"{prefix}_REASONING", "off").lower(),
+        mmproj=_get_str(f"{prefix}_MMPROJ", ""),
+        api_base=_normalize_api_base(_get_str(f"{prefix}_API_BASE", "")) if _get_str(f"{prefix}_API_BASE", "") else "",
+        api_key=_get_str(f"{prefix}_API_KEY", ""),
+        context=_get_int(f"{prefix}_CONTEXT", 8192),
+        gpu_layers=_get_int(f"{prefix}_NGL", 0),
+        flash_attn=_get_str(f"{prefix}_FLASH_ATTN", "auto").lower(),
+    )
 
 
 def _normalize_api_base(raw: str) -> str:
@@ -132,6 +200,13 @@ class Settings:
     # Valeur par défaut dans la dataclass : évite de casser les helpers de test qui
     # construisent Settings(...) à la main (même convention que loop_guard_threshold etc.).
     tester_max_steps: int = 12
+    # Hard deadline wall-clock du Web Tester (smolagents ToolCallingAgent + MCP Puppeteer/
+    # DevTools). Fix blocage : sans ce timeout, un appel MCP bloquant (Chrome hung, npx stdio
+    # deadlock, page JS en boucle infinie) fige le Tester indéfiniment. À l'expiration,
+    # run_with_retry rend un échec propre (None) → le Judge enchaîne. 0 = désactivé (legacy).
+    # Si non setté, fallback sur test_timeout_s (rétro-compatibilité). Défaut 120 dans la
+    # dataclass pour ne pas casser les helpers de test qui construisent Settings() à la main.
+    tester_timeout_s: int = 120
 
     # --- Nœud d'Escalade (Priorité 3 : post-mortem sur circuit breaker) ---
     # Quand une sous-tâche épuise le Circuit Breaker (3 itérations toutes rejetées),
@@ -196,6 +271,32 @@ class Settings:
     # bien meilleur choix. Setter PROMPT_REFINER_MODEL_ID dans .env pour cibler un modèle dédié.
     prompt_refiner_model_id: str = ""
 
+    # --- Modèle reasoning SANS thinking (F-58, migration llama-server) ---
+    # Pour les nœuds think=False (Judge/Security/PromptRefiner/Escalation) : même modèle
+    # costaud que l'Architect MAIS sans le thinking (plus rapide, pas de budget gaspillé en
+    # raisonnement sur des tâches de verdict/classification). En production llama-server,
+    # pointe vers la section models.ini `reasoning = off` (ex: "gemma-4-12b-nothink").
+    # Si vide (défaut), fallback sur reasoning_model_id (rétro-compatibilité Ollama et tests
+    # qui construisent Settings() à la main — ne pas casser).
+    reasoning_no_think_model_id: str = ""
+
+    # --- Specs modèles backend-agnostiques (F-58 : spawn llama-server vs external/cloud) ---
+    # Chaque rôle pointe vers un ModelSpec (backend + blob/model + reasoning + mmproj +
+    # api_base + api_key). Piloté par le .env : FAST_BACKEND/FAST_MODEL/..., REASONING_*,
+    # REASONING_NO_THINK_*. Si les vars BACKEND ne sont pas settées, backend="none" →
+    # model_lifecycle no-op (rétro-compat : on utilise les *_model_id + ollama_api_base).
+    fast_spec: ModelSpec = field(default_factory=ModelSpec)
+    reasoning_spec: ModelSpec = field(default_factory=ModelSpec)
+    no_think_spec: ModelSpec = field(default_factory=ModelSpec)
+
+    # --- Logs de run auto-capturés (Priorité 13-bis : journalisation) ---
+    # Répertoire où chaque run écrit son log stdout/stderr via un Tee (run_logging.py).
+    # Fini la redirection manuelle (> logs/...log) et le chemin hardcodé dans run_analyzer.
+    # Gitignoré par défaut (cf. .gitignore). Accepte un chemin relatif (logs) ou absolu.
+    logs_dir: str = "logs"
+    # Active/désactive la capture du log. Opt-out pour A/B ou debug (LOG_TO_FILE=0).
+    log_to_file: bool = True
+
     # --- Output daté par run (Priorité 13 : isolation des artefacts) ---
     # Racine du dossier où chaque run écrit ses fichiers générés. Le workflow coding crée un
     # sous-dossier daté `runs/YYYY-MM-DD_HHMM_slug/` et s'y chdir avant les nœuds Coder/Tester,
@@ -248,6 +349,7 @@ def load_settings() -> Settings:
         log_level=_get_str("LOG_LEVEL", "LOW"),
         fresh_start=_get_bool("FRESH_START", False),
         test_timeout_s=_get_int("TEST_TIMEOUT_S", 120),
+        tester_timeout_s=_get_int("TESTER_TIMEOUT_S", _get_int("TEST_TIMEOUT_S", 120)),
         stderr_head_lines=_get_int("STDERR_HEAD_LINES", 20),
         stderr_tail_lines=_get_int("STDERR_TAIL_LINES", 20),
         feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),
@@ -260,8 +362,15 @@ def load_settings() -> Settings:
         bash_guard_enabled=_get_bool("BASH_GUARD_ENABLED", True),
         prompt_refiner_enabled=_get_bool("PROMPT_REFINER_ENABLED", True),
         prompt_refiner_model_id=_get_str("PROMPT_REFINER_MODEL_ID", ""),
+        reasoning_no_think_model_id=_get_str("REASONING_NO_THINK_MODEL_ID", ""),
+        # F-58 : specs backend-agnostiques (spawn llama-server / external / cloud).
+        fast_spec=_model_spec_from_env("FAST"),
+        reasoning_spec=_model_spec_from_env("REASONING"),
+        no_think_spec=_model_spec_from_env("REASONING_NO_THINK"),
         output_dir=_get_str("OUTPUT_DIR", "runs"),
         output_retention=_get_int("OUTPUT_RETENTION", 10),
+        logs_dir=_get_str("LOGS_DIR", "logs"),
+        log_to_file=_get_bool("LOG_TO_FILE", True),
         idempotence_enabled=_get_bool("IDEMPOTENCE_ENABLED", True),
         idempotency_retention_days=_get_int("IDEMPOTENCY_RETENTION_DAYS", 14),
     )

@@ -124,29 +124,36 @@ produces the WRONG result is a FAILURE. You MUST verify the **behavior** the app
 **assertion script** via `puppeteer_evaluate` that triggers the action and checks the result.
 The script must return a clear verdict (true/false or a value you can compare).
 
-### ⚠️ CRITICAL — Syntaxe `puppeteer_evaluate` (sinon ERREUR SYSTÉMATIQUE)
-`puppeteer_evaluate` exécute le script via `eval()`. Un `return` au TOP-LEVEL est
-**ILLÉGAL** → erreur `"Illegal return statement"`. Tu DOIS wrapper ton code dans une
-**fonction fléchée immédiatement invoquée** :
+### ⚠️ CRITICAL — Syntaxe `puppeteer_evaluate` vs `evaluate_script`
+Tu as DEUX outils pour exécuter du JS. Ils ont des syntaxes INCOMPATIBLES :
 
+**1. `puppeteer_evaluate(script)`** : Exécute via `eval()`. Un `return` au TOP-LEVEL est **ILLÉGAL**.
+Tu DOIS wrapper ton code dans une **IIFE** (fonction fléchée immédiatement invoquée) :
 ```javascript
-// ✅ BON — IIFE, return à l'intérieur d'une fonction :
-(() => {
-  const bars = [...document.querySelectorAll('.bar')].map(b => parseFloat(b.style.height));
-  const sorted = [...bars].sort((a, b) => a - b);
-  return JSON.stringify(bars) === JSON.stringify(sorted);
-})()
+// ✅ BON (puppeteer_evaluate) — IIFE :
+(() => { return 1; })()
 ```
 ```javascript
-// ❌ MAUVAIS — return au top-level → "Illegal return statement" :
-const bars = [...document.querySelectorAll('.bar')].map(b => parseFloat(b.style.height));
-return JSON.stringify(bars) === JSON.stringify([...bars].sort((a,b)=>a-b));
+// ❌ MAUVAIS (puppeteer_evaluate) — return top-level :
+return 1;
 ```
 
-Règles de syntaxe :
-- **TOUJOURS** wrapper dans `(() => { ... })()` (synchrone) ou `(async () => { ... })()` (si `await`).
-- **JAMAIS** de `return` au top-level du script.
-- Pour lire une valeur simple sans logique : pas besoin de fonction, un expression suffit
+**2. `evaluate_script(script)` (Chrome DevTools MCP)** : Le MCP enveloppe LUI-MÊME le code. Une IIFE est **ILLÉGALE** (provoque l'erreur 'await is only valid in async functions' car le CDP parse mal l'IIFE).
+Tu DOIS fournir une **DÉCLARATION DE FONCTION** (non invoquée) :
+```javascript
+// ✅ BON (evaluate_script) — Fonction non invoquée :
+async () => { return 1; }
+// ou
+function() { return 1; }
+```
+```javascript
+// ❌ MAUVAIS (evaluate_script) — IIFE :
+(async () => { return 1; })()
+```
+
+Règles de syntaxe générales :
+- Identifie QUEL outil tu appelles avant d'écrire le script.
+- Pour lire une valeur simple sans logique, une expression pure suffit pour les DEUX outils (ex: `document.querySelectorAll('.bar').length`).
   (ex: `document.querySelectorAll('.bar').length` ou `[...document.querySelectorAll('button')].map(b=>b.id)`).
 - Évite les `\n` littéraux dans le script (préfère un code sur une ligne ou bien formaté).
 
@@ -166,7 +173,7 @@ Règles de syntaxe :
 [...document.querySelectorAll('button')].map(b => b.id)
 ```
 
-*Async — wait then check (animation):*
+*Async — wait then check (animation) avec puppeteer_evaluate :*
 ```javascript
 (async () => {
   await new Promise(r => setTimeout(r, 2000));
@@ -183,7 +190,7 @@ parseInt(document.querySelector('#comparisonCount').textContent)
 
 **Rules:**
 - Identify the **2 to 4 most important behaviors** of the cahier des charges. Don't test everything, but test the core.
-- For animations/async: use the `async () => { await ...; }` IIFE pattern shown above to wait INSIDE the script before checking.
+- For animations/async with puppeteer_evaluate: use the `async () => { await ...; }()` IIFE pattern. With evaluate_script: use the `async () => { await ...; }` declaration pattern. Wait INSIDE the script before checking.
 - An assertion returning `false` (or an unexpected value) = **FAILURE**. Report exactly what was expected vs what you got.
 - A behavior that you COULD test but didn't = test INCOMPLET. Don't return success on an untested core behavior.
 

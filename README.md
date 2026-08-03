@@ -176,12 +176,12 @@ These nodes are not used in coding mode.
 This project uses `uv` for seamless dependency and virtual environment management.
 
 ```bash
-# 1. Pull the required local models via Ollama
+# 1. Download the required GGUF blobs for llama-server (models are launched dynamically)
 #    - Fast model (Fan-out / Workers / Router) :
-ollama pull qwen3.5:2b
+#    Download a small model (e.g. gemma-4-E4B.gguf)
 #    - Heavy reasoning model (Architect / Coder / Judge) :
-ollama pull hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL
-
+#    Download a larger model (e.g. gemma-4-12B.gguf)
+#    Set their absolute paths in the .env file.
 # 2. Sync Python dependencies via uv (including DSPy, smolagents, etc.)
 uv sync
 
@@ -191,7 +191,7 @@ cp .env.example .env
 
 ## 🎮 Usage
 
-Ensure your Ollama server is running in the background (`ollama serve`).
+Ensure `llama-server` is in your PATH. The orchestrator will spawn and kill the models automatically during the workflow based on your `.env` configuration.
 
 ### Managing Prompts and Tasks (`tasks.json`)
 You don't need to touch Python code to give orders to the orchestrator. Simply modify the `tasks.json` file in the root directory. This file dictates what tasks are run depending on the active `WORKFLOW_MODE`.
@@ -215,6 +215,7 @@ $env:WORKFLOW_MODE="coding"
 $env:PYTHONIOENCODING="utf-8"
 uv run python -m graph_orchestrator.workflows
 ```
+Each run is journaled automatically into `logs/run-<timestamp>-<mode>.log` (colors stripped for a clean plain-text log) — no manual redirection needed.
 
 ### Data Processing: One-shot Mode (Default)
 Executes the standard Fan-out → Reduce → Adversary → Synth flow (mode par défaut de `WORKFLOW_MODE`, aucun réglage requis):
@@ -225,9 +226,15 @@ uv run agent_graph.py
 
 ### Data Processing: Exploration Mode (Loop-until-dry)
 ```bash
-$env:WORKFLOW_MODE="exploration"
-uv run python -m graph_orchestrator.workflows
+WORKFLOW_MODE=exploration uv run python -m graph_orchestrator.workflows
 ```
+
+### Run Analysis & Continuous Improvement
+After a run (especially End-to-End coding workflows), you can analyze the execution logs and DuckDB database to extract metrics (tokens, duration per node, errors, crashes).
+```bash
+uv run python scripts/run_analyzer.py
+```
+Every run is auto-journaled to `logs/run-<timestamp>-<mode>.log` (via a Tee on stdout+stderr in `workflows.main()`). This script auto-detects the latest log there (cross-platform — honors `$LOGS_DIR`, or pass `--log <path>` / `--logs-dir <dir>` to override) and produces an `analysis_report.md`. This is critical for post-mortem debugging and continuous improvement of the agents (F-60 & F-61).
 
 ## 🧪 Testing
 

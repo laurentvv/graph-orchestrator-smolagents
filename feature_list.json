@@ -479,6 +479,34 @@
       "dependencies": [
         "F-56"
       ]
+    },
+    {
+      "id": "F-58",
+      "name": "Intégration llama.cpp (llama-server) dynamique",
+      "description": "Lancement dynamique de llama.cpp à la place d'Ollama. Context manager model_lifecycle qui gère le spawn, configure DSPy via api_base et tue le process pour libérer la VRAM. Remplacement du backend external par spawn dans .env par défaut. Configuration des blobs GGUF dans .env.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-59",
+      "name": "Optimisation long cours des skills Coder pour réduire les step en erreur",
+      "description": "Analyse itérative des erreurs de syntaxe, des boucles et des crashes. Objectif : ajuster les SKILLS.md et le system prompt (nodes.py) pour réduire drastiquement le nombre de steps en erreur. INCLUT OBLIGATOIREMENT : la création d'un outil `apply_patch` ou `multi_replace` pour le Coder. Actuellement, le diff (F-48) n'est utilisé que par le Juge/Testeur en lecture. Le Coder, lui, doit réécrire tout le fichier (write_file), ce qui cause des régressions. Il faut lui donner la capacité d'éditer le code avec la même précision chirurgicale.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-60",
+      "name": "Outil d'analyse post-mortem des Runs (run_analyzer)",
+      "description": "Création d'un script `run_analyzer.py` permettant d'étudier les logs (`.system_generated/tasks/task-*.log`) et la base DuckDB (`graph_orchestrator.db`) pour en extraire des métriques (temps, tokens, types d'erreurs récurrentes, crash) afin d'apprendre des échecs et d'améliorer le système. Sauvegarde ces insights de manière pérenne.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-61",
+      "name": "Amélioration Continue automatisée (Self-Learning)",
+      "description": "Implémentation d'une boucle de feedback exploitant les rapports générés par `run_analyzer.py`. L'objectif est d'utiliser ces données pour ajuster dynamiquement les prompts des agents (nodes.py, SKILLS) et ainsi éviter les erreurs récurrentes (comme InterpreterError) lors des exécutions futures.",
+      "status": "pending",
+      "dependencies": ["F-60"]
     }
   ]
 }

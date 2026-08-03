@@ -26,9 +26,10 @@ from .models import (
     CoderOutput,
     extract_and_validate,
 )
-from .tools import read_file, write_file, append_file, edit_file, bash_command, list_directory, search_replace
+from .tools import read_file, write_file, append_file, edit_file, bash_command, list_directory, search_replace, multi_replace
 from .skills_loader import build_skills_block
 from .loop_guard import LoopGuard, extract_tool_calls_from_step
+from .llama_server import model_lifecycle
 from .orphan_repair import repair_orphan_steps
 from .sanitizer import sanitize_tools
 from .prompts import build_role_header
@@ -162,6 +163,9 @@ async def run_with_retry(
     max_retries: int,
     loop_guard: Optional["LoopGuard"] = None,
     node_kind: str = "coder",
+    model_id: Optional[str] = None,
+    api_base: Optional[str] = None,
+    timeout_s: Optional[float] = None,
 ) -> Tuple[Optional[object], Optional[NodeMetrics]]:
     """Exécute un agent avec retry. Retourne (données_validées, métriques).
 
@@ -213,13 +217,29 @@ async def run_with_retry(
             # asyncio.to_thread : smolagents est synchrone, on le déporte hors de la loop.
             # IMPORTANT : return_full_result doit être nommé — sinon `True` positionnel
             # tombe sur `stream` (2e paramètre) et renvoie un générateur au lieu d'un RunResult.
-            run_result = await asyncio.to_thread(
+            #
+            # timeout_s (fix blocage Tester Chrome DevTools) : hard deadline wall-clock.
+            # Si fourni, on wrap le to_thread dans asyncio.wait_for. À l'expiration, on
+            # rend un échec propre (None) pour que le graphe continue (Judge → itération).
+            # NOTE : le thread sous-jacent (agent.run + Chrome/npx bloqué) ne peut pas être
+            # tué par Python — il reste zombie jusqu'à la fin du process. C'est un compromis
+            # accepté : strictement meilleur que le blocage total du graphe.
+            coro = asyncio.to_thread(
                 agent.run, prompt, stream=False, return_full_result=True
             )
+            if timeout_s and timeout_s > 0:
+                run_result = await asyncio.wait_for(coro, timeout=timeout_s)
+            else:
+                run_result = await coro
 
             # smolagents renvoie un RunResult quand return_full_result=True
             raw_output = run_result.output if hasattr(run_result, "output") else run_result
-            validated = extract_and_validate(raw_output, model_class)
+            
+            agent_model = getattr(agent, "model", None)
+            api_base_val = getattr(agent_model, "api_base", None)
+            model_id_val = getattr(agent_model, "model_id", None)
+            
+            validated = extract_and_validate(raw_output, model_class, api_base=api_base_val, model_id=model_id_val)
 
             # Collecte métriques depuis le RunResult
             last_metrics = _metrics_from_run(agent, run_result)
@@ -276,6 +296,17 @@ async def run_with_retry(
                         f"un JSON valide pour ce schéma : {model_class.model_json_schema()} "
                         f"via l'outil final_answer."
                     )
+        except asyncio.TimeoutError:
+            # Fix blocage Tester Chrome DevTools : timeout wall-clock expiré.
+            # Le thread agent.run (et le Chrome/npx bloqué) reste zombie — Python ne peut
+            # pas tuer un thread — mais on NE bloque PLUS le graphe : on rend un échec
+            # propre (None) pour que le Judge puisse enchaîner sur ce qu'il a.
+            # last_metrics peut être None (rien n'a été collecté si le 1er run a timeout).
+            print(
+                f"[-] Timeout du nœud {node_kind} après {timeout_s}s "
+                f"(Chrome/DevTools/Puppeteer bloqué ?) — passage au nœud suivant."
+            )
+            return None, last_metrics
         except Exception as e:
             # F-33 (2) : exception pendant l'exécution (code Python cassé en CodeAgent,
             # payload invalide en TCA). On renvoie un message "découpe" au lieu de planter.
@@ -440,11 +471,13 @@ vrai fichier (ex: landing_page/index.html), pas sur la racine du workspace."""
 # On ne liste que les outils utiles au Coder (pas les 40+ du serveur) pour économiser
 # le contexte. Le Coder n'a pas besoin de Lighthouse/perf (ça, c'est le Tester).
 _DEVTOOLS_TOOLS_DOC = """
-- `navigate_page(url)` : ouvre une URL dans Chrome (utilise file:/// absolu pour un fichier local).
+- `navigate_page(url="...")` : ouvre une URL dans Chrome (utilise file:/// absolu pour un fichier local).
 - `take_screenshot()` : capture l'écran → l'image TE REVIENT (tu la vois). Format JPEG (léger).
 - `list_console_messages()` : liste les erreurs/warnings JS de la console (le "stderr" du web).
-- `click(uid)` / `fill(uid, value)` : interagit (utile si tu veux tester un bouton, ex: démarrer un tri).
-- `evaluate_script(function)` : exécute du JS dans la page (ex: lire une valeur du DOM).
+- `click(uid="...")` / `fill(uid="...", value="...")` : interagit (utile si tu veux tester un bouton, ex: démarrer un tri).
+- `evaluate_script(script="...")` : exécute du JS dans la page (ex: lire une valeur du DOM).
+  ⚠️ ATTENTION : Les arguments nommés sont OBLIGATOIRES pour tous ces outils (ex: `evaluate_script(script="...")`).
+  ⚠️ CRITIQUE : N'utilise JAMAIS 'await' au premier niveau (top-level await) dans evaluate_script. Le MCP chrome-devtools attend une DECLARATION de fonction (et l'invoque lui-même). Tu dois fournir une fonction asynchrone non invoquée. Correct : `async () => { await ... }` (NE FAIS PAS d'IIFE).
 Note : les `uid` d'éléments viennent de `take_snapshot()` (arbre a11y). Pour un simple check visuel,
 take_screenshot + list_console_messages suffisent dans 90% des cas."""
 
@@ -478,7 +511,7 @@ async def execute_coder_node(
         # Outils fichiers + recherche. Context7 (doc de libs à jour) est ajouté si
         # CONTEXT7_API_KEY est configurée. Le Coder décide QUAND l'utiliser via le
         # skill context7-research (dormant sur vanilla, actif sur libs externes).
-        coder_tools = [list_directory, read_file, write_file, append_file, edit_file, search_replace, DuckDuckGoSearchTool()]
+        coder_tools = [list_directory, read_file, write_file, append_file, edit_file, search_replace, multi_replace, DuckDuckGoSearchTool()]
         coder_tools.extend(c7_tools)
         # F-45 : Chrome DevTools (navigate_page, take_screenshot, list_console_messages,
         # click, fill...) pour auto-valider visuellement la page générée AVANT
@@ -503,23 +536,7 @@ async def execute_coder_node(
         # jusqu'à 91× plus de contenu que le TCA sur une même tâche).
         # final_answer s'appelle maintenant en SYNTAXE PYTHON : final_answer({...}) ou
         # final_answer("texte"), pas en JSON. extract_and_validate gère les 2 (dict + str).
-        local_coder = CodeAgent(
-            tools=coder_tools,
-            model=fast_model,
-            name=f"coder_{task['id'].replace('-', '_')}",
-            description="Agent développeur capable d'explorer le projet, d'écrire, lire, modifier du code.",
-            verbosity_level=resolve_verbosity("HIGH"),
-            # 14 steps (vs 12 avant F-45) : marge pour l'étape de validation visuelle
-            # (navigate_page + take_screenshot + analyse + corrections éventuelles).
-            # Un step CodeAgent = un code block complet, donc +2 steps couvrent le
-            # cycle preview sans trop allonger le runtime sur les tâches sans web.
-            max_steps=14,
-            # On gère nous-mêmes le set d'outils (pas de python_interpreter natif ajouté).
-            add_base_tools=False,
-            # F-45 : step_callback qui pousse le screenshot dans observations_images
-            # pour que le modèle vision l'analyse. No-op si pas de screenshot ce step.
-            step_callbacks=[make_screenshot_callback(screenshot_capture)],
-        )
+        # L'instanciation de local_coder a été déplacée plus bas, à l'intérieur du bloc `with model_lifecycle`.
 
         target_files_instruction = ""
         if "target_files" in task and task["target_files"]:
@@ -563,12 +580,12 @@ contiennent du vrai code. Le bug à corriger est décrit dans ### Contenu de la 
 1. read_file(path) sur CHAQUE fichier signalé fautif pour voir son état ACTUEL.
 2. Identifie le fragment précis qui cause le bug (ex: balise </html> placée trop tôt,
    fonction manquante, syntaxe cassée). Les tickets te donnent la ligne et l'aperçu.
-3. search_replace(path, old_string=fragment_fautif, new_string=fragment_corrigé) pour
-   corriger CHIRURGICALEMENT. Donne le fragment EXACT à remplacer (copie de read_file).
-   Si le bug est "contenu après </html>", déplace le </html> à la FIN via search_replace.
-4. Répéte pour chaque bug signalé. final_answer quand tous les bugs sont corrigés.
+3. Utilise l'outil `multi_replace` pour appliquer une ou plusieurs corrections chirurgicales.
+   Exemple: `multi_replace(path="index.html", replacements=[{{"old_string": "fragment fautif", "new_string": "fragment corrigé"}}])`
+   Donne le fragment EXACT à remplacer (copie de read_file).
+4. Répète pour chaque bug signalé. final_answer quand tous les bugs sont corrigés.
 ATTENTION : NE JAMAIS appeler write_file sur un fichier déjà créé (ça l'écrase et perd
-tout le travail). Uniquement read_file + search_replace en mode correction."""
+tout le travail). Uniquement read_file + multi_replace en mode correction."""
 
         # MODE CRÉATION (itération 1) — workflow adapté à la stratégie dictée par l'Architect (F-29).
         elif strategy == "incremental":
@@ -608,16 +625,20 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
 ### RÈGLES CRITIQUES (numérotées)
 1. AGIS, ne raconte pas : quand tu dis "je vais faire X", tu DOIS faire X dans la foulée.
    Une réponse sans appel d'outil est considérée comme une TÂCHE TERMINÉE (échec).
-2. BLOCS COMPLETS : chaque appel write_file/append_file doit contenir un bloc SYNTAXIQUEMENT
+2. INTERDICTION ABSOLUE d'utiliser des backticks (`) dans ta pensée (Thought).
+   Utilise-les UNIQUEMENT pour ouvrir et fermer le bloc de code ```python.
+3. ARGUMENTS NOMMÉS OBLIGATOIRES : Pour TOUS tes appels d'outils, tu DOIS utiliser des arguments nommés (ex: evaluate_script(script="...")). Les arguments positionnels feront crasher l'exécution.
+4. BLOCS COMPLETS : chaque appel write_file/append_file doit contenir un bloc SYNTAXIQUEMENT
    COMPLET (quotes/braces/parenthèses équilibrées). NE JAMAIS laisser une string/brace
    ouverte entre 2 appels. Si le contenu dépasse ~60 lignes, DÉCOUPE en plusieurs append_file.
-3. PAS DE PLACEHOLDER : interdiction absolue de "TODO", "...", "Logique ici", fonctions vides
+5. PAS DE PLACEHOLDER : interdiction absolue de "TODO", "...", "Logique ici", fonctions vides
    ou mocks. Implémentation COMPLÈTE, RÉELLE et FONCTIONNELLE.
-4. ANTI-BOUCLE : NE RE-ÉCRIS JAMAIS avec write_file un fichier déjà créé (ça l'écrase).
+6. ANTI-BOUCLE : NE RE-ÉCRIS JAMAIS avec write_file un fichier déjà créé (ça l'écrase).
    Pour AJOUTER du contenu → append_file. Pour MODIFIER un fragment → search_replace.
+7. PYTHON BUILT-INS : Si tu utilises `time.sleep()` ou d'autres modules standards dans ton code Python, n'oublie pas de les importer (ex: `import time` au début du bloc).
 
 ### FORMAT DE SORTIE (obligatoire)
-Tu écris du code Python dans un bloc ```python``` qui appelle tes outils. Exemple one-shot :
+Tu écris du code Python dans un bloc ````python ... ```` qui appelle tes outils. Exemple one-shot :
 ```python
 # Thought courte (1 phrase) PUIS appel immédiat — pas de longue réflexion
 resultat = write_file(path="index.html", content="<!DOCTYPE html>\\n<html>...</html>")
@@ -626,6 +647,7 @@ print(resultat)
 final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Fichiers créés."}})
 ```
 
+
         {strategy_block}
         {target_files_instruction}
         {devtools_preview_block}
@@ -633,7 +655,8 @@ final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Fichi
 ### OUTILS DISPONIBLES
 - `write_file(path, content)` : CRÉE/ÉCRASE un fichier complet. Sous-dossiers créés auto.
 - `append_file(path, content)` : AJOUTE un bloc à la FIN d'un fichier existant (garde anti-doublon).
-- `search_replace(path, old_string, new_string)` : MODIFIE un fragment (matching tolérant). À utiliser après read_file.
+- `multi_replace(path, replacements)` : MODIFIE un ou plusieurs fragments (matching tolérant). À utiliser après read_file.
+- `search_replace(path, old_string, new_string)` : MODIFIE un fragment unique.
 - `read_file(path)` / `list_directory(path)` : lecture/exploration.
 - `context7` (resolve_library_id/query_docs) : UNIQUEMENT pour une lib externe (React, Chart.js...). JAMAIS pour du vanilla.
 - Évite DuckDuckGoSearchTool (lent/imprécis).
@@ -662,9 +685,30 @@ Code prêt pour la production, respectant les conventions du langage.
             enabled=settings.loop_guard_enabled,
         )
         # max_retries can be slightly higher for coding since it involves tool use steps
-        return await run_with_retry(
-            local_coder, prompt, CoderOutput, settings.worker_max_retries, loop_guard=guard
-        )
+        # max_retries can be slightly higher for coding since it involves tool use steps
+        with model_lifecycle(settings.fast_spec) as srv:
+            dynamic_fast_model = OpenAIServerModel(
+                model_id=srv.model_id or settings.fast_model_id,
+                api_base=srv.api_base or settings.ollama_api_base,
+                api_key=srv.api_key or settings.ollama_api_key,
+                max_tokens=settings.fast_max_tokens,
+                temperature=settings.coder_temperature,
+                client_kwargs={"timeout": settings.llm_timeout_s},
+            )
+            local_coder = CodeAgent(
+                tools=coder_tools,
+                model=dynamic_fast_model,
+                name=f"coder_{task['id'].replace('-', '_')}",
+                description="Agent développeur capable d'explorer le projet, d'écrire, lire, modifier du code.",
+                verbosity_level=resolve_verbosity("HIGH"),
+                max_steps=14,
+                add_base_tools=False,
+                code_block_tags="markdown",
+                step_callbacks=[make_screenshot_callback(screenshot_capture)],
+            )
+            return await run_with_retry(
+                local_coder, prompt, CoderOutput, settings.worker_max_retries, loop_guard=guard
+            )
 
 
 async def execute_tester_node(

@@ -22,7 +22,13 @@ def mock_settings():
     settings = MagicMock()
     settings.fast_model_id = "mock-fast-model"
     settings.reasoning_model_id = "mock-reasoning-model"
+    settings.reasoning_no_think_model_id = "mock-reasoning-model"
     settings.ollama_api_base = "http://localhost:11434/v1"
+    # F-58 specs
+    settings.fast_spec = MagicMock(backend="external", model="mock-fast-model", api_base="http://localhost:11434/v1", api_key="sk-mock")
+    settings.reasoning_spec = MagicMock(backend="external", model="mock-reasoning-model", api_base="http://localhost:11434/v1", api_key="sk-mock")
+    settings.no_think_spec = MagicMock(backend="external", model="", api_base="http://localhost:11434/v1", api_key="sk-mock")
+    
     # Champs de troncature utilisés par execute_code_judge_node (Priorité 2).
     # Doivent être des int réels, pas des MagicMock, sinon truncate_output crash.
     settings.stderr_head_lines = 20

@@ -37,6 +37,14 @@ def _mock_settings():
     s.llm_timeout_s = 1.0
     s.prompt_refiner_enabled = True
     s.prompt_refiner_model_id = ""  # défaut vide = fallback sur reasoning_model_id
+    # F-58 : reasoning_no_think_model_id mocké vide (sinon MagicMock truthy casse le
+    # fallback `or` dans _no_think_model_id). Cohérent avec le défaut dataclass "".
+    s.reasoning_no_think_model_id = ""
+    
+    s.fast_spec = MagicMock(backend="external", model="mock-fast-model", api_base="http://localhost:11434/v1", api_key="sk-mock")
+    s.reasoning_spec = MagicMock(backend="external", model="mock-reasoning-model", api_base="http://localhost:11434/v1", api_key="sk-mock")
+    s.no_think_spec = MagicMock(backend="external", model="", api_base="http://localhost:11434/v1", api_key="sk-mock")
+
     return s
 
 
@@ -115,10 +123,11 @@ def test_prompt_refiner_uses_dedicated_model_when_set(mock_cot, mock_configure):
         execute_prompt_refiner_node("prompt", "FAKE_REASON", settings)
     )
 
-    # _configure_dspy reçoit le modèle dédié, pas reasoning_model_id. F-47 : think=False
-    # (le PromptRefiner désactive le thinking — reformulation structurée, pas besoin de
-    # raisonnement étape-par-étape, cf. debug/GAPS_TESTER_JUDGE.md Gap 2).
-    mock_configure.assert_called_once_with(settings, "dedicated-e4b-model", think=False)
+    # _configure_dspy reçoit le modèle dédié, pas reasoning_model_id. think=True :
+    # depuis le switch vers Ornith-9B (rapide), le thinking est activé sur TOUS les
+    # nœuds de raisonnement (Architect/Refiner/Judge/Security/Escalation) — fin du
+    # compromis think=False hérité du 12B lent. Le Refiner reformule mieux avec thinking.
+    mock_configure.assert_called_once_with(settings, "dedicated-e4b-model", think=True, api_base="http://localhost:11434/v1", api_key="sk-mock")
     # La métrique reflète aussi le modèle réellement utilisé (pas le défaut).
     assert metrics.model == "dedicated-e4b-model"
 
@@ -137,7 +146,7 @@ def test_prompt_refiner_falls_back_to_reasoning_model_when_unset(mock_cot, mock_
     settings.prompt_refiner_model_id = ""  # vide = fallback
     asyncio.run(execute_prompt_refiner_node("prompt", "FAKE_REASON", settings))
 
-    mock_configure.assert_called_once_with(settings, "mock-reasoning-model", think=False)
+    mock_configure.assert_called_once_with(settings, "mock-reasoning-model", think=True, api_base="http://localhost:11434/v1", api_key="sk-mock")
 
 
 # ==========================================

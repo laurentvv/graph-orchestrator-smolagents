@@ -26,7 +26,7 @@ from typing import List, Optional, Tuple
 # line-buffered pour que chaque print() soit visible immédiatement.
 for _stream in (sys.stdout, sys.stderr):
     try:
-        _stream.reconfigure(line_buffering=True)
+        _stream.reconfigure(line_buffering=True, encoding="utf-8")
     except Exception:
         # Fallback : si reconfigure() n'est pas dispo, on force l'unbuffered via
         # write+flush à l'ancienne n'est pas trivial sans wrapper ; on ignore.
@@ -426,7 +426,7 @@ async def run_coding_workflow(
                 seed_tasks[0]['content'] = task_content
             # Si refined est None (LLM down), on garde task_content brut (dégradation gracieuse).
 
-        print(f"[*] Analyse de la requête par le routeur ultra-rapide ({settings.fast_model_id})...")
+        print(f"[*] Analyse de la requête par le routeur ultra-rapide...")
         router_res, m0 = await execute_router_node(task_content, fast_model, settings)
         if m0: all_metrics.append(m0)
 
@@ -648,21 +648,27 @@ async def run_coding_workflow(
 
                 # 2. Vérifications Contradictoires (Tester + Security Reviewer)
                 # GPU-local : on séquentialise par défaut ( Tester PUIS Security)
-                # car lancer 2× le reasoning_model (gemma-12B) en parallèle sature
-                # la VRAM → swap lent, timeouts, et le Security devient "silencieux"
+                # car lancer 2× le reasoning_model en parallèle sature la VRAM
+                # → swap lent, timeouts, et le Security devient "silencieux"
                 # (observé run F-45 : Tester à 201k tokens pendant que Security
                 # n'a jamais rendu de verdict). AUDIT_PARALLEL=true restaure le
                 # comportement historique (gather) sur les grosses machines.
+                #
+                # MODÈLE TESTER : fast_model (multimodal, ex. gemma-4-E4B) — PAS reasoning_model.
+                # Le Tester capture des screenshots DevTools/Puppeteer et les envoie au modèle
+                # pour validation visuelle (layout, page blanche, chevauchements). Il faut donc
+                # un modèle MULTIMODAL. Or le reasoning_model (Ornith-9B) est texte uniquement.
+                # Le Security Reviewer reste sur reasoning_model (audit de code, pas de vision).
                 audit_parallel = os.getenv("AUDIT_PARALLEL", "false").strip().lower() in {"1", "true", "yes", "on"}
 
                 if audit_parallel:
                     print(f"    [>] Coder terminé. Déclenchement des Audits parallèles (Tester & Sécurité)...")
-                    t_task = execute_tester_node(sub_dict, reasoning_model, settings)
+                    t_task = execute_tester_node(sub_dict, fast_model, settings)
                     s_task = execute_security_reviewer_node(sub_dict, reasoning_model, settings)
                     (test_res, m2), (sec_res, m3) = await asyncio.gather(t_task, s_task)
                 else:
                     print(f"    [>] Coder terminé. Audit séquentiel (GPU-local) : Tester PUIS Sécurité...")
-                    test_res, m2 = await execute_tester_node(sub_dict, reasoning_model, settings)
+                    test_res, m2 = await execute_tester_node(sub_dict, fast_model, settings)
                     print(f"    [>] Tester terminé. Security Reviewer en cours...")
                     sec_res, m3 = await execute_security_reviewer_node(sub_dict, reasoning_model, settings)
                 if m2: sub_metrics.append(m2)
@@ -902,7 +908,18 @@ def run_workflow(mode: str, settings: Settings = default_settings) -> None:
 def main() -> None:
     """Point d'entrée dispatchant selon WORKFLOW_MODE."""
     settings = default_settings
-    run_workflow(settings.workflow_mode, settings)
+    # --- Logs de run auto-capturés (Priorité 13-bis) ------------------------
+    # Tee posé ICI (dès main()) pour capturer 100% de la sortie : preamble Knowledge
+    # Graph, run_id, checkpoint, run_output_dir... Ces lignes sont imprimées AVANT
+    # la résolution du dossier de run (coding/exploration), donc on doit englober
+    # run_workflow() entier. Couvre les 3 modes + les 2 entry points (agent_graph.py
+    # et -m graph_orchestrator.workflows importent tous deux cette fonction).
+    from .run_logging import tee_run_logging, resolve_log_path
+    log_path = resolve_log_path(settings.workflow_mode, settings.logs_dir)
+    with tee_run_logging(log_path, enabled=settings.log_to_file):
+        # 1ère ligne du log : permet à l'utilisateur de retrouver le chemin du fichier.
+        print(f"[📜] Log du run : {log_path}")
+        run_workflow(settings.workflow_mode, settings)
 
 
 if __name__ == "__main__":

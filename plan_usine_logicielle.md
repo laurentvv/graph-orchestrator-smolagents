@@ -266,3 +266,14 @@ Plus d'information : `system_prompts_analysis.md`
 > 1. **P14 d'abord** (F-56) — durcir les prompts avec les règles courtes (toujours pertinentes) + corriger le bug Linter P14-E. Effort faible, ROI immédiat.
 > 2. **P10 ensuite** — implémenter le middleware lazy loading, puis migrer les procédures longues des docstrings vers des skills `node-<role>-methodology` (dérivés des docs F-55). Permet de **dégonfler** les prompts que P14 aura partiellement alourdis, et d'injecter le contenu riche (grille OWASP, tableau couverture) seulement quand nécessaire.
 > 3. La **source unique de vérité** reste les `MANUAL_<NODE>_METHODOLOGY.md` : les prompts P14 (résumé court) et les skills P10 (version complète) en sont tous deux des projections, ce qui évite la dérive.
+
+## 🚀 Priorité 15 : Agent d'Amélioration Continue (Meta-Analyste)
+*Parce que les graphes IA génèrent énormément de logs impossibles à lire à la main.*
+
+> **🔎 État Actuel :** Quand le système échoue, l'humain doit lire des milliers de lignes de logs pour comprendre pourquoi l'agent a planté ou bouclé.
+> **🚀 Pourquoi ce sera mieux :** Une boucle de feedback structurée (Feature F-61) permet d'automatiser le post-mortem et de corriger les failles du prompt/skill à la source.
+
+- [x] **F-60 / F-61** : Création du script `scripts/run_analyzer.py` qui parse la base de données SQLite/DuckDB et les logs `task-*.log` pour générer un rapport Markdown. — *FAIT.*
+- [x] **F-61** : Établissement du workflow "Meta-Analyste" (documenté dans `AGENTS.md`) : exécution autonome par l'IA Antigravity, diagnostic, validation humaine, et patching chirurgical des prompts/skills. — *FAIT.*
+- [ ] **Traçabilité des itérations (Git local / Versioning)** : Afin d'éviter la perte d'informations lors des cycles de réécriture (ex: le Coder qui casse un code fonctionnel suite à un faux-positif du Tester), implémenter un versioning automatique dans le dossier `runs/`. À chaque itération de la boucle de code, l'orchestrateur effectue un commit Git local dans le dossier `runs/` (indépendant du dépôt principal) ou sauvegarde l'état dans des sous-dossiers `iter_1/`, `iter_2/`. Cela permettra de faire des `diff` post-mortem exacts pour voir comment l'IA a dégradé le code au fil des essais.
+

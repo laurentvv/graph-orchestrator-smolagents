@@ -99,7 +99,7 @@ Chaque `.md` est un cahier des charges structuré (souvent "1 fichier `index.htm
 
 ## 7. Tests du Graphe (Workflow Coding)
 1. **Préparation** : Copier un prompt depuis `references/Prompt-Vault/`. Le coller dans `tasks.json` (`coding.content`) et adapter `target_files`.
-2. **Configuration** : `WORKFLOW_MODE=coding` dans `.env`. Vérifier les LLMs (`curl http://<host>:11434/api/tags`).
+2. **Configuration** : `WORKFLOW_MODE=coding` dans `.env`. Vérifier les chemins GGUF (`FAST_MODEL`, `REASONING_MODEL`) et s'assurer que `FAST_BACKEND=spawn` et `REASONING_BACKEND=spawn` sont définis dans le `.env`.
 3. **Exécution** : `uv run agent_graph.py` (ajouter `PYTHONUNBUFFERED=1` si pipe).
 4. **Déroulement** : voir le diagramme complet du graphe (nœuds, modèles LLM, flux de données) dans `README.md` § « Node Graph & Data Flow ». En résumé : PromptRefiner → Router → Architect → (Coder → Linter → **Static Tester** → Tester+Security → Judge, max 3 itérations par sous-tâche) → Escalation si circuit breaker. Logs : `CODING WORKFLOW` (succès) ou `Fan-out asynchrone` (one-shot).
    - **Static Tester (F-49, 0 LLM, web-only)** : inséré entre Linter et Tester LLM. Implémente la méthodologie `debug/MANUAL_TESTER_METHODOLOGY.md` — `node --check` sur le JS inline (attrape TS-in-vanilla = page blanche), wiring `addEventListener` (attrape contrôle non branché, indétectable par screenshot), visibilité DOM DevTools (attrape éléments invisibles = bug CSS height:%). Court-circuite le Tester LLM (25 min) sur les bugs évidents en <6s. Dégradation gracieuse si `node`/Chrome absents. Opt-out `STATIC_TESTER_ENABLED=0` / `STATIC_TESTER_DEVTOOLS=0`.
@@ -109,3 +109,13 @@ Chaque `.md` est un cahier des charges structuré (souvent "1 fichier `index.htm
 *Notes* : 
 - Pour valider le graphe, commencer par **Bubble_Sort_Visualizer** (Easy, 1 fichier, borné).
 - **En cas de modification `.env.example`** : il faut reporter les ajouts dans `.env` local (sans toucher au contenu "secret").
+## 8. Amélioration Continue (Le Rôle du Meta-Analyste)
+Pour assurer l'amélioration continue de l'usine logicielle (Feature F-61), nous ne comptons pas sur un agent local autonome, mais sur une boucle de feedback hybride Humain + IA.
+
+**Directives pour l'Assistant IA (Antigravity) :**
+1. **Exécution Autonome** : C'est **toi (l'assistant)** qui dois lancer le script `uv run python scripts/run_analyzer.py` via ton terminal (soit après un run E2E complet, soit à la demande de l'utilisateur au début d'une session). Chaque run est désormais **journalisé automatiquement** dans `logs/run-<timestamp>-<mode>.log` (Tee posé sur stdout+stderr dans `workflows.main()`) ; le script y découvre le plus récent log de lui-même (cross-plateforme, via `$LOGS_DIR`). Fini la dépendance au chemin de l'Antigravity CLI.
+2. **Analyse** : Tu dois lire la sortie du script et repérer les problèmes récurrents (ex: erreurs de parsing Pydantic, syntaxe invalide comme le top-level `await`, ou crashes d'outils MCP).
+3. **Validation Humaine** : Tu ne dois **jamais** modifier les règles à l'aveugle. Tu dois faire un résumé clair à l'utilisateur des problèmes trouvés, lui proposer une solution (ex: "Je propose d'ajouter cette règle stricte dans `nodes.py`"), et attendre son feu vert ("Go").
+4. **Application** : Une fois la validation obtenue, interviens directement dans le code source pour durcir les prompts ou les skills.
+
+*Exemple réel : L'interdiction du top-level await dans Puppeteer et l'obligation d'utiliser des déclarations de fonction pour `evaluate_script` ont été diagnostiquées via l'analyse des crashes et fixées en direct dans les prompts des nœuds.*

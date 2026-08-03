@@ -426,3 +426,73 @@ def search_replace(path: str, old_string: str, new_string: str) -> str:
     except Exception as e:
         return f"Error editing file {path}: {str(e)}"
 
+
+@tool
+def multi_replace(path: str, replacements: list) -> str:
+    """Applies multiple search/replace operations to a file safely without rewriting it entirely.
+    
+    PREFER this tool over write_file when modifying an EXISTING file with multiple edits: 
+    you provide the exact code to find and its replacement for several blocks at once.
+
+    Args:
+        path: The file path to edit. Must exist.
+        replacements: A list of dictionaries, each containing 'old_string' and 'new_string'.
+            Example: [{"old_string": "foo()", "new_string": "bar()"}, ...]
+            The 'old_string' is matched tolerantly.
+    """
+    try:
+        if not replacements or not isinstance(replacements, list):
+            return "ERROR: 'replacements' must be a non-empty list of dictionaries."
+            
+        lock = _file_lock(path)
+        with lock:
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+                
+            success_count = 0
+            errors = []
+            
+            for i, rep in enumerate(replacements):
+                old_str = rep.get("old_string", "")
+                new_str = rep.get("new_string", "")
+                
+                if _is_placeholder(new_str):
+                    errors.append(f"Block {i}: 'new_string' is a placeholder. Skipping.")
+                    continue
+                    
+                if not old_str.strip():
+                    # Append if old_string is empty
+                    if content and not content.endswith("\n"):
+                        content += "\n"
+                    content += new_str
+                    success_count += 1
+                else:
+                    new_content = replace_most_similar_chunk(content, old_str, new_str)
+                    if new_content is None:
+                        hint = find_similar_lines(old_str, content)
+                        err_msg = f"Block {i}: 'old_string' not found."
+                        if hint:
+                            err_msg += f" Closest match:\n{hint}"
+                        errors.append(err_msg)
+                    else:
+                        content = new_content
+                        success_count += 1
+                        
+            if success_count == 0:
+                return "ERROR: No replacements were successful.\n" + "\n".join(errors)
+                
+            if not content.strip():
+                return "ERROR: The edits would empty the file. Aborting. File NOT modified."
+                
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
+                
+        msg = f"Successfully applied {success_count}/{len(replacements)} replacements to {path}."
+        if errors:
+            msg += "\nSome errors occurred:\n" + "\n".join(errors)
+        return msg
+        
+    except FileNotFoundError:
+        return (f"ERROR: file '{path}' does not exist. Use write_file to CREATE a new file.")
+    except Exception as e:
+        return f"Error editing file {path}: {str(e)}"
