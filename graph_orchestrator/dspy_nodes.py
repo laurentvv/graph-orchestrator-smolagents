@@ -21,6 +21,7 @@ import dspy
 
 from .config import Settings
 from .feedback_utils import truncate_output
+from .llama_server import model_lifecycle
 from .logging_utils import NodeMetrics
 from .models import (
     ArchitectOutput,
@@ -296,45 +297,34 @@ class EscalationSignature(dspy.Signature):
 # Configuration DSPy
 # ==========================================
 
-def _configure_dspy(settings: Settings, model_id: str, think: bool = False):
-    """Configure dynamiquement DSPy pour pointer vers une instance locale Ollama.
+def _configure_dspy(settings: Settings, model_id: str, think: bool = False,
+                    api_base: Optional[str] = None, api_key: Optional[str] = None):
+    """Configure dynamiquement DSPy pour pointer vers une instance llama-server (F-58).
 
-    Timeout appliqué : sans lui, un endpoint Ollama distant muet fige le nœud DSPy
-    (bug observé sur le serveur distant 10.201.12.50 qui répond au /api/tags mais
-    timeout sur l'inférence). Le timeout permet à l'appel d'échouer proprement.
+    Provider litellm ``openai/`` contre l'endpoint OpenAI-compatible ``/v1`` de llama-server
+    (ou n'importe quel endpoint OpenAI-compat : Ollama, OpenAI, OpenRouter — backend-agnostique).
 
-    Provider ``ollama/`` (F-47, fix Gap 2) : on utilise le provider litellm ``ollama/``
-    au lieu de ``openai/``. Pourquoi :
-    - ``openai/`` parle l'endpoint OpenAI-compat ``/v1`` d'Ollama. Or sur Ollama 0.32.5
-      (dernière version), le thinking Gemma 4 est **FORCÉ** sur ``/v1`` et AUCUN paramètre
-      (think, chat_template_kwargs, Modelfile) ne le désactive côté /v1.
-    - ``ollama/`` parle l'API native ``/api/chat`` d'Ollama, qui accepte le paramètre
-      ``think`` (booléen top-level). Testé : ``think=False`` → 3.8s + 6 tokens + réponse
-      directe (vs 23 min de thinking qui consomme tout max_tokens sans jamais émettre le
-      verdict → hang du Judge).
-    Le thinking est donc désactivé par défaut (``think=False``) pour les nœuds de verdict
-    (Judge/Router/PromptRefiner/Security/Escalation) où il est du gaspi bloquant. Seul
-    l'Architect le conserve (le raisonnement aide au découpage/stratégie) — voir appelant.
+    Thinking piloté CÔTÉ SERVEUR : le flag ``--reasoning on/off`` est passé au spawn de
+    llama-server par ``model_lifecycle`` (config ModelSpec). Le paramètre ``think`` est INERT
+    (conservé pour ne pas casser les appelants). Le thinking va dans ``reasoning_content``
+    (séparé), DSPy lit ``content`` (réponse finale propre) — comportement voulu, validé F-58.
 
-    ``think`` (F-47) : True = raisonnement étape-par-ante (Architect), False = réponse
-    directe (tous les autres nœuds DSPy). Le thinking consomme le budget max_tokens ; sans
-    borne stricte il peut faire hang le nœud (cf. debug/GAPS_TESTER_JUDGE.md Gap 2).
-
-    Note : l'api_base Ollama ne doit PAS contenir le suffixe ``/v1`` pour le provider
-    ``ollama/`` (litellm parle à la racine ``/api/chat``). On le retire si présent.
+    Args :
+        api_base/api_key/model_id : overrides depuis le serveur spawné (model_lifecycle.srv).
+            Si fournis, on les utilise (port dynamique du process spawné). Sinon, fallback
+            sur les settings (rétro-compatibilité tests mockés / endpoint externe fixe).
     """
-    api_base = settings.ollama_reasoning_api_base if model_id == settings.reasoning_model_id else settings.ollama_api_base
-    # Le provider ollama/ parle /api/chat à la racine — pas de /v1 (sinon 404).
-    if api_base.endswith("/v1"):
-        api_base = api_base[:-3]
+    if api_base is None:
+        api_base = settings.ollama_reasoning_api_base if model_id == settings.reasoning_model_id else settings.ollama_api_base
+    if api_key is None:
+        api_key = settings.ollama_api_key
     lm = dspy.LM(
-        f"ollama/{model_id}",
+        f"openai/{model_id}",
         api_base=api_base,
-        api_key="ollama",  # requis par litellm même si Ollama ne vérifie pas la clé
+        api_key=api_key,
         max_tokens=8192,
         temperature=0.3,
         timeout=settings.llm_timeout_s,
-        think=think,
     )
     return lm
 
@@ -342,6 +332,29 @@ def _configure_dspy(settings: Settings, model_id: str, think: bool = False):
 # ==========================================
 # Exécuteurs de Nœuds (Wrappers Asynchrones)
 # ==========================================
+
+def _no_think_model_id(settings: Settings) -> str:
+    """Résout le model_id pour les nœuds think=False (Judge/Security/Escalation).
+
+    F-58 : avec llama-server, le thinking se pilote côté serveur via models.ini
+    (reasoning=on/off), donc les nœuds think=False doivent pointer sur la section
+    `reasoning = off` (ex: "gemma-4-12b-nothink"). Si reasoning_no_think_model_id est
+    vide (défaut, rétro-compatibilité Ollama/tests), on retombe sur reasoning_model_id.
+    """
+    return settings.reasoning_no_think_model_id or settings.reasoning_model_id
+
+
+async def _run_dspy_node(signature, predictor_kwargs: dict, settings: Settings, spec, think: bool = False, model_override: Optional[str] = None) -> Any:
+    """Helper pour exécuter un nœud DSPy avec le cycle de vie du modèle."""
+    with model_lifecycle(spec) as srv:
+        _mid = model_override or srv.model_id or spec.model
+        _base = srv.api_base
+        _key = srv.api_key
+        lm = _configure_dspy(settings, _mid, think=think, api_base=_base, api_key=_key)
+        with dspy.context(lm=lm):
+            predictor = dspy.ChainOfThought(signature)
+            return await asyncio.to_thread(predictor, **predictor_kwargs)
+
 
 async def execute_router_node(task_content: str, fast_model, settings: Settings) -> Tuple[Optional[RouterOutput], Optional[NodeMetrics]]:
     """Exécute le nœud de routage avec un modèle rapide.
@@ -355,17 +368,19 @@ async def execute_router_node(task_content: str, fast_model, settings: Settings)
         Un tuple contenant l'objet Pydantic RouterOutput (ou None si échec) et les métriques du nœud.
     """
     print("[*] DSPy Routeur en cours...")
-    lm = _configure_dspy(settings, settings.fast_model_id, think=False)
     start_time = time.time()
     try:
-        with dspy.context(lm=lm):
-            predictor = dspy.ChainOfThought(RouterSignature)
-            # Exécution dans un thread séparé pour ne pas bloquer la boucle asynchrone (Event Loop) de smolagents
-            result = await asyncio.to_thread(predictor, task_content=task_content)
+        result = await _run_dspy_node(
+            signature=RouterSignature,
+            predictor_kwargs={"task_content": task_content},
+            settings=settings,
+            spec=settings.fast_spec,
+            think=False,
+        )
         
         metrics = NodeMetrics(
             node="router_dspy", 
-            model=settings.fast_model_id, 
+            model=settings.fast_spec.model, 
             duration_s=time.time() - start_time, 
             input_tokens=0, 
             output_tokens=0
@@ -477,20 +492,21 @@ async def execute_prompt_refiner_node(
         (dégradation gracieuse : l'appelant repliera sur le prompt brut).
     """
     print("[*] DSPy PromptRefiner en cours (reformulation du prompt brut en spec)...")
-    # Modèle dédié si setté (E4B recommandé : ~8× plus rapide que le 12B pour qualité
-    # équivalente — voir log.md test comparatif). Fallback sur reasoning_model_id sinon.
-    refiner_model_id = settings.prompt_refiner_model_id or settings.reasoning_model_id
-    lm = _configure_dspy(settings, refiner_model_id, think=False)
     capabilities = _build_capabilities_summary(settings)
     start_time = time.time()
     try:
-        with dspy.context(lm=lm):
-            predictor = dspy.ChainOfThought(PromptRefinerSignature)
-            result = await asyncio.to_thread(
-                predictor,
-                raw_prompt=raw_prompt,
-                available_capabilities=capabilities,
-            )
+        _spec = settings.no_think_spec if settings.no_think_spec.model else settings.reasoning_spec
+        result = await _run_dspy_node(
+            signature=PromptRefinerSignature,
+            predictor_kwargs={
+                "raw_prompt": raw_prompt,
+                "available_capabilities": capabilities,
+            },
+            settings=settings,
+            spec=_spec,
+            think=False,
+            model_override=settings.prompt_refiner_model_id,
+        )
         refined = result.output
         n_amb = len(refined.ambiguities_detected) if refined.ambiguities_detected else 0
         print(f"[+] PromptRefiner : spec produite ({len(refined.refined_prompt)} caractères"
@@ -498,7 +514,7 @@ async def execute_prompt_refiner_node(
 
         metrics = NodeMetrics(
             node="prompt_refiner_dspy",
-            model=refiner_model_id,
+            model=settings.prompt_refiner_model_id or _spec.model,
             duration_s=time.time() - start_time,
             input_tokens=0,
             output_tokens=0,
@@ -535,11 +551,6 @@ async def execute_architect_node(task: dict, reasoning_model, settings: Settings
         ArchitectOutput contenant la liste des sous-tâches pour le Fan-out des codeurs.
     """
     print("[*] DSPy Architecte en cours d'élaboration du plan...")
-    # F-47 : l'Architect est le SEUL nœud DSPy qui conserve le thinking (think=True). Le
-    # raisonnement étape-par-étape aide au découpage/stratégie (simple/incremental/multifile,
-    # sections, target_files). Tous les autres nœuds (Judge/Router/etc.) l'ont désactivé
-    # car c'était du gaspi bloquant (thinking forcé sur /v1 → hang, cf. _configure_dspy).
-    lm = _configure_dspy(settings, settings.reasoning_model_id, think=True)
     start_time = time.time()
 
     # Pré-fetch doc Context7 : l'Architect (DSPy, pas de boucle d'outils) ne peut
@@ -557,15 +568,19 @@ async def execute_architect_node(task: dict, reasoning_model, settings: Settings
         else:
             print("[*] Architect : Context7 indisponible/non pertinent — planification sans brief.")
     try:
-        with dspy.context(lm=lm):
-            predictor = dspy.ChainOfThought(ArchitectSignature)
-            result = await asyncio.to_thread(predictor, task_content=architect_input)
-        
+        result = await _run_dspy_node(
+            signature=ArchitectSignature,
+            predictor_kwargs={"task_content": architect_input},
+            settings=settings,
+            spec=settings.reasoning_spec,
+            think=True,
+        )
+
         metrics = NodeMetrics(
-            node="architect_dspy", 
-            model=settings.reasoning_model_id, 
-            duration_s=time.time() - start_time, 
-            input_tokens=0, 
+            node="architect_dspy",
+            model=settings.reasoning_spec.model,
+            duration_s=time.time() - start_time,
+            input_tokens=0,
             output_tokens=0
         )
         return result.output, metrics
@@ -583,9 +598,6 @@ async def execute_security_reviewer_node(subtask: dict, reasoning_model, setting
         settings (Settings): Configuration globale.
     """
     print(f"[*] DSPy Security Reviewer sur la tâche {subtask.get('id')}...")
-    lm = _configure_dspy(settings, settings.reasoning_model_id, think=False)
-    
-    # Lecture du code depuis le disque
     code_content = ""
     for file_path in subtask.get("target_files", []):
         try:
@@ -593,16 +605,24 @@ async def execute_security_reviewer_node(subtask: dict, reasoning_model, setting
                 code_content += f"--- {file_path} ---\n{f.read()}\n\n"
         except Exception:
             pass
-            
+
     start_time = time.time()
     try:
-        with dspy.context(lm=lm):
-            predictor = dspy.ChainOfThought(SecuritySignature)
-            result = await asyncio.to_thread(predictor, task_id=subtask.get("id", "unknown"), code=code_content or "Code manquant")
+        _spec = settings.no_think_spec if settings.no_think_spec.model else settings.reasoning_spec
+        result = await _run_dspy_node(
+            signature=SecuritySignature,
+            predictor_kwargs={
+                "task_id": subtask.get("id", "unknown"),
+                "code": code_content or "Code manquant"
+            },
+            settings=settings,
+            spec=_spec,
+            think=False,
+        )
         
         metrics = NodeMetrics(
             node="security_dspy", 
-            model=settings.reasoning_model_id, 
+            model=_spec.model, 
             duration_s=time.time() - start_time, 
             input_tokens=0, 
             output_tokens=0
@@ -627,9 +647,6 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
         CodeJudgeOutput dictant si le code est 'approved' ou s'il nécessite un feedback.
     """
     print(f"[*] DSPy Code Judge sur la tâche {subtask.get('id')}...")
-    lm = _configure_dspy(settings, settings.reasoning_model_id, think=False)
-    
-    # Lecture du code depuis le disque
     code_content = ""
     for file_path in subtask.get("target_files", []):
         try:
@@ -637,45 +654,43 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
                 code_content += f"--- {file_path} ---\n{f.read()}\n\n"
         except Exception:
             pass
-            
+
+    vulns = security_res.vulnerabilities if security_res and security_res.vulnerabilities else ["Aucune vulnérabilité critique détectée."]
+    
+    tests = "Résultats non disponibles"
+    if test_res:
+        if isinstance(test_res, dict):
+            tests = str(test_res.get("details", test_res))
+        else:
+            tests = getattr(test_res, "details", str(test_res))
+    tests = truncate_output(tests, head_lines=settings.stderr_head_lines, tail_lines=settings.stderr_tail_lines, max_chars=settings.feedback_max_chars)
+
     start_time = time.time()
-    
-    # Extraction sécurisée des tableaux pour éviter des erreurs Pydantic si les champs sont None
-    vulns = security_res.vulnerabilities if security_res and hasattr(security_res, "vulnerabilities") else []
-    # Le rapport du Tester peut être long (console JS, traceback). On le tronque AVANT
-    # de l'injecter au Judge pour protéger le contexte (sinon overflow sur les gros échecs).
-    tests_raw = str(test_res) if test_res else "Aucun résultat de test."
-    tests = truncate_output(
-        tests_raw,
-        head_lines=settings.stderr_head_lines,
-        tail_lines=settings.stderr_tail_lines,
-        max_chars=settings.feedback_max_chars,
-    )
-    
     try:
-        with dspy.context(lm=lm):
-            predictor = dspy.ChainOfThought(CodeJudgeSignature)
-            # task_requirements : le cahier des charges complet, pour que le Juge
-            # vérifie que les comportements clés sont testés ET corrects (pas juste
-            # que le code ne crash pas). Tronqué pour protéger le contexte.
-            task_requirements = truncate_output(
-                subtask.get("original_content", "") or "Cahier des charges non disponible.",
-                head_lines=30,
-                tail_lines=10,
-                max_chars=1500,
-            )
-            result = await asyncio.to_thread(
-                predictor,
-                task_id=subtask.get("id", "unknown"),
-                code=code_content or "Code manquant",
-                security_vulnerabilities=vulns,
-                test_results=tests,
-                task_requirements=task_requirements,
-            )
+        task_requirements = truncate_output(
+            subtask.get("original_content", "") or "Cahier des charges non disponible.",
+            head_lines=30,
+            tail_lines=10,
+            max_chars=1500,
+        )
+        _spec = settings.no_think_spec if settings.no_think_spec.model else settings.reasoning_spec
+        result = await _run_dspy_node(
+            signature=CodeJudgeSignature,
+            predictor_kwargs={
+                "task_id": subtask.get("id", "unknown"),
+                "code": code_content or "Code manquant",
+                "security_vulnerabilities": vulns,
+                "test_results": tests,
+                "task_requirements": task_requirements,
+            },
+            settings=settings,
+            spec=_spec,
+            think=False,
+        )
         
         metrics = NodeMetrics(
             node="code_judge_dspy",
-            model=settings.reasoning_model_id,
+            model=_spec.model,
             duration_s=time.time() - start_time,
             input_tokens=0,
             output_tokens=0
@@ -711,7 +726,6 @@ async def execute_escalation_node(subtask: dict, failure_history: str, reasoning
         historique 'max_iterations_reached' (dégradation gracieuse).
     """
     print(f"[*] DSPy Nœud d'Escalade sur la tâche {subtask.get('id')} (circuit breaker activé)...")
-    lm = _configure_dspy(settings, settings.reasoning_model_id, think=False)
 
     # Lecture du code courant sur disque (état final après le dernier échec).
     # Comme pour le Judge, on tronque pour protéger le contexte.
@@ -731,19 +745,23 @@ async def execute_escalation_node(subtask: dict, failure_history: str, reasoning
 
     start_time = time.time()
     try:
-        with dspy.context(lm=lm):
-            predictor = dspy.ChainOfThought(EscalationSignature)
-            result = await asyncio.to_thread(
-                predictor,
-                task_id=subtask.get("id", "unknown"),
-                task_description=subtask.get("description") or subtask.get("content") or "Description non disponible.",
-                failure_history=failure_history or "Aucun historique de réfutation enregistré.",
-                current_code=current_code,
-            )
+        _spec = settings.no_think_spec if settings.no_think_spec.model else settings.reasoning_spec
+        result = await _run_dspy_node(
+            signature=EscalationSignature,
+            predictor_kwargs={
+                "task_id": subtask.get("id", "unknown"),
+                "task_description": subtask.get("description") or subtask.get("content") or "Description non disponible.",
+                "failure_history": failure_history or "Aucun historique de réfutation enregistré.",
+                "current_code": current_code,
+            },
+            settings=settings,
+            spec=_spec,
+            think=False,
+        )
 
         metrics = NodeMetrics(
             node="escalation_dspy",
-            model=settings.reasoning_model_id,
+            model=_spec.model,
             duration_s=time.time() - start_time,
             input_tokens=0,
             output_tokens=0

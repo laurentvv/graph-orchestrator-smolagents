@@ -235,8 +235,9 @@ def extract_and_validate(response: Any, model_class: type[BaseModel]) -> Optiona
             import logging
             logging.getLogger("dspy").setLevel(logging.CRITICAL)
             
-            # Utilisation du petit modèle (très rapide) via Ollama Guided Decoding ou DSPy typed
-            lm = dspy.LM(f"ollama_chat/{settings.fast_model_id}", api_base=settings.ollama_api_base.replace("/v1", ""), api_key=settings.ollama_api_key)
+            # F-58 : provider openai/ contre llama-server (avant : ollama_chat/ → /api/chat Ollama).
+            # api_base garde /v1 (llama-server expose /v1, contrairement à Ollama /api/chat).
+            lm = dspy.LM(f"openai/{settings.fast_model_id}", api_base=settings.ollama_api_base, api_key=settings.ollama_api_key)
             with dspy.context(lm=lm):
                 class JSONFixSignature(dspy.Signature):
                     """Extract the exact JSON fields from the broken text into the correct schema."""

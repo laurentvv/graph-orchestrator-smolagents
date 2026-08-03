@@ -176,12 +176,12 @@ These nodes are not used in coding mode.
 This project uses `uv` for seamless dependency and virtual environment management.
 
 ```bash
-# 1. Pull the required local models via Ollama
+# 1. Download the required GGUF blobs for llama-server (models are launched dynamically)
 #    - Fast model (Fan-out / Workers / Router) :
-ollama pull qwen3.5:2b
+#    Download a small model (e.g. gemma-4-E4B.gguf)
 #    - Heavy reasoning model (Architect / Coder / Judge) :
-ollama pull hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL
-
+#    Download a larger model (e.g. gemma-4-12B.gguf)
+#    Set their absolute paths in the .env file.
 # 2. Sync Python dependencies via uv (including DSPy, smolagents, etc.)
 uv sync
 
@@ -191,7 +191,7 @@ cp .env.example .env
 
 ## 🎮 Usage
 
-Ensure your Ollama server is running in the background (`ollama serve`).
+Ensure `llama-server` is in your PATH. The orchestrator will spawn and kill the models automatically during the workflow based on your `.env` configuration.
 
 ### Managing Prompts and Tasks (`tasks.json`)
 You don't need to touch Python code to give orders to the orchestrator. Simply modify the `tasks.json` file in the root directory. This file dictates what tasks are run depending on the active `WORKFLOW_MODE`.

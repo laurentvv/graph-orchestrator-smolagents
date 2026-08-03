@@ -29,6 +29,7 @@ from .models import (
 from .tools import read_file, write_file, append_file, edit_file, bash_command, list_directory, search_replace
 from .skills_loader import build_skills_block
 from .loop_guard import LoopGuard, extract_tool_calls_from_step
+from .llama_server import model_lifecycle
 from .orphan_repair import repair_orphan_steps
 from .sanitizer import sanitize_tools
 from .prompts import build_role_header
@@ -162,6 +163,8 @@ async def run_with_retry(
     max_retries: int,
     loop_guard: Optional["LoopGuard"] = None,
     node_kind: str = "coder",
+    model_id: Optional[str] = None,
+    api_base: Optional[str] = None,
 ) -> Tuple[Optional[object], Optional[NodeMetrics]]:
     """Exécute un agent avec retry. Retourne (données_validées, métriques).
 
@@ -503,23 +506,7 @@ async def execute_coder_node(
         # jusqu'à 91× plus de contenu que le TCA sur une même tâche).
         # final_answer s'appelle maintenant en SYNTAXE PYTHON : final_answer({...}) ou
         # final_answer("texte"), pas en JSON. extract_and_validate gère les 2 (dict + str).
-        local_coder = CodeAgent(
-            tools=coder_tools,
-            model=fast_model,
-            name=f"coder_{task['id'].replace('-', '_')}",
-            description="Agent développeur capable d'explorer le projet, d'écrire, lire, modifier du code.",
-            verbosity_level=resolve_verbosity("HIGH"),
-            # 14 steps (vs 12 avant F-45) : marge pour l'étape de validation visuelle
-            # (navigate_page + take_screenshot + analyse + corrections éventuelles).
-            # Un step CodeAgent = un code block complet, donc +2 steps couvrent le
-            # cycle preview sans trop allonger le runtime sur les tâches sans web.
-            max_steps=14,
-            # On gère nous-mêmes le set d'outils (pas de python_interpreter natif ajouté).
-            add_base_tools=False,
-            # F-45 : step_callback qui pousse le screenshot dans observations_images
-            # pour que le modèle vision l'analyse. No-op si pas de screenshot ce step.
-            step_callbacks=[make_screenshot_callback(screenshot_capture)],
-        )
+        # L'instanciation de local_coder a été déplacée plus bas, à l'intérieur du bloc `with model_lifecycle`.
 
         target_files_instruction = ""
         if "target_files" in task and task["target_files"]:
@@ -662,9 +649,29 @@ Code prêt pour la production, respectant les conventions du langage.
             enabled=settings.loop_guard_enabled,
         )
         # max_retries can be slightly higher for coding since it involves tool use steps
-        return await run_with_retry(
-            local_coder, prompt, CoderOutput, settings.worker_max_retries, loop_guard=guard
-        )
+        # max_retries can be slightly higher for coding since it involves tool use steps
+        with model_lifecycle(settings.fast_spec) as srv:
+            dynamic_fast_model = OpenAIServerModel(
+                model_id=srv.model_id or settings.fast_model_id,
+                api_base=srv.api_base or settings.ollama_api_base,
+                api_key=srv.api_key or settings.ollama_api_key,
+                max_tokens=settings.fast_max_tokens,
+                temperature=settings.coder_temperature,
+                client_kwargs={"timeout": settings.llm_timeout_s},
+            )
+            local_coder = CodeAgent(
+                tools=coder_tools,
+                model=dynamic_fast_model,
+                name=f"coder_{task['id'].replace('-', '_')}",
+                description="Agent développeur capable d'explorer le projet, d'écrire, lire, modifier du code.",
+                verbosity_level=resolve_verbosity("HIGH"),
+                max_steps=14,
+                add_base_tools=False,
+                step_callbacks=[make_screenshot_callback(screenshot_capture)],
+            )
+            return await run_with_retry(
+                local_coder, prompt, CoderOutput, settings.worker_max_retries, loop_guard=guard
+            )
 
 
 async def execute_tester_node(

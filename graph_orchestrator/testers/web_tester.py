@@ -20,6 +20,7 @@ from typing import Optional, Tuple
 # pas de round-trip du HTML brut). On garde l'import symbolique pour documenter
 # la dépendance et faciliter son utilisation future (ex: analyse post-capture).
 from ..dom_filter import clean_dom_for_llm  # noqa: F401
+from ..llama_server import model_lifecycle
 from ..logging_utils import NodeMetrics
 from ..models import CoderOutput
 from ..prompts import build_role_header
@@ -33,7 +34,7 @@ class WebTestRunner:
         # importable même si l'environnement web (Chrome/npx) n'est pas dispo
         # (ex: le runner Python n'en a pas besoin).
         from mcp import StdioServerParameters
-        from smolagents import ToolCollection, ToolCallingAgent
+        from smolagents import ToolCollection, ToolCallingAgent, OpenAIServerModel
 
         from ..nodes import run_with_retry, resolve_verbosity, _detect_idle_step
         from ..skills_loader import load_skill_body
@@ -88,24 +89,7 @@ class WebTestRunner:
                 mode_label = "CIBLÉ (re-test bugs)" if use_targeted else "complet"
                 print(f"    [>] Tester mode: {mode_label} (max_steps={tester_max_steps})")
 
-                local_tester = ToolCallingAgent(
-                    tools=tester_tools,
-                    model=model,
-                    name=f"tester_{task['id'].replace('-', '_')}",
-                    description="Agent QA chargé de tester les interfaces web avec le MCP Puppeteer.",
-                    verbosity_level=resolve_verbosity("HIGH"),
-                    # max_steps adaptatif (F-47) : 6 en mode ciblé, settings.tester_max_steps
-                    # (défaut 12, configurable via TESTER_MAX_STEPS) en complet.
-                    # Rationnel complet : au-delà de 12, le contexte du ToolCallingAgent
-                    # explose (observations DOM accumulées : +18k tokens/step observé
-                    # sur run F-45, 405k tokens au step 21). Or gemma-4-12B perd en
-                    # qualité au-delà de ~100k tokens.
-                    max_steps=tester_max_steps,
-                    # F-45 : step_callback vision — pousse le screenshot dans
-                    # observations_images pour que le modèle le voie et détecte les
-                    # bugs visuels (pas seulement console/assertions).
-                    step_callbacks=[make_screenshot_callback(screenshot_capture)],
-                )
+                # L'instanciation de local_tester a été déplacée plus bas, à l'intérieur du bloc `with model_lifecycle`.
 
                 # Skill chargé via le loader centralisé (cohérent avec les autres nœuds) ;
                 # le frontmatter est nettoyé pour économiser le contexte du LLM.
@@ -231,7 +215,25 @@ Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_an
                     threshold=settings.loop_guard_threshold,
                     enabled=settings.loop_guard_enabled,
                 )
-                return await run_with_retry(
-                    local_tester, prompt, CoderOutput, settings.worker_max_retries,
-                    loop_guard=guard, node_kind="tester",
-                )
+                with model_lifecycle(settings.no_think_spec) as srv:
+                    _mid = srv.model_id or settings.reasoning_no_think_model_id or settings.reasoning_model_id
+                    dynamic_tester_model = OpenAIServerModel(
+                        model_id=_mid,
+                        api_base=srv.api_base or settings.ollama_reasoning_api_base,
+                        api_key=srv.api_key or settings.ollama_api_key,
+                        max_tokens=settings.reasoning_max_tokens,
+                        client_kwargs={"timeout": settings.llm_timeout_s},
+                    )
+                    local_tester = ToolCallingAgent(
+                        tools=tester_tools,
+                        model=dynamic_tester_model,
+                        name=f"tester_{task['id'].replace('-', '_')}",
+                        description="Agent QA chargé de tester les interfaces web avec le MCP Puppeteer.",
+                        verbosity_level=resolve_verbosity("HIGH"),
+                        max_steps=tester_max_steps,
+                        step_callbacks=[make_screenshot_callback(screenshot_capture)],
+                    )
+                    return await run_with_retry(
+                        local_tester, prompt, CoderOutput, settings.worker_max_retries,
+                        loop_guard=guard, node_kind="tester",
+                    )

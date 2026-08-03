@@ -479,6 +479,13 @@
       "dependencies": [
         "F-56"
       ]
+    },
+    {
+      "id": "F-58",
+      "name": "Intégration llama.cpp (llama-server) dynamique",
+      "description": "Lancement dynamique de llama.cpp à la place d'Ollama. Context manager model_lifecycle qui gère le spawn, configure DSPy via api_base et tue le process pour libérer la VRAM. Remplacement du backend external par spawn dans .env par défaut. Configuration des blobs GGUF dans .env.",
+      "status": "completed",
+      "dependencies": []
     }
   ]
 }

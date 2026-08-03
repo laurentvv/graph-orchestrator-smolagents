@@ -2773,3 +2773,4 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
   BASE_SKILLS_BY_NODE étendu aux nœuds DSPy (actuellement router/judge/security=[]).
 - Aucune modif prompts.py (rôles/invariants inchangés), models.py, nodes.py, skills_loader.py.
 - Branche feat/node-prompt-hardening prête à merger sur main.
+## [2026-08-03 12:15:00] fix  | Coder et test_prompt_refiner corrigés (bug fix precedence mock, variables non définies). Tests pytest passent 598/598.

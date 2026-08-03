@@ -75,14 +75,23 @@ async def lifespan(app: FastAPI):
 
 
 def _check_ollama(settings: Settings) -> bool:
-    """Vérifie si Ollama répond (non bloquant, timeout court)."""
+    """Vérifie si le serveur LLM (llama-server ou Ollama) répond (non bloquant).
+
+    F-58 : après migration llama-server, l'endpoint /api/tags (Ollama-only) n'existe plus.
+    llama-server expose /health (renvoie {"status":"ok"}) et /v1/models (OpenAI). On teste
+    /health d'abord (llama-server), puis /api/tags en fallback (si on pointe encore sur
+    Ollama pour certains usages). Les deux retournent 200 quand le serveur est up.
+    """
     import urllib.request
     base = settings.ollama_api_base.rstrip("/").removesuffix("/v1")
-    try:
-        req = urllib.request.urlopen(f"{base}/api/tags", timeout=2)
-        return req.status == 200
-    except Exception:
-        return False
+    for path in ("/health", "/api/tags"):
+        try:
+            req = urllib.request.urlopen(f"{base}{path}", timeout=2)
+            if req.status == 200:
+                return True
+        except Exception:
+            continue
+    return False
 
 
 app = FastAPI(

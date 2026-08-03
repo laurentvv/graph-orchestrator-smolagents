@@ -504,3 +504,11 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape P14-9 : État disque synchronisé (feature_list F-56 completed + F-57 pending,
   contract, progress, log, plan_usine P14 coché).
 
+## Jalons de l'Itération (cycle Intégration llama.cpp dynamique — F-58)
+- [x] Étape LCP-1 : `llama_server.py` créé avec le context manager `model_lifecycle`.
+- [x] Étape LCP-2 : `_configure_dspy` (dspy_nodes.py) et les runners (`CodeAgent` / `WebTester`) adaptés pour accepter l'API base issue du `model_lifecycle` spawn.
+- [x] Étape LCP-3 : Configurations .env et config.py adaptées (backends `spawn`, `FAST_MODEL` etc.)
+- [x] Étape LCP-4 : Ajustements mock tests pour respecter les `_SpawnedServer`.
+- [x] Étape LCP-5 : Tests unitaires (598 passed).
+- [ ] Étape LCP-6 : Run E2E (Bubble Sort validé).
+
