@@ -37,7 +37,7 @@ def parse_log_file(log_path: str):
         line_clean = line.strip()
         
         # Détection du nœud en cours
-        if "[*] DSPy" in line_clean or "[*] Code Judge" in line_clean:
+        if line_clean.startswith("[*] DSPy") or line_clean.startswith("[*] Code Judge") or line_clean.startswith("[*] Coder ") or line_clean.startswith("[*] Tester "):
             current_node = line_clean
             if current_node not in metrics["nodes"]:
                 metrics["nodes"][current_node] = {

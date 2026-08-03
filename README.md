@@ -225,9 +225,15 @@ uv run agent_graph.py
 
 ### Data Processing: Exploration Mode (Loop-until-dry)
 ```bash
-$env:WORKFLOW_MODE="exploration"
-uv run python -m graph_orchestrator.workflows
+WORKFLOW_MODE=exploration uv run python -m graph_orchestrator.workflows
 ```
+
+### Run Analysis & Continuous Improvement
+After a run (especially End-to-End coding workflows), you can analyze the execution logs and DuckDB database to extract metrics (tokens, duration per node, errors, crashes).
+```bash
+uv run python scripts/run_analyzer.py
+```
+This script will auto-detect the latest log in `.system_generated/tasks/` and produce an `analysis_report.md`. This is critical for post-mortem debugging and continuous improvement of the agents (F-60 & F-61).
 
 ## 🧪 Testing
 
