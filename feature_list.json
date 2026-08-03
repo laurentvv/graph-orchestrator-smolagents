@@ -506,35 +506,58 @@
       "name": "Amélioration Continue automatisée (Self-Learning)",
       "description": "Implémentation d'une boucle de feedback exploitant les rapports générés par `run_analyzer.py`. L'objectif est d'utiliser ces données pour ajuster dynamiquement les prompts des agents (nodes.py, SKILLS) et ainsi éviter les erreurs récurrentes (comme InterpreterError) lors des exécutions futures.",
       "status": "pending",
-      "dependencies": ["F-60"]
+      "dependencies": [
+        "F-60"
+      ]
     },
     {
       "id": "F-62",
       "name": "Correction perte de contexte Architecte (Shift Context)",
       "description": "Vérification: L'Architecte synthétise excessivement le cahier des charges initial (perte des couleurs, valeurs numériques et contraintes techniques). Validation: Le prompt généré pour le Coder devenait trop léger, affaiblissant la qualité du code. Modification: Ajout d'une RÈGLE DE PRÉSERVATION DES DONNÉES dans ArchitectSignature et injection du 'original_content' (seed_content) directement dans le prompt du Coder pour garantir la transmission du cahier des charges complet.",
       "status": "completed",
-      "dependencies": ["F-56"]
+      "dependencies": [
+        "F-56"
+      ]
     },
     {
       "id": "F-63",
       "name": "Correction Fallback llama-server (Mismatch mmproj)",
       "description": "Vérification: Diagnostic de l'erreur 404 qwen3.5:2b. Validation: Le crash initial provenait de llama-server qui tentait de charger un adaptateur de vision (mmproj) inadapté au modèle texte, causant un fallback silencieux et fautif vers Ollama. Modification: Retrait de l'export automatique de FAST_MMPROJ pour les modèles textes dans l'environnement de test afin de stabiliser le serveur.",
       "status": "completed",
-      "dependencies": ["F-58"]
+      "dependencies": [
+        "F-58"
+      ]
     },
     {
       "id": "F-64",
       "name": "Audit complet des system prompts d'outils IA (référence externe)",
       "description": "Lecture intégrale du contenu de 28+ prompts extraits d'outils IA (Cline, Codex CLI, Gemini CLI, RooCode, Claude Code 2.0/v1, Cursor multi-versions, Devin, Kiro Spec/Classifier, Traycer, Poke, Augment, Manus, Amp Sonnet/GPT-5, VSCode Agent, Windsurf, Qoder, Replit, Warp, Junie, CodeBuddy) depuis references/system-prompts-and-models-of-ai-tools/. Objectif : extraire les MÉCANISMES (formats d'édition, gating sécurité, routing, planification, méta-cognition, narration) indépendamment des licences. LIVRABLE : docs/system_prompts_audit_full.md — 8 sections : périmètre/taxonomie/10 invariants universels (confirme F-44)/6 catégories de mécanismes différenciants/20 pépites uniques/mapping vers nos nœuds (✅/⚠️/❌)/gaps actionnables/synthèse. CONFIRME : nos 10 invariants (F-44) et 9 rôles (F-0) sont alignés avec le corpus. IDENTIFIE : 20 pépites différenciantes non ingérées → alimente F-65.",
       "status": "completed",
-      "dependencies": ["F-44", "F-56"]
+      "dependencies": [
+        "F-44",
+        "F-56"
+      ]
     },
     {
       "id": "F-65",
       "name": "Ingestion des pépites prompts différenciantes (gates bloquantes + policies)",
       "description": "Issue de l'audit F-64 : 20 mécanismes différenciants identifiés dans le corpus externe, non ingérés dans prompts.py. Actionnables priorisés : (1) GATES BLOQUANTES — requires_approval bool (Cline) + matrice sandbox×approval Codex + is_dangerous Replit ; nos rôles Judge/Security sont déclaratifs ('DEFENSIVE ONLY'), pas de mécanisme attaché → porter un mécanisme de gate par risque. (2) WRITE-LOCK PARALLEL POLICY (Amp GPT-5) — paralléliser writes iff write targets disjoints, sérialiser si contrat partagé (types/schema/API) ; notre Coder fan-out ne décide pas parallèle vs séquentiel sur ce critère. (3) SELF-CORRECTION VÉRIFIABLE (Cursor 2025-09-03) — règle tools_used_in_turn => update_emitted pour Judge. (4) CITATION <cite> OBLIGATOIRE (Devin DeepWiki) — justifier verdicts Judge par localisation code. (5) QUALITY GATES TRIAGE (VSCode gpt-5) — rapport Tester en deltas PASS/FAIL + requirements coverage line. Secondaires : EARS format Architect (Kiro), engineering mindset contract+edge cases (VSCode), {{secret_name}} placeholder + canary decoy Security (Warp/CodeBuddy), notify vs ask gating (Manus), 8 templates par type de repo Architect (Qoder). Référence complète : docs/system_prompts_audit_full.md §6-7.",
       "status": "pending",
-      "dependencies": ["F-64", "F-44", "F-56"]
+      "dependencies": [
+        "F-64",
+        "F-44",
+        "F-56"
+      ]
+    },
+    {
+      "id": "F-66",
+      "name": "Audit 5 nouvelles références (fiches 19-23) + enrichissement plan",
+      "description": "Audit documentaire de 5 dépôts non audités (procédure references/PROCEDURE-AUDIT-REFERENCE.md) : loopx (fiche 19, 🟢), code-review-graph (20, 🟡), davidondrej-skills (21, 🟡), llm-council (22, 🟡), mattpocock-skills (23, 🟢). 5 fiches au format canonique créées (en-tête + synthèse + doc + code réutilisable + contrats + exclusions + mapping plan). inventory.json étendu (18→23 projets, 402→441 entrées ; update_inventory.py +5 blocs *_FILES + branches elif + replis sécurité ; idempotent vérifié, 0 doublon, tous chemins existent). INDEX.md rafraîchi (compteurs, navigation, synthèse thématique, matrice 195/160/84, 5 constats, 3 sections Hall of Fame, 13 lignes guide de recherche, arbre). README.md rafraîchi (compteurs + arbre). plan_usine_logicielle.md enrichi (8 citations aux nouvelles fiches) : P3-bis (matière loopx anti-loop déterministe : stall detector seuil=2 ignore bookkeeping + hash d'output matériel result_hash/material_change + vocabulaire delivery_outcome accountable/progress/idle), P6-bis (3 enrichissements Judge : risk score quantitatif code-review-graph compute_risk_score ∈ [0,1] + buckets 0.7/0.4 + IMPACT_EDGE_WEIGHTS ; council anonymisé llm-council labels A/B/C + agrégation Borda ; judge deux axes mattpocock Standards/Spec), P8 guard bash (enrichissement davidondrej 27 regex POSIX-ERE testées + doctrine fail-open + correction procédure Annexe D '52 regex'→'27 regex'), P9 compaction (complément structurel loopx whitelist de champs par type de payload), P10 skill middleware (fusion doctrine P10 : mattpocock socle conceptuel Predictability/deux charges/3 rungs/5 failure modes + davidondrej pratique Pattern A/B + awesome-claude modèle 3-niveaux), P11 event stream (complément loopx : event sourcing idempotent AppendOnlyStateEventStore fingerprint+checksum + ledger classifié 5 classes). Découvertes clés : loopx = matière déterministe anti-loop qui manquait à crush (10) ; code-review-graph = signaux quantitatifs pour le Judge ; mattpocock = pivot fusion doctrine P10. Réserves : loopx code verbeux (extraire algorithmes) + persistance JSONL→DuckDB ; code-review-graph runtime MCP+SQLite non portable ; llm-council vibe-coded + coût 2N+1 appels + OpenRouter payant ; mattpocock/davidondrej exemples TS-biaisés + philosophie small/composable à nuancer vs orchestrateur stateful. Aucune modification de code projet — travail documentaire + plan. Aucun test impacté.",
+      "status": "completed",
+      "dependencies": [
+        "F-35",
+        "F-64"
+      ]
     }
   ]
 }

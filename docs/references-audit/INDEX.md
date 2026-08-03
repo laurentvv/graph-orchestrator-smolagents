@@ -8,9 +8,9 @@
 
 | Métrique | Valeur |
 |---|---|
-| **Date de l'audit** | 2026-08-01 |
-| **Projets/dossiers audités** | 18 |
-| **Entrées de fichiers inventoriées** | 402 (inventaire machine : [`inventory.json`](./inventory.json)) |
+| **Date de l'audit** | 2026-08-03 |
+| **Projets/dossiers audités** | 23 |
+| **Entrées de fichiers inventoriées** | 441 (inventaire machine : [`inventory.json`](./inventory.json)) |
 | **Fichiers pertinents scannés** (base) | ~10 000 (hors `.git/`, `node_modules/`, médias, fixtures) |
 | **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css`) + JSON/YAML de spec/contrat |
 | **Exclusions** | `.git/` (~730 MB), `node_modules/`, médias (1 293 SVG, 16 mp4…), fixtures de tests, traductions de README (1 conservée/projet) |
@@ -19,7 +19,7 @@
 
 ---
 
-## 🧭 Navigation — les 18 fiches
+## 🧭 Navigation — les 23 fiches
 
 | # | Projet | Réutilisabilité | Fiche | Résumé en 1 ligne |
 |---|---|---|---|---|
@@ -41,6 +41,11 @@
 | 16 | **learn-claude-code** | 🟢 Haute | [16-learn-claude-code](./projects/16-learn-claude-code.md) | Cours 20 leçons déconstruisant Claude Code en harness engineering — **Python natif** : hooks, compaction, error recovery, skill loading, task DAG (patterns directement portables) |
 | 17 | **system-prompts-and-models-of-ai-tools** | 🟢 Haute | [17-system-prompts-and-models-of-ai-tools](./projects/17-system-prompts-and-models-of-ai-tools.md) | Collection de system prompts extraits d'outils IA (32 dossiers) — **bibliothèque de patterns** pour nos prompts : Codex CLI, Manus, Claude Code 2.0, Gemini CLI, Cursor + 10 invariants universels |
 | 18 | **awesome-claude-skills** | 🟡 Moyenne | [18-awesome-claude-skills](./projects/18-awesome-claude-skills.md) | Marketplace officielle Claude de skills — **doctrine du format SKILL.md** (modèle 3-niveaux Progressive Disclosure) + outillage (`init_skill.py`/`quick_validate.py`) + `mcp-builder`. Caution externe de P10 |
+| 19 | **loopx** | 🟢 Haute | [19-loopx](./projects/19-loopx.md) | Control plane pour agents longue durée — **3 priorités** : anti-loop déterministe (stall detector + hash d'output + delivery_outcome), compaction par whitelist de champs, event sourcing idempotent |
+| 20 | **code-review-graph** | 🟡 Moyenne | [20-code-review-graph](./projects/20-code-review-graph.md) | Moteur d'analyse d'impact + **risk score composite** (`compute_risk_score` ∈ [0,1], buckets 0.7/0.4) + `IMPACT_EDGE_WEIGHTS` — signaux quantitatifs pour le Judge (P6) |
+| 21 | **davidondrej-skills** | 🟡 Moyenne | [21-davidondrej-skills](./projects/21-davidondrej-skills.md) | **Denylist 27 regex POSIX-ERE** (bash destructeur) + moteur fail-open + ~115 tests — enrichit notre `bash_guard.py` (P8) |
+| 22 | **llm-council** | 🟡 Moyenne | [22-llm-council](./projects/22-llm-council.md) | Pattern **council anonymisé** (labels A/B/C + mapping réversible + agrégation Borda) — option d'enrichissement du Judge (⚠️ coût 2N+1 appels) |
+| 23 | **mattpocock-skills** | 🟢 Haute | [23-mattpocock-skills](./projects/23-mattpocock-skills.md) | **Doctrine d'authoring formelle** (Predictability, deux charges, hiérarchie 3 rungs, 5 failure modes) — pivot de la fusion P10 + `code-review`/`tdd` engineering skills |
 
 ---
 
@@ -50,10 +55,10 @@
 `aider` (Python, mature), `crush` (Go), `nanocode` (Python, 1 fichier), `opencode` (TS, gigantesque), `openfox` (TS, local-LLM-first). → Valeur : edit-formats robustes (aider), anti-loop (crush), patterns d'outils minimaux (nanocode), specs de protocole (opencode), persistance event-sourcing (openfox).
 
 ### 2. 🔧 Frameworks d'orchestration d'agents (mixte code + docs)
-`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm)**, **patterns harness Python natifs (learn-claude-code)**.
+`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code), `loopx` (control plane — anti-loop déterministe + event sourcing + compaction, stdlib pure), `code-review-graph` (analyse d'impact + risk score composite). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm)**, **patterns harness Python natifs (learn-claude-code)**, **anti-loop déterministe + event ledger (loopx)**.
 
 ### 3. 📚 Ressources & outils
-`Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante), `claude-code-unified-agents` (prompts de spécialisation), `system-prompts-and-models-of-ai-tools` (**bibliothèque de system prompts** d'outils commerciaux/open-source), `awesome-claude-skills` (**doctrine du format SKILL.md** + outillage).
+`Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante), `claude-code-unified-agents` (prompts de spécialisation), `system-prompts-and-models-of-ai-tools` (**bibliothèque de system prompts** d'outils commerciaux/open-source), `awesome-claude-skills` (**doctrine du format SKILL.md** + outillage), `davidondrej-skills` (denylist 27 regex + hooks anti-crash), `mattpocock-skills` (**doctrine d'authoring formelle** + engineering skills), `llm-council` (pattern council anonymisé).
 
 ---
 
@@ -126,6 +131,36 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | Fichier | Apport |
 |---|---|
 | `references/deer_flow_analysis.md` | Les 3 idées actionnables : middlewares autour du nœud Agent, reducers typés, contexte à la demande (Prompt-Vault) |
+
+### Anti-loop déterministe + event sourcing idempotent (loopx)
+> ⚙️ **La matière déterministe qui manquait pour P3 et P11.** crush (10) ne faisait que du hash d'output ; loopx apporte un véritable modèle comptable du turn (productif vs gratuit) + un stall detector + un event sourcing idempotent. Python stdlib pure → portable direct.
+
+| Fichier | Symbole(s) clé(s) | Apport |
+|---|---|---|
+| `references/loopx/loopx/control_plane/quota/recent_runs.py` | `consecutive_unchanged_monitor_observations`, `MONITOR_DEBT_UNCHANGED_TURN_THRESHOLD=2` | **Stall detector déterministe** (~160 L). Compte les turns sans transition matérielle, ignore le bookkeeping, au-delà du seuil=2 → backoff. Complément direct à notre LoopGuard (F-36) qui ne fingerprint que les tool_calls |
+| `references/loopx/loopx/capabilities/issue_fix/pr_monitor_materialization.py` | `_group_fingerprint`, `result_hash`, `material_change` | **Pattern de hash d'output matériel** (le précédent hash ≠ nouveau hash → `material_change`, sinon `consecutive_no_change++`). Exactement ce qu'il faut pour hasher la sortie du Coder à chaque itération |
+| `references/loopx/loopx/control_plane/work_items/delivery_outcome.py` | `DeliveryOutcome`, `ACCOUNTABLE_DELIVERY_OUTCOMES` | **Vocabulaire du résultat de turn** (accountable/progress/idle). La métrique qui alimente tout l'anti-loop |
+| `references/loopx/loopx/event_sourced_state.py` | `AppendOnlyStateEventStore`, `event_fingerprint`, `event_stream_checksum`, `StateEventConflictError` | **Event sourcing append-only idempotent** (fingerprint + checksum SHA256 + détection de conflit + rebuild d'état). À reloger sur DuckDB (le projet cible l'utilise déjà) |
+| `references/loopx/loopx/control_plane/runtime/event_ledger.py` | `EVENT_LEDGER_CLASSES` (5 classes), `build_event_ledger_summary` | **Journal d'événements classifié** (accounting/decision/evidence/state/work) agrégé sur fenêtres 24h/7d. Blueprint pour l'event stream (P11) au-delà du contrat deer-flow |
+| `references/loopx/loopx/control_plane/runtime/run_compaction.py` | `compact_run_base`, `RUN_BASE_COMPACT_FIELDS` | **Compaction par whitelist de champs par type de payload** (complément structurel à qm sémantique) |
+
+### Risk score quantitatif pour le Judge (code-review-graph)
+> 📊 **Signaux quantitatifs d'entrée du Judge.** Le Judge actuel ne s'appuie que sur du qualitatif LLM ; code-review-graph apporte un scoring composite multi-facteurs ∈ [0,1] + buckets + tables de poids par type de relation.
+
+| Fichier | Symbole(s) clé(s) | Apport |
+|---|---|---|
+| `references/code-review-graph/code_review_graph/changes.py` | `compute_risk_score(store, node, churn_counts) -> float`, `review_priorities` | **Score de risque 0.0-1.0 multi-facteurs** (flow participation 0.25, callers 0.15, test coverage 0.30→0.05, security +0.20, churn 0.15). `review_priorities` = top-10 par score desc — inspire l'ordonnancement des findings |
+| `references/code-review-graph/code_review_graph/constants.py` | `IMPACT_EDGE_WEIGHTS`, `IMPACT_DEPTH_DECAY=0.6`, `SECURITY_KEYWORDS` | **Tables de poids par type de relation** (CALLS 1.0, INHERITS 0.9, TESTED_BY 0.7…) + decay géométrique + 26 security keywords. Réutilisables telles quelles |
+| `references/code-review-graph/code_review_graph/tools/context.py` | `get_minimal_context`, bucketing `>0.7 high, >0.4 medium` | **Seuils de bucketing** à calibrer pour la rubric critical/high/medium/low du Judge |
+
+### Doctrine d'authoring de skills (mattpocock — pivot de la fusion P10)
+> 🎓 **La théorie de l'authoring qui manquait.** awesome-claude-skills (18) + davidondrej (21) sont des collections ; mattpocock formalise un modèle conceptuel cohérent applicable à nos skills smolagents.
+
+| Fichier | Symbole(s) clé(s) | Apport |
+|---|---|---|
+| `references/mattpocock-skills/skills/productivity/writing-great-skills/SKILL.md` (+ `GLOSSARY.md`) | **Predictability**, **context load vs cognitive load**, **model-invoked vs user-invoked**, **router skill**, **3 rungs**, **5 failure modes**, **leading word** | **Doctrine P10 la plus aboutie**. Racine = Predictability ; deux charges (cognitive/context) ; hiérarchie 3 rungs ; failure modes nommés (premature completion, duplication, sediment, sprawl, no-op, negation). Concepts agnostiques du runtime |
+| `references/mattpocock-skills/.agents/adr/0001-*.md` | **hard-dependency vs soft-dependency** | Pattern **fail-loud vs degrade-gracefully** (notre Context7/devtools font déjà du degrade-gracefully) |
+| `references/mattpocock-skills/skills/engineering/code-review/SKILL.md` | **two axes** (Standards/Spec), **parallel sub-agents** | Pattern de judge à deux axes (Standards → lint, Spec → conformité PRD) en sub-agents parallèles jamais fusionnés |
 
 ### System prompts spécialisés (claude-code-unified-agents)
 > Valeur concentrée dans ~8 prompts purs (49–185 lignes) alignés avec les rôles du graphe. Les autres fichiers sont du code TS non portable. 4 agents promis par le README sont absents (`ui-designer`, `content-strategist`, `performance-optimizer`, `iot-engineer`).
@@ -211,7 +246,14 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | **learn-claude-code** | **11** | **5** | **2** | 🟢 **Haute** |
 | **system-prompts-and-models-of-ai-tools** | **12** | **5** | **0** | 🟢 **Haute** |
 | **awesome-claude-skills** | **5** | **6** | **0** | 🟡 **Moyenne** |
-| **Total** | **171** | **147** | **82** | — |
+| **loopx** | **8** | **2** | **0** | 🟢 **Haute** |
+| **code-review-graph** | **6** | **4** | **0** | 🟡 **Moyenne** |
+| **davidondrej-skills** | **3** | **3** | **0** | 🟡 **Moyenne** |
+| **llm-council** | **1** | **1** | **2** | 🟡 **Moyenne** |
+| **mattpocock-skills** | **6** | **3** | **0** | 🟢 **Haute** |
+| **Total** | **195** | **160** | **84** | — |
+
+> ℹ️ Le total de la matrice (439 = 195+160+84) couvre les entrées classées H/M/L. L'inventaire machine compte 441 entrées au total (2 entrées pré-existantes non classées dans d'anciens projets).
 
 **Constats** :
 - **axon** (23 Haute) et **aider** (17 Haute) restent les mines d'or côté Python.
@@ -222,6 +264,11 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 - **deer-flow** (21 Haute) malgré une note globale Moyenne — la valeur est dans les contracts/plans/middlewares.
 - **claude-code-unified-agents** : 7 prompts purs 🟢 (alignés avec les rôles du graphe), mais la majorité des 53 fichiers est du code TS non portable → note Moyenne. (L'ancienne fiche la notait Haute à tort.)
 - **opencode/openfox** (TS) : peu de Haute, leurs **specs/docs** restent des références conceptuelles au mieux.
+- **loopx** (8 Haute, 🟢 Haute) : le **complément déterministe manquant à crush (10)** pour P3 — au lieu d'un simple hash d'output, loopx apporte un stall detector (seuil=2, ignore le bookkeeping), un vocabulaire de delivery_outcome (accountable/progress/idle) et un modèle de turn transaction (turns productifs vs gratuits). Couvre aussi P9 (compaction par whitelist de champs) et P11 (event sourcing idempotent + ledger 5 classes). Stdlib pure, zéro dépendance → portable direct, mais code verbeux (extraire les algorithmes, pas copier).
+- **code-review-graph** (6 Haute, 🟡 Moyenne) : apporte des **signaux quantitatifs** au Judge (aujourd'hui uniquement qualitatif LLM) — `compute_risk_score` ∈ [0,1] multi-facteurs + buckets 0.7/0.4 + `IMPACT_EDGE_WEIGHTS`. Le runtime (MCP+SQLite+Tree-sitter) ne se porte pas, on transpose les modèles de scoring.
+- **mattpocock-skills** (6 Haute, 🟢 Haute) : **pivot de la fusion doctrine P10** (avec awesome-claude-skills 18 + davidondrej 21) — le seul des 3 qui formalise une *théorie* de l'authoring (Predictability, deux charges, hiérarchie 3 rungs) plutôt qu'une collection.
+- **davidondrej-skills** (3 Haute, 🟡 Moyenne) : **enrichit directement notre `bash_guard.py` (F-38)** de patterns manquants (gh delete, fork bomb, `curl|sh`, reflog expire) + doctrine fail-open + ~115 tests prêts à porter. ⚠️ Correction procédure : « 52 regex » = en réalité **27 regex** (fichier de 52 lignes).
+- **llm-council** (🟡 Moyenne) : un seul pattern utile (council anonymisé A/B/C + Borda) pour valider des findings à enjeu, mais **réserves majeures** (vibe-coded, coût 2N+1 appels, OpenRouter payant) → à traiter comme inspiration, pas dépendance.
 
 ---
 
@@ -267,6 +314,21 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | Un **outil de scaffolding/validation** pour nos skills | Fiche **18-awesome-claude-skills** → `skill-creator/scripts/init_skill.py` + `quick_validate.py` |
 | Un **manuel pour construire un serveur MCP** | Fiche **18-awesome-claude-skills** → `mcp-builder/SKILL.md` + `reference/python_mcp_server.md` |
 | Un **pattern de cycle de vie serveur** pour le Tester (Playwright) | Fiche **18-awesome-claude-skills** → `webapp-testing/scripts/with_server.py` |
+| Un **anti-loop déterministe** (au-delà du hash d'output) | Fiche **19-loopx** → `control_plane/quota/recent_runs.py` (stall detector seuil=2, ignore bookkeeping) + `capabilities/issue_fix/pr_monitor_materialization.py` (`result_hash`/`material_change`) |
+| Classifier chaque itération Coder→Tester (productif vs gratuit) | Fiche **19-loopx** → `control_plane/work_items/delivery_outcome.py` (`DeliveryOutcome` accountable/progress) + `turn_driver/transaction.py` (`NO_SPEND`/`STOP_RESULT_KINDS`) |
+| Un **event sourcing idempotent** (reprise/checkpoint) | Fiche **19-loopx** → `event_sourced_state.py` (`AppendOnlyStateEventStore`, fingerprint, checksum, conflict detection) — à reloger sur DuckDB |
+| Un **journal d'événements classifié** pour l'observabilité | Fiche **19-loopx** → `control_plane/runtime/event_ledger.py` (`EVENT_LEDGER_CLASSES` 5 classes, fenêtres 24h/7d) |
+| Une **compaction structurelle** (par whitelist de champs, avant le résumé LLM coûteux) | Fiche **19-loopx** → `control_plane/runtime/run_compaction.py` (`RUN_BASE_COMPACT_FIELDS`) — complément à qm (14, sémantique) |
+| Un **risk score quantitatif** pour prioriser les findings du Judge | Fiche **20-code-review-graph** → `changes.py` (`compute_risk_score` ∈ [0,1] multi-facteurs) + `tools/context.py` (buckets 0.7/0.4) |
+| Des **poids par type de relation** pour un graphe de dépendances | Fiche **20-code-review-graph** → `constants.py` (`IMPACT_EDGE_WEIGHTS` : CALLS 1.0, INHERITS 0.9…) + `IMPACT_DEPTH_DECAY=0.6` |
+| Un **format de sortie structuré** pour le Judge (findings par risk level) | Fiche **20-code-review-graph** → `skills/review-pr/SKILL.md` (Risk Assessment / File-by-File / Recommendations) |
+| Des **métriques** pour benchmarker le Judge (P/R/F1, MRR) | Fiche **20-code-review-graph** → `eval/scorer.py` (`compute_precision_recall`, `compute_mrr`) |
+| Une **denylist de commandes bash destructrices** (regex) | Fiche **21-davidondrej-skills** → `hooks/dangerous-patterns.txt` (27 regex POSIX-ERE) + `test-guard.sh` (~115 cas block+allow) |
+| Le **moteur fail-open** d'un garde anti-crash | Fiche **21-davidondrej-skills** → `hooks/deny-dangerous.sh` (rejet explicite citant le pattern, fail-open sur erreur) |
+| Un **pattern de council LLM** (jugement mutuel à l'aveugle) | Fiche **22-llm-council** → `backend/council.py` (anonymisation A/B/C + mapping réversible + agrégation Borda) — ⚠️ coût 2N+1 appels |
+| Une **doctrine d'authoring de skills** (théorie formelle) | Fiche **23-mattpocock-skills** → `writing-great-skills/SKILL.md` (Predictability, deux charges, 3 rungs, 5 failure modes) — pivot de la fusion P10 |
+| Un **judge à deux axes** (Standards + Spec) en sub-agents parallèles | Fiche **23-mattpocock-skills** → `engineering/code-review/SKILL.md` (jamais fusionnés ni re-rankés) |
+| Un **pattern hard-dependency vs soft-dependency** (fail-loud vs degrade) | Fiche **23-mattpocock-skills** → `.agents/adr/0001-*.md` |
 
 ---
 
@@ -276,8 +338,8 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 docs/references-audit/
 ├── README.md              ← Mode d'emploi (start ici)
 ├── INDEX.md               ← CE DOCUMENT (navigation + synthèse + Hall of Fame)
-├── inventory.json         ← Inventaire machine-lisible (402 entrées, filtrable)
-└── projects/              ← 18 fiches détaillées (1 par projet)
+├── inventory.json         ← Inventaire machine-lisible (441 entrées, filtrable)
+└── projects/              ← 23 fiches détaillées (1 par projet)
     ├── 01-prompt-vault.md
     ├── 02-aider.md
     ├── ...
@@ -286,7 +348,12 @@ docs/references-audit/
     ├── 15-claude-code-unified-agents.md
     ├── 16-learn-claude-code.md
     ├── 17-system-prompts-and-models-of-ai-tools.md
-    └── 18-awesome-claude-skills.md
+    ├── 18-awesome-claude-skills.md
+    ├── 19-loopx.md
+    ├── 20-code-review-graph.md
+    ├── 21-davidondrej-skills.md
+    ├── 22-llm-council.md
+    └── 23-mattpocock-skills.md
 ```
 
 **Pour recherche programmatique** : `inventory.json` est consommable directement :
