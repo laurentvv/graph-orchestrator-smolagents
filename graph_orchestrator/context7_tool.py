@@ -114,7 +114,7 @@ def fetch_context7_brief(query: str, top_k: int = 3) -> str:
             # interprétée différemment d'un paramètre absent par le serveur MCP
             # (Kilo review). On ne devine pas un nom de lib — on laisse Context7
             # proposer les candidats les plus pertinents.
-            resolved = resolver(query=query)
+            resolved = resolver(query=query, libraryName="")
             if not resolved:
                 return ""
 
