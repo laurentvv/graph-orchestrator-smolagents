@@ -281,8 +281,12 @@ class CodeJudgeSignature(dspy.Signature):
            ``test_results`` dit PASS mais qu'une exigence n'est pas implémentée dans ``code``
            → finding critical, ``is_approved=False``. Le test peut rater des choses ou faire
            des faux PASS ; ton œil sur le code est l'arbitre final.
-        4. APPLIQUE ``security_vulnerabilities`` : toute vuln critical/high = ``is_approved=False``.
-        5. DÉCIDE : ``is_approved`` ssi 0 critical/high.
+        4. SANCTIONNE LES ÉCHECS DE TEST : Si ``test_results`` contient "Timeout", "Error", 
+           "Fail" ou indique que l'exécution n'a pas pu se terminer, tu DOIS IMPÉRATIVEMENT
+           déclarer un finding 'critical' et mettre ``is_approved=False``. Le code ne doit JAMAIS 
+           être approuvé si le test n'est pas 100% vert.
+        5. APPLIQUE ``security_vulnerabilities`` : toute vuln critical/high = ``is_approved=False``.
+        6. DÉCIDE : ``is_approved`` ssi 0 critical/high.
 
         LOCALISATION OBLIGATOIRE : chaque finding DOIT citer la ligne ou le fragment exact du
         code soumis (ancre in-diff) — pas de remarque générique. Permet au Coder d'agir
