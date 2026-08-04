@@ -312,7 +312,7 @@ async def run_with_retry(
                 f"[-] Timeout du nœud {node_kind} après {timeout_s}s "
                 f"(Chrome/DevTools/Puppeteer bloqué ?) — passage au nœud suivant."
             )
-            return None, last_metrics
+            return "TIMEOUT ERROR: L'exécution du testeur a dépassé le délai imparti (120s). Le test a planté (boucle infinie ou gel de l'UI).", last_metrics
         except Exception as e:
             # F-33 (2) : exception pendant l'exécution (code Python cassé en CodeAgent,
             # payload invalide en TCA). On renvoie un message "découpe" au lieu de planter.
