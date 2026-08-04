@@ -27,9 +27,10 @@ Tester, qui échouera → cycle de correction long. Le preview court-circuite ç
      bug — seule la console le révèle.
    - Si tu vois `SyntaxError`, `Unexpected token`, `Uncaught` → c'est un bug CRITIQUE.
      Corrige-le AVANT de continuer. Ne fais JAMAIS `final_answer` avec une erreur console.
-3. **Capture** : `take_screenshot()` → l'image te revient. **Analyse-la** :
+3. **Capture** : `take_screenshot()` → l'image te revient. **Analyse-la de façon CRITIQUE** :
    - La page est-elle vide/blanche ? → erreur JS (vérifié étape 2 normalement).
    - Le layout est-il cassé (éléments superposés, débordement, texte coupé) ?
+   - **L'occupation de l'espace est-elle harmonieuse ?** (Traque les énormes zones de vide injustifiées. Si un graphique, un canevas ou une grille n'occupe que la moitié de son conteneur, c'est un BUG visuel à corriger).
    - Les couleurs/polices correspondent-elles au cahier des charges ?
 4. **Interactions (si la page en a)** : teste un bouton clé via `click(uid=...)` ou
    `evaluate_script` pour confirmer que le JS fonctionne (ex: cliquer "Démarrer" et vérifier
