@@ -13,10 +13,10 @@ from graph_orchestrator.hitl import should_trigger_hitl
 def _settings(**overrides) -> Settings:
     """Construit des Settings avec overrides (les autres champs ont des défauts valides)."""
     base = dict(
-        ollama_api_base="http://localhost:11434/v1",
-        ollama_reasoning_api_base="http://localhost:11434/v1",
-        ollama_api_key="sk-local",
-        fast_model_id="qwen3.5:2b",
+        local_api_base="http://localhost:11434/v1",
+        local_reasoning_api_base="http://localhost:11434/v1",
+        local_api_key="sk-local",
+        fast_model_id="Qwen3.5-9B-Q4_K_M",
         reasoning_model_id="gemma",
         reasoning_max_tokens=8192,
         fast_max_tokens=6000,

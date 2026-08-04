@@ -21,11 +21,11 @@ from .skills import get_skill_instructions, list_skills
 
 
 def build_model(settings: Settings, model_id: Optional[str] = None) -> OpenAIServerModel:
-    """Construit le modèle LLM depuis la config (Ollama local par défaut)."""
+    """Construit le modèle LLM depuis la config (serveur local par défaut)."""
     return OpenAIServerModel(
         model_id=model_id or settings.reasoning_model_id,
-        api_base=settings.ollama_api_base,
-        api_key=settings.ollama_api_key,
+        api_base=settings.local_api_base,
+        api_key=settings.local_api_key,
         max_tokens=settings.reasoning_max_tokens,
     )
 

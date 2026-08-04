@@ -50,7 +50,7 @@ class StepData(BaseModel):
 class HealthResponse(BaseModel):
     """Diagnostic du serveur (endpoint /health)."""
     status: Literal["ok", "degraded"]
-    ollama_reachable: bool
+    local_llm_reachable: bool
     models_configured: dict
     tools_available: List[str]
     skills_available: List[dict]

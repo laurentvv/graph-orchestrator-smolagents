@@ -23,7 +23,7 @@ def mock_settings():
     settings.fast_model_id = "mock-fast-model"
     settings.reasoning_model_id = "mock-reasoning-model"
     settings.reasoning_no_think_model_id = "mock-reasoning-model"
-    settings.ollama_api_base = "http://localhost:11434/v1"
+    settings.local_api_base = "http://localhost:11434/v1"
     # F-58 specs
     settings.fast_spec = MagicMock(backend="external", model="mock-fast-model", api_base="http://localhost:11434/v1", api_key="sk-mock")
     settings.reasoning_spec = MagicMock(backend="external", model="mock-reasoning-model", api_base="http://localhost:11434/v1", api_key="sk-mock")

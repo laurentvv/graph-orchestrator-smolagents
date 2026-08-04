@@ -91,9 +91,25 @@ class WebTestRunner:
 
                 # L'instanciation de local_tester a été déplacée plus bas, à l'intérieur du bloc `with model_lifecycle`.
 
-                # Skill chargé via le loader centralisé (cohérent avec les autres nœuds) ;
-                # le frontmatter est nettoyé pour économiser le contexte du LLM.
-                skill_content = load_skill_body("web-tester")
+                # F-57 v3: Skills dynamiques choisis par l'Architecte pour le Tester
+                from ..skills_loader import enforce_skill_budget
+                tester_skills = task.get("tester_skills", [])
+                if not tester_skills:
+                    tester_skills = ["web-tester"] # Repli statique par défaut
+                
+                # Budgétisation pour le Tester (socle "web-tester" toujours conservé)
+                tester_skills = enforce_skill_budget(
+                    tester_skills, 
+                    budget_tokens=settings.skill_budget_tokens, 
+                    always_skills={"web-tester"}
+                )
+                
+                blocks = []
+                for s in tester_skills:
+                    body = load_skill_body(s)
+                    if body:
+                        blocks.append(f"### SKILL: {s}\n{body}")
+                skill_content = "\n\n".join(blocks)
 
                 workspace_url = "file:///" + os.path.abspath(os.getcwd()).replace("\\", "/")
 
@@ -221,8 +237,8 @@ Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_an
                     _mid = srv.model_id or settings.reasoning_no_think_model_id or settings.reasoning_model_id
                     dynamic_tester_model = OpenAIServerModel(
                         model_id=_mid,
-                        api_base=srv.api_base or settings.ollama_reasoning_api_base,
-                        api_key=srv.api_key or settings.ollama_api_key,
+                        api_base=srv.api_base or settings.local_reasoning_api_base,
+                        api_key=srv.api_key or settings.local_api_key,
                         max_tokens=settings.reasoning_max_tokens,
                         client_kwargs={"timeout": settings.llm_timeout_s},
                     )

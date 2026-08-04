@@ -110,7 +110,7 @@ async def main():
     print(f"[*] Tester standalone")
     print(f"    Fichier testé     : {html_file} ({os.path.getsize(html_file)} octets)")
     print(f"    Modèle reasoning  : {settings.reasoning_model_id}")
-    print(f"    Endpoint          : {settings.ollama_reasoning_api_base}")
+    print(f"    Endpoint          : {settings.local_reasoning_api_base}")
     print(f"    DevTools activé   : {os.getenv('CHROME_DEVTOOLS_ENABLED', '1')}")
     print(f"    Audits parallèles : {os.getenv('AUDIT_PARALLEL', 'false')} (séquentiel GPU-local)")
     print(f"    max_steps tester  : 12 (GPU-local)")

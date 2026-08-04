@@ -54,3 +54,7 @@ vendor/
 python_health_report.md
 
 models/
+
+# --- Assistances IA externes ---
+.agents/
+.claude/

@@ -284,6 +284,19 @@
 - [ ] Critère 226 : Config — `read_before_write_enabled: bool = True` dans la dataclass Settings + `load_settings` via `_get_bool("READ_BEFORE_WRITE_ENABLED", True)` + `.env.example` + `.env` — opt-out total `READ_BEFORE_WRITE_ENABLED=false` — testé via `load_settings()` (défaut True, env false → False).
 - [ ] Critère 227 : La suite pytest complète passe (0 régression) — 651 passed / 0 failed (616 baseline + 35 nouveaux `test_read_gate.py`), 11 deselected (test_web_tester_functional = Chrome/npx live, hors périmètre).
 
+## Critères F-57 — Skills à la demande / Coder lazy loading (Priorité 10, Phase 1)
+
+- [ ] Critère 228 : `EAGER_SKILLS_CODER` est un `set` contenant exactement `{"file-creation", "coding", "context7-research"}` (3 skills critiques dont l'oubli provoque un failure mode fatal) — tous existent sur disque (`load_skill_body` non vide) — testé `TestEagerSkillsCoder`.
+- [ ] Critère 229 : `_parse_frontmatter_yaml(text)` ne lève JAMAIS — YAML valide → dict (name, description) ; sans frontmatter → `{}` ; malformé → dict vide ou repli regex ; incomplet (split < 3) → `{}` — testé `TestParseFrontmatterYaml` (4 cas).
+- [ ] Critère 230 : `parse_skill_meta(name)` lit UNIQUEMENT le frontmatter (pas le corps) — skill existant → `(name, description)` tuple de 2 ; absent → `None` — testé `TestParseSkillMeta` (4 cas, incluant tous les skills applicables ont un meta).
+- [ ] Critère 231 : `build_skills_catalog(task_content)` — retourne metadata (name+description ~100 tokens/skill) de TOUS les skills applicables (EAGER + LAZY) ; marque chaque skill `(EAGER)` ou `(lazy)` ; contient la directive `load_skill` ; ne contient PAS le corps complet des skills LAZY ; NETTEMENT plus court que `build_eager_skills_block` (< 25% de sa taille) — testé `TestBuildSkillsCatalog` (6 cas).
+- [ ] Critère 232 : `build_eager_skills_block(task_content)` — contient le corps complet des 3 skills EAGER (`### SKILL: file-creation`, `coding`, `context7-research`) ; ne contient PAS `frontend-design` ni `devtools-preview` (LAZY) ; contenu identique à l'ancien `build_skills_block` pour les EAGER — testé `TestBuildEagerSkillsBlock` (5 cas).
+- [ ] Critère 233 : `@tool load_skill(skill_name)` (nouveau module `skill_loader_tool.py`) — retourne le corps complet du skill demandé ; skill inconnu → message d'erreur (ne lève jamais, fail-open) ; est un tool smolagents valide (expose `name`/`description`/`inputs`) — testé `TestLoadSkillTool` (4 cas, incluant noms bizarres/injection).
+- [ ] Critère 234 : Non-régression — `select_skills_for_coder`, `build_skills_block` (déprécié mais conservé) et `load_skill_body` restent inchangés (tests existants `test_chrome_devtools_tool.py::TestSkillRouting`, `test_context7_tool.py` passent) — testé `TestNonRegression` (4 cas).
+- [ ] Critère 235 : Config opt-out — `skill_lazy_loading_enabled: bool = True` dans la dataclass Settings + `load_settings` via `_get_bool("SKILL_LAZY_LOADING_ENABLED", True)` + `.env.example` + `.env` local — `false` → `execute_coder_node` fallback `build_skills_block` (eager complet, rétrocompat) ; `true` (défaut) → `build_eager_skills_block` + `build_skills_catalog` + outil `load_skill` ajouté à `coder_tools`.
+- [ ] Critère 236 : La suite pytest complète passe (0 régression) — 678 passed / 0 failed hors 3 pré-existants `test_run_logging.py` (format log évolué, non liés à F-57, confirmés par `git stash`), 11 deselected (test_web_tester_functional = Chrome/npx live). 30 nouveaux tests `test_skill_lazy_loading.py`.
+- [ ] Critère 237 : Gain mesuré (smoke test) — sur tâche web type, `len(build_eager_skills_block) + len(build_skills_catalog)` < `len(build_skills_block)` (ancien eager complet), réduction **-36.8%** du system prompt par step (17386 → 10988 chars).
+
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.
 * Validation process : `uv run python -m graph_orchestrator.workflows` (WORKFLOW_MODE=coding) →

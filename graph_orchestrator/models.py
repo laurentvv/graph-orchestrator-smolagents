@@ -74,6 +74,12 @@ class ArchitectTask(BaseModel):
     # Si strategy='incremental', liste des sections à construire une par une via
     # append_file (ex: ['CSS', 'sidebar', 'KPI', 'table', 'JS']). Vide sinon.
     sections: List[str] = []
+    # F-57 (Priorité 10) : skills à injecter au Coder pour cette sous-tâche. L'Architect
+    # sélectionne dans le catalogue des skills disponibles (frontend-design pour du web,
+    # python-health-audit pour du Python, devtools-preview pour validation visuelle...).
+    skills: List[str] = []
+    tester_skills: List[str] = []
+    judge_skills: List[str] = []
 
 
 class RouterOutput(BaseModel):
@@ -237,8 +243,8 @@ def extract_and_validate(response: Any, model_class: type[BaseModel], api_base: 
             logging.getLogger("dspy").setLevel(logging.CRITICAL)
             
             # F-58 : provider openai/ contre llama-server (avant : ollama_chat/ → /api/chat Ollama).
-            # api_base garde /v1 (llama-server expose /v1, contrairement à Ollama /api/chat).
-            use_api_base = api_base or settings.ollama_api_base
+            # api_base garde /v1 (llama-server expose /v1).
+            use_api_base = api_base or settings.local_api_base
             use_model_id = model_id or settings.fast_model_id
             
             # Fetch actual model ID from llama-server to avoid litellm NotFoundError
@@ -254,7 +260,7 @@ def extract_and_validate(response: Any, model_class: type[BaseModel], api_base: 
             if use_model_id == "default":
                 use_model_id = "llama"
             
-            lm = dspy.LM(f"openai/{use_model_id}", api_base=use_api_base, api_key=settings.ollama_api_key)
+            lm = dspy.LM(f"openai/{use_model_id}", api_base=use_api_base, api_key=settings.local_api_key)
             with dspy.context(lm=lm):
                 class JSONFixSignature(dspy.Signature):
                     """Extract the exact JSON fields from the broken text into the correct schema."""

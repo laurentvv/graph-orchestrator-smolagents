@@ -536,6 +536,9 @@ async def run_coding_workflow(
                     # 'simple' (rétro-compat : sous-tâche sans stratégie explicite).
                     "strategy": getattr(subtask, "strategy", "simple"),
                     "sections": getattr(subtask, "sections", []),
+                    # F-57 : skills sélectionnés par l'Architect pour cette sous-tâche.
+                    # Le Coder reçoit le corps complet de ces skills. Si vide, socle défaut.
+                    "skills": getattr(subtask, "skills", []),
                     # Numéro d'itération (1=création initiale, 2+=correction). Le prompt
                     # Coder s'adapte : itération 1 = write_file (création), itération 2+ =
                     # read_file + search_replace (correction chirurgicale, JAMAIS rewrite).

@@ -67,8 +67,10 @@ def chrome_devtools_tools():
 
     try:
         with ToolCollection.from_mcp(params, trust_remote_code=True) as tool_collection:
-            tools = list(tool_collection.tools)
-            logger.debug("Chrome DevTools connecté : %d outil(s).", len(tools))
+            # Filtrage strict (anti context-overflow) : on ne garde que l'essentiel
+            allowed = {"navigate_page", "take_screenshot", "take_snapshot", "list_console_messages", "evaluate_script"}
+            tools = [t for t in tool_collection.tools if t.name in allowed]
+            logger.debug("Chrome DevTools connecté : %d outil(s) (filtrés sur %d).", len(tools), len(list(tool_collection.tools)))
             yield tools
     except Exception as e:
         # Connexion échouée (npx absent, Chrome non trouvé, port occupé...). On

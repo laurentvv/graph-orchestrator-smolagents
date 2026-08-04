@@ -2938,3 +2938,109 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
   Commentaire détaillé dans read_gate.py justifiant l'exemption (3 raisons).
 - Test v2 lancé (même scénario incremental, append_file exempté) pour valider que le
   workflow complète sans crash.
+
+## [2026-08-04 20:00:00] plan | Planification cycle F-57 Phase 1 — Skills à la Demande (Coder lazy loading)
+- DÉCISION UTILISATEUR : approche en 2 phases. Phase 1 = Coder (prouver le gain
+  tokens). Phase 2 = généralisation aux nœuds DSPy (mécanisme methodology_context)
+  UNIQUEMENT SI Phase 1 performante. Sinon on garde eager.
+- BASELINE de comparaison : run 2026-08-04_1816_bubble_sort (index.html 255 lignes,
+  7018 octets, HTML complet propre du DOCTYPE à </html>, généré en one-shot par le
+  Coder Qwen3.5-9B). Métrique clé = tokens IN du Coder à comparer avant/après.
+- PROBLÈME CIBLÉ : le Coder lit le corps complet de 3-5 skills (~15k chars) en EAGER
+  à CHACUN de ses 12-25 steps → ~60-120k tokens/run répétés sur du contenu statique.
+  Context overflow observé (32891 > 32768 ctx, logs/run-20260804-114314-coding.log).
+- BLUEPRINT : references/learn-claude-code/s07_skill_loading/code.py (2 niveaux :
+  metadata ~100 tokens/skill toujours en system + tool load_skill charge le corps
+  complet à la demande). Passage 4B→9B réduit le risque d'oubli de load_skill.
+- DÉCOUPLAGE EAGER vs LAZY (par criticité) :
+  * EAGER (corps complet toujours en system) : file-creation (anti-contenu-vide),
+    coding (anti-TypeScript + CSS height), context7-research (décision QUAND chercher).
+  * LAZY (metadata + tool load_skill) : frontend-design, devtools-preview,
+    python-health-audit.
+  * Gain estimé tâche web : ~8k chars × 12 steps ≈ 24k tokens/run économisés.
+- NOUVEAUX MODÈLES (notification utilisateur) : Qwen3.5-9B-Q4_K_M (FAST/Coder) +
+  Ornith-1.0-9B-MTP-Q4_K_M (REASONING). Déjà configurés dans .env. Le 9B (vs 4B
+  ancien) rend le lazy loading plus viable (suit mieux l'instruction load_skill).
+- Périmètre HORS-SCOPE ce cycle : nœuds DSPy (Phase 2), skills orphelins, format
+  canonique scripts/references/assets.
+
+## [2026-08-04 20:45:00] feat | F-57 PHASE 1 IMPLÉMENTÉ — Skills à la demande / Coder lazy loading (Priorité 10)
+- OBJECTIF : réduire les tokens du Coder (Qwen3.5-9B) qui lisait le corps complet de
+  3-5 skills (~15k chars) en EAGER à CHACUN de ses 12-25 steps → ~60-120k tokens/run.
+  Context overflow observé (32891 > 32768, logs/run-20260804-114314).
+- BLUEPRINT : references/learn-claude-code/s07_skill_loading/code.py (2 niveaux).
+- IMPLÉMENTATION (5 fichiers) :
+  * skills_loader.py : EAGER_SKILLS_CODER = {file-creation, coding, context7-research}
+    (failure modes fatals si oubli). _parse_frontmatter_yaml (défensif), parse_skill_meta
+    (name+desc seulement), build_skills_catalog (metadata TOUS les skills ~100 tok/skill),
+    build_eager_skills_block (corps des 3 EAGER only). build_skills_block conservé
+    (déprécié, rétrocompat).
+  * skill_loader_tool.py (nouveau) : @tool load_skill(name) → corps complet à la demande.
+  * nodes.py execute_coder_node : si skill_lazy_loading_enabled → eager_block + catalog_block
+    + outil load_skill dans coder_tools. Sinon fallback build_skills_block (eager complet).
+  * config.py + .env.example + .env : skill_lazy_loading_enabled (défaut True, opt-out).
+- DÉCOUPLAGE : EAGER (corps toujours en system) = file-creation, coding, context7-research.
+  LAZY (metadata + tool load_skill) = frontend-design, devtools-preview, python-health-audit.
+- GAIN MESURÉ (smoke test tâche web) : system prompt 17386 → 10988 chars = **-36.8%/step**.
+  Soit ~6.4k chars × 12 steps ≈ 24k tokens/run économisés. Les skills LAZY ne sont lus
+  qu'une fois (via load_skill) au lieu d'être répétés à chaque step.
+- TESTS : 30/30 PASS (test_skill_lazy_loading.py : EAGER 3, frontmatter 4, parse_meta 4,
+  catalog 6, eager_block 5, load_skill 4, non-régression 4).
+- VALIDATION : py_compile OK (5 fichiers). Suite pytest complète 678 passed / 0 failed
+  hors 3 pré-existants test_run_logging.py (non liés à F-57, confirmés par git stash).
+  0 régression. 11 deselected (test_web_tester_functional = Chrome/npx live).
+- NOUVEAUX MODÈLES (notification utilisateur ce cycle) : Qwen3.5-9B-Q4_K_M (FAST/Coder) +
+  Ornith-1.0-9B-MTP-Q4_K_M (REASONING). Déjà dans .env. Le 9B (vs ancien 4B) suit mieux
+  l'instruction load_skill → risque d'oubli réduit.
+- PHASE 2 (CYCLE SUIVANT, CONDITIONNEL) : généralisation aux nœuds DSPy (Router/Architect/
+  Judge/Security) via input field methodology_context UNIQUEMENT SI le run de validation
+  Bubble Sort confirme : (1) HTML complet (qualité baseline), (2) tokens IN Coder réduits,
+  (3) Coder appelle bien load_skill. Baseline = run 2026-08-04_1816_bubble_sort.
+- ÉTAT DISQUE : feature_list.json F-57 pending→completed, plan_usine_logicielle.md P10
+  PARTIEL 🟡 + case cochée, contract.md +critères 228-237, progress.md, README.md
+  section Coder. ATTENTE commit + push + PR + run validation.
+
+## [2026-08-04 21:30:00] fix | F-57 RÉVISÉ (v2/v3) après échec run — Architect sélectionne + budget tokens
+- DIAGNOSTIC RUN 202456 : 2 problèmes orthogonaux identifiés.
+  1. LOAD_SKILL IGNORÉ : le Coder (Qwen3.5-9B) n'appelait JAMAIS l'outil load_skill.
+     Le catalogue metadata était trop passif ("appelle si tu t'en sers"). Un petit LLM
+     ne "décide" pas consciemment de consulter un skill — il code directement. Perte
+     de connaissance des skills conditionnels (frontend-design, devtools-preview).
+  2. STRATÉGIE INCREMENTAL ABUSÉE : l'Architect a dicté 'incremental' pour Bubble Sort
+     (~250 lignes) → squelette avec marqueurs INSERT_CSS/INSERT_JS non remplacés.
+     Le prompt disait ">500 lignes" mais pas assez restrictif.
+- DÉCISION UTILISATEUR : (a) L'ARCHITECT SÉLECTIONNE les skills dans son plan
+  (subtask.skills), le Coder reçoit le corps complet directement (plus de décision du
+  modèle). (b) Fix prompt Architect pour durcir incremental. (c) Garder load_skill tool
+  pour la flexibilité (re-consulter, explorer). (d) Budget tokens anti-saturation.
+- IMPLÉMENTATION v2/v3 (7 fichiers) :
+  * models.py : ArchitectTask +champ skills: List[str] = [] (additif non-cassant).
+  * workflows.py : propagation subtask.skills → sub_dict["skills"].
+  * nodes.py execute_coder_node : si task["skills"] → injecte corps complet (après
+    enforce_skill_budget) ; sinon repli build_conditional_skills_block (regex).
+    load_skill tool GARDÉ dans coder_tools (flexibilité, plus gate par config).
+  * skills_loader.py : ALWAYS_SKILLS_CODER (renommé EAGER→ALWAYS, alias rétrocompat),
+    count_skill_tokens (tiktoken cl100k_base, mémoïsé, repli chars/4), enforce_skill_budget
+    (rogne petits d'abord, socle toujours conservé), build_conditional_skills_block (repli).
+  * dspy_nodes.py ArchitectSignature : RÈGLE DE STRATÉGIE durcie (incremental >500 lignes
+    STRICT, "doute → simple", Bubble Sort explicite = simple) + RÈGLE DE SÉLECTION DES
+    SKILLS (catalogue : frontend-design/devtools-preview/python-testing-patterns/code-review/
+    systematic-debugging, budget géré côté code).
+  * config.py : skill_budget_tokens (défaut 8000, ~24% contexte Qwen 9B 32k). Remplace
+    skill_lazy_loading_enabled (plus pertinent).
+- ENRICHISSEMENT CATALOGUE (4 nouveaux skills via npx skills add) :
+  * code-review (mattpocock/skills, 245k installs) : Judge structuré 2 axes Standards+Spec.
+  * systematic-debugging (obra/superpowers, 212k installs) : diagnostic structuré escalade.
+  * frontend-design-anthropic (anthropics/skills, 740k installs) : manifeste anti-générique.
+    Renommé (collision évitée avec notre frontend-design custom préservé).
+  * python-testing-patterns (wshobson/agents, 29k installs) : doctrine pytest, débloque
+    python-tester (orphan). Synergie F-57 : l'Architect peut sélectionner ces skills.
+  * Symlinks convertis en copies réelles (Windows-safe pour git). Catalogue : 15 skills.
+- GAIN BUDGET : socle ALWAYS (file-creation+coding+context7-research) = 2967 tok. Budget
+  8000 = 2967 socle + 5033 tok conditionnels dispo (≈3-4 skills moyens).
+- TESTS : 33/33 PASS test_skill_lazy_loading.py (API v2/v3 + nouveaux skills + catalogue
+  étendu + non-régression). Suite complète 681 passed / 0 failed hors 3 pré-existants
+  test_run_logging.py (non liés, confirmés git stash). 0 régression.
+- CONTEXTE7 ARCHITECT : mécanisme existant (fetch_context7_brief, pré-fetch si lib externe)
+  fonctionne. Amélioration possible : multi-lib (fetch Chart.js + Tailwind séparément).
+  ROI moyen (4/12 Prompt-Vault mentionnent des libs, surtout Advanced/Hard). Cycle futur.

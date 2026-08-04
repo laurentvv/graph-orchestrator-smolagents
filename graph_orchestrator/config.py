@@ -112,13 +112,12 @@ def _model_spec_from_env(prefix: str) -> ModelSpec:
 
 
 def _normalize_api_base(raw: str) -> str:
-    """Normalise la base de l'API OpenAI-compatible d'Ollama.
+    """Normalise la base de l'API OpenAI-compatible.
 
-    La variable d'env OLLAMA_API_BASE est aussi utilisée par le CLI Ollama natif et
-    pointe souvent vers http://127.0.0.1:11434 SANS le suffixe /v1. Or smolagents
+    La variable d'env LOCAL_API_BASE pointe souvent vers l'hôte SANS le suffixe /v1. Or smolagents
     (client OpenAI) attend l'endpoint OpenAI-compatible, qui est sous /v1.
     Sans /v1, on obtient un 404 sur /chat/completions.
-    On ajoute donc /v1 si manquant (et qu'on est sur un serveur Ollama local).
+    On ajoute donc /v1 si manquant.
     """
     base = raw.rstrip("/")
     if not base.endswith("/v1"):
@@ -130,10 +129,10 @@ def _normalize_api_base(raw: str) -> str:
 class Settings:
     """Paramètres du graphe, surchargeables par variables d'environnement."""
 
-    # --- Connexion Ollama (endpoint OpenAI-compatible) ---
-    ollama_api_base: str
-    ollama_reasoning_api_base: str
-    ollama_api_key: str
+    # --- Connexion Modèle Local (endpoint OpenAI-compatible) ---
+    local_api_base: str
+    local_reasoning_api_base: str
+    local_api_key: str
 
     # --- Tiering des modèles ---
     fast_model_id: str  # Fan-out (workers)
@@ -143,10 +142,10 @@ class Settings:
     # peut dépasser 2000 tokens ; sans max_tokens généreux, la génération est coupée
     # en plein milieu d'un tool_call JSON -> corruption du contenu du fichier.
     coder_temperature: float  # CRITIQUE pour le code : température basse (déterministe)
-    # pour éviter la corruption aléatoire de la syntaxe. Le défaut serveur de qwen3.5:4b
+    # pour éviter la corruption aléatoire de la syntaxe. Le défaut serveur
     # est 1.0 (chat créatif) — inadapté au code. 0.2 = quasi-déterministe, idéal.
 
-    # --- Robustesse (tolérance aux pauses d'un endpoint Ollama distant) ---
+    # --- Robustesse (tolérance aux pauses d'un endpoint distant) ---
     # Timeout (secondes) d'un appel LLM. Au-delà, l'appel échoue (et peut être
     # retryé par smolagents). Sans timeout, un endpoint distant muet fige le
     # workflow indéfiniment (bug observé sur le serveur distant 10.201.12.50).
@@ -256,6 +255,14 @@ class Settings:
     # absent = création OK, read impossible = on laisse passer). Opt-out pour debug.
     read_before_write_enabled: bool = True
 
+    # --- Skills : sélection par l'Architect + budget tokens (Priorité 10, F-57) ---
+    # L'Architect sélectionne les skills pertinents dans son plan (subtask.skills),
+    # et le Coder reçoit leur corps complet. Ce budget plafonne la sélection pour
+    # éviter la saturation du contexte (32k sur Qwen 9B). Défaut 8000 tokens (~24%).
+    # Le socle ALWAYS (file-creation+coding+context7-research ≈ 2967 tok) est toujours
+    # conservé ; les skills conditionnels sont rognés « petits d'abord » si dépassement.
+    skill_budget_tokens: int = 8000
+
     # --- Guard bash denylist (Priorité 8-bis : robustesse runtime) ---
     # `bash_command` exécute des commandes issues du LLM via shell=True. Un guard
     # denylist bloque les commandes destructrices (rm -rf /, format, mkfs, dd vers
@@ -285,7 +292,7 @@ class Settings:
     # costaud que l'Architect MAIS sans le thinking (plus rapide, pas de budget gaspillé en
     # raisonnement sur des tâches de verdict/classification). En production llama-server,
     # pointe vers la section models.ini `reasoning = off` (ex: "gemma-4-12b-nothink").
-    # Si vide (défaut), fallback sur reasoning_model_id (rétro-compatibilité Ollama et tests
+    # Si vide (défaut), fallback sur reasoning_model_id (rétro-compatibilité et tests
     # qui construisent Settings() à la main — ne pas casser).
     reasoning_no_think_model_id: str = ""
 
@@ -293,7 +300,7 @@ class Settings:
     # Chaque rôle pointe vers un ModelSpec (backend + blob/model + reasoning + mmproj +
     # api_base + api_key). Piloté par le .env : FAST_BACKEND/FAST_MODEL/..., REASONING_*,
     # REASONING_NO_THINK_*. Si les vars BACKEND ne sont pas settées, backend="none" →
-    # model_lifecycle no-op (rétro-compat : on utilise les *_model_id + ollama_api_base).
+    # model_lifecycle no-op (rétro-compat : on utilise les *_model_id + local_api_base).
     fast_spec: ModelSpec = field(default_factory=ModelSpec)
     reasoning_spec: ModelSpec = field(default_factory=ModelSpec)
     no_think_spec: ModelSpec = field(default_factory=ModelSpec)
@@ -330,14 +337,14 @@ class Settings:
 def load_settings() -> Settings:
     """Construit les settings depuis l'environnement (avec valeurs par défaut)."""
     return Settings(
-        ollama_api_base=_normalize_api_base(
-            _get_str("OLLAMA_API_BASE", "http://localhost:11434/v1")
+        local_api_base=_normalize_api_base(
+            _get_str("LOCAL_API_BASE", "http://localhost:8000/v1")
         ),
-        ollama_reasoning_api_base=_normalize_api_base(
-            _get_str("OLLAMA_REASONING_API_BASE", _get_str("OLLAMA_API_BASE", "http://localhost:11434/v1"))
+        local_reasoning_api_base=_normalize_api_base(
+            _get_str("LOCAL_REASONING_API_BASE", _get_str("LOCAL_API_BASE", "http://localhost:8000/v1"))
         ),
-        ollama_api_key=_get_str("OLLAMA_API_KEY", "sk-local"),
-        fast_model_id=_get_str("FAST_MODEL_ID", "qwen3.5:2b"),
+        local_api_key=_get_str("LOCAL_API_KEY", "sk-local"),
+        fast_model_id=_get_str("FAST_MODEL_ID", "Qwen3.5-9B-Q4_K_M"),
         reasoning_model_id=_get_str(
             "REASONING_MODEL_ID",
             "hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL",
@@ -369,6 +376,7 @@ def load_settings() -> Settings:
         loop_guard_threshold=_get_int("LOOP_GUARD_THRESHOLD", 3),
         sanitizer_enabled=_get_bool("SANITIZER_ENABLED", True),
         read_before_write_enabled=_get_bool("READ_BEFORE_WRITE_ENABLED", True),
+        skill_budget_tokens=_get_int("SKILL_BUDGET_TOKENS", 8000),
         bash_guard_enabled=_get_bool("BASH_GUARD_ENABLED", True),
         prompt_refiner_enabled=_get_bool("PROMPT_REFINER_ENABLED", True),
         prompt_refiner_model_id=_get_str("PROMPT_REFINER_MODEL_ID", ""),

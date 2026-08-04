@@ -556,3 +556,37 @@ odes.py et web_tester.py pour exiger une DÉCLARATION de fonction asynchrone non
 - [x] Étape RBW-8 : État disque synchronisé (feature_list.json +F-67, contract.md
   +critères 215-227, plan_usine_logicielle.md P1 case cochée, progress.md, README.md,
   log.md). Commit + push + PR.
+
+## Jalons de l'Itération (cycle Skills à la demande / Coder lazy loading — F-57 Phase 1, Priorité 10)
+- [x] Étape F57-1 : Plan approuvé (2 phases : Phase 1 = Coder pour prouver le gain
+  tokens ; Phase 2 = généralisation aux nœuds DSPy UNIQUEMENT si Phase 1 performante).
+  Baseline = run 2026-08-04_1816_bubble_sort (index.html 255 lignes one-shot).
+  Décisions : mécanisme input field methodology_context pour DSPy (Phase 2),
+  découplage EAGER vs LAZY par criticité (3 EAGER critiques, 3 LAZY conditionnels).
+- [x] Étape F57-2 : `graph_orchestrator/skills_loader.py` — nouvelle API additive :
+  EAGER_SKILLS_CODER (set de 3), _parse_frontmatter_yaml (défensif, jamais lève),
+  parse_skill_meta (tuple name+desc, None si absent), build_skills_catalog
+  (metadata de TOUS, ~100 tokens/skill, directive load_skill), build_eager_skills_block
+  (corps des 3 EAGER only). build_skills_block + select_skills_for_coder CONSERVÉS
+  (rétrocompat, tests existants + WebTester en dépendent).
+- [x] Étape F57-3 : `graph_orchestrator/skill_loader_tool.py` (nouveau) — @tool
+  load_skill(skill_name) retourne corps complet (load_skill_body) ou message si
+  introuvable, fail-open jamais ne lève. Déterministe, 0 LLM, 0 réseau.
+- [x] Étape F57-4 : `graph_orchestrator/nodes.py execute_coder_node` — branchement :
+  si settings.skill_lazy_loading_enabled → eager_block + catalog_block (remplace
+  skills_block) + outil load_skill ajouté à coder_tools. Sinon fallback build_skills_block.
+- [x] Étape F57-5 : `graph_orchestrator/config.py` + `.env.example` + `.env` local —
+  skill_lazy_loading_enabled: bool = True + _get_bool("SKILL_LAZY_LOADING_ENABLED", True).
+- [x] Étape F57-6 : `tests/test_skill_lazy_loading.py` — 30 tests (EAGER 3, frontmatter
+  parser 4, parse_skill_meta 4, build_skills_catalog 6, build_eager_skills_block 5,
+  load_skill tool 4, non-régression 4). 30/30 PASS.
+- [x] Étape F57-7 : Validation — py_compile OK (5 fichiers) + smoke test (system prompt
+  -36.8% par step : 17386→10988 chars sur tâche web) + suite pytest complète 678 passed
+  / 0 failed hors 3 pré-existants test_run_logging.py (non liés, confirmés par git stash),
+  11 deselected (test_web_tester_functional). 0 régression.
+- [x] Étape F57-8 : État disque synchronisé (feature_list.json F-57 pending→completed,
+  contract.md +critères 228-237, plan_usine_logicielle.md P10 PARTIEL + case cochée,
+  progress.md, README.md section Coder, log.md). ATTENTE commit/PR.
+- [ ] Étape F57-9 : Run de validation Bubble Sort (comparatif tokens vs baseline
+  2026-08-04_1816). Critères : HTML complet + tokens IN réduits + Coder appelle
+  load_skill. SI réussite → déclenche Phase 2 (nœuds DSPy).

@@ -212,7 +212,7 @@ PROBLÈMES D'INTERACTION: <boutons/liens cassés, ou "aucun">
 ## Evaluation Criteria (verdict decision)
 - **Errors**: any hidden JavaScript error in the console? → FAILURE.
 - **Functional assertions**: do ALL core behaviors return the expected result? → a single failing assertion = FAILURE.
-- **Visuals**: any blatant CSS rendering bug? → FAILURE.
+- **Visuals & Aesthetics**: any blatant CSS rendering bug? Is the space occupation harmonious? (If a chart, canvas, or grid only occupies a tiny fraction of its container leaving huge unjustified empty spaces, this is an AESTHETIC BUG). → FAILURE.
 - **Interactivity**: do buttons/inputs work? → broken interaction = FAILURE.
 
 **`status: "success"` requires ALL of: 0 console error + every core assertion PASS + no visual/interaction bug.**

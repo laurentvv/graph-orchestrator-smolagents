@@ -58,8 +58,8 @@ def test_slugify_truncation():
 def _mock_settings(output_dir="runs"):
     from graph_orchestrator.config import Settings
     return Settings(
-        ollama_api_base="http://x/v1", ollama_reasoning_api_base="http://x/v1",
-        ollama_api_key="sk", fast_model_id="m", reasoning_model_id="m",
+        local_api_base="http://x/v1", local_reasoning_api_base="http://x/v1",
+        local_api_key="sk", fast_model_id="m", reasoning_model_id="m",
         reasoning_max_tokens=8, fast_max_tokens=8, coder_temperature=0.2,
         llm_timeout_s=1.0, judge_confidence_threshold=0.5,
         worker_max_retries=1, adversary_count=1, adversary_threshold=0.5,

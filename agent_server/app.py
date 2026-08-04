@@ -45,7 +45,7 @@ _app_state: dict = {
     "mcp_context": None,
     "kg": None,
     "settings": default_settings,
-    "ollama_reachable": False,
+    "local_llm_reachable": False,
 }
 
 # Runs en cours : {run_id: {"queue": asyncio.Queue, "task": asyncio.Task}}
@@ -66,7 +66,7 @@ async def lifespan(app: FastAPI):
         with connect_all_mcp() as mcp_tools:
             _app_state["mcp_tools"] = mcp_tools
             console.print(f"[green][app] {len(mcp_tools)} outil(s) MCP chargé(s)[/green]")
-            _app_state["ollama_reachable"] = _check_ollama(settings)
+            _app_state["local_llm_reachable"] = _check_local_llm(settings)
             yield
     finally:
         if _app_state["kg"]:
@@ -74,16 +74,15 @@ async def lifespan(app: FastAPI):
         console.print("[yellow][app] Shutdown complete[/yellow]")
 
 
-def _check_ollama(settings: Settings) -> bool:
-    """Vérifie si le serveur LLM (llama-server ou Ollama) répond (non bloquant).
+def _check_local_llm(settings: Settings) -> bool:
+    """Vérifie si le serveur LLM (llama-server) répond (non bloquant).
 
     F-58 : après migration llama-server, l'endpoint /api/tags (Ollama-only) n'existe plus.
     llama-server expose /health (renvoie {"status":"ok"}) et /v1/models (OpenAI). On teste
-    /health d'abord (llama-server), puis /api/tags en fallback (si on pointe encore sur
-    Ollama pour certains usages). Les deux retournent 200 quand le serveur est up.
+    /health d'abord (llama-server).
     """
     import urllib.request
-    base = settings.ollama_api_base.rstrip("/").removesuffix("/v1")
+    base = settings.local_api_base.rstrip("/").removesuffix("/v1")
     for path in ("/health", "/api/tags"):
         try:
             req = urllib.request.urlopen(f"{base}{path}", timeout=2)
@@ -118,8 +117,8 @@ app.add_middleware(
 async def health() -> HealthResponse:
     settings: Settings = _app_state["settings"]
     return HealthResponse(
-        status="ok" if _app_state["ollama_reachable"] else "degraded",
-        ollama_reachable=_app_state["ollama_reachable"],
+        status="ok" if _app_state["local_llm_reachable"] else "degraded",
+        local_llm_reachable=_app_state["local_llm_reachable"],
         models_configured={
             "fast": settings.fast_model_id,
             "reasoning": settings.reasoning_model_id,

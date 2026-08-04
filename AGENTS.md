@@ -94,6 +94,8 @@ Chaque `.md` est un cahier des charges structuré (souvent "1 fichier `index.htm
 ## 5. Projets de Référence
 **Code et audits** : Consulter `docs/references-audit/` (lié au code GitHub stocké dans `references/`). C'est une véritable mine d'or d'implémentations déjà faites, fiables et prêtes à l'emploi. N'hésitez pas à y piocher du code et à vous inspirer de ces solutions existantes plutôt que de tout réinventer.
 
+**Cartographie Nœuds & Skills** : [`docs/NODES_AND_SKILLS.md`](./docs/NODES_AND_SKILLS.md) — inventaire complet des system prompts forcés par nœud (rôles, invariants, docstrings DSPy), des 11 skills et de leur mode de chargement (eager vs lazy F-57). À consulter pour savoir ce que voit chaque agent LLM à l'exécution, ou pour ajouter/modifier un skill.
+
 ## 6. Git & GitHub
 - **Kilo Code Review** : L'agent GitHub doit approuver la PR avant le merge. *(Note pour l'agent IA : une fois la PR soumise, arrête-toi. Ne reste pas en boucle d'attente. Tu seras réveillé une fois la review validée pour supprimer la branche et retourner sur `main`).*
 

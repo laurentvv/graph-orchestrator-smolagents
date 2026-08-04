@@ -13,7 +13,7 @@ def test_qwen_json():
     
     # Payload natif pour Ollama (Guided Decoding)
     payload = {
-        "model": "qwen3.5:2b",
+        "model": "Qwen3.5-9B-Q4_K_M",
         "messages": [
             {
                 "role": "system",

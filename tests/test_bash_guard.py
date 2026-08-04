@@ -274,9 +274,9 @@ def test_bash_command_opt_out_runs_subprocess():
     """
     from graph_orchestrator.config import Settings
     relaxed = Settings(
-        ollama_api_base="http://x/v1",
-        ollama_reasoning_api_base="http://x/v1",
-        ollama_api_key="k",
+        local_api_base="http://x/v1",
+        local_reasoning_api_base="http://x/v1",
+        local_api_key="k",
         fast_model_id="m",
         reasoning_model_id="m",
         reasoning_max_tokens=1,

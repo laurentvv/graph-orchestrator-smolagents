@@ -36,7 +36,7 @@ def mock_settings():
     settings.fast_model_id = "mock-fast-model"
     settings.reasoning_model_id = "mock-reasoning-model"
     settings.reasoning_no_think_model_id = "mock-reasoning-model"
-    settings.ollama_api_base = "http://localhost:11434/v1"
+    settings.local_api_base = "http://localhost:11434/v1"
     
     settings.fast_spec = MagicMock(backend="external", model="mock-fast-model", api_base="http://localhost:11434/v1", api_key="sk-mock")
     settings.reasoning_spec = MagicMock(backend="external", model="mock-reasoning-model", api_base="http://localhost:11434/v1", api_key="sk-mock")
@@ -216,8 +216,8 @@ def _setup_workflow_mocks(monkeypatch, approve=True, escalation_output=None,
 def _settings(escalation_enabled=True):
     from graph_orchestrator.config import Settings
     return Settings(
-        ollama_api_base="http://x/v1", ollama_reasoning_api_base="http://x/v1",
-        ollama_api_key="sk", fast_model_id="m", reasoning_model_id="m",
+        local_api_base="http://x/v1", local_reasoning_api_base="http://x/v1",
+        local_api_key="sk", fast_model_id="m", reasoning_model_id="m",
         reasoning_max_tokens=8, fast_max_tokens=8, coder_temperature=0.2,
         llm_timeout_s=1.0, judge_confidence_threshold=0.5,
         worker_max_retries=1, adversary_count=1, adversary_threshold=0.5,

@@ -46,12 +46,12 @@ class TestClaims:
         kg.add_entity("task:t1", "task")
         cid = kg.add_claim(
             "task:t1", "CPU à 95%", "observation", 0.9,
-            source="worker_t1", model_id="qwen3.5", run_id="r1",
+            source="worker_t1", model_id="Qwen3.5-9B-Q4_K_M", run_id="r1",
         )
         assert cid is not None and isinstance(cid, int)
         prov = kg.get_provenance(cid)
         assert prov[0]["source"] == "worker_t1"
-        assert prov[0]["model_id"] == "qwen3.5"
+        assert prov[0]["model_id"] == "Qwen3.5-9B-Q4_K_M"
 
     def test_dedup_refuse_doublon_ouvert(self, kg):
         kg.add_entity("task:t1", "task")

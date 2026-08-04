@@ -27,7 +27,13 @@ from .models import (
     extract_and_validate,
 )
 from .tools import read_file, write_file, append_file, edit_file, bash_command, list_directory, search_replace, multi_replace
-from .skills_loader import build_skills_block
+from .skills_loader import (
+    build_skills_block,
+    build_conditional_skills_block,
+    enforce_skill_budget,
+)
+from .skill_loader_tool import load_skill
+from .skills_loader import load_skill_body
 from .loop_guard import LoopGuard, extract_tool_calls_from_step
 from .llama_server import model_lifecycle
 from .orphan_repair import repair_orphan_steps
@@ -80,8 +86,8 @@ def build_fast_model(settings: Settings) -> OpenAIServerModel:
     # quasi-déterministe : code cohérent, moins d'hallucinations de format.
     return OpenAIServerModel(
         model_id=settings.fast_model_id,
-        api_base=settings.ollama_api_base,
-        api_key=settings.ollama_api_key,
+        api_base=settings.local_api_base,
+        api_key=settings.local_api_key,
         max_tokens=settings.fast_max_tokens,
         temperature=settings.coder_temperature,
         client_kwargs={"timeout": settings.llm_timeout_s},
@@ -93,8 +99,8 @@ def build_reasoning_model(settings: Settings) -> OpenAIServerModel:
     # finish_reason=length sans tool_calls (le raisonnement interne consomme tout).
     return OpenAIServerModel(
         model_id=settings.reasoning_model_id,
-        api_base=settings.ollama_reasoning_api_base,
-        api_key=settings.ollama_api_key,
+        api_base=settings.local_reasoning_api_base,
+        api_key=settings.local_api_key,
         max_tokens=settings.reasoning_max_tokens,
         client_kwargs={"timeout": settings.llm_timeout_s},
     )
@@ -515,8 +521,13 @@ async def execute_coder_node(
         coder_tools.extend(c7_tools)
         # F-45 : Chrome DevTools (navigate_page, take_screenshot, list_console_messages,
         # click, fill...) pour auto-valider visuellement la page générée AVANT
-        # final_answer. Le modèle fast (gemma-4-E4B) a la vision (validé runtime).
+        # final_answer. Le modèle fast (Qwen3.5-9B) a la vision (validé runtime).
         coder_tools.extend(cdt_tools)
+        # F-57 (Priorité 10) : tool load_skill pour la flexibilité. Les skills
+        # sélectionnés par l'Architect sont déjà injectés en corps complet dans le
+        # system prompt (voir skills_block ci-dessous), mais le Coder peut appeler
+        # load_skill pour re-consulter un skill ou en explorer un autre non sélectionné.
+        coder_tools.append(load_skill)
         # F-45 : wrap les outils de screenshot pour capturer l'image PIL et la faire
         # remonter au LLM via observations_images (step_callback). Sans ça, smolagents
         # garde l'image pour lui ("Stored 'image.png' in memory.") et le modèle ne la
@@ -562,10 +573,33 @@ async def execute_coder_node(
   n'existe pas encore. N'essaie PAS de lister un dossier qui n'existe pas.
 - Chaque fichier cible DOIT être créé. Ne passe pas au reste avant."""
 
-        # Skills ciblés pour cette tâche (socle coder + spécialisés selon le contenu).
-        # Le contenu des SKILL.md est injecté directement (pas une liste de chemins à
-        # explorer), pour éviter la dispersion stérile du Coder vers les fichiers .md.
-        skills_block = build_skills_block(task.get("content", ""))
+        # Skills ciblés pour cette tâche. F-57 (Priorité 10) : L'ARCHITECT SÉLECTIONNE
+        # les skills dans son plan (subtask.skills), et le Coder reçoit leur corps
+        # complet directement. C'est le mécanisme principal — fiable à 100% (pas de
+        # décision du modèle, l'Architect a déjà choisi). Le tool load_skill reste
+        # disponible pour la flexibilité (re-consulter un skill, en explorer un autre).
+        # Si l'Architect n'a pas sélectionné de skills (vieille sous-tâche, fallback),
+        # on utilise la sélection contextuelle (regex sur le contenu) en repli.
+        architect_skills = task.get("skills", [])
+        if architect_skills:
+            # F-57 v3 : budget de tokens anti-saturation. L'Architect peut sélectionner
+            # trop de skills → on rogne pour rester sous skill_budget_tokens (défaut 8000,
+            # ~24% du contexte Qwen 9B). Le socle ALWAYS est toujours conservé.
+            architect_skills = enforce_skill_budget(
+                architect_skills, budget_tokens=settings.skill_budget_tokens
+            )
+            blocks: list = []
+            for name in architect_skills:
+                body = load_skill_body(name)
+                if body:
+                    blocks.append(f"### SKILL: {name}\n{body}")
+            skills_block = (
+                "Voici tes COMPÉTENCES (skills) — applique leurs consignes directement :\n\n"
+                + "\n\n".join(blocks)
+            ) if blocks else ""
+        else:
+            # Repli : sélection contextuelle (regex) si l'Architect n'a rien sélectionné.
+            skills_block = build_conditional_skills_block(task.get("content", ""))
 
         # F-32 : prompt réécrit selon la structure canonique des audits (references aider/
         # crush/opencode/openfox/deer-flow + web Anthropic/OpenAI/Cline/SWE-agent) :
@@ -701,8 +735,8 @@ Code prêt pour la production, respectant les conventions du langage.
         with model_lifecycle(settings.fast_spec) as srv:
             dynamic_fast_model = OpenAIServerModel(
                 model_id=srv.model_id or settings.fast_model_id,
-                api_base=srv.api_base or settings.ollama_api_base,
-                api_key=srv.api_key or settings.ollama_api_key,
+                api_base=srv.api_base or settings.local_api_base,
+                api_key=srv.api_key or settings.local_api_key,
                 max_tokens=settings.fast_max_tokens,
                 temperature=settings.coder_temperature,
                 client_kwargs={"timeout": settings.llm_timeout_s},

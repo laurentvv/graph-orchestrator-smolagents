@@ -130,23 +130,25 @@ class ArchitectSignature(dspy.Signature):
         Pour CHAQUE sous-tâche, choisis une 'strategy' parmi :
         - 'simple' : UN seul write_file par fichier (contenu COMPLET). C'est la stratégie PAR
           DÉFAUT. Pour une sous-tâche multifile, le Coder enchaîne plusieurs write_file (un par
-          fichier cible) dans le même run. Convient pour tout fichier < ~500 lignes.
+          fichier cible) dans le même run. Convient pour TOUT fichier < ~500 lignes. Un
+          visualiseur d'algorithme (Bubble Sort, ToDo, palette de couleurs...) = 'simple'.
         - 'incremental' : RÉSERVÉ aux GROS fichiers monolithiques (> ~500 lignes, ex: un
           dashboard admin complet dans un seul index.html imposé par la spec). Le Coder
           construira le squelette PUIS remplira section par section via append_file. Dans ce
           cas, fournis 'sections' = liste des sections (ex: ['css', 'sidebar', 'kpi', 'js']).
-          N'utilise JAMAIS incremental sur un fichier < ~500 lignes — ça crée des bugs de
-          structure (contenu après </html>) pour aucun bénéfice.
+          ⚠️ N'utilise JAMAIS incremental sur un fichier < ~500 lignes — un visualiseur
+          interactif (~200-300 lignes) DOIT être 'simple'. Incremental sur un petit fichier
+          laisse les marqueurs INSERT_* non remplacés (bug observé en prod) et casse la page.
         - 'multifile' : quand une sous-tâche porte PLUSIEURS fichiers liés (index.html +
           styles.css + script.js). Le Coder crée chaque fichier via write_file autonome.
           Même logique que 'simple' (contenu complet par fichier), juste pour signaler
           qu'il y a plusieurs fichiers dans la sous-tâche.
 
-        QUAND UTILISER QUOI :
-        - HTML/CSS/JS dans 1 seul fichier → 'simple'.
-        - HTML/CSS/JS en fichiers séparés liés → 'multifile' (1 sous-tâche, tous les fichiers).
-        - Python/TS 1 module → 'simple'. Plusieurs modules liés → 'multifile'.
-        - Gros monolithe (> 500 lignes) imposé → 'incremental' (dernier recours).
+        QUAND UTILISER QUOI (règle stricte) :
+        - 1 seul fichier < 500 lignes (Bubble Sort, ToDo, visualizer, palette...) → 'simple'.
+        - Plusieurs fichiers liés (site HTML+CSS+JS) → 'multifile' (1 sous-tâche, tous fichiers).
+        - 1 SEUL fichier > 500 lignes (dashboard monolithe imposé par la spec) → 'incremental'.
+        Si tu hésites entre 'simple' et 'incremental', c'est 'simple'. Le doute profite à 'simple'.
 
         RÈGLES POUR 'incremental' (sections) :
         - La 1ère section DOIT être le squelette structural complet (ex: `<!DOCTYPE html>…
@@ -162,7 +164,26 @@ class ArchitectSignature(dspy.Signature):
         dans un seul index.html). 'multifile' = PLUSIEURS fichiers séparés (ex: app.py +
         utils.py). Ne mets JAMAIS 'incremental' sur un projet multifichier Python/TS —
         sinon le Coder écrirait un seul gros .py au lieu de le modulariser. 'incremental'
-        est exclusif aux fichiers MONOLITHIQUES IMPOSÉS par la spec.
+        est exclusif aux fichiers MONOLITHIQUES IMPOSÉS par la spec (> ~500 lignes).
+
+        RÈGLE DE SÉLECTION DES SKILLS (F-57, Priorité 10) :
+        Pour CHAQUE sous-tâche, remplis 'skills' avec les skills pertinents parmi ce catalogue.
+        Un budget de tokens (défaut ~8000) plafonne automatiquement la sélection côté Coder
+        (rogne les plus gros si dépassement) — donc sélectionne généreusement ce qui est utile,
+        le système garde les plus pertinents sous le budget :
+        - 'frontend-design' : OBLIGATOIRE pour toute tâche web (HTML/CSS/JS, landing page,
+          dashboard, visualizer). Design pro concret : palettes, typo, layout APP vs LANDING.
+        - 'devtools-preview' : pour les tâches web avec interface interactive (boutons,
+          animations) — le Coder auto-validera sa page via Chrome DevTools (screenshot+console).
+        - 'python-testing-patterns' : pour les projets Python où le Coder doit produire des
+          tests pytest (fixtures, mocking, TDD). Donne la doctrine du code testable.
+        - 'code-review' : pour les sous-tâches complexes où le Coder doit s'auto-réviser
+          (revue structurée Standards + Spec, rubric critical/major/minor).
+        - 'systematic-debugging' : pour les itérations de correction (itération 2+) où le
+          Coder doit diagnostiquer un bug de façon structurée (hypothèses falsifiables, bisection).
+        Ne mets JAMAIS un skill non listé ci-dessus. Si la tâche est du vanilla simple sans
+        enjeu design (ex: script CLI pur), 'skills' peut rester vide (le socle file-creation +
+        coding + context7-research est toujours injecté automatiquement par défaut).
 
         Le Coder suivra ta stratégie à la lettre. Chaque sous-tâche doit avoir des critères
         d'acceptation vérifiables (comportements attendus testables, pas juste un nom de fichier).
@@ -176,7 +197,7 @@ class ArchitectSignature(dspy.Signature):
         """,
     )
     task_content: str = dspy.InputField(desc="Le cahier des charges global de la fonctionnalité ou du projet à développer")
-    output: ArchitectOutput = dspy.OutputField(desc="Plan : liste de sous-tâches (2-4 max). Chaque ArchitectTask a target_files + strategy ('simple'|'incremental'|'multifile') + sections (si incremental).")
+    output: ArchitectOutput = dspy.OutputField(desc="Plan : liste de sous-tâches (2-4 max). Chaque ArchitectTask a target_files + strategy + sections (si incremental). Définis aussi 'skills' (pour le Coder, ex: ['tdd']), 'tester_skills' (pour le Tester, ex: ['webapp-testing']), 'judge_skills' (ex: ['code-review']).")
 
 
 class SecuritySignature(dspy.Signature):
@@ -322,9 +343,9 @@ def _configure_dspy(settings: Settings, model_id: str, think: bool = False,
             sur les settings (rétro-compatibilité tests mockés / endpoint externe fixe).
     """
     if api_base is None:
-        api_base = settings.ollama_reasoning_api_base if model_id == settings.reasoning_model_id else settings.ollama_api_base
+        api_base = settings.local_reasoning_api_base if model_id == settings.reasoning_model_id else settings.local_api_base
     if api_key is None:
-        api_key = settings.ollama_api_key
+        api_key = settings.local_api_key
     lm = dspy.LM(
         f"openai/{model_id}",
         api_base=api_base,
@@ -560,11 +581,23 @@ async def execute_architect_node(task: dict, reasoning_model, settings: Settings
     start_time = time.time()
 
     # Pré-fetch doc Context7 : l'Architect (DSPy, pas de boucle d'outils) ne peut
-    # pas appeler Context7 lui-même. On lui injecte donc un brief doc à jour QUAND
-    # le contenu mentionne une lib/framework externe (sinon 0 appel réseau — l'Architect
-    # planifie à partir du seul prompt, comme avant). Graceful : brief vide si pas de clé.
+    # pas appeler Context7 lui-même.
     task_content_raw = task.get("content", "")
-    architect_input = task_content_raw
+    
+    # F-57 v3 : Injection des skills statiques pour l'Architecte (ex: to-spec)
+    from .skills_loader import BASE_SKILLS_BY_NODE, load_skill_body
+    architect_skills_text = ""
+    architect_skills_list = BASE_SKILLS_BY_NODE.get("architect", [])
+    if architect_skills_list:
+        blocks = []
+        for s in architect_skills_list:
+            body = load_skill_body(s)
+            if body:
+                blocks.append(f"### SKILL: {s}\n{body}")
+        if blocks:
+            architect_skills_text = "COMPÉTENCES POUR LA CONCEPTION (Applique ces guidelines pour structurer ton plan) :\n\n" + "\n\n".join(blocks) + "\n\n---\n\n"
+
+    architect_input = architect_skills_text + task_content_raw
     if _mentions_external_lib(task_content_raw):
         from .context7_tool import fetch_context7_brief
         brief = await asyncio.to_thread(fetch_context7_brief, task_content_raw)

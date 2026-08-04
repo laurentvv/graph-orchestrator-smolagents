@@ -98,10 +98,10 @@ class TestPersistanceKG:
         kg.add_entity("task:t1", "task")
         cid = kg.add_claim(
             "task:t1", "obs", "observation", 0.9,
-            source="worker_t1", model_id="qwen3.5:2b", run_id="run_42",
+            source="worker_t1", model_id="Qwen3.5-9B-Q4_K_M", run_id="run_42",
         )
         prov = kg.get_provenance(cid)
         assert len(prov) == 1
         assert prov[0]["source"] == "worker_t1"
-        assert prov[0]["model_id"] == "qwen3.5:2b"
+        assert prov[0]["model_id"] == "Qwen3.5-9B-Q4_K_M"
         assert prov[0]["run_id"] == "run_42"

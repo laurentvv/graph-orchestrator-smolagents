@@ -199,9 +199,9 @@ def _settings(kg_path=":memory:", fresh_start=False):
     from dataclasses import replace
     # Construit des settings avec un KG en mémoire + fresh_start pilotable.
     s = Settings(
-        ollama_api_base="http://x/v1",
-        ollama_reasoning_api_base="http://x/v1",
-        ollama_api_key="sk",
+        local_api_base="http://x/v1",
+        local_reasoning_api_base="http://x/v1",
+        local_api_key="sk",
         fast_model_id="m", reasoning_model_id="m",
         reasoning_max_tokens=8, fast_max_tokens=8, coder_temperature=0.2,
         llm_timeout_s=1.0, judge_confidence_threshold=0.5,

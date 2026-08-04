@@ -89,7 +89,7 @@ async def main():
     print(f"    Dossier sortie  : {os.path.abspath(OUT_DIR)} (isolé, nettoyé)")
     print(f"    Fichier cible   : {TARGET_FILE}")
     print(f"    Modèle FAST     : {settings.fast_model_id}")
-    print(f"    Endpoint        : {settings.ollama_api_base}")
+    print(f"    Endpoint        : {settings.local_api_base}")
     print(f"    max_steps       : 12 | tempér. : {settings.coder_temperature}")
     print(f"    CAHIER CHARGES  : {task_desc[:80]}...")
     print()

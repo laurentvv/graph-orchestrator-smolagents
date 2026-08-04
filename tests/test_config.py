@@ -34,9 +34,9 @@ def test_defaults_appliques():
     old = {k: os.environ.pop(k, None) for k in keys}
     try:
         s = load_settings()
-        assert s.ollama_api_base == "http://localhost:11434/v1"
-        assert s.ollama_api_key == "sk-local"
-        assert s.fast_model_id == "qwen3.5:2b"
+        assert s.local_api_base == "http://localhost:11434/v1"
+        assert s.local_api_key == "sk-local"
+        assert s.fast_model_id == "Qwen3.5-9B-Q4_K_M"
         assert s.reasoning_model_id == "hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL"
         assert s.reasoning_max_tokens == 8192
         assert s.judge_confidence_threshold == 0.7
@@ -50,13 +50,13 @@ def test_defaults_appliques():
 
 def test_env_override(monkeypatch):
     """Les variables d'env écrasent les defaults."""
-    monkeypatch.setenv("FAST_MODEL_ID", "qwen3.5:4b")
+    monkeypatch.setenv("FAST_MODEL_ID", "Qwen3.5-9B-Q4_K_M")
     monkeypatch.setenv("JUDGE_CONFIDENCE_THRESHOLD", "0.85")
     monkeypatch.setenv("REASONING_MAX_TOKENS", "4096")
     monkeypatch.setenv("WORKER_MAX_RETRIES", "5")
 
     s = load_settings()
-    assert s.fast_model_id == "qwen3.5:4b"
+    assert s.fast_model_id == "Qwen3.5-9B-Q4_K_M"
     assert s.judge_confidence_threshold == 0.85
     assert s.reasoning_max_tokens == 4096
     assert s.worker_max_retries == 5

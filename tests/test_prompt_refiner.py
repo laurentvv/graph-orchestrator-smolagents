@@ -32,8 +32,8 @@ def _mock_settings():
     s = MagicMock()
     s.reasoning_model_id = "mock-reasoning-model"
     s.fast_model_id = "mock-fast-model"
-    s.ollama_reasoning_api_base = "http://localhost:11434/v1"
-    s.ollama_api_base = "http://localhost:11434/v1"
+    s.local_reasoning_api_base = "http://localhost:11434/v1"
+    s.local_api_base = "http://localhost:11434/v1"
     s.llm_timeout_s = 1.0
     s.prompt_refiner_enabled = True
     s.prompt_refiner_model_id = ""  # défaut vide = fallback sur reasoning_model_id
@@ -223,8 +223,8 @@ def _seed_tasks():
 def _settings_full(prompt_refiner_enabled=True):
     from graph_orchestrator.config import Settings
     return Settings(
-        ollama_api_base="http://x/v1", ollama_reasoning_api_base="http://x/v1",
-        ollama_api_key="sk", fast_model_id="m", reasoning_model_id="m",
+        local_api_base="http://x/v1", local_reasoning_api_base="http://x/v1",
+        local_api_key="sk", fast_model_id="m", reasoning_model_id="m",
         reasoning_max_tokens=8, fast_max_tokens=8, coder_temperature=0.2,
         llm_timeout_s=1.0, judge_confidence_threshold=0.5,
         worker_max_retries=1, adversary_count=1, adversary_threshold=0.5,
