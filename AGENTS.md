@@ -97,6 +97,7 @@ Chaque `.md` est un cahier des charges structuré (souvent "1 fichier `index.htm
 **Cartographie Nœuds & Skills** : [`docs/NODES_AND_SKILLS.md`](./docs/NODES_AND_SKILLS.md) — inventaire complet des system prompts forcés par nœud (rôles, invariants, docstrings DSPy), des 11 skills et de leur mode de chargement (eager vs lazy F-57). À consulter pour savoir ce que voit chaque agent LLM à l'exécution, ou pour ajouter/modifier un skill.
 
 ## 6. Git & GitHub
+- **Règle d'or Git** : Ne JAMAIS travailler ou pousser directement sur `main`. Avant toute modification, tu DOIS créer une nouvelle branche (ex: `feat/...` ou `fix/...`).
 - **Kilo Code Review** : L'agent GitHub doit approuver la PR avant le merge. *(Note pour l'agent IA : une fois la PR soumise, arrête-toi. Ne reste pas en boucle d'attente. Tu seras réveillé une fois la review validée pour supprimer la branche et retourner sur `main`).*
 
 ## 7. Tests du Graphe (Workflow Coding)
