@@ -473,7 +473,7 @@ vrai fichier (ex: landing_page/index.html), pas sur la racine du workspace."""
 _DEVTOOLS_TOOLS_DOC = """
 - `navigate_page(url="...")` : ouvre une URL dans Chrome (utilise file:/// absolu pour un fichier local).
 - `take_screenshot()` : capture l'écran → l'image TE REVIENT (tu la vois). Format JPEG (léger).
-- `list_console_messages()` : liste les erreurs/warnings JS de la console (le "stderr" du web).
+- `list_console_messages()` : liste les erreurs/warnings JS de la console. ⚠️ Cet outil renvoie une chaîne de caractères Markdown directement affichable (ne fais surtout pas de boucle `for` ni de `.get()`, utilise simplement `print(list_console_messages())`).
 - `click(uid="...")` / `fill(uid="...", value="...")` : interagit (utile si tu veux tester un bouton, ex: démarrer un tri).
 - `evaluate_script(script="...")` : exécute du JS dans la page (ex: lire une valeur du DOM).
   ⚠️ ATTENTION : Les arguments nommés sont OBLIGATOIRES pour tous ces outils (ex: `evaluate_script(script="...")`).

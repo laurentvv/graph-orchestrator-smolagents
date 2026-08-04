@@ -144,12 +144,12 @@ def tee_run_logging(log_path: str, enabled: bool = True) -> Iterator[None]:
 
 
 def resolve_log_path(mode: str, logs_dir: str) -> str:
-    """Construit un chemin de log horodaté : ``<logs_dir>/run-<stamp>-<mode>.log``.
+    """Construit un chemin de log horodaté : ``<logs_dir>/run_<mode>_<stamp>/run_full.log``.
 
     Cross-plateforme (``os.path.join``). Le mode est slugifié pour rester sûr
-    comme nom de fichier. Convention d'horodatage : ``YYYYMMDD-HHMMSS`` (triable
+    comme nom de dossier. Convention d'horodatage : ``YYYY-MM-DD_HHMMSS`` (triable
     chronologiquement par simple ordre lexicographique).
     """
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    safe_mode = re.sub(r"[^a-z0-9]+", "-", (mode or "").strip().lower()).strip("-") or "run"
-    return os.path.join(logs_dir, f"run-{stamp}-{safe_mode}.log")
+    stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+    safe_mode = re.sub(r"[^a-z0-9]+", "_", (mode or "").strip().lower()).strip("_") or "run"
+    return os.path.join(logs_dir, f"run_{safe_mode}_{stamp}", "run_full.log")

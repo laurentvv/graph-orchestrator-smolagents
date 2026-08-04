@@ -144,7 +144,7 @@ class ReadGate:
         except Exception:
             return
 
-    def check_write(self, path: str) -> Tuple[bool, str]:
+    def check_write(self, path: str, tool_name: str = "write") -> Tuple[bool, str]:
         """Décide ALLOW vs BLOCK pour une écriture sur `path`.
 
         Renvoie `(allowed, reason)` — `reason` vide si allowed, message
@@ -156,6 +156,12 @@ class ReadGate:
         3. Read impossible (permissions, binaire, IO) → ALLOW (fail-open).
         4. hash de la dernière lecture connue == hash disque → ALLOW.
         5. Sinon (pas de lecture, ou lecture stale) → BLOCK.
+
+        `tool_name` est inclus dans le message (ex "write_file", "search_replace")
+        pour aider le modèle à comprendre quel appel a été bloqué. Le message est
+        construit par concaténation (PAS str.format sur `path`) car un chemin peut
+        légitimement contenir `{` ou `}` (ex `data{config}.json`) — format lèverait
+        KeyError/ValueError et rendrait le gate inopérant (fail-open silencieux).
         """
         if not path or not isinstance(path, str):
             return (True, "")
@@ -177,22 +183,27 @@ class ReadGate:
             if last_read_hash is not None and last_read_hash == current_hash:
                 return (True, "")
             # (5) Pas de lecture, ou lecture stale (hash ≠) → BLOCK.
-            return (
-                False,
-                _BLOCK_MESSAGE.format(tool_name="write/edit", path=path),
-            )
+            # Message construit par concaténation (anti-injection d'accolades).
+            return (False, _block_message(tool_name, path))
         except Exception:
             # Fail-open absolu : aucune inspection ne doit briquer l'agent.
             return (True, "")
 
 
-_BLOCK_MESSAGE = (
-    "ERROR (Read-Before-Write Gate): {path} already exists and you have not read "
-    "its CURRENT version. Any write invalidates earlier reads, so you MUST re-read "
-    "before every modification. Call read_file on {path} first (a ranged read of "
-    "the relevant section is enough, e.g. the last ~30 lines before an append), "
-    "check what is already there, then retry your edit. The file was NOT modified."
-)
+def _block_message(tool_name: str, path: str) -> str:
+    """Construit le message pédagogique de blocage (concaténation, pas format).
+
+    Séparé en fonction pour être testable isolément et éviter str.format sur un
+    `path` utilisateur (qui peut contenir `{`/`}` → KeyError/ValueError).
+    """
+    return (
+        "ERROR (Read-Before-Write Gate): " + path + " already exists and you have "
+        "not read its CURRENT version. " + tool_name + " was BLOCKED — any write "
+        "invalidates earlier reads, so you MUST re-read before every modification. "
+        "Call read_file on " + path + " first (a ranged read of the relevant "
+        "section is enough, e.g. the last ~30 lines), check what is already there, "
+        "then retry your edit. The file was NOT modified."
+    )
 
 
 # ==========================================
@@ -233,7 +244,7 @@ class _GatedWriteTool(BaseTool):
         # Le CodeAgent appelle les outils via __call__ (chemin confirmé dans
         # sanitizer.py docstring). On coerce rien ici (le sanitizer le fait en
         # amont ou en aval selon l'ordre de la chaîne) — on ne fait que gate.
-        allowed, reason = self._gate.check_write(kwargs.get("path"))
+        allowed, reason = self._gate.check_write(kwargs.get("path"), self.name)
         if not allowed:
             return reason
         result = self._wrapped(*args, **kwargs)
@@ -241,7 +252,7 @@ class _GatedWriteTool(BaseTool):
 
     def forward(self, *args: Any, **kwargs: Any) -> Any:
         # Chemin TCA / fallback. Même logique que __call__.
-        allowed, reason = self._gate.check_write(kwargs.get("path"))
+        allowed, reason = self._gate.check_write(kwargs.get("path"), self.name)
         if not allowed:
             return reason
         result = self._wrapped.forward(*args, **kwargs)
