@@ -48,10 +48,22 @@ from smolagents import BaseTool
 _READ_TOOLS = frozenset({"read_file"})
 
 # Outils d'écriture soumis au gate. Deer Flow gate write_file + str_replace ;
-# on ajoute nos 3 outils d'édition équivalents (edit_file, search_replace,
-# multi_replace, append_file) — tous modifient un fichier existant.
+# on ajoute nos outils d'édition équivalents (edit_file, search_replace,
+# multi_replace) qui ÉCRASENT/MODIFIENT un fragment existant — ce sont eux qui
+# peuvent corrompre aveuglément un fichier non lu.
+#
+# EXCEPTION : `append_file` est VOLONTAIREMENT EXEMPTÉ du gate. Raisons :
+# (1) un append n'écrase pas — il ajoute à la fin — l'anti-doublon F-28 (garde
+#     textuelle « content == fin du fichier ») + l'idempotence F-43 (backing
+#     DuckDB) suffisent à le protéger.
+# (2) `append_file` est le MÉCANISME CENTRAL de la stratégie incremental (F-28) :
+#     write_file(squelette) puis N append_file(sections). Forcer un read_file
+#     avant CHAQUE append (mode Strict) double le nombre de steps et fait
+#     exploser le contexte (test live 2026-08-04 : 425k tokens, crash overflow).
+# (3) Deer Flow n'a pas d'équivalent d'append incremental — son `write_file`
+#     avec append=True gère la création, pas la construction section-par-section.
 _GATED_WRITE_TOOLS = frozenset(
-    {"write_file", "search_replace", "edit_file", "multi_replace", "append_file"}
+    {"write_file", "search_replace", "edit_file", "multi_replace"}
 )
 
 

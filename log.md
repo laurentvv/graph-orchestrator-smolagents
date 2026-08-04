@@ -2895,3 +2895,46 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
 - PRIORITÉ 1 du plan usine logicielle → COMPLÈTE (les 4 cases cochées : SEARCH/REPLACE
   F-19, Mutex F-20, Anti-vide F-10, Read-Before-Write Gate F-67).
 - ATTENTE Kilo Code Review avant merge (AGENTS.md §6).
+
+## [2026-08-04 00:22:00] docs | Audit cohérence INDEX références → enrichissement plan + feature_list
+- Demande utilisateur : « Des nouvelles références ajouté : INDEX.md + inventory.json. Vérifie ce qui peut être utile au projet et ajoute ça au plan + feature_list. »
+- CONSTAT INITIAL : les fiches 19-23 (loopx, code-review-graph, davidondrej, llm-council, mattpocock) étaient DÉJÀ intégrées au plan via F-66 (commit 9dc59c0, completed). Les 23 projets de references/ sont tous audités.
+- Audit de cohérence EXHAUSTIF (agent Explore) croisant le Hall of Fame de l'INDEX contre plan_usine_logicielle.md → 18 écarts identifiés, dont le gisement principal = qm (4 briques 🟢 Haute sur 9 du Hall of Fame qm oubliées : consolidation, mémoire durable, budget USD, queue/lease/reaper).
+- ENRICHISSEMENT du plan_usine_logicielle.md (uniquement des cases `[ ]` à faire + 1 nouvelle sous-section, AUCUN code modifié) :
+  • P3-bis : +2 cases (Budget LLM USD qm F-69a, Queue runs à leases/reaper qm F-69b + garde leases typés pour compaction async).
+  • P6-bis : +2 cases (Diff multi-fichiers open-swe + métriques Judge P/R/F1/MRR code-review-graph F-70).
+  • P6-ter (NOUVELLE sous-section « Mémoire durable du KG ») : +1 bloc (consolidation claims LLM-juge + mémoire deux-tiers scratch/notebook qm F-68).
+  • P9 : +1 case (Compression skeleton libcst RepoGraph F-71, orthogonal au KG HORS-SCOPE) + garde leases typés qm sur compaction async.
+  • P1 : +1 case (Format V4A/apply_patch multi-fichiers aider) + précision source (search_replace.py RelativeIndenter/dmp_apply non crédités).
+  • P2 : +1 case (Capture Playwright LlamaBot + cycle de vie serveur with_server.py awesome-claude).
+  • P10 : +2 cases (Manuel MCP mcp-builder + doctrine hard/soft dependency ADR mattpocock).
+  • Tableau état avancement (l.11-31) mis à jour (P6 et P9 reflètent les nouvelles briques planifiées).
+- ENRICHISSEMENT feature_list.json : +4 features pending (F-68 mémoire KG qm, F-69 budget+queue qm, F-70 diff+métriques Judge, F-71 skeleton libcst). 72 features total. JSON validé (python json.load OK).
+- Périmètre : travail DOCUMENTAIRE uniquement (plan + feature_list + log + progress). Aucun code de production modifié, aucun test impacté. Aucune régression possible.
+- Filtre qualité respecté : les 4 nouvelles features F-68/69/70/71 s'appuient sur qm (production-éprouvée, en-tête du plan), open-swe/code-review-graph (🟡 Moyenne mais briques 🟢 Haute ciblées), RepoGraph (🟢 Haute pour get_skeleton isolé du trio académique).
+
+
+## [2026-08-04 00:35:00] eval | TEST LIVE GATE v1 — marche mais CASSE le workflow incremental
+- Test live debug/test_gate_live_bubble.py : rejoue le vrai prompt Architect→Coder Bubble
+  Sort (extrait du log du dernier run réussi) via execute_coder_node (gate actif).
+- RÉSULTAT GATE : fonctionne EXACTEMENT comme prévu.
+  * Step 1 : write_file(squelette) → ALLOW (création, dossier vierge). ✅
+  * Step 2 : append_file(css) → 🛑 BLOCAGE gate ("index.html already exists and you
+    have not read its current version... Call read_file first"). Message pédagogique
+    clair, fichier NON modifié. ✅
+  * Step 3 : read_file(index.html) → le modèle OBÉIT au message, lit le fichier. ✅
+  * Step 4+ : append retry → ALLOW (après read).
+- MAIS CRASH EN STEP 18 : context overflow (32876 tokens > ctx 32768). Cause racine :
+  la stratégie incremental (F-28) fait ~6 append_file. Avec le gate Strict, CHAQUE
+  append était précédé d'un blocage + un read_file obligatoire → double le nombre
+  de steps + chaque read_file réinjecte tout le fichier cumulé dans l'historique →
+  explosion du contexte (425k tokens au step 17) → crash.
+- DIAGNOSTIC : le mode Strict (fidèle Deer Flow) est INADAPTÉ à append_file. Un append
+  n'écrase pas (ajoute à la fin), l'anti-doublon F-28 + idempotence F-43 le protègent
+  déjà. Forcer un read_file avant chaque append est précisément ce qu'on voulait éviter
+  en créant append_file (accumulation sans relecture).
+- CORRECTION : append_file EXEMPTÉ du gate (retiré de _GATED_WRITE_TOOLS). Le gate
+  reste sur write_file/search_replace/edit_file/multi_replace (qui écrasent/modifient).
+  Commentaire détaillé dans read_gate.py justifiant l'exemption (3 raisons).
+- Test v2 lancé (même scénario incremental, append_file exempté) pour valider que le
+  workflow complète sans crash.

@@ -378,7 +378,13 @@ class TestWrapTools:
         assert result is tools  # identité préservée.
 
     def test_wraps_only_targeted_tools(self):
-        """Seuls read_file + les 5 outils d'écriture sont wrappés ; les autres intacts."""
+        """Seuls read_file + les outils d'écriture (hors append_file) sont wrappés.
+
+        append_file est EXEMPTÉ du gate (voir docstring read_gate.py) : il est le
+        mécanisme central de la stratégie incremental (F-28) et forcer un read_file
+        avant chaque append fait exploser le contexte. L'anti-doublon F-28 +
+        l'idempotence F-43 le protègent déjà.
+        """
         from smolagents import DuckDuckGoSearchTool
 
         from graph_orchestrator.tools import (
@@ -403,13 +409,15 @@ class TestWrapTools:
         ]
         result = wrap_tools_with_read_gate(tools, ReadGate(), enabled=True)
         types_by_name = {t.name: type(t).__name__ for t in result}
+        # Gated (écrasent/modifient) : wrappés.
         assert types_by_name["read_file"] == "_ReadTrackingTool"
         assert types_by_name["write_file"] == "_GatedWriteTool"
         assert types_by_name["search_replace"] == "_GatedWriteTool"
         assert types_by_name["edit_file"] == "_GatedWriteTool"
         assert types_by_name["multi_replace"] == "_GatedWriteTool"
-        assert types_by_name["append_file"] == "_GatedWriteTool"
         # Non ciblés : inchangés (type d'origine, pas wrappés).
+        # append_file est VOLONTAIREMENT exempté (stratégie incremental F-28).
+        assert types_by_name["append_file"] != "_GatedWriteTool"
         assert types_by_name["list_directory"] != "_GatedWriteTool"
         assert types_by_name["web_search"] != "_GatedWriteTool"  # DuckDuckGo intact.
 
