@@ -73,6 +73,15 @@ utilise des **px absolus** (`height: ${value * 3}px`) plutôt que des `%`.
 (`evaluate_script`) que `document.querySelectorAll('.bar').length > 0` ET que les
 barres ont une hauteur visible (`getBoundingClientRect().height > 0`).
 
+## ⚠️ RÈGLE CRITIQUE — Animations JS et Boucles bloquantes (failure mode timeout n°1)
+
+Quand tu crées un visualiseur d'algorithme (comme un tri) ou toute animation en JS, **NE JAMAIS UTILISER DE BOUCLE `while` OU `for` CONTINUE/BLOQUANTE**.
+Le navigateur n'a qu'un seul thread. Une boucle `while (swapped)` ou un `for` lourd bloque l'Event Loop. Le DOM ne se mettra jamais à jour visuellement, la page gèlera, et le Tester (Puppeteer) plantera sur un timeout de 120 secondes.
+
+**RÈGLE OBLIGATOIRE** : Pour toute animation, ton algorithme DOIT libérer le Main Thread à chaque étape. Utilise une fonction asynchrone avec un délai manuel :
+`const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));`
+Puis dans tes boucles : `await sleep(vitesse);`. Sans ça, l'agent de test échouera à voir la moindre animation.
+
 ## Format de réponse final
 
 Quand tu as résolu la tâche, utilise `final_answer` avec :
