@@ -568,6 +568,43 @@
         "F-28",
         "F-42"
       ]
+    },
+    {
+      "id": "F-68",
+      "name": "Mémoire durable du KG (consolidation claims + scratch/notebook deux-tiers)",
+      "description": "Sous-section P6-ter du plan usine logicielle (audit cohérence INDEX fiche 14-qm, 2026-08-04). Le gisement d'écarts le plus massif de l'audit de cohérence est qm : sur 9 briques 🟢 Haute du Hall of Fame qm, le plan n'en exploitait que 3 (compaction P9, idempotence F-43, sandbox P8-bis). Les briques MÉMOIRE sont oubliées — or le KG DuckDB de claims/refutations grossit indéfiniment sans dédup ni consolidation (le nœud d'escalade F-23 ne fait que synthétiser, pas consolider). Deux briques complémentaires (consolidation par LLM-juge émettant UPDATE/DELETE/ADD + mémoire deux-tiers scratch volatile vs notebook consolidé durable avec contrat recall/capture/replaceIfRevision + concurrence optimiste). Référence : references/qm/src/memory/strategies/consolidation.ts + scratch-promote.ts + memory-service.ts. Priorité : HAUTE (qm = référence production-éprouvée explicitement listée en en-tête du plan).",
+      "status": "pending",
+      "dependencies": [
+        "F-03",
+        "F-23"
+      ]
+    },
+    {
+      "id": "F-69",
+      "name": "Budget LLM USD + Queue de runs à leases/reaper",
+      "description": "Priorité P3-bis du plan usine logicielle (audit cohérence INDEX fiche 14-qm, 2026-08-04). Deux briques runtime qm oubliées. (1) BUDGET LLM USD : createBudgetTracker qui suit le coût USD estimé (estimateCostUsd par fenêtre glissante 24h) et bloque l'exécution au-delà d'un plafond — coupe-circuit FINANCIER distinct du circuit-breaker itératif (F-36) et du max_iter (F-22) qui limitent les boucles, pas le coût. Priorité basse aujourd'hui (GPU-local = coût marginal nul) MAIS pré-requis avant tout passage en prod distant payant. ⚠️ Ne pas confondre avec ToolOutputBudgetMiddleware deer-flow (P8) qui tronque des tokens d'output d'outil. (2) QUEUE DE RUNS À LEASES : modélise la reprise après crash comme une queue (claim + heartbeat + reapExpired pour les runs abandonnés + errorParks pour les échecs). Complète le checkpoint F-24 qui ne gère que la reprise d'un run EN COURS, pas la détection/nettoyage des runs ABANDONNÉS (process tué, VRAM saturée). À reloger sur DuckDB. Inclut garde pour la compaction async (P9) : leases typés par rôle LeaseHolder (turn/compaction/fork) pour qu'une compaction async n'écrase pas un turn en cours. Référence : references/qm/src/ratelimit/budget.ts + runs/run-store.ts + sessions/session-store.ts.",
+      "status": "pending",
+      "dependencies": [
+        "F-24",
+        "F-36"
+      ]
+    },
+    {
+      "id": "F-70",
+      "name": "Diff multi-fichiers + métriques de benchmark du Judge",
+      "description": "Sous-section P6-bis du plan usine logicielle (audit cohérence INDEX fiches 09-open-swe + 20-code-review-graph, 2026-08-04). Le Judge (F-44) exige « IN-DIFF ONLY » mais ne dispose pas de brique pour CONSTRUIRE ce diff multi-fichiers (runs/ est versionné git local depuis F-53, mais le diff n'est consommé que par le Tester ciblé, pas formalisé pour le Judge). (a) Diff full-content multi-fichiers à la build_pr_diff_files (open-swe) ; (b) format de sortie structuré Risk Assessment / File-by-File / Recommendations (skills/review-pr/SKILL.md code-review-graph) ; (c) MÉTRIQUES quantitatives de benchmark (compute_precision_recall + compute_mrr, eval/scorer.py code-review-graph) — aujourd'hui le Judge n'est évalué que qualitativement (lecture de logs), indispensable pour la P15 Meta-Analyste et toute regression-test du Judge.",
+      "status": "pending",
+      "dependencies": [
+        "F-44",
+        "F-53"
+      ]
+    },
+    {
+      "id": "F-71",
+      "name": "Compression de code par skeleton (libcst, get_skeleton)",
+      "description": "Priorité P9 du plan usine logicielle (audit cohérence INDEX fiche 04-repograph, 2026-08-04). Réduire le contexte LLM en remplaçant les corps de fonctions par ... via get_skeleton (garde ClassDef/FunctionDef/docstrings/constantes, supprime le corps). ORTHOGONAL au KG structural (P4 HORS-SCOPE) : ce n'est pas une brique de knowledge graph, c'est un utilitaire de réduction de contexte applicable même en création de code (ex: réinjecter l'existant runs/ ou un fichier partiellement écrit au Coder pour qu'il l'étende sans consommer tout le budget tokens). Le plan avait jeté get_skeleton avec le reste du trio académique RepoGraph/axon/graphify en P4 — à tort, classé séparément 🟢 Haute dans le Hall of Fame. Référence : references/RepoGraph/agentless/util/compress_file.py (CompressTransformer, get_skeleton, pur libcst indépendant).",
+      "status": "pending",
+      "dependencies": []
     }
   ]
 }

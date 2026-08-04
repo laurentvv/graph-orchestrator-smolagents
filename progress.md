@@ -526,6 +526,13 @@ odes.py et web_tester.py pour exiger une DÉCLARATION de fonction asynchrone non
 - [x] Étape RAA-5 : Mise à jour exhaustive des documents de suivi (eature_list.json, plan_usine_logicielle.md, README.md, progress.md, log.md).
 - [ ] Étape RAA-6 : Attente de la fin du run E2E, analyse post-mortem finale avec un_analyzer.py, rapport de validation, et préparation pour commit/PR.
 
+## Jalons de l'Itération (cycle Audit cohérence INDEX références — enrichissement plan)
+- [x] Étape ACI-1 : Constat initial — fiches 19-23 déjà intégrées via F-66 (completed). INDEX.md + inventory.json = commit 9dc59c0.
+- [x] Étape ACI-2 : Audit de cohérence exhaustif (agent Explore) — Hall of Fame INDEX croisé contre plan_usine_logicielle.md. 18 écarts identifiés, gisement principal = qm (4 briques 🟢 Haute sur 9 oubliées).
+- [x] Étape ACI-3 : Enrichissement plan_usine_logicielle.md (cases `[ ]` uniquement, 0 code modifié) — P3-bis (+2), P6-bis (+2), P6-ter NOUVELLE sous-section (+1 bloc), P9 (+1 case + garde), P1 (+1 case + précision source), P2 (+1 case), P10 (+2 cases), tableau état avancement mis à jour.
+- [x] Étape ACI-4 : feature_list.json +4 features pending (F-68 mémoire KG qm, F-69 budget+queue qm, F-70 diff+métriques Judge, F-71 skeleton libcst). 72 features total. JSON validé.
+- [x] Étape ACI-5 : log.md + progress.md synchronisés. Périmètre = travail documentaire uniquement (aucun code de production modifié, aucun test impacté).
+
 ## Jalons de l'Itération (cycle Read-Before-Write Gate — F-67, Priorité 1)
 - [x] Étape RBW-1 : Exploration (2 agents parallèles) — design Deer Flow lu (issue #3857,
   middleware read_before_write_middleware.py 269 lignes) : hash SHA256 contenu complet,
