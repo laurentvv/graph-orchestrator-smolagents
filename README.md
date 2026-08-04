@@ -1,5 +1,7 @@
 # 🧠 Graph Orchestrator: The Autonomous Software Factory
 
+![Graph Orchestrator Architecture](docs/orchestrator_banner.jpg)
+
 [![Status](https://img.shields.io/badge/Status-Production_Ready-success.svg)](#)
 [![Stack](https://img.shields.io/badge/Stack-DSPy_3.0_%7C_smolagents_%7C_MCP-blue.svg)](#)
 
