@@ -7,6 +7,7 @@ réelle des summaries et pas seulement le confidence_score.
 
 import json
 import os
+import requests
 import re
 from typing import Any, List, Literal, Optional
 
@@ -242,7 +243,6 @@ def extract_and_validate(response: Any, model_class: type[BaseModel], api_base: 
             
             # Fetch actual model ID from llama-server to avoid litellm NotFoundError
             try:
-                import requests
                 resp = requests.get(f"{use_api_base.rstrip('/')}/models", timeout=2)
                 if resp.status_code == 200:
                     models_data = resp.json()

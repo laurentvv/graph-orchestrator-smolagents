@@ -129,7 +129,6 @@ class LoopGuard:
             return None
         for fp, count in self._counts.items():
             if count >= self.threshold:
-                print(f"[LoopGuard] TRIPPED ON: {fp} (count={count})")
                 return (
                     f"CIRCUIT BREAKER (Anti-Loop) : tu as appelé le même outil avec les "
                     f"mêmes arguments {count} fois ({self.threshold}+ = boucle avérée). "
