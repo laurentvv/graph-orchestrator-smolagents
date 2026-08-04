@@ -1,64 +1,64 @@
-# 🧠 Graph Orchestrator : L'Usine Logicielle Autonome
+# 🧠 Graph Orchestrator: The Autonomous Software Factory
 
 [![Status](https://img.shields.io/badge/Status-Production_Ready-success.svg)](#)
 [![Stack](https://img.shields.io/badge/Stack-DSPy_3.0_%7C_smolagents_%7C_MCP-blue.svg)](#)
 
-Bienvenue dans le **Graph Orchestrator**. Ceci n'est pas un énième chatbot IA qui génère du code au kilomètre et s'arrête à la première erreur. C'est **une véritable équipe d'ingénierie autonome**, orchestrée par des graphes, dotée d'une mémoire persistante, et conçue pour résoudre des tâches complexes de bout en bout sans la moindre intervention humaine.
+Welcome to the **Graph Orchestrator**. This isn't just another AI chatbot that generates lines of code and crashes at the first error. It is a **fully autonomous engineering team**, orchestrated via graphs, equipped with persistent memory, and designed to solve complex end-to-end tasks without any human intervention.
 
-Si vous avez déjà été frustré par des agents qui "tournent en rond" (Agent Loops), qui modifient du code à l'aveugle, ou qui oublient le cahier des charges en cours de route, cette architecture a été pensée *exactement* pour vous.
-
----
-
-## 🚀 Pourquoi cette usine logicielle est unique au monde ?
-
-L'écrasante majorité des agents de code existants (Roo Code, Cline, Devin) reposent sur une seule IA surpuissante qui doit tout faire : planifier, coder, tester, et s'auto-évaluer. Cela conduit inévitablement à un effondrement du contexte et à de l'aveuglement cognitif. 
-
-Le Graph Orchestrator brise ce plafond de verre grâce au paradigme **"Brains vs Hands"** (Les Cerveaux et les Mains) :
-
-### 1. 🧠 Les Cerveaux (DSPy) pensent l'Architecture
-Nous confions la réflexion à des modèles de raisonnement profonds (Chain of Thought, 32k tokens). 
-L'**Architecte**, le **Juge** et l'expert en **Sécurité** ne tapent jamais de code. Ils décomposent mathématiquement le besoin, rédigent des schémas JSON Pydantic ultra-stricts (sans halluciner), et valident impitoyablement les livrables. 
-
-### 2. 🛠️ Les Mains (smolagents) agissent sur le Terrain
-Pour chaque sous-tâche, un nœud **Coder** (modèle rapide) est réveillé. Il reçoit un ordre clair et une boîte à outils puissante. Il écrit les fichiers, navigue dans le terminal, manipule Git, et a même... des yeux !
-
-### 3. 👀 L'Auto-Correction Visuelle (Multimodal)
-Fini les interfaces web avec des boutons invisibles ou des éléments superposés. Nos agents utilisent le protocole **MCP (Model Context Protocol)** pour piloter Chrome en arrière-plan. L'agent prend une capture d'écran de son propre code, l'analyse avec ses modèles de vision, et corrige de lui-même les bugs visuels *avant même* que vous ne les voyiez. 
-
-### 4. 📚 La Fin des Hallucinations d'API (Context7)
-Un LLM ne sait pas coder avec une bibliothèque sortie hier matin. Au lieu de le laisser inventer des méthodes imaginaires, notre usine est branchée en temps réel au réseau documentaire **Context7**. Dès que l'agent détecte qu'il a besoin de *React*, *Prisma*, ou *Tailwind*, il pré-charge automatiquement la documentation officielle à jour. 
-
-### 5. 🛡️ Les Garde-Fous Infaillibles (Zero-LLM Gates)
-On ne gaspille pas l'intelligence artificielle pour vérifier une faute de frappe. Avant qu'un fichier soit validé :
-- **Le Linter** scanne instantanément la syntaxe.
-- **Le Static Tester** vérifie la mécanique web (les boutons sont-ils cliquables ?).
-- **Le Disjoncteur Anti-Boucle** repère mathématiquement si l'agent fait la même erreur 3 fois de suite, et déclenche l'Escalade (Post-Mortem automatique).
-- **Le Read-Before-Write Gate** empêche formellement un agent d'écrire dans un fichier qu'il n'a pas lu au préalable.
+If you've ever been frustrated by agents stuck in infinite loops, editing code blindly, or forgetting the initial requirements halfway through the project, this architecture was built *exactly* for you.
 
 ---
 
-## 🗄️ Une Mémoire de Fer : Le Knowledge Graph
-Toutes ces IAs (l'Architecte, le Codeur, le Testeur) ne partagent pas un simple prompt historique qui s'effacerait avec le temps. Elles échangent et persistent leur savoir dans une **base de données relationnelle locale (DuckDB)**.
+## 🚀 Why is this software factory unique?
 
-Lorsqu'un Coder échoue et que le Juge rejette le code, la raison du rejet est gravée dans le Knowledge Graph. À la prochaine itération, le Coder requêtera cette base de données pour "apprendre de ses erreurs", garantissant que le système ne produit **jamais de régression**.
+The vast majority of existing coding agents (Roo Code, Cline, Devin) rely on a single omnipotent AI model that must do everything: plan, code, test, and self-evaluate. This inevitably leads to context collapse and cognitive blindness.
+
+The Graph Orchestrator breaks this ceiling by introducing the **"Brains vs Hands"** paradigm:
+
+### 1. 🧠 The Brains (DSPy) Handle the Architecture
+We delegate the heavy thinking to deep reasoning models (Chain of Thought, 32k tokens). 
+The **Architect**, the **Judge**, and the **Security Expert** never write a single line of code. They mathematically break down the requirements, generate ultra-strict Pydantic JSON schemas (preventing hallucinations), and ruthlessly evaluate the deliverables.
+
+### 2. 🛠️ The Hands (smolagents) Execute in the Field
+For each subtask, a **Coder** node (fast model) wakes up. It receives a clear order and a powerful toolkit. It writes files, navigates the terminal, uses Git, and even has... eyes!
+
+### 3. 👀 Multimodal Visual Self-Correction
+Say goodbye to web interfaces with invisible buttons or overlapping divs. Our agents use the **MCP (Model Context Protocol)** to drive Chrome in the background. The agent takes a screenshot of its own code, analyzes it using its vision models, and fixes visual bugs on its own *before* you even see them.
+
+### 4. 📚 The End of API Hallucinations (Context7)
+An LLM cannot code using a library that was released yesterday. Instead of letting it invent imaginary methods, our factory is hooked up in real-time to the **Context7** documentation network. As soon as the agent detects it needs *React*, *Prisma*, or *Tailwind*, it automatically pre-fetches the latest official documentation.
+
+### 5. 🛡️ Bulletproof Guardrails (Zero-LLM Gates)
+We don't waste expensive AI cycles verifying simple typos. Before any file is validated:
+- **The Linter** instantly scans the syntax.
+- **The Static Tester** checks the web mechanics (are the buttons actually clickable?).
+- **The Anti-Loop Circuit Breaker** mathematically detects if the agent makes the exact same mistake 3 times in a row, triggering an Escalation (auto-post-mortem).
+- **The Read-Before-Write Gate** strictly forbids an agent from editing a file it hasn't read first.
 
 ---
 
-## 🛠️ Prêt à démarrer l'Usine ?
+## 🗄️ Ironclad Memory: The Knowledge Graph
+These AIs (the Architect, the Coder, the Tester) don't share a fragile history prompt that fades over time. They communicate and persist their knowledge inside a **local relational database (DuckDB)**.
 
-Vous voulez voir l'équipe au travail ? Le point d'entrée unique est extrêmement simple :
+When a Coder fails and the Judge rejects the code, the reason for the rejection is etched into the Knowledge Graph. On the next iteration, the Coder queries this database to "learn from its mistakes", guaranteeing the system **never produces a regression**.
 
-1. Ouvrez `tasks.json` et écrivez votre besoin métier en langage naturel.
-2. Démarrez l'usine avec une seule ligne de commande :
+---
+
+## 🛠️ Ready to Start the Factory?
+
+Want to see the team at work? The entry point is incredibly simple:
+
+1. Open `tasks.json` and write your business requirements in natural language.
+2. Boot the factory with a single command line:
    ```powershell
    $env:WORKFLOW_MODE="coding"
    $env:PYTHONIOENCODING="utf-8"
    uv run python -m graph_orchestrator.workflows
    ```
-3. Prenez un café ☕ et regardez l'orchestrateur créer la branche, planifier, coder, s'auto-corriger visuellement, et vous fournir un projet clef-en-main, stable et audité.
+3. Grab a coffee ☕ and watch the orchestrator branch, plan, code, visually self-correct, and deliver a turnkey, stable, and audited project.
 
 ---
 
-> 📖 **Pour les Ingénieurs et Architectes Systèmes :**
-> Vous voulez comprendre les entrailles du monstre ? Le routage asynchrone, les arbres de syntaxe abstraits, et les spécifications DSPy ?
-> 👉 [Consultez notre documentation technique approfondie (Architecture Details)](docs/ARCHITECTURE_DETAILS.md)
+> 📖 **For Systems Engineers & Architects:**
+> Want to dive into the belly of the beast? Interested in asynchronous routing, abstract syntax trees, and DSPy specifications?
+> 👉 [Check out our deep technical documentation (Architecture Details)](docs/ARCHITECTURE_DETAILS.md)
