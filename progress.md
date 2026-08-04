@@ -516,11 +516,43 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 
 
 ## Jalons de l'Itération (cycle Analyse des Runs & Amélioration Continue — F-60 / F-61)
-- [x] Étape RAA-1 : Création de un_analyzer.py (F-60) pour parser les logs 	ask-*.log et extraire les métriques de graph_orchestrator.db. Filtres robustes contre les bordures de logs (Rich).
+- [x] Étape RAA-1 : Création de 
+un_analyzer.py (F-60) pour parser les logs 	ask-*.log et extraire les métriques de graph_orchestrator.db. Filtres robustes contre les bordures de logs (Rich).
 - [x] Étape RAA-2 : Validation en direct du rôle de Meta-Analyste de l'assistant IA (F-61). Diagnostic des crashes InterpreterError et injection dynamique de la règle import time dans 
 odes.py et web_tester.py.
 - [x] Étape RAA-3 : Remplacement du write_file par multi_replace_file_content validé et acté (F-59) pour le Coder.
 - [x] Étape RAA-4 : Application en direct (F-61) d'un deuxième correctif : le run E2E a crashé sur le Web Tester à cause de la règle "IIFE" passée au MCP chrome-devtools. Analyse + correction de 
 odes.py et web_tester.py pour exiger une DÉCLARATION de fonction asynchrone non invoquée (sync () => { await ... }) à la place de l'IIFE.
 - [x] Étape RAA-5 : Mise à jour exhaustive des documents de suivi (eature_list.json, plan_usine_logicielle.md, README.md, progress.md, log.md).
-- [ ] Étape RAA-6 : Attente de la fin du run E2E, analyse post-mortem finale avec un_analyzer.py, rapport de validation, et préparation pour commit/PR.
+- [ ] Étape RAA-6 : Attente de la fin du run E2E, analyse post-mortem finale avec un_analyzer.py, rapport de validation, et préparation pour commit/PR.
+
+## Jalons de l'Itération (cycle Audit cohérence INDEX références — enrichissement plan)
+- [x] Étape ACI-1 : Constat initial — fiches 19-23 déjà intégrées via F-66 (completed). INDEX.md + inventory.json = commit 9dc59c0.
+- [x] Étape ACI-2 : Audit de cohérence exhaustif (agent Explore) — Hall of Fame INDEX croisé contre plan_usine_logicielle.md. 18 écarts identifiés, gisement principal = qm (4 briques 🟢 Haute sur 9 oubliées).
+- [x] Étape ACI-3 : Enrichissement plan_usine_logicielle.md (cases `[ ]` uniquement, 0 code modifié) — P3-bis (+2), P6-bis (+2), P6-ter NOUVELLE sous-section (+1 bloc), P9 (+1 case + garde), P1 (+1 case + précision source), P2 (+1 case), P10 (+2 cases), tableau état avancement mis à jour.
+- [x] Étape ACI-4 : feature_list.json +4 features pending (F-68 mémoire KG qm, F-69 budget+queue qm, F-70 diff+métriques Judge, F-71 skeleton libcst). 72 features total. JSON validé.
+- [x] Étape ACI-5 : log.md + progress.md synchronisés. Périmètre = travail documentaire uniquement (aucun code de production modifié, aucun test impacté).
+
+## Jalons de l'Itération (cycle Read-Before-Write Gate — F-67, Priorité 1)
+- [x] Étape RBW-1 : Exploration (2 agents parallèles) — design Deer Flow lu (issue #3857,
+  middleware read_before_write_middleware.py 269 lignes) : hash SHA256 contenu complet,
+  stamp après read_file, « newest mark wins », fail-open, gate write_file+str_replace,
+  un write réussi invalide la mark (Strict). Archi smolagents cartographiée (SanitizedTool
+  = template parfait à copier, step_callbacks existants, read_file non tracé).
+- [x] Étape RBW-2 : Décision design (AskUserQuestion) — mode STRICT (fidèle Deer Flow) :
+  un write réussi n'auto-stamp PAS la mark → force re-read avant chaque édition.
+- [x] Étape RBW-3 : `graph_orchestrator/read_gate.py` (~310 lignes) — compute_content_hash,
+  _normalize_path (Windows-safe), ReadGate (dict thread-safe), _GatedWriteTool,
+  _ReadTrackingTool, wrap_tools_with_read_gate. 0 LLM, 100% déterministe.
+- [x] Étape RBW-4 : Branchement `nodes.py execute_coder_node` (~10 lignes) — gate inséré
+  ENTRE wrap_screenshot_tools et sanitize_tools (ordre : gate AVANT sanitizer).
+- [x] Étape RBW-5 : Config `read_before_write_enabled` (défaut True) dans config.py +
+  .env.example + .env local (AGENTS.md §7). Opt-out READ_BEFORE_WRITE_ENABLED=false.
+- [x] Étape RBW-6 : `tests/test_read_gate.py` — 35 tests (helpers 5, ReadGate logic 4,
+  fail-open 6, Strict mode 3, newest-wins 1, thread-safety 1, _GatedWriteTool 5,
+  _ReadTrackingTool 3, wrap 3, E2E 4). 35/35 PASS.
+- [x] Étape RBW-7 : Validation — py_compile OK (3 fichiers) + suite pytest complète
+  651 passed / 0 failed (616 baseline + 35 nouveaux), 0 régression.
+- [x] Étape RBW-8 : État disque synchronisé (feature_list.json +F-67, contract.md
+  +critères 215-227, plan_usine_logicielle.md P1 case cochée, progress.md, README.md,
+  log.md). Commit + push + PR.

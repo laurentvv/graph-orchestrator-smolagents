@@ -7,6 +7,7 @@ réelle des summaries et pas seulement le confidence_score.
 
 import json
 import os
+import requests
 import re
 from typing import Any, List, Literal, Optional
 
@@ -239,6 +240,17 @@ def extract_and_validate(response: Any, model_class: type[BaseModel], api_base: 
             # api_base garde /v1 (llama-server expose /v1, contrairement à Ollama /api/chat).
             use_api_base = api_base or settings.ollama_api_base
             use_model_id = model_id or settings.fast_model_id
+            
+            # Fetch actual model ID from llama-server to avoid litellm NotFoundError
+            try:
+                resp = requests.get(f"{use_api_base.rstrip('/')}/models", timeout=2)
+                if resp.status_code == 200:
+                    models_data = resp.json()
+                    if "data" in models_data and len(models_data["data"]) > 0:
+                        use_model_id = models_data["data"][0]["id"]
+            except Exception:
+                pass
+                
             if use_model_id == "default":
                 use_model_id = "llama"
             

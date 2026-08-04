@@ -2819,3 +2819,122 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
 - **plan_usine_logicielle.md enrichi** (8 citations aux nouvelles fiches) : P3-bis (matière loopx anti-loop déterministe : stall detector + hash d'output + delivery_outcome), P6-bis (3 enrichissements Judge : risk score quantitatif code-review-graph + council anonymisé llm-council + deux axes mattpocock), P8 guard bash (enrichissement davidondrej 27 regex + doctrine fail-open + correction « 52→27 »), P9 compaction (complément structurel loopx whitelist de champs), P10 skill middleware (fusion doctrine P10 : mattpocock socle + davidondrej pratique + awesome-claude modèle 3-niveaux), P11 event stream (complément loopx : event sourcing idempotent + ledger 5 classes).
 - **Réserves signalées** : loopx code verbeux (extraire les algorithmes), code-review-graph runtime non portable (MCP+SQLite), llm-council vibe-coded + coût 2N+1 + OpenRouter payant, mattpocock/davidondrej philosophie « small/composable/any-model » à nuancer vs orchestrateur stateful + exemples TS-biaisés.
 - **Aucune modification du code du projet** — travail documentaire + plan. Aucun test impacté (pas de code modifié).
+
+## [2026-08-04 00:06:00] feat | READ-BEFORE-WRITE GATE IMPLÉMENTÉ (Priorité 1, F-67)
+- DERNIÈRE CASE de la Priorité 1 du plan usine logicielle (ligne 71). L'invariant n°1
+  « read-before-write » était UNIQUEMENT en prompt (nodes.py:574), AUCUN garde logiciel
+  → le Coder (CodeAgent) pouvait éditer/écraser un fichier existant sans l'avoir lu,
+  ou enchaîner write→edit sans relire = cause n°1 de corruption aveugle (Deer Flow #3857).
+- NOUVEAU MODULE graph_orchestrator/read_gate.py (~310 lignes, 100% Python natif, 0 LLM) :
+  * compute_content_hash (SHA256 contenu complet UTF-8) + _normalize_path (os.path.normpath
+    + abspath, Windows-safe pour `..` et mixed separators `/` `\`).
+  * ReadGate : dict thread-safe {norm_path: hash} (threading.Lock). record_read stamp le
+    hash du contenu COMPLET (même sur read partiel offset/limit, re-lit le disque comme
+    Deer Flow). record_write MODE STRICT supprime la mark (un write réussi invalide la
+    lecture → force re-read avant chaque édition). check_write(path) → (allowed, reason),
+    fail-open garanti (fichier absent = création OK, read impossible = laisse passer,
+    jamais briquer). « Newest mark wins ».
+  * _GatedWriteTool(BaseTool) proxy (template copié SanitizedTool F-42) sur
+    write_file/search_replace/edit_file/multi_replace/append_file : bloque SANS déléguer
+    si check_write False, sinon délègue puis record_write. __getattr__ préserve
+    to_code_prompt (Jinja CodeAgent). Intercepte __call__ ET forward.
+  * _ReadTrackingTool proxy miroir sur read_file : après délégation, re-lit le disque et
+    stamp le hash complet. Retourne bien le résultat de read_file.
+  * wrap_tools_with_read_gate(tools, gate, enabled) : no-op si disabled, wrap ciblé
+    (laisse intacts list_directory/bash_command/MCP/DuckDuckGo), ordre préservé.
+- BRANCHEMENT nodes.py execute_coder_node (~10 lignes) : gate inséré ENTRE
+  wrap_screenshot_tools et sanitize_tools. ORDRE CRITIQUE : gate AVANT sanitizer →
+  le sanitizer coerce les args (path str), puis délègue au gate qui check le path.
+- CONFIG : read_before_write_enabled (défaut True) dans config.py + .env.example + .env
+  local. Opt-out READ_BEFORE_WRITE_ENABLED=false.
+- ÉCART CONSCIENCIEUX vs Deer Flow : Deer Flow stocke la mark sur
+  ToolMessage.additional_kwargs (graphe LangGraph multi-threads, mark liée à la survie
+  du contexte). Notre Coder est un CodeAgent unique séquentiel → mark tenue en RAM dans
+  un dict partagé (pattern screenshot_capture éprouvé dans vision_callback.py). Plus
+  simple, adapté à notre archi.
+
+## [2026-08-04 00:07:30] test | TESTS READ-BEFORE-WRITE GATE — 35/35 PASS
+- tests/test_read_gate.py : 35 tests (0 LLM, 0 réseau). Couvre :
+  * helpers purs (5) : hash stable/differs, normalize dotdot/mixed-sep/absolute.
+  * ReadGate logic (4) : création ALLOW, existant non lu BLOCK, après read ALLOW,
+    read stale BLOCK.
+  * fail-open (6) : path None/vide/non-string, fichier binaire illisible, record_read/
+    record_write ne lèvent pas sur bad input.
+  * Strict mode (3) : write invalide mark, re-read restaure, write sur path sans mark
+    est no-op idempotent.
+  * newest mark wins (1) + thread-safety 20×50 parallèle (1).
+  * _GatedWriteTool (5) : bloque sans déléguer (fichier disque INCHANGÉ), allow+délègue+
+    record_write, copie metadata, __getattr__ to_code_prompt, forward aussi gated.
+  * _ReadTrackingTool (3) : stamp hash contenu COMPLET (re-lit disque peu importe
+    offset/limit), skip fichier absent, retourne bien le résultat.
+  * wrap (3) : disabled no-op (même objet), wrap ciblé uniquement, ordre préservé.
+  * E2E (4) : write existant sans read BLOCK, read puis write ALLOW, write puis edit
+    sans re-read BLOCK (Strict = cas #3857), message cite path + read_file.
+- DÉBOGAGE : 1ère exécution 7 échecs → 3 causes (faux BaseTool factice invalidé par
+  smolagents → remplacé par vrais outils + assert sur disque ; contenu test trop court
+  rejeté par garde anti-placeholder write_file ; nom DuckDuckGo = 'web_search' pas
+  'search'). Corrigés, 35/35 PASS.
+
+## [2026-08-04 00:08:54] eval | VALIDATION COMPLÈTE — 651 passed / 0 failed
+- py_compile OK (read_gate.py + nodes.py + config.py).
+- Suite pytest complète : 651 passed, 0 failed, 11 deselected (test_web_tester_functional
+  = Chrome/npx live, hors périmètre). 616 baseline + 35 nouveaux. 0 régression.
+- Warnings : DeprecationWarning DSPy + FutureWarning smolagents (PRÉEXISTANTS, hors
+  périmètre).
+- PRIORITÉ 1 du plan usine logicielle → COMPLÈTE (les 4 cases cochées : SEARCH/REPLACE
+  F-19, Mutex F-20, Anti-vide F-10, Read-Before-Write Gate F-67).
+
+## [2026-08-04 00:12:00] pr | PR #29 créée — feat/read-before-write-gate
+- Branche feat/read-before-write-gate poussée. Commit a0e1538 (1 commit, 11 fichiers,
+  +1467/-520). PR #29 ouverte vers main.
+- INCIDENT git corrigé : le commit avait été créé sur main par erreur (la branche
+  feature pointait sur un ancien commit orthogonal a31cc4a). Corrigé : branche
+  forcée sur a0e1538, main rembobiné sur 9dc59c0 (aligné origin/main, intact), puis
+  checkout branche. Vérifié : main = 0 commit d'avance sur origin, branche = 1 commit
+  de plus que main. Aucune perte.
+- PRIORITÉ 1 du plan usine logicielle → COMPLÈTE (les 4 cases cochées : SEARCH/REPLACE
+  F-19, Mutex F-20, Anti-vide F-10, Read-Before-Write Gate F-67).
+- ATTENTE Kilo Code Review avant merge (AGENTS.md §6).
+
+## [2026-08-04 00:22:00] docs | Audit cohérence INDEX références → enrichissement plan + feature_list
+- Demande utilisateur : « Des nouvelles références ajouté : INDEX.md + inventory.json. Vérifie ce qui peut être utile au projet et ajoute ça au plan + feature_list. »
+- CONSTAT INITIAL : les fiches 19-23 (loopx, code-review-graph, davidondrej, llm-council, mattpocock) étaient DÉJÀ intégrées au plan via F-66 (commit 9dc59c0, completed). Les 23 projets de references/ sont tous audités.
+- Audit de cohérence EXHAUSTIF (agent Explore) croisant le Hall of Fame de l'INDEX contre plan_usine_logicielle.md → 18 écarts identifiés, dont le gisement principal = qm (4 briques 🟢 Haute sur 9 du Hall of Fame qm oubliées : consolidation, mémoire durable, budget USD, queue/lease/reaper).
+- ENRICHISSEMENT du plan_usine_logicielle.md (uniquement des cases `[ ]` à faire + 1 nouvelle sous-section, AUCUN code modifié) :
+  • P3-bis : +2 cases (Budget LLM USD qm F-69a, Queue runs à leases/reaper qm F-69b + garde leases typés pour compaction async).
+  • P6-bis : +2 cases (Diff multi-fichiers open-swe + métriques Judge P/R/F1/MRR code-review-graph F-70).
+  • P6-ter (NOUVELLE sous-section « Mémoire durable du KG ») : +1 bloc (consolidation claims LLM-juge + mémoire deux-tiers scratch/notebook qm F-68).
+  • P9 : +1 case (Compression skeleton libcst RepoGraph F-71, orthogonal au KG HORS-SCOPE) + garde leases typés qm sur compaction async.
+  • P1 : +1 case (Format V4A/apply_patch multi-fichiers aider) + précision source (search_replace.py RelativeIndenter/dmp_apply non crédités).
+  • P2 : +1 case (Capture Playwright LlamaBot + cycle de vie serveur with_server.py awesome-claude).
+  • P10 : +2 cases (Manuel MCP mcp-builder + doctrine hard/soft dependency ADR mattpocock).
+  • Tableau état avancement (l.11-31) mis à jour (P6 et P9 reflètent les nouvelles briques planifiées).
+- ENRICHISSEMENT feature_list.json : +4 features pending (F-68 mémoire KG qm, F-69 budget+queue qm, F-70 diff+métriques Judge, F-71 skeleton libcst). 72 features total. JSON validé (python json.load OK).
+- Périmètre : travail DOCUMENTAIRE uniquement (plan + feature_list + log + progress). Aucun code de production modifié, aucun test impacté. Aucune régression possible.
+- Filtre qualité respecté : les 4 nouvelles features F-68/69/70/71 s'appuient sur qm (production-éprouvée, en-tête du plan), open-swe/code-review-graph (🟡 Moyenne mais briques 🟢 Haute ciblées), RepoGraph (🟢 Haute pour get_skeleton isolé du trio académique).
+
+
+## [2026-08-04 00:35:00] eval | TEST LIVE GATE v1 — marche mais CASSE le workflow incremental
+- Test live debug/test_gate_live_bubble.py : rejoue le vrai prompt Architect→Coder Bubble
+  Sort (extrait du log du dernier run réussi) via execute_coder_node (gate actif).
+- RÉSULTAT GATE : fonctionne EXACTEMENT comme prévu.
+  * Step 1 : write_file(squelette) → ALLOW (création, dossier vierge). ✅
+  * Step 2 : append_file(css) → 🛑 BLOCAGE gate ("index.html already exists and you
+    have not read its current version... Call read_file first"). Message pédagogique
+    clair, fichier NON modifié. ✅
+  * Step 3 : read_file(index.html) → le modèle OBÉIT au message, lit le fichier. ✅
+  * Step 4+ : append retry → ALLOW (après read).
+- MAIS CRASH EN STEP 18 : context overflow (32876 tokens > ctx 32768). Cause racine :
+  la stratégie incremental (F-28) fait ~6 append_file. Avec le gate Strict, CHAQUE
+  append était précédé d'un blocage + un read_file obligatoire → double le nombre
+  de steps + chaque read_file réinjecte tout le fichier cumulé dans l'historique →
+  explosion du contexte (425k tokens au step 17) → crash.
+- DIAGNOSTIC : le mode Strict (fidèle Deer Flow) est INADAPTÉ à append_file. Un append
+  n'écrase pas (ajoute à la fin), l'anti-doublon F-28 + idempotence F-43 le protègent
+  déjà. Forcer un read_file avant chaque append est précisément ce qu'on voulait éviter
+  en créant append_file (accumulation sans relecture).
+- CORRECTION : append_file EXEMPTÉ du gate (retiré de _GATED_WRITE_TOOLS). Le gate
+  reste sur write_file/search_replace/edit_file/multi_replace (qui écrasent/modifient).
+  Commentaire détaillé dans read_gate.py justifiant l'exemption (3 raisons).
+- Test v2 lancé (même scénario incremental, append_file exempté) pour valider que le
+  workflow complète sans crash.

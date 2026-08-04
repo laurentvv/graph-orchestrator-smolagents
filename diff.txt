@@ -1,0 +1,218 @@
+diff --git a/.env.example b/.env.example
+index 2fa46bb..efbdfb5 100644
+--- a/.env.example
++++ b/.env.example
+@@ -203,12 +203,14 @@ SANITIZER_ENABLED=true
+ 
+ # --- Read-Before-Write Gate (Priorité 1 / F-66) ---
+ # Si "true" (défaut), un middleware bloque write_file / search_replace / edit_file /
+-# multi_replace / append_file sur un fichier EXISTANT dont le contenu n'a pas été lu
+-# (hash SHA256 du contenu complet). Inspiré de Deer Flow (issue #3857). Mode Strict :
+-# un write réussi invalide la mark de lecture → force re-read avant chaque édition
+-# (corrige le bug « édition à partir d'une représentation mentale stale »). Fail-open
+-# garanti : fichier absent = création OK, read impossible = on laisse passer (le gate
+-# ne brique jamais l'agent). Si "false", comportement historique (écritures libres).
++# multi_replace sur un fichier EXISTANT dont le contenu n'a pas été lu (hash SHA256
++# du contenu complet). append_file est EXEMPTÉ (ajout-only, ne peut pas écraser ;
++# l'anti-doublon F-28 + l'idempotence F-43 le protègent déjà, et le gater casserait
++# la stratégie de construction incrémentale F-28). Inspiré de Deer Flow (issue #3857).
++# Mode Strict : un write réussi invalide la mark de lecture → force re-read avant
++# chaque édition (corrige le bug « édition à partir d'une représentation mentale
++# stale »). Fail-open garanti : fichier absent = création OK, read impossible = on
++# laisse passer (le gate ne brique jamais l'agent). Si "false", écritures libres.
+ READ_BEFORE_WRITE_ENABLED=true
+ 
+ # --- Guard bash denylist (Priorité 8-bis : robustesse runtime) ---
+diff --git a/README.md b/README.md
+index 9ecfc95..562e0e9 100644
+--- a/README.md
++++ b/README.md
+@@ -28,7 +28,7 @@ Moving away from fragile, linear AI execution loops, this orchestrator embraces
+ Instead of letting a single agent write and evaluate its own code, this system simulates an entire engineering team:
+ - **PromptRefiner Node (meta-prompt, before the Architect)**: a DSPy reasoning node (gemma, `ChainOfThought`) that rewrites the raw user prompt into a **structured spec** (Goal / Expected features / Technical constraints / Validation criteria in Given/When/When when relevant) *before* it reaches the Router and Architect. Inspired by the "Enhance Prompt" pattern of Kilo Code / Cline / Roo Code. It knows the catalog of available capabilities (skills + Context7 status + testers) to orient the spec toward what's actually buildable, detects vague terms (`fast`, `user-friendly`...), and structures without inventing scope. The refined prompt is persisted in the checkpoint (LLM skipped on resume). Opt-out via `PROMPT_REFINER_ENABLED`; degrades gracefully to the raw prompt if the LLM is down.
+ - **DSPy Architect Node**: A heavy reasoning model that takes a complex prompt, designs the global architecture, and breaks it down into granular JSON subtasks using strict Pydantic constraints. It also emits a **build strategy per subtask** (`simple` | `incremental` | `multifile`) telling the Coder *how* to construct the files — not just *what* to build.
+-- **Fan-out Coder Nodes (smolagents `CodeAgent`)**: For each subtask, a Coder agent is spawned asynchronously to write code by generating **Python that calls tools** (`write_file(path=..., content=...)`). CodeAgent was chosen over ToolCallingAgent after empirical comparison: small local models (gemma) reliably generate Python but fail to emit valid JSON tool-calls. A **guard software** detects idle steps (model reasons without acting), broken code blocks (unclosed strings), and **empty HTML skeletons** (preventing small models from failing at incremental generation), re-injecting targeted correction messages. A **cryptographic anti-loop** (SHA-256 fingerprint of `tool + arguments`) trips a circuit-breaker when the Coder repeats the *exact same* tool call N times in a row — stopping token hemorrhage from "spinning in circles" failures. Configurable via `LOOP_GUARD_ENABLED` / `LOOP_GUARD_THRESHOLD`. An **Orphan Repair** layer (`orphan_repair.py`) additionally guards the conversation history: if a `tool_use` call has no matching `tool_result` (e.g. the agent was interrupted mid-tool-call and the memory was restored from a checkpoint), it injects a fake `{"status": "error", "error": "Interrompu"}` response **before** the agent runs, so the asymmetric tool-call pair never crashes the LLM API on replay. Both the generic "messages" form and the smolagents `memory.steps` form are handled; the integration is defensive (never blocks the main flow). A **Sanitizer** layer (`sanitizer.py`) automatically **auto-types** tool arguments: small models often emit malformed values (`offset="1, 80"` → coerced to `80`, `replace_all="true"` → `True`, JSON strings for `array`/`object` fields), which otherwise trigger wasted retries on Pydantic type-validation errors. It coerces *best-effort* against the real `tool.inputs` schema (never LLM inference) and leaves non-coercible values untouched so smolagents validation remains the final arbiter. Deterministic, 0-LLM. Configurable via `SANITIZER_ENABLED` (default on). An **Idempotence** layer (`idempotency.py`) guarantees that non-idempotent side effects (`append_file`, `pip install`) are applied **exactly once per run** — even after a checkpoint replay (crash recovery). Backed by DuckDB (survives a new process), with a 14-day retention and lazy pruning; a failed operation is not marked done (retryable). `write_file` is intentionally NOT wrapped (idempotent by overwrite by design); `bash_command` is covered by the guard + anti-loop instead. Opt-out via `IDEMPOTENCE_ENABLED`. A **Read-Before-Write Gate** layer (`read_gate.py`, F-67, inspired by Deer Flow issue #3857) enforces the #1 invariant in *code*, not just in prompts: it **blocks** `write_file`/`search_replace`/`edit_file`/`multi_replace`/`append_file` on a file the agent has not first **read** — tracked by a SHA-256 hash of the file's full content (a ranged/partial `read_file` still stamps the whole-file hash, as in Deer Flow). **Strict mode**: a successful write *invalidates* the read mark, so the agent must re-read before *every* subsequent edit — preventing the "edit from a stale mental model" corruption that is the #1 blind-write failure mode. Fail-open by construction: file-absent = creation allowed, read-impossible = let through, the gate never bricks the agent. The mark lives in RAM (our Coder is a single sequential CodeAgent, not a multi-thread LangGraph), mirroring the `screenshot_capture` shared-state pattern. Configurable via `READ_BEFORE_WRITE_ENABLED` (default on).
++- **Fan-out Coder Nodes (smolagents `CodeAgent`)**: For each subtask, a Coder agent is spawned asynchronously to write code by generating **Python that calls tools** (`write_file(path=..., content=...)`). CodeAgent was chosen over ToolCallingAgent after empirical comparison: small local models (gemma) reliably generate Python but fail to emit valid JSON tool-calls. A **guard software** detects idle steps (model reasons without acting), broken code blocks (unclosed strings), and **empty HTML skeletons** (preventing small models from failing at incremental generation), re-injecting targeted correction messages. A **cryptographic anti-loop** (SHA-256 fingerprint of `tool + arguments`) trips a circuit-breaker when the Coder repeats the *exact same* tool call N times in a row — stopping token hemorrhage from "spinning in circles" failures. Configurable via `LOOP_GUARD_ENABLED` / `LOOP_GUARD_THRESHOLD`. An **Orphan Repair** layer (`orphan_repair.py`) additionally guards the conversation history: if a `tool_use` call has no matching `tool_result` (e.g. the agent was interrupted mid-tool-call and the memory was restored from a checkpoint), it injects a fake `{"status": "error", "error": "Interrompu"}` response **before** the agent runs, so the asymmetric tool-call pair never crashes the LLM API on replay. Both the generic "messages" form and the smolagents `memory.steps` form are handled; the integration is defensive (never blocks the main flow). A **Sanitizer** layer (`sanitizer.py`) automatically **auto-types** tool arguments: small models often emit malformed values (`offset="1, 80"` → coerced to `80`, `replace_all="true"` → `True`, JSON strings for `array`/`object` fields), which otherwise trigger wasted retries on Pydantic type-validation errors. It coerces *best-effort* against the real `tool.inputs` schema (never LLM inference) and leaves non-coercible values untouched so smolagents validation remains the final arbiter. Deterministic, 0-LLM. Configurable via `SANITIZER_ENABLED` (default on). An **Idempotence** layer (`idempotency.py`) guarantees that non-idempotent side effects (`append_file`, `pip install`) are applied **exactly once per run** — even after a checkpoint replay (crash recovery). Backed by DuckDB (survives a new process), with a 14-day retention and lazy pruning; a failed operation is not marked done (retryable). `write_file` is intentionally NOT wrapped (idempotent by overwrite by design); `bash_command` is covered by the guard + anti-loop instead. Opt-out via `IDEMPOTENCE_ENABLED`. A **Read-Before-Write Gate** layer (`read_gate.py`, F-67, inspired by Deer Flow issue #3857) enforces the #1 invariant in *code*, not just in prompts: it **blocks** `write_file`/`search_replace`/`edit_file`/`multi_replace` on a file the agent has not first **read** — tracked by a SHA-256 hash of the file's full content (a ranged/partial `read_file` still stamps the whole-file hash, as in Deer Flow). Note: `append_file` is **exempt** (it appends-only, never overwrites — the anti-duplicate guard F-28 + idempotence F-43 already protect it, and gating it would break the incremental-build workflow F-28). **Strict mode**: a successful write *invalidates* the read mark, so the agent must re-read before *every* subsequent edit — preventing the "edit from a stale mental model" corruption that is the #1 blind-write failure mode. Fail-open by construction: file-absent = creation allowed, read-impossible = let through, the gate never bricks the agent. The mark lives in RAM (our Coder is a single sequential CodeAgent, not a multi-thread LangGraph), mirroring the `screenshot_capture` shared-state pattern. Configurable via `READ_BEFORE_WRITE_ENABLED` (default on).
+ - **Linter Node (Shift Left, deterministic)**: Right after the Coder, a **0-LLM gatekeeper** validates syntax (`tree-sitter` for Python/HTML/CSS/JS/TS/TSX + `py_compile` for Python indentation + HTML structural checks like *content after `</html>`*). On invalid syntax it **short-circuits the expensive Tester** and loops back to the Coder with the error — a syntax typo should never waste a full LLM cycle.
+ - **Static Tester Node (deterministic web gatekeeper)**: A second 0-LLM gatekeeper (web-only) that validates **web semantics** the Linter cannot reach (it skips inline `<script>` JS — `tree-sitter-html` parses it as text). Three tiers in fail-fast order: **Tier 1** (`node --check` on the extracted JS catches TypeScript-in-vanilla = the #1 Coder bug = blank page; `addEventListener` wiring check catches an interactive control present but not connected — the slider-not-wired trap that a screenshot *cannot* detect); **Tier 2** (Chrome DevTools `getBoundingClientRect().height` after clicking the primary action — catches elements created in JS but rendered invisible by a CSS `height:%` on a heightless parent, the exact bug the LLM missed by confirmation bias). Implements the proven 7-step methodology from `debug/MANUAL_TESTER_METHODOLOGY.md`. Catches ~80% of web bugs in <6s vs the LLM Tester's 25 min. Graceful degradation: if `node` or Chrome is absent the affected tier skips silently (the LLM Tester takes over); opt-out via `STATIC_TESTER_ENABLED=0` / `STATIC_TESTER_DEVTOOLS=0`.
+ - **Parallel Validation**: 
+diff --git a/contract.md b/contract.md
+index ebf92c1..1a1cba7 100644
+--- a/contract.md
++++ b/contract.md
+@@ -278,7 +278,7 @@
+ - [ ] Critère 220 : « Newest mark wins » — deux reads successifs, le DERNIER gagne (hash le plus récent) — testé `test_newest_mark_wins`. Thread-safety — 20 threads × 50 stamps parallèles ne corrompent pas le dict interne — testé `test_concurrent_record_read_is_safe`.
+ - [ ] Critère 221 : `_GatedWriteTool` (proxy template SanitizedTool) — si `check_write` bloque, l'outil sous-jacent n'est JAMAIS appelé (vérifié par fichier disque INCHANGÉ), renvoie le message pédagogique ; si ALLOW, délègue puis appelle `record_write` (Strict) ; copie name/description/inputs/output_type ; `__getattr__` délègue `to_code_prompt` ; chemin `forward` aussi gated — testé `TestGatedWriteTool` (5 cas).
+ - [ ] Critère 222 : `_ReadTrackingTool` — après délégation à `read_file`, stamp le hash du contenu COMPLET du fichier (re-lit le disque, peu importe l'offset/limit demandé = vision Deer Flow) ; skip le stamp si fichier absent ; retourne bien le résultat de read_file — testé `TestReadTrackingTool` (3 cas).
+-- [ ] Critère 223 : `wrap_tools_with_read_gate(tools, gate, enabled)` — `enabled=False` → no-op (même objet liste) ; `enabled=True` → wrap UNIQUEMENT `read_file` (+ les 5 outils d'écriture write_file/search_replace/edit_file/multi_replace/append_file), laisse intacts les autres (list_directory, web_search/DuckDuckGo, MCP) ; préserve l'ordre — testé `TestWrapTools` (3 cas).
++- [ ] Critère 223 : `wrap_tools_with_read_gate(tools, gate, enabled)` — `enabled=False` → no-op (même objet liste) ; `enabled=True` → wrap UNIQUEMENT `read_file` (+ les 4 outils d'écriture write_file/search_replace/edit_file/multi_replace ; `append_file` est VOLONTAIREMENT EXEMPTÉ — ajout-only, protégé par anti-doublon F-28 + idempotence F-43, le gater casserait la stratégie incremental F-28), laisse intacts les autres (list_directory, web_search/DuckDuckGo, MCP) ; préserve l'ordre — testé `TestWrapTools` (3 cas).
+ - [ ] Critère 224 : E2E scénarios Coder simulé — write sur fichier existant SANS read → BLOCK (fichier disque inchangé) ; read puis write → ALLOW (fichier modifié) ; write puis edit sans re-read → BLOCK (Strict, le cas #3857) ; message pédagogique cite le path ET `read_file` — testé `TestEndToEnd` (4 cas).
+ - [ ] Critère 225 : Branchement dans `execute_coder_node` (nodes.py) — `wrap_tools_with_read_gate` inséré ENTRE `wrap_screenshot_tools` et `sanitize_tools` (ordre : gate AVANT sanitizer → voit kwargs déjà typés), gated par `settings.read_before_write_enabled` — vérifié par lecture du code.
+ - [ ] Critère 226 : Config — `read_before_write_enabled: bool = True` dans la dataclass Settings + `load_settings` via `_get_bool("READ_BEFORE_WRITE_ENABLED", True)` + `.env.example` + `.env` — opt-out total `READ_BEFORE_WRITE_ENABLED=false` — testé via `load_settings()` (défaut True, env false → False).
+diff --git a/graph_orchestrator/loop_guard.py b/graph_orchestrator/loop_guard.py
+index 25aff19..963adda 100644
+--- a/graph_orchestrator/loop_guard.py
++++ b/graph_orchestrator/loop_guard.py
+@@ -107,6 +107,13 @@ class LoopGuard:
+         """
+         if not self.enabled:
+             return ""
++            
++        # Les outils purement observationnels sont exemptés du LoopGuard.
++        # Un agent peut légitimement faire plusieurs screenshots, lire le
++        # même fichier plusieurs fois, ou lire la console, sans que ce soit une boucle.
++        if tool_name in ("take_screenshot", "take_snapshot", "list_console_messages", "read_file", "evaluate_script"):
++            return ""
++            
+         fp = compute_tool_call_fingerprint(tool_name, arguments)
+         self._counts[fp] += 1
+         return fp
+@@ -122,6 +129,7 @@ class LoopGuard:
+             return None
+         for fp, count in self._counts.items():
+             if count >= self.threshold:
++                print(f"[LoopGuard] TRIPPED ON: {fp} (count={count})")
+                 return (
+                     f"CIRCUIT BREAKER (Anti-Loop) : tu as appelé le même outil avec les "
+                     f"mêmes arguments {count} fois ({self.threshold}+ = boucle avérée). "
+diff --git a/graph_orchestrator/models.py b/graph_orchestrator/models.py
+index 845ee53..a6ec2e5 100644
+--- a/graph_orchestrator/models.py
++++ b/graph_orchestrator/models.py
+@@ -239,6 +239,18 @@ def extract_and_validate(response: Any, model_class: type[BaseModel], api_base:
+             # api_base garde /v1 (llama-server expose /v1, contrairement à Ollama /api/chat).
+             use_api_base = api_base or settings.ollama_api_base
+             use_model_id = model_id or settings.fast_model_id
++            
++            # Fetch actual model ID from llama-server to avoid litellm NotFoundError
++            try:
++                import requests
++                resp = requests.get(f"{use_api_base.rstrip('/')}/models", timeout=2)
++                if resp.status_code == 200:
++                    models_data = resp.json()
++                    if "data" in models_data and len(models_data["data"]) > 0:
++                        use_model_id = models_data["data"][0]["id"]
++            except Exception:
++                pass
++                
+             if use_model_id == "default":
+                 use_model_id = "llama"
+             
+diff --git a/graph_orchestrator/nodes.py b/graph_orchestrator/nodes.py
+index 6a7b65a..c40bc6b 100644
+--- a/graph_orchestrator/nodes.py
++++ b/graph_orchestrator/nodes.py
+@@ -473,7 +473,7 @@ vrai fichier (ex: landing_page/index.html), pas sur la racine du workspace."""
+ _DEVTOOLS_TOOLS_DOC = """
+ - `navigate_page(url="...")` : ouvre une URL dans Chrome (utilise file:/// absolu pour un fichier local).
+ - `take_screenshot()` : capture l'écran → l'image TE REVIENT (tu la vois). Format JPEG (léger).
+-- `list_console_messages()` : liste les erreurs/warnings JS de la console (le "stderr" du web).
++- `list_console_messages()` : liste les erreurs/warnings JS de la console. ⚠️ Cet outil renvoie une chaîne de caractères Markdown directement affichable (ne fais surtout pas de boucle `for` ni de `.get()`, utilise simplement `print(list_console_messages())`).
+ - `click(uid="...")` / `fill(uid="...", value="...")` : interagit (utile si tu veux tester un bouton, ex: démarrer un tri).
+ - `evaluate_script(script="...")` : exécute du JS dans la page (ex: lire une valeur du DOM).
+   ⚠️ ATTENTION : Les arguments nommés sont OBLIGATOIRES pour tous ces outils (ex: `evaluate_script(script="...")`).
+diff --git a/graph_orchestrator/read_gate.py b/graph_orchestrator/read_gate.py
+index 296f3f4..7de4a2c 100644
+--- a/graph_orchestrator/read_gate.py
++++ b/graph_orchestrator/read_gate.py
+@@ -144,7 +144,7 @@ class ReadGate:
+         except Exception:
+             return
+ 
+-    def check_write(self, path: str) -> Tuple[bool, str]:
++    def check_write(self, path: str, tool_name: str = "write") -> Tuple[bool, str]:
+         """Décide ALLOW vs BLOCK pour une écriture sur `path`.
+ 
+         Renvoie `(allowed, reason)` — `reason` vide si allowed, message
+@@ -156,6 +156,12 @@ class ReadGate:
+         3. Read impossible (permissions, binaire, IO) → ALLOW (fail-open).
+         4. hash de la dernière lecture connue == hash disque → ALLOW.
+         5. Sinon (pas de lecture, ou lecture stale) → BLOCK.
++
++        `tool_name` est inclus dans le message (ex "write_file", "search_replace")
++        pour aider le modèle à comprendre quel appel a été bloqué. Le message est
++        construit par concaténation (PAS str.format sur `path`) car un chemin peut
++        légitimement contenir `{` ou `}` (ex `data{config}.json`) — format lèverait
++        KeyError/ValueError et rendrait le gate inopérant (fail-open silencieux).
+         """
+         if not path or not isinstance(path, str):
+             return (True, "")
+@@ -177,22 +183,27 @@ class ReadGate:
+             if last_read_hash is not None and last_read_hash == current_hash:
+                 return (True, "")
+             # (5) Pas de lecture, ou lecture stale (hash ≠) → BLOCK.
+-            return (
+-                False,
+-                _BLOCK_MESSAGE.format(tool_name="write/edit", path=path),
+-            )
++            # Message construit par concaténation (anti-injection d'accolades).
++            return (False, _block_message(tool_name, path))
+         except Exception:
+             # Fail-open absolu : aucune inspection ne doit briquer l'agent.
+             return (True, "")
+ 
+ 
+-_BLOCK_MESSAGE = (
+-    "ERROR (Read-Before-Write Gate): {path} already exists and you have not read "
+-    "its CURRENT version. Any write invalidates earlier reads, so you MUST re-read "
+-    "before every modification. Call read_file on {path} first (a ranged read of "
+-    "the relevant section is enough, e.g. the last ~30 lines before an append), "
+-    "check what is already there, then retry your edit. The file was NOT modified."
+-)
++def _block_message(tool_name: str, path: str) -> str:
++    """Construit le message pédagogique de blocage (concaténation, pas format).
++
++    Séparé en fonction pour être testable isolément et éviter str.format sur un
++    `path` utilisateur (qui peut contenir `{`/`}` → KeyError/ValueError).
++    """
++    return (
++        "ERROR (Read-Before-Write Gate): " + path + " already exists and you have "
++        "not read its CURRENT version. " + tool_name + " was BLOCKED — any write "
++        "invalidates earlier reads, so you MUST re-read before every modification. "
++        "Call read_file on " + path + " first (a ranged read of the relevant "
++        "section is enough, e.g. the last ~30 lines), check what is already there, "
++        "then retry your edit. The file was NOT modified."
++    )
+ 
+ 
+ # ==========================================
+@@ -233,7 +244,7 @@ class _GatedWriteTool(BaseTool):
+         # Le CodeAgent appelle les outils via __call__ (chemin confirmé dans
+         # sanitizer.py docstring). On coerce rien ici (le sanitizer le fait en
+         # amont ou en aval selon l'ordre de la chaîne) — on ne fait que gate.
+-        allowed, reason = self._gate.check_write(kwargs.get("path"))
++        allowed, reason = self._gate.check_write(kwargs.get("path"), self.name)
+         if not allowed:
+             return reason
+         result = self._wrapped(*args, **kwargs)
+@@ -241,7 +252,7 @@ class _GatedWriteTool(BaseTool):
+ 
+     def forward(self, *args: Any, **kwargs: Any) -> Any:
+         # Chemin TCA / fallback. Même logique que __call__.
+-        allowed, reason = self._gate.check_write(kwargs.get("path"))
++        allowed, reason = self._gate.check_write(kwargs.get("path"), self.name)
+         if not allowed:
+             return reason
+         result = self._wrapped.forward(*args, **kwargs)
+diff --git a/graph_orchestrator/run_logging.py b/graph_orchestrator/run_logging.py
+index 5a76591..5935ea4 100644
+--- a/graph_orchestrator/run_logging.py
++++ b/graph_orchestrator/run_logging.py
+@@ -144,12 +144,12 @@ def tee_run_logging(log_path: str, enabled: bool = True) -> Iterator[None]:
+ 
+ 
+ def resolve_log_path(mode: str, logs_dir: str) -> str:
+-    """Construit un chemin de log horodaté : ``<logs_dir>/run-<stamp>-<mode>.log``.
++    """Construit un chemin de log horodaté : ``<logs_dir>/run_<mode>_<stamp>/run_full.log``.
+ 
+     Cross-plateforme (``os.path.join``). Le mode est slugifié pour rester sûr
+-    comme nom de fichier. Convention d'horodatage : ``YYYYMMDD-HHMMSS`` (triable
++    comme nom de dossier. Convention d'horodatage : ``YYYY-MM-DD_HHMMSS`` (triable
+     chronologiquement par simple ordre lexicographique).
+     """
+-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+-    safe_mode = re.sub(r"[^a-z0-9]+", "-", (mode or "").strip().lower()).strip("-") or "run"
+-    return os.path.join(logs_dir, f"run-{stamp}-{safe_mode}.log")
++    stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
++    safe_mode = re.sub(r"[^a-z0-9]+", "_", (mode or "").strip().lower()).strip("_") or "run"
++    return os.path.join(logs_dir, f"run_{safe_mode}_{stamp}", "run_full.log")

@@ -107,6 +107,13 @@ class LoopGuard:
         """
         if not self.enabled:
             return ""
+            
+        # Les outils purement observationnels sont exemptés du LoopGuard.
+        # Un agent peut légitimement faire plusieurs screenshots, lire le
+        # même fichier plusieurs fois, ou lire la console, sans que ce soit une boucle.
+        if tool_name in ("take_screenshot", "take_snapshot", "list_console_messages", "read_file", "evaluate_script"):
+            return ""
+            
         fp = compute_tool_call_fingerprint(tool_name, arguments)
         self._counts[fp] += 1
         return fp

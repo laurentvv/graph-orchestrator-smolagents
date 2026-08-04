@@ -558,6 +558,53 @@
         "F-35",
         "F-64"
       ]
+    },
+    {
+      "id": "F-67",
+      "name": "Read-Before-Write Gate (middleware Coder, Deer Flow #3857)",
+      "description": "Priorité 1 du plan usine logicielle (dernière case décochée). L'invariant n°1 « read-before-write » était UNIQUEMENT en prompt (nodes.py:574), AUCUN garde logiciel ne l'appliquait → le Coder (CodeAgent) pouvait éditer/écraser un fichier existant sans l'avoir lu, ou enchaîner write→edit sans relire = cause n°1 de corruption aveugle (Deer Flow issue #3857 : « append/édition à partir d'une représentation mentale stale »). F-28 (append_file) avait une « version simple » (garde anti-doublon texte) — F-67 porte le middleware COMPLET. IMPLÉMENTÉ : graph_orchestrator/read_gate.py (100% Python natif, 0 LLM, déterministe). (1) compute_content_hash (SHA256 contenu complet UTF-8) + _normalize_path (os.path.normpath+abspath, Windows-safe pour `..`/mixed separators). (2) ReadGate : état partagé thread-safe (threading.Lock, dict {norm_path: hash}) ; record_read stamp le hash du contenu COMPLET (même sur read partiel offset/limit, re-lit le disque comme Deer Flow) ; record_write MODE STRICT supprime la mark (un write réussi invalide la lecture → force re-read avant chaque édition, l'invariant read-before-every-edit) ; check_write(path) → (allowed, reason), fail-open garanti (fichier absent = création OK, read impossible = on laisse passer, jamais briquer l'agent), « newest mark wins ». (3) _GatedWriteTool(BaseTool) proxy (template copié SanitizedTool F-42) sur write_file/search_replace/edit_file/multi_replace/append_file : bloque sans déléguer si check_write False, sinon délègue puis record_write ; __getattr__ préserve to_code_prompt (Jinja CodeAgent). (4) _ReadTrackingTool proxy miroir sur read_file : après délégation, re-lit le disque et stamp le hash complet. (5) wrap_tools_with_read_gate(tools, gate, enabled) no-op si disabled, wrap ciblé, ordre préservé. Branché dans execute_coder_node entre wrap_screenshot_tools et sanitize_tools (ordre : gate AVANT sanitizer → voit kwargs déjà typés). Config read_before_write_enabled (défaut True, opt-out READ_BEFORE_WRITE_ENABLED=false) + .env.example + .env. 35 tests PASS (test_read_gate.py : helpers 5, ReadGate logic 4, fail-open 6, Strict mode 3, newest-wins 1, thread-safety 1, _GatedWriteTool 5, _ReadTrackingTool 3, wrap 3, E2E 4). Suite pytest complète 651 passed / 0 failed (616 baseline + 35 nouveaux), 0 régression. Écart consciencieux vs Deer Flow : mark en RAM (notre CodeAgent = unique séquentiel, pas LangGraph multi-threads) plutôt que sur ToolMessage.additional_kwargs.",
+      "status": "completed",
+      "dependencies": [
+        "F-28",
+        "F-42"
+      ]
+    },
+    {
+      "id": "F-68",
+      "name": "Mémoire durable du KG (consolidation claims + scratch/notebook deux-tiers)",
+      "description": "Sous-section P6-ter du plan usine logicielle (audit cohérence INDEX fiche 14-qm, 2026-08-04). Le gisement d'écarts le plus massif de l'audit de cohérence est qm : sur 9 briques 🟢 Haute du Hall of Fame qm, le plan n'en exploitait que 3 (compaction P9, idempotence F-43, sandbox P8-bis). Les briques MÉMOIRE sont oubliées — or le KG DuckDB de claims/refutations grossit indéfiniment sans dédup ni consolidation (le nœud d'escalade F-23 ne fait que synthétiser, pas consolider). Deux briques complémentaires (consolidation par LLM-juge émettant UPDATE/DELETE/ADD + mémoire deux-tiers scratch volatile vs notebook consolidé durable avec contrat recall/capture/replaceIfRevision + concurrence optimiste). Référence : references/qm/src/memory/strategies/consolidation.ts + scratch-promote.ts + memory-service.ts. Priorité : HAUTE (qm = référence production-éprouvée explicitement listée en en-tête du plan).",
+      "status": "pending",
+      "dependencies": [
+        "F-03",
+        "F-23"
+      ]
+    },
+    {
+      "id": "F-69",
+      "name": "Budget LLM USD + Queue de runs à leases/reaper",
+      "description": "Priorité P3-bis du plan usine logicielle (audit cohérence INDEX fiche 14-qm, 2026-08-04). Deux briques runtime qm oubliées. (1) BUDGET LLM USD : createBudgetTracker qui suit le coût USD estimé (estimateCostUsd par fenêtre glissante 24h) et bloque l'exécution au-delà d'un plafond — coupe-circuit FINANCIER distinct du circuit-breaker itératif (F-36) et du max_iter (F-22) qui limitent les boucles, pas le coût. Priorité basse aujourd'hui (GPU-local = coût marginal nul) MAIS pré-requis avant tout passage en prod distant payant. ⚠️ Ne pas confondre avec ToolOutputBudgetMiddleware deer-flow (P8) qui tronque des tokens d'output d'outil. (2) QUEUE DE RUNS À LEASES : modélise la reprise après crash comme une queue (claim + heartbeat + reapExpired pour les runs abandonnés + errorParks pour les échecs). Complète le checkpoint F-24 qui ne gère que la reprise d'un run EN COURS, pas la détection/nettoyage des runs ABANDONNÉS (process tué, VRAM saturée). À reloger sur DuckDB. Inclut garde pour la compaction async (P9) : leases typés par rôle LeaseHolder (turn/compaction/fork) pour qu'une compaction async n'écrase pas un turn en cours. Référence : references/qm/src/ratelimit/budget.ts + runs/run-store.ts + sessions/session-store.ts.",
+      "status": "pending",
+      "dependencies": [
+        "F-24",
+        "F-36"
+      ]
+    },
+    {
+      "id": "F-70",
+      "name": "Diff multi-fichiers + métriques de benchmark du Judge",
+      "description": "Sous-section P6-bis du plan usine logicielle (audit cohérence INDEX fiches 09-open-swe + 20-code-review-graph, 2026-08-04). Le Judge (F-44) exige « IN-DIFF ONLY » mais ne dispose pas de brique pour CONSTRUIRE ce diff multi-fichiers (runs/ est versionné git local depuis F-53, mais le diff n'est consommé que par le Tester ciblé, pas formalisé pour le Judge). (a) Diff full-content multi-fichiers à la build_pr_diff_files (open-swe) ; (b) format de sortie structuré Risk Assessment / File-by-File / Recommendations (skills/review-pr/SKILL.md code-review-graph) ; (c) MÉTRIQUES quantitatives de benchmark (compute_precision_recall + compute_mrr, eval/scorer.py code-review-graph) — aujourd'hui le Judge n'est évalué que qualitativement (lecture de logs), indispensable pour la P15 Meta-Analyste et toute regression-test du Judge.",
+      "status": "pending",
+      "dependencies": [
+        "F-44",
+        "F-53"
+      ]
+    },
+    {
+      "id": "F-71",
+      "name": "Compression de code par skeleton (libcst, get_skeleton)",
+      "description": "Priorité P9 du plan usine logicielle (audit cohérence INDEX fiche 04-repograph, 2026-08-04). Réduire le contexte LLM en remplaçant les corps de fonctions par ... via get_skeleton (garde ClassDef/FunctionDef/docstrings/constantes, supprime le corps). ORTHOGONAL au KG structural (P4 HORS-SCOPE) : ce n'est pas une brique de knowledge graph, c'est un utilitaire de réduction de contexte applicable même en création de code (ex: réinjecter l'existant runs/ ou un fichier partiellement écrit au Coder pour qu'il l'étende sans consommer tout le budget tokens). Le plan avait jeté get_skeleton avec le reste du trio académique RepoGraph/axon/graphify en P4 — à tort, classé séparément 🟢 Haute dans le Hall of Fame. Référence : references/RepoGraph/agentless/util/compress_file.py (CompressTransformer, get_skeleton, pur libcst indépendant).",
+      "status": "pending",
+      "dependencies": []
     }
   ]
 }
