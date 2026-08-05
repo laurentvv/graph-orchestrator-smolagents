@@ -8,10 +8,10 @@
 
 | Métrique | Valeur |
 |---|---|
-| **Date de l'audit** | 2026-08-03 |
-| **Projets/dossiers audités** | 23 |
-| **Entrées de fichiers inventoriées** | 441 (inventaire machine : [`inventory.json`](./inventory.json)) |
-| **Fichiers pertinents scannés** (base) | ~10 000 (hors `.git/`, `node_modules/`, médias, fixtures) |
+| **Date de l'audit** | 2026-08-05 |
+| **Projets/dossiers audités** | 24 |
+| **Entrées de fichiers inventoriées** | 448 (inventaire machine : [`inventory.json`](./inventory.json)) |
+| **Fichiers pertinents scannés** (base) | ~11 300 (hors `.git/`, `node_modules/`, médias, fixtures) |
 | **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css`) + JSON/YAML de spec/contrat |
 | **Exclusions** | `.git/` (~730 MB), `node_modules/`, médias (1 293 SVG, 16 mp4…), fixtures de tests, traductions de README (1 conservée/projet) |
 
@@ -19,7 +19,7 @@
 
 ---
 
-## 🧭 Navigation — les 23 fiches
+## 🧭 Navigation — les 24 fiches
 
 | # | Projet | Réutilisabilité | Fiche | Résumé en 1 ligne |
 |---|---|---|---|---|
@@ -46,6 +46,7 @@
 | 21 | **davidondrej-skills** | 🟡 Moyenne | [21-davidondrej-skills](./projects/21-davidondrej-skills.md) | **Denylist 27 regex POSIX-ERE** (bash destructeur) + moteur fail-open + ~115 tests — enrichit notre `bash_guard.py` (P8) |
 | 22 | **llm-council** | 🟡 Moyenne | [22-llm-council](./projects/22-llm-council.md) | Pattern **council anonymisé** (labels A/B/C + mapping réversible + agrégation Borda) — option d'enrichissement du Judge (⚠️ coût 2N+1 appels) |
 | 23 | **mattpocock-skills** | 🟢 Haute | [23-mattpocock-skills](./projects/23-mattpocock-skills.md) | **Doctrine d'authoring formelle** (Predictability, deux charges, hiérarchie 3 rungs, 5 failure modes) — pivot de la fusion P10 + `code-review`/`tdd` engineering skills |
+| 24 | **pi** | 🟢 Haute | [24-pi](./projects/24-pi.md) | Agent stateful TS — **compaction contextuelle**, résumé de branche pour P9, et juge empirique vitest (P6) |
 
 ---
 
@@ -55,7 +56,7 @@
 `aider` (Python, mature), `crush` (Go), `nanocode` (Python, 1 fichier), `opencode` (TS, gigantesque), `openfox` (TS, local-LLM-first). → Valeur : edit-formats robustes (aider), anti-loop (crush), patterns d'outils minimaux (nanocode), specs de protocole (opencode), persistance event-sourcing (openfox).
 
 ### 2. 🔧 Frameworks d'orchestration d'agents (mixte code + docs)
-`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code), `loopx` (control plane — anti-loop déterministe + event sourcing + compaction, stdlib pure), `code-review-graph` (analyse d'impact + risk score composite). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm)**, **patterns harness Python natifs (learn-claude-code)**, **anti-loop déterministe + event ledger (loopx)**.
+`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code), `loopx` (control plane — anti-loop déterministe + event sourcing + compaction, stdlib pure), `code-review-graph` (analyse d'impact + risk score composite), `pi` (agent stateful TS). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm, pi)**, **patterns harness Python natifs (learn-claude-code)**, **anti-loop déterministe + event ledger (loopx)**, **branch summarization (pi)**.
 
 ### 3. 📚 Ressources & outils
 `Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante), `claude-code-unified-agents` (prompts de spécialisation), `system-prompts-and-models-of-ai-tools` (**bibliothèque de system prompts** d'outils commerciaux/open-source), `awesome-claude-skills` (**doctrine du format SKILL.md** + outillage), `davidondrej-skills` (denylist 27 regex + hooks anti-crash), `mattpocock-skills` (**doctrine d'authoring formelle** + engineering skills), `llm-council` (pattern council anonymisé).
@@ -251,9 +252,10 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | **davidondrej-skills** | **3** | **3** | **0** | 🟡 **Moyenne** |
 | **llm-council** | **1** | **1** | **2** | 🟡 **Moyenne** |
 | **mattpocock-skills** | **6** | **3** | **0** | 🟢 **Haute** |
-| **Total** | **195** | **160** | **84** | — |
+| **pi** | **3** | **4** | **0** | 🟢 **Haute** |
+| **Total** | **198** | **164** | **84** | — |
 
-> ℹ️ Le total de la matrice (439 = 195+160+84) couvre les entrées classées H/M/L. L'inventaire machine compte 441 entrées au total (2 entrées pré-existantes non classées dans d'anciens projets).
+> ℹ️ Le total de la matrice (446 = 198+164+84) couvre les entrées classées H/M/L. L'inventaire machine compte 448 entrées au total (2 entrées pré-existantes non classées dans d'anciens projets).
 
 **Constats** :
 - **axon** (23 Haute) et **aider** (17 Haute) restent les mines d'or côté Python.
@@ -269,6 +271,8 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 - **mattpocock-skills** (6 Haute, 🟢 Haute) : **pivot de la fusion doctrine P10** (avec awesome-claude-skills 18 + davidondrej 21) — le seul des 3 qui formalise une *théorie* de l'authoring (Predictability, deux charges, hiérarchie 3 rungs) plutôt qu'une collection.
 - **davidondrej-skills** (3 Haute, 🟡 Moyenne) : **enrichit directement notre `bash_guard.py` (F-38)** de patterns manquants (gh delete, fork bomb, `curl|sh`, reflog expire) + doctrine fail-open + ~115 tests prêts à porter. ⚠️ Correction procédure : « 52 regex » = en réalité **27 regex** (fichier de 52 lignes).
 - **llm-council** (🟡 Moyenne) : un seul pattern utile (council anonymisé A/B/C + Borda) pour valider des findings à enjeu, mais **réserves majeures** (vibe-coded, coût 2N+1 appels, OpenRouter payant) → à traiter comme inspiration, pas dépendance.
+- **pi** (3 Haute, 🟢 Haute) : très forte valeur sur **P9 (compaction basée sur l'état fichier)** et **branch summarization**, approche complémentaire et mature à qm/loopx. Son TDD harness valide statistiquement nos choix P6.
+
 
 ---
 
@@ -289,7 +293,8 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | Compresser le code pour le contexte LLM | Fiche **04-repograph** → `compress_file.py` (`get_skeleton`) |
 | Un web scraper (Playwright) | Fiche **02-aider** → `scrape.py` |
 | Les 3 idées actionnables clés | Fiche **13-deer-flow-analysis** (note de synthèse) |
-| **Compacter l'historique de contexte** (LLM context overflow) | Fiche **14-qm** → `harness/context-compaction.ts` (`planCompaction`) + `core/orchestrator/compaction.ts` (duale sync+async) |
+| **Compacter l'historique de contexte** (LLM context overflow) | Fiche **24-pi** → `compaction.ts` (basé sur file state) ; Fiche **14-qm** → `harness/context-compaction.ts` (`planCompaction`) + `core/orchestrator/compaction.ts` (duale sync+async) |
+| **Résumé de branche (branch summarization)** | Fiche **24-pi** → `branch-summarization.ts` (pour undo et préservation apprentissage) |
 | **Consolider le knowledge graph** (LLM-juge de claims) | Fiche **14-qm** → `memory/strategies/consolidation.ts` (`UPDATE`/`DELETE`/`ADD`) |
 | **Garantir un effet de bord unique** (idempotence des retries) | Fiche **14-qm** → `idempotency/idempotency-store.ts` (`once(key, fn)`) |
 | **Contrôler le coût LLM** (budget USD, fenêtre glissante) | Fiche **14-qm** → `ratelimit/budget.ts` (`createBudgetTracker`, `estimateCostUsd`) |
@@ -353,7 +358,8 @@ docs/references-audit/
     ├── 20-code-review-graph.md
     ├── 21-davidondrej-skills.md
     ├── 22-llm-council.md
-    └── 23-mattpocock-skills.md
+    ├── 23-mattpocock-skills.md
+    └── 24-pi.md
 ```
 
 **Pour recherche programmatique** : `inventory.json` est consommable directement :

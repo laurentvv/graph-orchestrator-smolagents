@@ -16,6 +16,7 @@ from graph_orchestrator.run_logging import (
     _TeeIO,
     resolve_log_path,
     tee_run_logging,
+    clean_old_logs,
 )
 
 
@@ -23,20 +24,20 @@ from graph_orchestrator.run_logging import (
 # resolve_log_path
 # ==========================================
 def test_resolve_log_path_format():
-    """Format : <logs_dir>/run-<YYYYMMDD-HHMMSS>-<mode>.log."""
+    """Format : <logs_dir>/run_<mode>_<YYYY-MM-DD_HHMMSS>/run_full.log."""
     path = resolve_log_path("coding", "logs")
     norm = path.replace("\\", "/")
-    assert norm.startswith("logs/run-")
-    assert norm.endswith("-coding.log")
-    # Le timestamp est bien au format attendu (8 digits date, tiret, 6 digits heure).
+    assert norm.startswith("logs/run_coding_")
+    assert norm.endswith("/run_full.log")
+    # Le timestamp est bien au format attendu (YYYY-MM-DD_HHMMSS)
     import re
-    assert re.search(r"run-\d{8}-\d{6}-coding\.log$", norm)
+    assert re.search(r"run_coding_\d{4}-\d{2}-\d{2}_\d{6}/run_full\.log$", norm)
 
 
 def test_resolve_log_path_slugifies_mode():
     """Mode avec espaces/casse → slugifié (sûr comme nom de fichier)."""
     path = resolve_log_path("One Shot", "logs")
-    assert "-one-shot.log" in path.replace("\\", "/")
+    assert "run_one_shot_" in path.replace("\\", "/")
 
 
 def test_resolve_log_path_cross_platform():
@@ -49,7 +50,7 @@ def test_resolve_log_path_cross_platform():
 def test_resolve_log_path_empty_mode_fallback():
     """Mode vide → fallback 'run'."""
     path = resolve_log_path("", "logs")
-    assert "-run.log" in path.replace("\\", "/")
+    assert "run_run_" in path.replace("\\", "/")
 
 
 # ==========================================
@@ -206,3 +207,47 @@ def test_tee_run_logging_captures_stderr(tmp_path):
     with open(log_path, "r", encoding="utf-8") as f:
         content = f.read()
     assert "erreur capturée" in content
+
+
+# ==========================================
+# clean_old_logs
+# ==========================================
+def test_clean_old_logs_respects_retention(tmp_path):
+    import time
+    # Crée 3 dossiers de logs
+    logs_dir = tmp_path / "logs"
+    logs_dir.mkdir()
+    
+    (logs_dir / "run_test_1").mkdir()
+    time.sleep(0.01)
+    (logs_dir / "run_test_2").mkdir()
+    time.sleep(0.01)
+    (logs_dir / "run_test_3").mkdir()
+    
+    # Rétention de 2 -> supprime le plus vieux (run_test_1)
+    clean_old_logs(str(logs_dir), retention=2)
+    
+    remaining = [d.name for d in logs_dir.iterdir() if d.is_dir()]
+    assert len(remaining) == 2
+    assert "run_test_1" not in remaining
+    assert "run_test_2" in remaining
+    assert "run_test_3" in remaining
+
+def test_clean_old_logs_ignores_non_run_dirs(tmp_path):
+    import time
+    logs_dir = tmp_path / "logs"
+    logs_dir.mkdir()
+    
+    (logs_dir / "run_test_1").mkdir()
+    time.sleep(0.01)
+    (logs_dir / "run_test_2").mkdir()
+    (logs_dir / "some_other_folder").mkdir()
+    
+    # Rétention de 1 -> run_test_1 est supprimé, run_test_2 gardé, some_other_folder ignoré (pas préfixe run_)
+    clean_old_logs(str(logs_dir), retention=1)
+    
+    remaining = [d.name for d in logs_dir.iterdir() if d.is_dir()]
+    assert "run_test_2" in remaining
+    assert "some_other_folder" in remaining
+    assert "run_test_1" not in remaining
+

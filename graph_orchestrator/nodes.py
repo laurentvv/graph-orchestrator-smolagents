@@ -26,7 +26,7 @@ from .models import (
     CoderOutput,
     extract_and_validate,
 )
-from .tools import read_file, write_file, append_file, edit_file, bash_command, list_directory, search_replace, multi_replace
+from .tools import read_file, write_file, append_file, edit_file, bash_command, list_directory, search_replace, multi_replace, check_run_state, record_run_error, _RUN_ERRORS
 from .skills_loader import (
     build_skills_block,
     build_conditional_skills_block,
@@ -197,8 +197,10 @@ async def run_with_retry(
     """
     last_metrics: Optional[NodeMetrics] = None
     # Détecte si l'agent est un CodeAgent (P1) pour adapter le message de retry
-    # (final_answer en Python, pas en JSON). Le TCA garde son message historique.
     is_code_agent = type(agent).__name__ == "CodeAgent"
+
+    # Réinitialise les erreurs enregistrées pour ce nouveau run du nœud
+    _RUN_ERRORS.clear()
 
     for attempt in range(max_retries):
         # P8 (Orphan Repair) : avant chaque exécution, on répare les appels d'outil
@@ -290,6 +292,7 @@ async def run_with_retry(
                     f"[!] Tentative {attempt + 1}/{max_retries} échouée pour "
                     f"{model_class.__name__}. Nouvelle tentative..."
                 )
+                record_run_error(f"Tentative {attempt + 1} échouée : JSON non valide ou outil final non utilisé.")
                 # Message de retry adapté au type d'agent (Python pour CodeAgent, JSON pour TCA).
                 if is_code_agent:
                     prompt += (
@@ -312,12 +315,14 @@ async def run_with_retry(
                 f"[-] Timeout du nœud {node_kind} après {timeout_s}s "
                 f"(Chrome/DevTools/Puppeteer bloqué ?) — passage au nœud suivant."
             )
+            record_run_error(f"Tentative {attempt + 1} échouée : TIMEOUT ({timeout_s}s). La page a pu crasher ou boucler à l'infini.")
             return "TIMEOUT ERROR: L'exécution du testeur a dépassé le délai imparti (120s). Le test a planté (boucle infinie ou gel de l'UI).", last_metrics
         except Exception as e:
             # F-33 (2) : exception pendant l'exécution (code Python cassé en CodeAgent,
             # payload invalide en TCA). On renvoie un message "découpe" au lieu de planter.
             msg = str(e)
             print(f"[-] Erreur interne (Tentative {attempt + 1}/{max_retries}): {msg}")
+            record_run_error(f"Tentative {attempt + 1} échouée (Exception Interne Python/LLM) : {msg}")
             if is_code_agent and ("Syntax" in msg or "parse" in msg.lower() or "unterminated" in msg.lower()):
                 prompt += (
                     "\n\nATTENTION : ton dernier bloc de code Python a échoué (syntaxe invalide : "
@@ -518,9 +523,9 @@ async def execute_coder_node(
         from .tools import (
             read_file, write_file, append_file, list_directory,
             bash_command, search_replace, multi_replace, edit_file,
-            read_python_skeleton
+            read_python_skeleton, check_run_state
         )
-        coder_tools = [list_directory, read_file, read_python_skeleton, write_file, append_file, edit_file, search_replace, multi_replace, DuckDuckGoSearchTool()]
+        coder_tools = [list_directory, read_file, read_python_skeleton, write_file, append_file, edit_file, search_replace, multi_replace, check_run_state, DuckDuckGoSearchTool()]
         coder_tools.extend(c7_tools)
         # F-45 : Chrome DevTools (navigate_page, take_screenshot, list_console_messages,
         # click, fill...) pour auto-valider visuellement la page générée AVANT
@@ -574,7 +579,9 @@ async def execute_coder_node(
 - 'write_file' crée automatiquement les sous-répertoires manquants : tu peux appeler
   'write_file' avec le chemin complet (ex: "landing_page/index.html") MÊME SI le dossier
   n'existe pas encore. N'essaie PAS de lister un dossier qui n'existe pas.
-- Chaque fichier cible DOIT être créé. Ne passe pas au reste avant."""
+- ⚠️ AVANT TOUTE CHOSE : Appelle l'outil `check_run_state()` pour vérifier si tu es dans une boucle de redémarrage. Si cet outil t'indique que tu as crashé lors de la tentative précédente (ex: erreur de JSON ou de syntaxe sur l'appel final), LES FICHIERS SONT SÛREMENT DÉJÀ LÀ. Ne les écrase pas aveuglément !
+- ⚠️ AVANT DE CRÉER UN FICHIER : Vérifie TOUJOURS s'il existe déjà (via read_file). S'il existe et semble complet, NE LE RÉÉCRIS PAS.
+- Sinon, tu DOIS créer le fichier avant de passer au reste."""
 
         # Skills ciblés pour cette tâche. F-57 (Priorité 10) : L'ARCHITECT SÉLECTIONNE
         # les skills dans son plan (subtask.skills), et le Coder reçoit leur corps

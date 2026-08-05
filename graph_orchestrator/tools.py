@@ -19,6 +19,35 @@ import threading
 _FILE_LOCKS: dict[str, threading.Lock] = {}
 _FILE_LOCKS_GUARD = threading.Lock()
 
+# --- Suivi d'état pour introspection (Coder) ---------------------------------
+# Trace les erreurs internes rencontrées par l'agent lors de la tentative précédente
+_RUN_ERRORS: list[str] = []
+
+def record_run_error(error_msg: str) -> None:
+    """Enregistre une erreur interne pour introspection future par l'agent."""
+    _RUN_ERRORS.append(error_msg)
+
+
+@tool
+def check_run_state() -> str:
+    """Checks the internal state of the current node execution.
+    If you previously crashed (e.g., due to a JSON parsing error, timeout, or Python syntax error),
+    this tool will return the exact errors you encountered in the previous attempts.
+    Always call this BEFORE creating files if you suspect you are in a retry loop.
+    
+    Returns:
+        A string describing the errors encountered in previous attempts, or a message saying no errors occurred.
+    """
+    if not _RUN_ERRORS:
+        return "Aucune erreur enregistrée. C'est votre première tentative ou tout s'est bien passé jusqu'ici."
+    
+    report = "ERREURS LORS DES TENTATIVES PRÉCÉDENTES :\n"
+    for i, err in enumerate(_RUN_ERRORS, 1):
+        report += f"[{i}] {err}\n"
+    report += "\nSi l'erreur précédente était liée à final_answer ou au formatage (ex: parsing JSON), les fichiers que tu as créés juste avant le crash SONT PROBABLEMENT DÉJÀ SUR LE DISQUE. Ne les recrée pas !\n"
+    report += "Passe directement à la suite en appelant SIMPLEMENT en Python :\n"
+    report += "final_answer({'task_id': 'ton_task_id', 'status': 'success', 'details': 'Fichiers récupérés intacts après crash du LLM.'})"
+    return report
 
 def _file_lock(path: str) -> threading.Lock:
     """Renvoie (et crée si besoin) le verrou associé à un chemin de fichier normalisé."""

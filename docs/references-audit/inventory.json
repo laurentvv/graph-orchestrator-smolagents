@@ -1,5 +1,5 @@
 {
-  "audit_date": "2026-08-03",
+  "audit_date": "2026-08-05",
   "scope": "filtered-useful (docs + code + specs; excludes .git/node_modules/media/fixtures/translated-READMEs)",
   "projects": [
     {
@@ -4880,7 +4880,85 @@
           "description": "6 phases : loop tight qui passe au rouge → reproduire/minimiser → 3-5 hypothèses falsifiables → instrumenter (1 var/time) → fix + regression test → cleanup. Doctrine de diagnostic pour le nœud Tester/Escalation."
         }
       ]
+    },
+    {
+      "id": "pi",
+      "name": "pi",
+      "path": "references/pi",
+      "category": "agent-framework",
+      "reuse_rating": "high",
+      "summary": "(ajouté par update_inventory.py)",
+      "files": [
+        {
+          "path": "references/pi/packages/coding-agent/src/core/compaction/compaction.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "compact",
+            "extractFileOperations"
+          ],
+          "description": "Compaction du contexte basée sur les fichiers lus/écrits au lieu de la troncature brute. Blueprint parfait pour P9 (compaction DuckDB)."
+        },
+        {
+          "path": "references/pi/packages/coding-agent/src/core/compaction/branch-summarization.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "BranchSummaryResult",
+            "collectEntriesForBranchSummary"
+          ],
+          "description": "Algorithme résumant une branche abandonnée lors d'un 'undo', préservant l'apprentissage (P9)."
+        },
+        {
+          "path": "references/pi/packages/evals/src/vitest-evals/harness-table.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "createJudge",
+            "TargetTaskJudge"
+          ],
+          "description": "Implémentation de LLM-as-a-judge dans vitest (P6 Judge / TDD)."
+        },
+        {
+          "path": "references/pi/packages/coding-agent/src/core/bash-executor.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "executeBashWithOperations"
+          ],
+          "description": "Abstraction de l'exécution Bash pour sandbox LLM (P8)."
+        },
+        {
+          "path": "references/pi/packages/coding-agent/src/core/extensions/types.ts",
+          "type": "spec",
+          "reuse": "medium",
+          "key_symbols": [
+            "ExtensionRunner",
+            "ToolExecutionStartEvent"
+          ],
+          "description": "Système d'intercepteurs événementiels (middlewares) avant/après appel d'outil (P8 anti-crash)."
+        },
+        {
+          "path": "references/pi/packages/coding-agent/src/core/skills.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "formatSkillsForPrompt",
+            "Skill"
+          ],
+          "description": "Chargement des skills YAML+Markdown pour injection dans le System Prompt (P10)."
+        },
+        {
+          "path": "references/pi/packages/agent/src/proxy.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "ProxyMessageEventStream"
+          ],
+          "description": "API pour streamer raisonnement et toolcalls, base pour event bus JSON (P11)."
+        }
+      ]
     }
   ],
-  "projects_audited": 23
+  "projects_audited": 24
 }
