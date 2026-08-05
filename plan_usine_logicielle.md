@@ -8,6 +8,7 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 > - **Références recherche/POC** ( RepoGraph, axon, graphify) : **non retenues** comme base de feature — trop académiques, ROI faible sur l'usage actuel (création de code de zéro, pas exploration de gros dépôts).
 > Le détail des références est dans [`docs/references-audit/`](./docs/references-audit/INDEX.md).
 > 🔄 **Note de mise à jour** : Consulte toujours [`references/update_report.md`](./references/update_report.md) pour voir les dernières nouveautés ajoutées aux dépôts amonts (nouvelles "Skills", outils MCP, workflows, etc.) avant de concevoir une fonctionnalité.
+> 🧠 **Mémoire et Directives** : Le comportement des agents, la gestion d'état (`feature_list.json`, `progress.md`, `log.md`) et la topologie du graphe sont définis dans [`AGENTS.md`](./AGENTS.md) et [`docs/NODES_AND_SKILLS.md`](./docs/NODES_AND_SKILLS.md). Ce sont les sources de vérité absolues pour le runtime.
 
 > **📊 ÉTAT D'AVANCEMENT (2026-07-31)**
 > | Priorité | Statut |
