@@ -155,6 +155,24 @@ def write_file(path: str, content: str) -> str:
                 "in this single write_file call. The file was NOT created."
             )
         os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        # Garde anti-imbrication du dossier de run (bug observé run 2026-08-05_1546) :
+        # le Coder s'exécute DANS le dossier de run (après _scoped_chdir), mais il
+        # écrit parfois avec le chemin relatif au repo root (ex:
+        # "runs/2026-..._bubble_sort/index.html") → créant un sous-dossier imbriqué
+        # "runs/.../runs/.../index.html". La validation visuelle navigate_page pointe
+        # alors vers runs/.../index.html (inexistant) → ERR_FILE_NOT_FOUND → run KO.
+        # Détection déterministe sur l'ABSPATH (pas le path brut) : depuis le run dir,
+        # path="runs/<run>/index.html" → abspath "repo/runs/<run>/runs/<run>/index.html"
+        # qui contient "runs/<X>/runs/". On refuse et on oriente vers le chemin court.
+        abs_path = os.path.abspath(path).replace("\\", "/")
+        if re.search(r"(^|/)runs/[^/]+/runs/", abs_path):
+            short = os.path.basename(path)
+            return (
+                f"ERROR: chemin imbriqué détecté — '{path}' créerait un sous-dossier "
+                f"runs/.../runs/... (bug d'imbrication du dossier de run). Ton dossier "
+                f"de travail EST déjà le dossier de run. Utilise le chemin COURT : "
+                f"'{short}'. Le fichier N'A PAS été créé."
+            )
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
         return f"Successfully wrote to {path} ({len(content)} chars)"
