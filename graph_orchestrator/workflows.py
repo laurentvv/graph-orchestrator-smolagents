@@ -677,6 +677,23 @@ async def run_coding_workflow(
                 if m2: sub_metrics.append(m2)
                 if m3: sub_metrics.append(m3)
 
+                # Traçage KG d'un échec Security (post-mortem run 123955) : si le
+                # nœud Security n'a pas rendu de verdict (None), on persiste une
+                # réfutation dédiée pour que le post-mortem et l'Escalade en
+                # tiennent compte. Combiné au fail-closed côté Judge (qui bloque
+                # l'approbation sans audit), l'échec n'est plus silencieux.
+                if sec_res is None:
+                    print(f"    [!] Security Reviewer a échoué pour {subtask.task_id} — tracé dans le KG.")
+                    kg.add_claim(
+                        entity_id=entity_id,
+                        content="Audit sécurité INDISPONIBLE — le nœud Security n'a pas produit de verdict (échec LLM/infra). Approbation bloquée (fail-closed).",
+                        kind="refutation",
+                        confidence=None,
+                        source="security_unavailable",
+                        model_id=settings.reasoning_model_id,
+                        run_id=run_id,
+                    )
+
                 # 3. Judge Panel (Fan-in) — DSPy ChainOfThought (Pydantic force le JSON Mode)
                 print(f"    [>] Audits terminés. Juge ({settings.reasoning_model_id}) en cours d'évaluation...")
                 judge_res, m4 = await execute_code_judge_node(sub_dict, test_res, sec_res, fast_model, settings)

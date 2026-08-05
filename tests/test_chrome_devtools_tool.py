@@ -120,6 +120,42 @@ class TestChromeDevtoolsToolsMocked:
             assert len(tools) == 2
             assert {t.name for t in tools} == {"navigate_page", "take_screenshot"}
 
+    def test_click_et_fill_autorises(self, monkeypatch):
+        """click/fill ne doivent PAS être filtrés (post-mortem run 123955).
+
+        La doc/skills recommandent click(uid=...) pour tester les interactions, mais
+        ces outils étaient exclus par l'allowlist → le Coder/Tester générait click(...)
+        que smolagents rejetait ("Forbidden function") 6 fois par run. Ils doivent
+        maintenant passer le filtre."""
+        monkeypatch.setattr(chrome_devtools_tool, "_build_params", lambda: {"fake": True})
+
+        fake_click = MagicMock()
+        fake_click.name = "click"
+        fake_fill = MagicMock()
+        fake_fill.name = "fill"
+        fake_nav = MagicMock()
+        fake_nav.name = "navigate_page"
+        # Outil volontairement hors allowlist : doit rester filtré
+        fake_perf = MagicMock()
+        fake_perf.name = "performance_start_trace"
+        fake_collection = MagicMock()
+        fake_collection.tools = [fake_click, fake_fill, fake_nav, fake_perf]
+
+        @contextmanager
+        def fake_from_mcp(params, **kwargs):
+            yield fake_collection
+
+        monkeypatch.setattr(chrome_devtools_tool, "ToolCollection", MagicMock(from_mcp=fake_from_mcp))
+
+        with chrome_devtools_tool.chrome_devtools_tools() as tools:
+            names = {t.name for t in tools}
+            assert "click" in names, "click doit être autorisé (tests d'interaction)"
+            assert "fill" in names, "fill doit être autorisé (tests d'interaction)"
+            assert "navigate_page" in names
+            # Le filtrage strict reste actif sur les autres outils (anti context-overflow)
+            assert "performance_start_trace" not in names
+
+
 
 # ==========================================
 # list_mcp_servers_status (diagnostic /health)

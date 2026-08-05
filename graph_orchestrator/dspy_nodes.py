@@ -27,6 +27,7 @@ from .models import (
     ArchitectOutput,
     CodeJudgeOutput,
     EscalationOutput,
+    Finding,
     PromptRefinerOutput,
     RouterOutput,
     SecurityOutput,
@@ -677,14 +678,22 @@ async def execute_security_reviewer_node(subtask: dict, reasoning_model, setting
 
 async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Optional[SecurityOutput], reasoning_model, settings: Settings) -> Tuple[Optional[CodeJudgeOutput], Optional[NodeMetrics]]:
     """Exécute le Juge final qui décide si la boucle de développement s'arrête.
-    
+
+    Fail-closed (post-mortem run 123955) : si ``security_res is None`` (nœud Security
+    en échec LLM/infra), on RETOURNE IMMÉDIATEMENT un verdict ``is_approved=False`` SANS
+    appeler le LLM Judge. Avant ce fix, ``None`` était silencieusement transformé en
+    "Aucune vulnérabilité critique détectée." → le Juge approuvait à l'aveugle un code
+    non audité (run 123955 : ``bs-001`` APPROUVÉ juste après ``Error in generating
+    model output`` côté Security). Désormais impossible : pas d'audit = pas d'approbation.
+
     Args:
         subtask (dict): La sous-tâche évaluée.
         test_res (Any): La sortie de l'agent Testeur QA (smolagents).
-        security_res (SecurityOutput): Les vulnérabilités identifiées à l'étape précédente.
+        security_res (SecurityOutput | None): Les vulnérabilités identifiées, ou ``None``
+            si le nœud Security a échoué (auquel cas la sous-tâche est bloquée ici).
         reasoning_model: Modèle lourd.
-        settings (Settings): Configuration.
-        
+        settings: Configuration.
+
     Returns:
         CodeJudgeOutput dictant si le code est 'approved' ou s'il nécessite un feedback.
     """
@@ -697,7 +706,36 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
         except Exception:
             pass
 
-    vulns = security_res.vulnerabilities if security_res and security_res.vulnerabilities else ["Aucune vulnérabilité critique détectée."]
+    # Fail-closed : pas d'audit sécurité = pas d'approbation. On court-circuite le
+    # LLM Judge (économise le budget + rend l'approbation sans audit impossible).
+    if security_res is None:
+        print(f"[!] Security indisponible pour {subtask.get('id')} — Judge SKIPPÉ (fail-closed), approbation bloquée.")
+        blocked = CodeJudgeOutput(
+            task_id=subtask.get("id", "unknown"),
+            is_approved=False,
+            final_feedback=(
+                "Audit de sécurité INDISPONIBLE (le nœud Security n'a pas produit de "
+                "verdict — échec LLM/infra). Approbation BLOQUÉE par sécurité (fail-closed). "
+                "Relancer le run ou auditer manuellement le code avant validation."
+            ),
+            findings=[Finding(
+                severity="critical",
+                category="security",
+                location="(audit indisponible)",
+                description="Le nœud Security Reviewer n'a pas délivré de verdict — code non audité.",
+                suggestion="Relancer le run (cause souvent transitoire : VRAM, connexion llama-server) ou auditer manuellement.",
+            )],
+        )
+        metrics = NodeMetrics(
+            node="code_judge_dspy",
+            model=settings.no_think_spec.model,
+            duration_s=0.0,
+            input_tokens=0,
+            output_tokens=0,
+        )
+        return blocked, metrics
+
+    vulns = security_res.vulnerabilities if security_res.vulnerabilities else ["Aucune vulnérabilité critique détectée."]
     
     tests = "Résultats non disponibles"
     if test_res:

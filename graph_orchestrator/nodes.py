@@ -705,6 +705,11 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
 6. ANTI-BOUCLE : NE RE-ÉCRIS JAMAIS avec write_file un fichier déjà créé (ça l'écrase).
    Pour AJOUTER du contenu → append_file. Pour MODIFIER un fragment → search_replace.
 7. PYTHON BUILT-INS : Si tu utilises `time.sleep()` ou d'autres modules standards dans ton code Python, n'oublie pas de les importer (ex: `import time` au début du bloc).
+8. FERMETURE D'APPEL = `)` JAMAIS `}}` : quand `content`/`new_string` contient du JS/HTML
+   avec des `{{...}}`, l'appel Python se termine TOUJOURS par `)`. Le `}}` appartient au
+   CONTENU, pas à l'appel. Mélanger les deux provoque un SyntaxError de parsing fatal.
+   ❌ FAUX : search_replace(path="x", old_string="...", new_string="function() {{ ... }}"}}
+   ✅ JUSTE : search_replace(path="x", old_string="...", new_string="function() {{ ... }}")
 
 ### FORMAT DE SORTIE (obligatoire)
 Tu écris du code Python dans un bloc ````python ... ```` qui appelle tes outils. Exemple one-shot :
@@ -712,6 +717,9 @@ Tu écris du code Python dans un bloc ````python ... ```` qui appelle tes outils
 # Thought courte (1 phrase) PUIS appel immédiat — pas de longue réflexion
 resultat = write_file(path="index.html", content="<!DOCTYPE html>\\n<html>...</html>")
 print(resultat)
+# Exemple search_replace avec du JS (accolades) : ferme l'appel par ')' JAMAIS '}}'
+fix = search_replace(path="index.html", old_string="function() {{}}", new_string="function() {{ startSort(); }}")
+print(fix)
 # ... autres appels ...
 final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Fichiers créés.", "linter_ok": True, "vision_ok": True}})
 ```
