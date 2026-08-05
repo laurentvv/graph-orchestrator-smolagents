@@ -7,6 +7,7 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 > - **Référence mature mais collectée** (prompts, à adapter) : `claude-code-unified-agents`.
 > - **Références recherche/POC** ( RepoGraph, axon, graphify) : **non retenues** comme base de feature — trop académiques, ROI faible sur l'usage actuel (création de code de zéro, pas exploration de gros dépôts).
 > Le détail des références est dans [`docs/references-audit/`](./docs/references-audit/INDEX.md).
+> 🔄 **Note de mise à jour** : Consulte toujours [`references/update_report.md`](./references/update_report.md) pour voir les dernières nouveautés ajoutées aux dépôts amonts (nouvelles "Skills", outils MCP, workflows, etc.) avant de concevoir une fonctionnalité.
 
 > **📊 ÉTAT D'AVANCEMENT (2026-07-31)**
 > | Priorité | Statut |
