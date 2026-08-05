@@ -25,19 +25,23 @@ class TestNormalizeApiBase:
 
 def test_defaults_appliques():
     """Sans variable d'env, les valeurs par défaut s'appliquent."""
-    # Nettoie l'env des variables connues pour ce test.
+    # Nettoie l'env des variables connues pour ce test. NB : depuis la migration
+    # F-58 (llama.cpp dynamique / llama-server spawn), les clés LOCAL_API_BASE
+    # et LOCAL_API_KEY remplacent OLLAMA_API_BASE / OLLAMA_API_KEY (backend-agnostique).
     keys = [
-        "OLLAMA_API_BASE", "OLLAMA_API_KEY", "FAST_MODEL_ID",
-        "REASONING_MODEL_ID", "REASONING_MAX_TOKENS",
+        "LOCAL_API_BASE", "LOCAL_API_KEY", "OLLAMA_API_BASE", "OLLAMA_API_KEY",
+        "FAST_MODEL_ID", "REASONING_MODEL_ID", "REASONING_MAX_TOKENS",
         "JUDGE_CONFIDENCE_THRESHOLD", "WORKER_MAX_RETRIES", "LOG_LEVEL",
     ]
     old = {k: os.environ.pop(k, None) for k in keys}
     try:
         s = load_settings()
-        assert s.local_api_base == "http://localhost:11434/v1"
+        # F-58 : port 8000 (llama-server spawn) remplace 11434 (Ollama natif).
+        assert s.local_api_base == "http://localhost:8000/v1"
         assert s.local_api_key == "sk-local"
         assert s.fast_model_id == "Qwen3.5-9B-Q4_K_M"
-        assert s.reasoning_model_id == "hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL"
+        # F-58 : reasoning_model_id passé de gemma-4-E4B à Ornith-1.0-9B-MTP.
+        assert s.reasoning_model_id == "hf.co/protoLabsAI/Ornith-1.0-9B-MTP-GGUF"
         assert s.reasoning_max_tokens == 8192
         assert s.judge_confidence_threshold == 0.7
         assert s.worker_max_retries == 3
@@ -71,11 +75,13 @@ def test_settings_is_frozen():
 
 
 def test_tester_max_steps_default_and_override(monkeypatch):
-    """TESTER_MAX_STEPS borne la durée du Web Tester (fix TIMINGS_ANALYSE). Défaut 12."""
-    # Défaut = 12 (borné vs l'ancien 24 hardcoded qui laissait boucler ~30 min).
+    """TESTER_MAX_STEPS borne la durée du Web Tester (fix TIMINGS_ANALYSE). Défaut 25."""
+    # Défaut = 25 (relevé depuis 12 : les assertions fonctionnelles + console
+    # multi-étapes du Web Tester nécessitent plus de marge ; le timeout 600s
+    # reste le garde-fou dur contre les boucles).
     monkeypatch.delenv("TESTER_MAX_STEPS", raising=False)
     s = load_settings()
-    assert s.tester_max_steps == 12
+    assert s.tester_max_steps == 25
     # Override via env.
     monkeypatch.setenv("TESTER_MAX_STEPS", "20")
     s2 = load_settings()

@@ -589,11 +589,19 @@ async def execute_coder_node(
 ### ⚠️ FICHIERS CIBLES — TU DOIS CRÉER CES FICHIERS (priorité absolue)
 {files_list}
 
-- 'write_file' crée automatiquement les sous-répertoires manquants : tu peux appeler
-  'write_file' avec le chemin complet (ex: "landing_page/index.html") MÊME SI le dossier
-  n'existe pas encore. N'essaie PAS de lister un dossier qui n'existe pas.
+- 📍 TON DOSSIER DE TRAVAIL ACTUEL EST LE DOSSIER DE RUN. Cela signifie que pour
+  créer `index.html`, tu utilises le chemin COURT `index.html` (PAS de préfixe
+  `runs/...` ni de chemin absolu). Le fichier atterrira au bon endroit.
+  → JAMAIS de `write_file(path="runs/2026-..._bubble_sort/index.html", ...)` :
+  cela créerait un sous-dossier imbriqué `runs/.../runs/.../index.html` et la
+  validation visuelle échouerait (ERR_FILE_NOT_FOUND). Utilise `index.html`.
+- 'write_file' crée automatiquement les sous-répertoires manquants NÉCESSAIRES
+  (ex: pour `landing_page/index.html`, le dossier `landing_page/` est créé) — mais
+  ne préfixe JAMAIS par le dossier de run lui-même.
 - ⚠️ AVANT TOUTE CHOSE : Appelle l'outil `check_run_state()` pour vérifier si tu es dans une boucle de redémarrage. Si cet outil t'indique que tu as crashé lors de la tentative précédente (ex: erreur de JSON ou de syntaxe sur l'appel final), LES FICHIERS SONT SÛREMENT DÉJÀ LÀ. Ne les écrase pas aveuglément !
-- ⚠️ AVANT DE CRÉER UN FICHIER : Vérifie TOUJOURS s'il existe déjà (via read_file). S'il existe et semble complet, NE LE RÉÉCRIS PAS.
+- ⚠️ AVANT DE CRÉER UN FICHIER : Vérifie TOUJOURS s'il existe déjà (via read_file
+  avec le chemin COURT, ex: `read_file(path="index.html")`). S'il existe et semble
+  complet, NE LE RÉÉCRIS PAS.
 - Sinon, tu DOIS créer le fichier avant de passer au reste."""
 
         # Skills ciblés pour cette tâche. F-57 (Priorité 10) : L'ARCHITECT SÉLECTIONNE
