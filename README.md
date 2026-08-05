@@ -76,7 +76,12 @@ The repo ships a **curated catalogue of test prompts** to validate the graph on 
 | `bubble-sort-monofile` | single `index.html` | baseline: step-by-step animation, speed slider, counter, color states |
 | `bubble-sort-multifile` | `index.html` + `styles.css` + `script.js` | the Architect picks multifile (F-29), the Coder wires files together (link/script src + DOM ids), and linting runs per file |
 
-**Workflow**: copy an entry from the catalogue into `tasks.json` (`coding` section), run the factory, then append a row to `test_results.md`. The recommended first validation is `bubble-sort-monofile` (bounded, single file).
+**Workflow**: copy an entry from the catalogue into `tasks.json` (`coding` section), run the factory, then inject the verdict into the tracker:
+```bash
+uv run python scripts/parse_run_result.py --test-id bubble-sort-multifile   # latest run
+uv run python scripts/parse_run_result.py --dry-run                         # preview only
+```
+The script parses the "RÉSULTAT FINAL DU GRAPHE" block, derives the status (✅/❌/⚠️/⏹️), and appends a row (duplicate-guarded). The recommended first validation is `bubble-sort-monofile` (bounded, single file).
 
 ---
 

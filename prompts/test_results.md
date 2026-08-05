@@ -13,10 +13,20 @@ le statut final et des notes post-mortem utiles à l'amélioration continue
    (utiliser `to_coding_task("bubble-sort-multifile")` pour obtenir le dict prêt
    à coller, sans le champ `notes`).
 3. `WORKFLOW_MODE=coding` dans `.env`, puis `uv run agent_graph.py`.
-4. Une fois le run terminé, **compléter une ligne** dans le tableau ci-dessous.
+4. Une fois le run terminé, **injecter le verdict** dans le tableau :
+   ```bash
+   # Run le plus récent, associé à un test du catalogue :
+   uv run python scripts/parse_run_result.py --test-id bubble-sort-multifile
+   # Ou un run spécifique :
+   uv run python scripts/parse_run_result.py logs/run_coding_<timestamp> --test-id <id>
+   ```
+   Le script lit le bloc « RÉSULTAT FINAL DU GRAPHE », déduit le statut
+   (✅/❌/⚠️/⏹️) et ajoute une ligne. Garde anti-doublon : un run déjà présent
+   n'est pas ré-ajouté. Pour relire sans écrire : `--dry-run`.
 
-> Le statut se lit dans le bloc « RÉSULTAT FINAL DU GRAPHE » à la fin du log
-> (`logs/run_coding_<timestamp>/run_full.log`). Un run sans ce bloc = interrompu.
+> En l'absence de script : le statut se lit dans le bloc « RÉSULTAT FINAL DU
+> GRAPHE » à la fin du log (`logs/run_coding_<timestamp>/run_full.log`). Un run
+> sans ce bloc = interrompu.
 
 ## Légende
 
