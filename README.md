@@ -64,6 +64,22 @@ Want to see the team at work? The entry point is incredibly simple:
 
 ---
 
+## 🧪 Test Suite & Regression Prompts
+
+The repo ships a **curated catalogue of test prompts** to validate the graph on bounded, reproducible tasks (per `AGENTS.md §7`):
+
+- **Catalogue** → [`prompts/test_prompts.py`](prompts/test_prompts.py) — typed Python entries (`id`, `content`, `target_files`, `notes`) with helpers `by_id()` and `to_coding_task()`. List them with `uv run python -m prompts.test_prompts`.
+- **Results tracker** → [`prompts/test_results.md`](prompts/test_results.md) — manual dashboard (status + post-run notes) to update after each run.
+
+| id | strategy | what it validates |
+| :--- | :--- | :--- |
+| `bubble-sort-monofile` | single `index.html` | baseline: step-by-step animation, speed slider, counter, color states |
+| `bubble-sort-multifile` | `index.html` + `styles.css` + `script.js` | the Architect picks multifile (F-29), the Coder wires files together (link/script src + DOM ids), and linting runs per file |
+
+**Workflow**: copy an entry from the catalogue into `tasks.json` (`coding` section), run the factory, then append a row to `test_results.md`. The recommended first validation is `bubble-sort-monofile` (bounded, single file).
+
+---
+
 > 📖 **For Systems Engineers & Architects:**
 > Want to dive into the belly of the beast? Interested in asynchronous routing, abstract syntax trees, and DSPy specifications?
 > 👉 [Check out our deep technical documentation (Architecture Details)](docs/ARCHITECTURE_DETAILS.md)

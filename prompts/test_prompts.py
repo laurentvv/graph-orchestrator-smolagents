@@ -12,6 +12,11 @@ Convention de nommage des ids : <algo/outil>-<variante>. Le target_files reflèt
 la stratégie attendue (mono-fichier vs multi-fichiers) — c'est ce qui pousse
 l'Architecte vers la bonne stratégie de découpage (F-29).
 
+## Suivi des résultats
+
+Les statuts et notes post-run (succès/échec/interrompu) sont consignés dans le
+tableau de bord manuel ``prompts/test_results.md``. À compléter après chaque run.
+
 ## Tests disponibles
 
 | id                            | stratégie        | ce qu'il valide                                   |
