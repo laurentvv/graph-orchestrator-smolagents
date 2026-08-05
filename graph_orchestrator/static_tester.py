@@ -552,36 +552,42 @@ def _evaluate_visibility(
 # ni le Tier 2 (barres visibles) ne le voient. Le Tester LLM non plus : son pattern
 # d'animation (wait 2s then check final state) passe même si l'animation a duré 0 ms.
 #
-# Détection : on clique Start, on attend une fenêtre courte (400 ms), et on mesure la
-# progression d'un signal (compteur de comparaisons, nombre de .sorted). Si l'état est
-# déjà terminal après < 50 ms alors que l'animation devrait durer plus → instantané.
+# Détection : on clique l'action primaire, on attend une fenêtre courte (400 ms), puis
+# on vérifie si l'état est déjà stabilisé (ne progresse plus). On découvre le signal de
+# progression génériquement (compteur numérique OU éléments marqués "terminal"), sans
+# hardcoder de sélecteur d'algorithme. Si l'état est stable à 400 ms alors que
+# l'animation devrait durer plus longtemps → animation instantanée.
 
 # Fenêtre d'observation (ms). Assez courte pour rester déterministe, assez longue pour
 # qu'au moins une frame ait eu lieu (une animation légitime progresse déjà à ce stade).
 _TIER3_OBSERVE_MS = 400
-# Seuil (ms) en dessous duquel un état terminal = animation instantanée. Une animation
-# légitime à delay=1 ms sur 30 barres dure ~21 s ; à 50 ms elle reste >> seuil.
-_TIER3_INSTANT_THRESHOLD_MS = 50
+# Fenêtre secondaire (ms) pour mesurer la stabilisation : snapshot t1, attend cette
+# durée, snapshot t2. Si t2 == t1, l'animation est stabilisée (terminée).
+_TIER3_STABILIZATION_MS = 50
 
 
 def _evaluate_temporal(
     devtools_tools: list, url: str, primary_action_id: Optional[str] = None
 ) -> List[str]:
-    """Tier 3 : détecte une animation instantanée (qui termine en < 50 ms au lieu de
+    """Tier 3 : détecte une animation instantanée (stabilisée en < 400 ms au lieu de
     progresser sur plusieurs secondes).
+
+    GÉNÉRIQUE : ne suppose PAS l'algorithme. Découvre un signal de progression dans le
+    DOM (compteur numérique OU éléments marqués d'une classe "terminal"), puis détecte
+    la terminaison par stabilisation (le signal cesse de bouger entre deux snapshots
+    rapprochés) — pas en vérifiant une forme d'état final spécifique.
 
     Réutilise le pattern DevTools de _evaluate_visibility (navigate + single
     evaluate_script async), le helper _parse_devtools_json, et l'id d'action primaire
     (_find_primary_action_id).
 
-    Protocole en UN seul evaluate_script (le navigateur garde l'état entre le snapshot
-    T0, le clic, l'attente et le snapshot T1) :
-      1. Snapshot T0 = signal de progression (compteur #counter/#comparisonCount si
-         présent, sinon nombre de .sorted, sinon -1 = indétectable).
-      2. performance.now() au clic du bouton primaire.
+    Protocole en UN seul evaluate_script :
+      1. Snapshot T0 = signal de progression découvert (ou -1 si indétectable).
+      2. Clic du bouton primaire.
       3. await setTimeout(400) — fenêtre d'observation.
-      4. Snapshot T1 + performance.now() → elapsed_ms.
-      5. Retourne JSON {t0, t1, elapsed_ms, finished}.
+      4. Snapshot T1.
+      5. await setTimeout(50) + snapshot T2 (mesure de stabilisation).
+      6. finished = (T2 == T1) → l'animation est stabilisée (terminée).
 
     Verdict (côté Python) :
       - elapsed_ms < 50 ET finished (état terminal atteint) → animation instantanée (FAIL).
@@ -624,41 +630,56 @@ def _evaluate_temporal(
         # (qu'il exécute lui-même). On autorise async () => { await ... } (documenté
         # nodes.py:504) — on n'écrit JAMAIS d'IIFE `(() => {...})()` top-level await.
         #
-        # DEUX signaux DISTINCTS :
-        #  - progression : compteur de comparaisons (#counter) si présent, sinon nombre
-        #    de .sorted. Sert à confirmer que le clic a déclenché l'algorithme (t1 > t0).
-        #  - finished : l'animation a atteint son état terminal. Détection GÉNÉRIQUE par
-        #    ordre croissant des hauteurs des .bar (un tri est terminé quand le tableau
-        #    est ordonné). On NE compare PAS le compteur au nombre de barres (un tri de
-        #    n éléments fait n*(n-1)/2 comparaisons, pas n — sinon faux "finished" dès
-        #    la n-ième comparaison sur une animation légitime).
+        # GÉNÉRIQUE — on découvre le signal de progression au lieu de hardcoder des
+        # sélecteurs d'un tri en barres. On cherche, dans cet ordre :
+        #  1. un compteur numérique (élément dont le textContent est un entier — typiquement
+        #     un compteur de comparaisons/passes/visites affiché à l'utilisateur) ;
+        #  2. le nombre d'éléments portant une classe "terminal" (sorted/done/visited/
+        #     finished — convention universelle pour marquer les éléments traités).
+        # Si aucun signal n'est trouvé (signal=-1), on NE conclut pas (skip, pas de FP).
+        #
+        # Terminaison : on ne suppose JAMAIS la forme de l'état final (pas de "barres triées",
+        # pas de "tableau ordonné" — ce serait spécifique à un algorithme). On détecte la
+        # terminaison par STABILITÉ : si entre deux snapshots rapprochés (fin de la fenêtre
+        # d'observation) le signal ne bouge plus, l'animation est finie. Une animation en
+        # cours progresse encore → non terminal.
         js_probe = (
             "async () => {"
+            "  const findCounter = () => {"
+            "    const els = document.querySelectorAll('[id],[class]');"
+            "    for (const el of els) {"
+            "      const m = (el.textContent || '').trim().match(/^\\d+$/);"
+            "      if (m) return parseInt(m[0]);"
+            "    }"
+            "    return null;"
+            "  };"
+            "  const findTerminal = () => {"
+            "    const sels = ['.sorted','.done','.visited','.finished','.completed'];"
+            "    for (const s of sels) { const n = document.querySelectorAll(s).length; if (n > 0) return n; }"
+            "    return null;"
+            "  };"
             "  const progression = () => {"
-            "    const c = document.querySelector('#counter, #comparisonCount');"
-            "    if (c) { const v = parseInt(c.textContent); if (!isNaN(v)) return v; }"
-            "    return document.querySelectorAll('.bar.sorted').length;"
-            "  };"
-            "  const heightsSorted = () => {"
-            "    const hs = [...document.querySelectorAll('.bar')].map(b => parseFloat(b.style.height) || 0);"
-            "    if (hs.length < 2) return false;"
-            "    for (let k = 1; k < hs.length; k++) { if (hs[k] < hs[k-1]) return false; }"
-            "    return true;"
-            "  };"
-            "  const allSorted = () => {"
-            "    const bars = document.querySelectorAll('.bar');"
-            "    return bars.length > 0 && bars.length === document.querySelectorAll('.bar.sorted').length;"
+            "    const c = findCounter();"
+            "    if (c !== null) return c;"
+            "    const t = findTerminal();"
+            "    if (t !== null) return t;"
+            "    return -1;"
             "  };"
             "  const t0 = progression();"
             f"  const btn = document.getElementById('{primary_action_id}');"
-            "  if (!btn) { return JSON.stringify({t0: -1, t1: -1, elapsed_ms: -1, finished: false, reason: 'no-btn'}); }"
+            "  if (!btn) { return JSON.stringify({t0: -1, t1: -1, t2: -1, elapsed_ms: -1, finished: false, reason: 'no-btn'}); }"
             "  const t_start = performance.now();"
             "  btn.click();"
             f"  await new Promise(r => setTimeout(r, {_TIER3_OBSERVE_MS}));"
             "  const t1 = progression();"
             "  const elapsed_ms = performance.now() - t_start;"
-            "  const finished = heightsSorted() || allSorted();"
-            "  return JSON.stringify({t0, t1, elapsed_ms, finished});"
+            # Snapshot t2 après stabilisation : si t2 == t1, l'animation est stabilisée
+            # (terminée). Si t2 > t1, elle progresse encore → non terminal (animation
+            # légitime).
+            f"  await new Promise(r => setTimeout(r, {_TIER3_STABILIZATION_MS}));"
+            "  const t2 = progression();"
+            "  const finished = (t1 >= 0 && t2 === t1);"
+            "  return JSON.stringify({t0, t1, t2, elapsed_ms, finished});"
             "}"
         )
         raw = _eval(js_probe)
@@ -673,38 +694,38 @@ def _evaluate_temporal(
         if not item:
             return []
 
-        # Signal indétectable (pas de compteur, pas de .sorted) → on ne conclut pas.
+        # Signal indétectable (pas de compteur, pas d'élément terminal, OU bouton absent)
+        # → on ne conclut pas (skip, jamais de faux positif).
         if item.get("reason") == "no-btn":
             return []
-
         t0 = item.get("t0", -1)
         t1 = item.get("t1", -1)
-        elapsed_ms = item.get("elapsed_ms", -1)
+        if t0 < 0 or t1 < 0:
+            # Aucun signal de progression trouvé dans le DOM → on ne peut pas mesurer.
+            return []
+
         finished = bool(item.get("finished", False))
 
-        # Animation instantanée : l'état terminal est atteint pendant la fenêtre
-        # d'observation de _TIER3_OBSERVE_MS (400 ms). Une animation légitime censée
-        # durer > 1 s ne serait PAS terminée à 400 ms → finished=true ici prouve que tout
+        # Animation instantanée : l'état est stabilisé (t2 == t1) pendant la fenêtre
+        # d'observation de _TIER3_OBSERVE_MS (400 ms). Une animation légitime censée durer
+        # > 1 s ne serait PAS stabilisée à 400 ms → finished=true ici prouve que tout
         # s'est exécuté en (au plus) quelques frames. On exige t1 > t0 (la progression a
         # bien eu lieu, le clic a déclenché l'algorithme) pour éviter les faux positifs
         # sur une page déjà à l'état terminal avant le clic.
-        # NB : elapsed_ms inclut la fenêtre d'attente (await setTimeout(400)) ; on ne
-        # l'utilise pas comme seuil absolu (il vaut ~400 ms dans tous les cas) — il sert
-        # juste d'info contextuelle dans le message.
         if finished and t1 > t0:
             return [
                 f"[temporal] Animation instantanée détectée : l'action '{primary_action_id}' "
-                f"amène l'état à son terme (signal {t0}→{t1}, terminal) en moins de "
-                f"{_TIER3_OBSERVE_MS} ms, au lieu de progresser sur plusieurs secondes/frame. "
+                f"amène l'état à son terme (signal {t0}→{t1}, puis stabilisé) en moins de "
+                f"{_TIER3_OBSERVE_MS} ms, au lieu de progresser sur plusieurs secondes. "
                 f"Cause typique : la fonction appelée par `requestAnimationFrame` (ou nommée "
-                f"step/tick/performStep) contient les boucles `for`/`while` complètes de "
+                f"step/tick/animate) contient les boucles `for`/`while` complètes de "
                 f"l'algorithme → tout s'exécute en 1 tick JS. Corrige en n'avançant que d'UNE "
-                f"seule itération par frame (indices i/j persistés hors de la fonction). Le "
-                f"`delay`/slider de vitesse doit réellement contrôler le rythme."
+                f"seule étape par frame (état de progression persisté hors de la fonction). "
+                f"Le `delay`/slider de vitesse doit réellement contrôler le rythme."
             ]
         # Cas non terminal mais aucune progression : animation non démarrée OU signal
         # non pertinent. On ne flag PAS (risque de faux positif : animation lente légitime
-        # où 400 ms < temps d'une itération). Le LLM Tester vérifiera le comportement réel.
+        # où 400 ms < temps d'une étape). Le LLM Tester vérifiera le comportement réel.
         return []
     except Exception as e:
         logger.debug("Static Tester Tier 3 skip (%s).", e)
