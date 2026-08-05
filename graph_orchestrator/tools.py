@@ -52,6 +52,23 @@ def read_file(path: str, offset: int = 0, limit: int = -1) -> str:
         return f"Error reading file {path}: {str(e)}"
 
 @tool
+def read_python_skeleton(path: str) -> str:
+    """Reads a Python file and returns its skeleton (classes, functions signatures, constants) 
+    while hiding the implementation bodies.
+    Useful for quickly understanding the structure of a large Python module without using too much context window.
+    
+    Args:
+        path: The absolute or relative path to the Python file.
+    """
+    try:
+        from .skeleton import get_skeleton
+        with open(path, 'r', encoding='utf-8') as f:
+            code = f.read()
+        return get_skeleton(code)
+    except Exception as e:
+        return f"Error generating skeleton for {path}: {str(e)}"
+
+@tool
 def list_directory(path: str = ".") -> str:
     """Lists the contents of a directory.
     Useful for exploring the codebase structure.

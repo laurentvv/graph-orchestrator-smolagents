@@ -515,9 +515,12 @@ async def execute_coder_node(
     # même pattern. Si indisponible, cdt = [] et le Coder tourne sans preview.
     with context7_tools() as c7_tools, chrome_devtools_tools() as cdt_tools:
         # Outils fichiers + recherche. Context7 (doc de libs à jour) est ajouté si
-        # CONTEXT7_API_KEY est configurée. Le Coder décide QUAND l'utiliser via le
-        # skill context7-research (dormant sur vanilla, actif sur libs externes).
-        coder_tools = [list_directory, read_file, write_file, append_file, edit_file, search_replace, multi_replace, DuckDuckGoSearchTool()]
+        from .tools import (
+            read_file, write_file, append_file, list_directory,
+            bash_command, search_replace, multi_replace, edit_file,
+            read_python_skeleton
+        )
+        coder_tools = [list_directory, read_file, read_python_skeleton, write_file, append_file, edit_file, search_replace, multi_replace, DuckDuckGoSearchTool()]
         coder_tools.extend(c7_tools)
         # F-45 : Chrome DevTools (navigate_page, take_screenshot, list_console_messages,
         # click, fill...) pour auto-valider visuellement la page générée AVANT
