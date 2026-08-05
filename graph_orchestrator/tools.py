@@ -542,3 +542,24 @@ def multi_replace(path: str, replacements: list) -> str:
         return (f"ERROR: file '{path}' does not exist. Use write_file to CREATE a new file.")
     except Exception as e:
         return f"Error editing file {path}: {str(e)}"
+
+@tool
+def log_event(event_type: str, details: str) -> str:
+    """Logs a major event in the execution history.
+    Use this to keep a trace of the execution instead of writing to a text file.
+    
+    Args:
+        event_type: The type of event (e.g., 'init', 'gen', 'eval', 'fix', 'error').
+        details: A description of the event.
+    """
+    try:
+        from .idempotency import get_current_store
+        from .event_stream import get_event_db
+        store = get_current_store()
+        run_id = store.run_id if (store and store.run_id) else "unknown_run"
+        
+        db = get_event_db()
+        db.log_event(run_id, "agent", event_type, details)
+        return "Event logged successfully."
+    except Exception as e:
+        return f"Error logging event: {str(e)}"

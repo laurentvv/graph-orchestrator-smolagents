@@ -35,6 +35,7 @@ class WebTestRunner:
         # (ex: le runner Python n'en a pas besoin).
         from mcp import StdioServerParameters
         from smolagents import ToolCollection, CodeAgent, OpenAIServerModel
+        from graph_orchestrator.compaction import CompactingCodeAgent
 
         from ..nodes import run_with_retry, resolve_verbosity, _detect_idle_step
         from ..skills_loader import load_skill_body
@@ -267,7 +268,7 @@ final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Un r√
                         max_tokens=settings.reasoning_max_tokens,
                         client_kwargs={"timeout": settings.llm_timeout_s},
                     )
-                    local_tester = CodeAgent(
+                    local_tester = CompactingCodeAgent(
                         tools=tester_tools,
                         model=dynamic_tester_model,
                         name=f"tester_{task['id'].replace('-', '_')}",

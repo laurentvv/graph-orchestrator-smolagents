@@ -11,6 +11,15 @@ import json
 import argparse
 from datetime import datetime
 
+# Défaut du chemin DuckDB : on réutilise la constante canonique du paquet
+# (data/graph_orchestrator.db, ancrée au paquet) pour rester cohérent avec le
+# runner/agent_server. Fallback si le paquet n'est pas importable (script lancé
+# hors venv).
+try:
+    from graph_orchestrator.config import DEFAULT_KG_PATH as _DEFAULT_KG_PATH
+except Exception:
+    _DEFAULT_KG_PATH = "data/graph_orchestrator.db"
+
 def parse_log_file(log_path: str):
     print(f"[*] Analyse du log : {log_path}")
     
@@ -200,7 +209,7 @@ def main():
     parser.add_argument("--logs-dir", type=str, default=os.environ.get("LOGS_DIR", "logs"),
                         help="Répertoire de découverte auto des logs (défaut : $LOGS_DIR ou 'logs')")
     parser.add_argument("--out", type=str, default="analysis_report.md", help="Fichier de sortie Markdown")
-    parser.add_argument("--db", type=str, default="graph_orchestrator.db", help="Chemin de la base DuckDB")
+    parser.add_argument("--db", type=str, default=_DEFAULT_KG_PATH, help="Chemin de la base DuckDB (défaut : data/graph_orchestrator.db ancré au paquet)")
     args = parser.parse_args()
 
     log_file = args.log

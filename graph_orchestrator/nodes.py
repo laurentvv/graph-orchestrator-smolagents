@@ -253,10 +253,8 @@ async def run_with_retry(
             last_metrics = _metrics_from_run(agent, run_result)
 
             # P3 (Anti-Loop) : enregistre les tool calls de CETTE exécution dans
-            # le guard. On scanne tous les steps produits (un agent.run peut
-            # enchaîner plusieurs ActionStep). Si une action dépasse le seuil de
-            # répétition, on interrompt tout de suite — inutile de parser/valider
-            # une sortie produite en bouclant.
+            # le guard.
+            loop_msg = None
             if loop_guard is not None:
                 steps = getattr(getattr(agent, "memory", None), "steps", None) or []
                 for step in steps:
@@ -268,15 +266,30 @@ async def run_with_retry(
                         f"[!] Anti-Loop (Tentative {attempt + 1}/{max_retries}) : "
                         f"action répétée {loop_guard.threshold}+ fois → circuit-breaker."
                     )
-                    # On ne renvoie pas None silencieusement : on injecte le
-                    # message dans le prompt pour un éventuel retry, qui aura
-                    # une chance de casser la boucle (si retries restants).
                     prompt += f"\n\n{loop_msg}"
+
+            if validated:
+                error_msg = None
+                if hasattr(validated, "vision_ok") and node_kind == "coder":
+                    is_frontend = any(t.name == "take_screenshot" for t in getattr(agent, "tools", {}).values())
+                    if is_frontend:
+                        used_vision = False
+                        steps = getattr(getattr(agent, "memory", None), "steps", None) or []
+                        for step in steps:
+                            code = str(getattr(step, "model_output", "")) + str(getattr(step, "code_action", ""))
+                            if "take_screenshot" in code:
+                                used_vision = True
+                                break
+                        if not used_vision:
+                            error_msg = "ERREUR FATALE: Tu as déclaré la tâche terminée mais tu n'as PAS utilisé 'take_screenshot' pour vérifier visuellement ton UI. C'est OBLIGATOIRE. Recommence, navigue sur la page, prends le screenshot, et vérifie que ça marche vraiment."
+                
+                if loop_msg:
+                    pass # anti-loop caught it
+                elif error_msg:
+                    print(f"[-] Checklist échouée : {error_msg}")
+                    prompt += f"\n\n{error_msg}"
+                    validated = None
                 else:
-                    if validated:
-                        return validated, last_metrics
-            else:
-                if validated:
                     return validated, last_metrics
 
             # F-33 (1) : tour sans tool call exécuté ? (modèle réfléchit sans agir)
@@ -523,9 +536,9 @@ async def execute_coder_node(
         from .tools import (
             read_file, write_file, append_file, list_directory,
             bash_command, search_replace, multi_replace, edit_file,
-            read_python_skeleton, check_run_state
+            read_python_skeleton, check_run_state, log_event
         )
-        coder_tools = [list_directory, read_file, read_python_skeleton, write_file, append_file, edit_file, search_replace, multi_replace, check_run_state, DuckDuckGoSearchTool()]
+        coder_tools = [list_directory, read_file, read_python_skeleton, write_file, append_file, edit_file, search_replace, multi_replace, check_run_state, log_event, DuckDuckGoSearchTool()]
         coder_tools.extend(c7_tools)
         # F-45 : Chrome DevTools (navigate_page, take_screenshot, list_console_messages,
         # click, fill...) pour auto-valider visuellement la page générée AVANT
@@ -700,8 +713,10 @@ Tu écris du code Python dans un bloc ````python ... ```` qui appelle tes outils
 resultat = write_file(path="index.html", content="<!DOCTYPE html>\\n<html>...</html>")
 print(resultat)
 # ... autres appels ...
-final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Fichiers créés."}})
+final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Fichiers créés.", "linter_ok": True, "vision_ok": True}})
 ```
+NOTE CRITIQUE : "linter_ok" doit être True SEULEMENT si tu as vérifié ton code via linter/test.
+"vision_ok" doit être True SEULEMENT pour une UI ET si tu as pris un screenshot via take_screenshot. Sinon False.
 
 
         {strategy_block}

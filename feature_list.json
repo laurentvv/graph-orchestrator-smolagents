@@ -580,16 +580,6 @@
       ]
     },
     {
-      "id": "F-69",
-      "name": "Budget LLM USD + Queue de runs à leases/reaper",
-      "description": "Priorité P3-bis du plan usine logicielle (audit cohérence INDEX fiche 14-qm, 2026-08-04). Deux briques runtime qm oubliées. (1) BUDGET LLM USD : createBudgetTracker qui suit le coût USD estimé (estimateCostUsd par fenêtre glissante 24h) et bloque l'exécution au-delà d'un plafond — coupe-circuit FINANCIER distinct du circuit-breaker itératif (F-36) et du max_iter (F-22) qui limitent les boucles, pas le coût. Priorité basse aujourd'hui (GPU-local = coût marginal nul) MAIS pré-requis avant tout passage en prod distant payant. ⚠️ Ne pas confondre avec ToolOutputBudgetMiddleware deer-flow (P8) qui tronque des tokens d'output d'outil. (2) QUEUE DE RUNS À LEASES : modélise la reprise après crash comme une queue (claim + heartbeat + reapExpired pour les runs abandonnés + errorParks pour les échecs). Complète le checkpoint F-24 qui ne gère que la reprise d'un run EN COURS, pas la détection/nettoyage des runs ABANDONNÉS (process tué, VRAM saturée). À reloger sur DuckDB. Inclut garde pour la compaction async (P9) : leases typés par rôle LeaseHolder (turn/compaction/fork) pour qu'une compaction async n'écrase pas un turn en cours. Référence : references/qm/src/ratelimit/budget.ts + runs/run-store.ts + sessions/session-store.ts.",
-      "status": "pending",
-      "dependencies": [
-        "F-24",
-        "F-36"
-      ]
-    },
-    {
       "id": "F-70",
       "name": "Diff multi-fichiers + métriques de benchmark du Judge",
       "description": "Sous-section P6-bis du plan usine logicielle (audit cohérence INDEX fiches 09-open-swe + 20-code-review-graph, 2026-08-04). Le Judge (F-44) exige « IN-DIFF ONLY » mais ne dispose pas de brique pour CONSTRUIRE ce diff multi-fichiers (runs/ est versionné git local depuis F-53, mais le diff n'est consommé que par le Tester ciblé, pas formalisé pour le Judge). (a) Diff full-content multi-fichiers à la build_pr_diff_files (open-swe) ; (b) format de sortie structuré Risk Assessment / File-by-File / Recommendations (skills/review-pr/SKILL.md code-review-graph) ; (c) MÉTRIQUES quantitatives de benchmark (compute_precision_recall + compute_mrr, eval/scorer.py code-review-graph) — aujourd'hui le Judge n'est évalué que qualitativement (lecture de logs), indispensable pour la P15 Meta-Analyste et toute regression-test du Judge.",
@@ -619,6 +609,20 @@
       "description": "Validation de la Priorité 10 (Skill Activation Middleware, Découplage Structurel des Skills, Manuel MCP, Graceful Degradation). Mise en place d'un chargement paresseux (lazy loading), découplage des fichiers SKILL.md (scripts/ et references/), et formalisation de la gestion des dépendances d'outils via 2 ADRs.",
       "status": "completed",
       "dependencies": []
+    },
+    {
+      "id": "F-74",
+      "name": "Historisation Multi-BDD DuckDB et Nettoyage des Logs",
+      "description": "Validation de la Priorité 11 (Event Stream). Création de bases DuckDB dédiées (ex: runs_history.duckdb, event_stream.duckdb) pour isoler les statistiques, suivre la consommation des tokens et remplacer la croissance infinie des fichiers plats (log.md, traces).",
+      "status": "pending",
+      "dependencies": []
+    },
+    {
+      "id": "F-75",
+      "name": "Migration KG DuckDB vers data/ (chemin ancré au paquet)",
+      "description": "Déplacement de graph_orchestrator.db de la racine du repo vers data/. Chemin par défaut ancré au paquet via config.DEFAULT_KG_PATH (résolu depuis graph_orchestrator/config.py → repo_root/data/), indépendant du cwd et résistant au chdir du workflow. Cohérent avec event_stream.py (DEFAULT_EVENT_DB_PATH) et runs_history.py (DEFAULT_HISTORY_DB_PATH) qui placent déjà leurs .duckdb dans data/. Création auto du dossier parent dans KnowledgeGraph.__init__. Impact : config.py, knowledge_graph.py, scripts/run_analyzer.py, .env*, docstrings. VALIDÉ : KnowledgeGraph lit data/graph_orchestrator.db (63 claims, 17 entities intacts), analyzer trouve la DB sans --db, pytest 30 passed.",
+      "status": "completed",
+      "dependencies": ["F-03"]
     }
   ]
 }

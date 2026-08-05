@@ -12,12 +12,14 @@ Avantages clés (cf. guide §5) :
   - Survie à l'effacement du contexte (persistance fichier).
   - Déduplication durable (clé de hash normalisée).
 
-Persistance : fichier DuckDB unique (KG_PATH, défaut "graph_orchestrator.db").
+Persistance : fichier DuckDB unique (KG_PATH, défaut "data/graph_orchestrator.db"
+ancré au paquet via config.DEFAULT_KG_PATH — indépendant du cwd).
 Pour les tests : KnowledgeGraph(":memory:") — graphe volatil en RAM.
 """
 
 import hashlib
 import json
+import os
 from datetime import datetime, timedelta
 from typing import List, Optional
 
@@ -44,6 +46,12 @@ class KnowledgeGraph:
     def __init__(self, path: str = ":memory:"):
         # read_write, create_if_not_exists
         self.path = path
+        # S'assurer que le dossier parent existe (ex: data/). DuckDB crée le
+        # fichier mais PAS le répertoire parent — sans cela, un chemin ancré au
+        # paquet (data/graph_orchestrator.db) lèverait si data/ est absent.
+        # Cohérent avec event_stream.py / runs_history.py qui font de même.
+        if path != ":memory:":
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         self.conn = duckdb.connect(path, read_only=False) if path != ":memory:" else duckdb.connect(":memory:")
         self._init_schema()
 

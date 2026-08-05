@@ -58,17 +58,16 @@ Tu ne dois jamais te fier uniquement à ta fenêtre de contexte pour suivre l'av
     - [ ] Étape 3 : Écriture du code logique.
     ```
 
-### D. `log.md`
-* **Rôle** : Journal d'exécution chronologique en mode ajout seul (append-only). Rien ne doit y être effacé. Chaque événement majeur y est empilé.
-* **Cycle de vie** : Une entrée est ajoutée au début et à la fin de chaque action.
-* **Format strict obligatoire** (inclure l'heure exacte) :
-    ```markdown
-    # Journal d'Exécution (Append-Only)
-
-    ## [AAAA-MM-JJ HH:MM:SS] init | Initialisation du workspace et négociation du contrat.md
-    ## [AAAA-MM-JJ HH:MM:SS] gen  | Écriture du script principal et génération des structures JSON.
-    ## [AAAA-MM-JJ HH:MM:SS] eval | Échec de la validation du contrat sur le critère 2 (Structure incorrecte).
-    ## [AAAA-MM-JJ HH:MM:SS] fix  | Correction de la sérialisation et ré-exécution de la boucle.
+### D. Historisation Événementielle (DuckDB)
+* **Rôle** : L'ancien fichier `log.md` est supprimé au profit d'une base de données analytique structurée (DuckDB). Cela évite la saturation du contexte et permet des requêtes avancées post-mortem.
+* **Cycle de vie** : À chaque événement majeur (début de tâche, erreur inattendue, validation de sous-tâche), tu DOIS appeler l'outil `log_event` au lieu d'écrire dans un fichier texte.
+* **Usage** : 
+    ```python
+    # Appel d'outil (Python CodeAgent)
+    log_event(
+        event_type="init", # ou "gen", "eval", "fix", "error"
+        details="Initialisation du workspace et négociation du contrat."
+    )
     ```
 
 ## 3. Directives Opérationnelles pour la Boucle d'Exécution

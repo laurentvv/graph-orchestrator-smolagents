@@ -9,9 +9,8 @@ import json
 import os
 import requests
 import re
-from typing import Any, List, Literal, Optional
-
-from pydantic import BaseModel, ValidationError
+from typing import List, Optional, Any, Literal, Dict, Union
+from pydantic import BaseModel, Field, ConfigDict, field_validator, ValidationError
 
 
 # ==========================================
@@ -115,8 +114,8 @@ class CoderOutput(BaseModel):
     task_id: str
     status: Literal["success", "failure"]
     details: str
-
-
+    linter_ok: bool = Field(default=False, description="As-tu vérifié ton code via le linter ou un test unitaire ?")
+    vision_ok: bool = Field(default=False, description="Pour une tâche Frontend, as-tu navigué sur la page ET pris un screenshot pour vérifier le rendu visuel ?")
 class SecurityOutput(BaseModel):
     """Verdict du noeud d'audit de sécurité sur le code généré."""
     task_id: str
