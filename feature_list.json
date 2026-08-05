@@ -603,7 +603,7 @@
       "id": "F-71",
       "name": "Compression de code par skeleton (libcst, get_skeleton)",
       "description": "Priorité P9 du plan usine logicielle (audit cohérence INDEX fiche 04-repograph, 2026-08-04). Réduire le contexte LLM en remplaçant les corps de fonctions par ... via get_skeleton (garde ClassDef/FunctionDef/docstrings/constantes, supprime le corps). ORTHOGONAL au KG structural (P4 HORS-SCOPE) : ce n'est pas une brique de knowledge graph, c'est un utilitaire de réduction de contexte applicable même en création de code (ex: réinjecter l'existant runs/ ou un fichier partiellement écrit au Coder pour qu'il l'étende sans consommer tout le budget tokens). Le plan avait jeté get_skeleton avec le reste du trio académique RepoGraph/axon/graphify en P4 — à tort, classé séparément 🟢 Haute dans le Hall of Fame. Référence : references/RepoGraph/agentless/util/compress_file.py (CompressTransformer, get_skeleton, pur libcst indépendant).",
-      "status": "pending",
+      "status": "completed",
       "dependencies": []
     },
     {
@@ -611,6 +611,13 @@
       "name": "Outils Python dédiés pour simplification des Prompts (Prompt Offloading)",
       "description": "Créer le maximum d'outils Python (tools dédiés) pour encapsuler la complexité (scripts JS, algorithmes longs) au lieu de l'injecter sous forme de texte brut dans les prompts systèmes des nœuds. Modèle : Web Tester (puppeteer_clean_dom, puppeteer_add_visual_tags). Réduit drastiquement la taille du prompt (pre-fill), allège la charge cognitive (baisse des crash de parsing JSON des petits LLMs) et accélère l'exécution.",
       "status": "pending",
+      "dependencies": []
+    },
+    {
+      "id": "F-73",
+      "name": "Contexte à la Demande et Doctrine des Skills",
+      "description": "Validation de la Priorité 10 (Skill Activation Middleware, Découplage Structurel des Skills, Manuel MCP, Graceful Degradation). Mise en place d'un chargement paresseux (lazy loading), découplage des fichiers SKILL.md (scripts/ et references/), et formalisation de la gestion des dépendances d'outils via 2 ADRs.",
+      "status": "completed",
       "dependencies": []
     }
   ]

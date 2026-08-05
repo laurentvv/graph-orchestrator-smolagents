@@ -36,6 +36,7 @@ We don't waste expensive AI cycles verifying simple typos. Before any file is va
 - **The Static Tester** checks the web mechanics (are the buttons actually clickable?).
 - **The Anti-Loop Circuit Breaker** mathematically detects if the agent makes the exact same mistake 3 times in a row, triggering an Escalation (auto-post-mortem).
 - **The Read-Before-Write Gate** strictly forbids an agent from editing a file it hasn't read first.
+- **Context Compaction & Lazy Loading** dynamically compresses Python code via AST (Abstract Syntax Trees) and only loads tool documentations into context when explicitly requested, guaranteeing the agent never suffers from "Context Overflow".
 
 ---
 
