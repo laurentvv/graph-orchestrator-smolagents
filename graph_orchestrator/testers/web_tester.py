@@ -254,6 +254,15 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
    tester, utilise l'outil `read_file(path="...")` (ex: `read_file(path="index.html")`).
    Pour lister les fichiers du run : `list_directory()`. Diagnostiqué sur run 1507
    où le Tester gaspillait 6 steps en `open()` puis `read_file()` interdits → timeout 600s.
+5. ANIMATION = TEST TEMPOREL, PAS ÉTAT FINAL : pour un visualiseur/animation, NE JAMAIS
+   te contenter d'attendre un délai fixe (ex: `setTimeout(r, 2000)`) puis vérifier l'état
+   final — une animation **instantanée** (exécutée en 1 frame au lieu de progresser) passe
+   ce test alors que c'est un bug grave. Tu DOIS mesurer la progression dans le temps :
+   identifie un signal de progression dans le DOM (compteur, éléments marqués, attribut
+   changeant), snapshot AVANT de déclencher l'action, re-snapshot après un court délai
+   (~400ms), et vérifier que la progression est PARTIELLE (ni 0 ni terminale, si
+   l'animation doit durer > 400ms). Une animation qui termine en < 50ms est un BUG
+   (instantanée), pas un succès. Voir la recette temporelle dans le skill.
 
 ### FORMAT DE SORTIE (obligatoire)
 Tu écris du code Python dans un bloc ````python ... ```` qui appelle tes outils.

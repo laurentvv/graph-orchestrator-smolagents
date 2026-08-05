@@ -386,3 +386,134 @@ def test_node_absent_degrades(monkeypatch):
     html = "<script>let x: number = 1;</script>"  # TS (aurait dû FAIL)
     errs = _check_js_syntax(html)
     assert errs == [], "node absent → pas d'échec faux (le LLM Tester prend le relais)"
+
+
+# ==========================================
+# Tier 3 — Animation temporelle (skip si Chrome absent)
+# ==========================================
+# HTML du bug réel diagnostiqué (run 2026-08-05_1602_bubble_sort) : performStep()
+# contient les deux boucles imbriquées complètes → tout le tri en 1 tick JS.
+INSTANT_ANIMATION_HTML = """<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>.visualization{height:300px;display:flex;align-items:flex-end;background:#eee;padding:4px}
+.bar{flex:1;min-width:6px;background:#4a90d9}.bar.sorted{background:#39e6c4}</style>
+</head><body>
+<div class="visualization" id="visualization"></div>
+<button id="startBtn">Démarrer</button>
+<div>Comparaisons: <span id="counter">0</span></div>
+<script>
+let array=[],comparisons=0,delay=50;
+function init(){
+  const c=document.getElementById('visualization');c.innerHTML='';array=[];comparisons=0;
+  document.getElementById('counter').textContent=0;
+  for(let i=0;i<30;i++){const v=Math.floor(Math.random()*100)+1;array.push(v);
+    const b=document.createElement('div');b.className='bar';b.style.height=(v*2)+'px';c.appendChild(b);}
+}
+function performStep(){
+  const bars=document.querySelectorAll('.bar');const n=array.length;
+  for(let i=0;i<n-1;i++){for(let j=0;j<n-i-1;j++){
+    comparisons++;document.getElementById('counter').textContent=comparisons;
+    if(array[j]>array[j+1]){[array[j],array[j+1]]=[array[j+1],array[j]];
+      [bars[j].style.height,bars[j+1].style.height]=[bars[j+1].style.height,bars[j].style.height];}
+  }bars[n-i-1].classList.add('sorted');}
+}
+document.getElementById('startBtn').addEventListener('click',()=>{performStep();});
+init();
+</script></body></html>"""
+
+# HTML correct : progression sur ~2s (await sleep entre swaps), non terminal à 400ms.
+PROGRESSIVE_ANIMATION_HTML = """<!DOCTYPE html><html><head><meta charset="UTF-8">
+<style>.visualization{height:300px;display:flex;align-items:flex-end;background:#eee;padding:4px}
+.bar{flex:1;min-width:6px;background:#4a90d9}.bar.sorted{background:#39e6c4}</style>
+</head><body>
+<div class="visualization" id="visualization"></div>
+<button id="startBtn">Démarrer</button>
+<div>Comparaisons: <span id="counter">0</span></div>
+<script>
+let array=[],comparisons=0,sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function init(){
+  const c=document.getElementById('visualization');c.innerHTML='';array=[];comparisons=0;
+  document.getElementById('counter').textContent=0;
+  for(let i=0;i<12;i++){const v=Math.floor(Math.random()*100)+1;array.push(v);
+    const b=document.createElement('div');b.className='bar';b.style.height=(v*2)+'px';c.appendChild(b);}
+}
+async function sort(){
+  const n=array.length,bars=document.querySelectorAll('.bar');
+  for(let i=0;i<n-1;i++){for(let j=0;j<n-i-1;j++){
+    comparisons++;document.getElementById('counter').textContent=comparisons;
+    if(array[j]>array[j+1]){[array[j],array[j+1]]=[array[j+1],array[j]];
+      [bars[j].style.height,bars[j+1].style.height]=[bars[j+1].style.height,bars[j].style.height];}
+    await sleep(30);}bars[n-i-1].classList.add('sorted');}
+}
+document.getElementById('startBtn').addEventListener('click',()=>{sort();});
+init();
+</script></body></html>"""
+
+
+def test_instant_animation_perform_step_loop(tmp_path):
+    """Le bug du run 2026-08-05_1602 : performStep() contient tout l'algorithme
+    → animation instantanée. Le Tier 3 DOIT la détecter.
+
+    On isole le verdict Tier 3 : peu importe les autres bugs (Tier 1/2), on vérifie
+    qu'une erreur "[temporal]"/"instantanée" est présente. Si Chrome indispo → skip.
+    """
+    p = _write(tmp_path, "index.html", INSTANT_ANIMATION_HTML)
+    res = static_check_html(p, run_devtools=True, run_temporal=True)
+    if res.tier_reached != "tier3":
+        pytest.skip("Chrome DevTools indispo dans l'env de test — Tier 3 testé en live.")
+    temporal_errors = [e for e in res.errors if "instantanée" in e or "[temporal]" in e]
+    assert temporal_errors, f"Le Tier 3 doit détecter l'animation instantanée: {res.errors}"
+
+
+def test_progressive_animation_passes(tmp_path):
+    """Une animation légitime (await sleep entre swaps, ~2s) ne doit PAS être
+    flagguée par le Tier 3 (pas de faux positif). À 400ms l'animation n'est pas
+    terminale → pas de flag [temporal].
+
+    On isole le verdict Tier 3 : aucune erreur "[temporal]"/"instantanée".
+    """
+    p = _write(tmp_path, "index.html", PROGRESSIVE_ANIMATION_HTML)
+    res = static_check_html(p, run_devtools=True, run_temporal=True)
+    if res.tier_reached != "tier3":
+        pytest.skip("Chrome DevTools indispo dans l'env de test — Tier 3 testé en live.")
+    temporal_errors = [e for e in res.errors if "instantanée" in e or "[temporal]" in e]
+    assert not temporal_errors, f"Animation légitime ne doit pas être flagguée par le Tier 3: {temporal_errors}"
+
+
+def test_temporal_disabled_env(tmp_path):
+    """run_temporal=False → le Tier 3 ne s'exécute pas, donc le bug d'animation
+    instantanée n'est PAS détecté (même avec Chrome dispo).
+
+    On isole la désactivation du Tier 3 : peu importe les autres bugs (Tier 1/2),
+    on vérifie juste qu'aucune erreur "[temporal]"/"instantanée" n'est rapportée
+    ET que tier_reached n'atteint pas "tier3".
+    """
+    p = _write(tmp_path, "index.html", INSTANT_ANIMATION_HTML)
+    res = static_check_html(p, run_devtools=True, run_temporal=False)
+    # Le Tier 3 n'a pas tourné → pas de message d'animation instantanée.
+    assert all("instantanée" not in e for e in res.errors), res.errors
+    assert all("[temporal]" not in e for e in res.errors), res.errors
+    assert res.tier_reached != "tier3", f"Tier 3 ne doit pas s'exécuter: {res.tier_reached}"
+
+
+def test_temporal_env_var_optout(tmp_path, monkeypatch):
+    """STATIC_TESTER_TEMPORAL=0 → l'env-var désactive le Tier 3 au niveau du nœud."""
+    monkeypatch.setenv("STATIC_TESTER_TEMPORAL", "0")
+    p = _write(tmp_path, "index.html", INSTANT_ANIMATION_HTML)
+    res, _ = execute_static_tester_node(
+        {"id": "st3", "target_files": [p]}, settings=None
+    )
+    # Le bug d'animation instantanée est spécifique au Tier 3. Sans lui, ce message
+    # n'apparaît jamais dans les détails (les autres bugs Tier 1/2 peuvent être là).
+    assert "instantanée" not in res.details, "Tier 3 désactivé ne doit pas flaguer l'animation"
+
+
+def test_temporal_no_progress_signal_skip():
+    """Une page sans compteur ni .sorted → signal indétectable → le Tier 3 ne
+    flag PAS (jamais de faux positif). On appelle _evaluate_temporal directement
+    avec une sonde qui ne trouve rien à mesurer."""
+    import graph_orchestrator.static_tester as st
+
+    # _evaluate_temporal sans DevTools → retourne [] (skip), pas de flag.
+    errs = st._evaluate_temporal([], "file:///dummy", "startBtn")
+    assert errs == [], "Sans DevTools ou signal, le Tier 3 doit skip sans flaguer."
+

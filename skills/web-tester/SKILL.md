@@ -182,6 +182,33 @@ Règles de syntaxe générales :
   return JSON.stringify(bars) === JSON.stringify(sorted);
 })()
 ```
+⚠️ La recette ci-dessus vérifie l'**état final** seulement. Elle **passe** même si
+l'animation est **instantanée** (exécutée en 1 frame au lieu de progresser) — un bug
+grave. Pour un visualiseur/animation, AJOUTE obligatoirement la recette temporelle
+ci-dessous qui mesure la **progression dans le temps**.
+
+*Temporal — progression mesurée (DÉTECTE les animations instantanées) avec puppeteer_evaluate :*
+```javascript
+(async () => {
+  // Trouve un signal de progression sur la page (adapte aux éléments RÉELS du DOM) :
+  // - un compteur (texte numérique qui augmente), OU
+  // - le nombre d'éléments marqués "terminés" (classe/style distinctif), OU
+  // - tout attribut qui change au fil de l'animation.
+  const signal = () => { /* retourne un nombre croissant */ };
+  const t0 = signal();
+  // Déclenche l'action qui lance l'animation (clic sur le bouton principal — adapte l'id) :
+  document.querySelector('button').click();
+  await new Promise(r => setTimeout(r, 400));     // fenêtre courte
+  const t1 = signal();
+  // Doit avoir progressé SANS être déjà terminal si l'animation dure > 400ms.
+  return JSON.stringify({ t0, t1, progressed: t1 > t0 });
+})()
+```
+**IMPORTANT** : tu dois DÉCOUVRIR le signal de progression et le déclencheur depuis le HTML
+réel de la page (lis le source d'abord via `read_file` ou `puppeteer_clean_dom`), pas
+deviner des ids. Verdict : `progressed === false` après 400ms = animation **instantanée** ou
+non démarrée → investigager (FAIL si l'animation est censée être visible). `t1 > t0` =
+l'animation progresse bien dans le temps → OK.
 
 *Counter value (pure expression):*
 ```javascript

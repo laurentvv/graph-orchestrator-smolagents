@@ -98,6 +98,35 @@ Le navigateur n'a qu'un seul thread. Une boucle `while (swapped)` ou un `for` lo
 `const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));`
 Puis dans tes boucles : `await sleep(vitesse);`. Sans ça, l'agent de test échouera à voir la moindre animation.
 
+### Granularité de la fonction de step (complément indispensable)
+
+La règle ci-dessus porte sur le **threading** (libérer le Main Thread). Il en manque une
+seconde, sur la **structure** : la fonction appelée à chaque étape (`step`, `tick`,
+`performStep`, le callback de `requestAnimationFrame`) ne doit avancer que d'**UNE SEULE**
+étape de l'algorithme par appel — **JAMAIS** contenir les boucles `for`/`while` complètes
+de l'algorithme.
+
+Pourquoi : si tu mets la totalité de l'algorithme dans la fonction de step, tout
+s'exécute en un seul tick JS. Le navigateur ne repeint qu'après → l'utilisateur ne voit que
+l'état final, le `delay`/slider de vitesse ne contrôle plus rien, et le Static Tester Tier 3
+détectera une animation « instantanée » (bug).
+
+**Pattern correct (abstrait)** : conserve l'état de progression (indices, données) dans des
+variables persistantes hors de la fonction. À chaque appel, avance d'**un seul pas** de
+l'algorithme, mets à jour le rendu, puis re-programme la frame suivante :
+```js
+// état persistant hors de la fonction (adapte à TON algorithme)
+function step() {
+  if (estTermine()) { terminer(); return; }
+  avancerUnSeulPas();      // UNE étape de l'algorithme, pas tout
+  rendre();                // met à jour le DOM
+  requestAnimationFrame(step);  // re-programme la frame suivante
+}
+```
+Avec `await sleep(vitesse)` dans une boucle `async`, l'équivalent est une boucle qui `await`
+à chaque itération — mais **une seule itération par `await`**, jamais l'algorithme complet
+d'un bloc.
+
 ## Format de réponse final
 
 Quand tu as résolu la tâche, utilise `final_answer` avec :
