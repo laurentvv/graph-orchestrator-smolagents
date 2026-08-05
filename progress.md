@@ -572,29 +572,48 @@ odes.py et web_tester.py pour exiger une DÉCLARATION de fonction asynchrone non
   +critères 215-227, plan_usine_logicielle.md P1 case cochée, progress.md, README.md,
   log.md). Commit + push + PR.
 
-## Jalons de l'Itération (cycle Skills à la demande / Coder lazy loading — F-57 Phase 1, Priorité 10)
+## Jalons de l'Itération (cycle Skills à la demande / Coder — F-57 Phase 1, Priorité 10)
+> **Note de pivot (v3)** : le design initial v1 (lazy loading via tool `load_skill`
+> + flag `SKILL_LAZY_LOADING_ENABLED`) a **échoué en run de validation** : le Coder
+> 9B n'appelait pas l'outil, perdant les skills conditionnels. Pivot vers v3 =
+> **sélection par l'Architect** (injection directe fiable à 100%) + budget tokens.
+> Le tool `load_skill` reste disponible pour la flexibilité (re-consulter un skill),
+> mais n'est plus le mécanisme principal.
 - [x] Étape F57-1 : Plan approuvé (2 phases : Phase 1 = Coder pour prouver le gain
   tokens ; Phase 2 = généralisation aux nœuds DSPy UNIQUEMENT si Phase 1 performante).
   Baseline = run 2026-08-04_1816_bubble_sort (index.html 255 lignes one-shot).
   Décisions : mécanisme input field methodology_context pour DSPy (Phase 2),
-  découplage EAGER vs LAZY par criticité (3 EAGER critiques, 3 LAZY conditionnels).
-- [x] Étape F57-2 : `graph_orchestrator/skills_loader.py` — nouvelle API additive :
-  EAGER_SKILLS_CODER (set de 3), _parse_frontmatter_yaml (défensif, jamais lève),
-  parse_skill_meta (tuple name+desc, None si absent), build_skills_catalog
-  (metadata de TOUS, ~100 tokens/skill, directive load_skill), build_eager_skills_block
-  (corps des 3 EAGER only). build_skills_block + select_skills_for_coder CONSERVÉS
-  (rétrocompat, tests existants + WebTester en dépendent).
-- [x] Étape F57-3 : `graph_orchestrator/skill_loader_tool.py` (nouveau) — @tool
+  socle ALWAYS (3 skills critiques) vs skills conditionnels (sélection regex).
+- [x] Étape F57-2 : `graph_orchestrator/skills_loader.py` — API additive :
+  ALWAYS_SKILLS_CODER (set de 3, ex-EAGER_SKILLS_CODER renommé), _parse_frontmatter_yaml
+  (défensif, jamais lève), parse_skill_meta (tuple name+desc, None si absent, pour
+  nœuds DSPy), count_skill_tokens (tiktoken cl100k_base + mémo + repli chars/4),
+  enforce_skill_budget (rogne « petits d'abord », socle ALWAYS toujours conservé),
+  build_conditional_skills_block (repli regex si Architect n'a rien sélectionné).
+  build_skills_catalog / build_eager_skills_block / EAGER_SKILLS_CODER CONSERVÉS
+  en alias dépréciés (rétrocompat tests). build_skills_block + select_skills_for_coder
+  CONSERVÉS (WebTester en dépend).
+- [x] Étape F57-3 : `graph_orchestrator/skill_loader_tool.py` — @tool
   load_skill(skill_name) retourne corps complet (load_skill_body) ou message si
-  introuvable, fail-open jamais ne lève. Déterministe, 0 LLM, 0 réseau.
-- [x] Étape F57-4 : `graph_orchestrator/nodes.py execute_coder_node` — branchement :
-  si settings.skill_lazy_loading_enabled → eager_block + catalog_block (remplace
-  skills_block) + outil load_skill ajouté à coder_tools. Sinon fallback build_skills_block.
-- [x] Étape F57-5 : `graph_orchestrator/config.py` + `.env.example` + `.env` local —
-  skill_lazy_loading_enabled: bool = True + _get_bool("SKILL_LAZY_LOADING_ENABLED", True).
-- [x] Étape F57-6 : `tests/test_skill_lazy_loading.py` — 30 tests (EAGER 3, frontmatter
-  parser 4, parse_skill_meta 4, build_skills_catalog 6, build_eager_skills_block 5,
-  load_skill tool 4, non-régression 4). 30/30 PASS.
+  introuvable, fail-open jamais ne lève. Déterministe, 0 LLM, 0 réseau. Rôle v3 =
+  flexibilité (re-consulter un skill), PAS mécanisme principal d'injection.
+- [x] Étape F57-4 : `graph_orchestrator/nodes.py execute_coder_node` — branchement v3 :
+  l'Architect sélectionne `subtask.skills` → `enforce_skill_budget(budget=skill_budget_tokens)`
+  → injection corps complet directe. Repli `build_conditional_skills_block` (regex) si
+  l'Architect n'a rien sélectionné. Outil `load_skill` ajouté à coder_tools pour la
+  flexibilité. ArchitectOutput/SubTask gagnent les champs `skills`/`tester_skills`/
+  `judge_skills` (models.py l.76-81).
+- [x] Étape F57-5 : **Pivot F-57 v3** (le lazy loading via tool a échoué en run :
+  le Coder 9B n'appelait pas `load_skill`, cf. commentaire skills_loader.py l.166-179).
+  Nouveau design = **sélection par l'Architect** (`subtask.skills` dans ArchitectOutput,
+  models.py l.76-81) + budget tokens anti-saturation. `config.py` + `.env.example` +
+  `.env` local — `skill_budget_tokens: int = 8000` (défaut, ~24% du contexte Qwen 9B)
+  + `_get_int("SKILL_BUDGET_TOKENS", 8000)`. AUCUN flag `skill_lazy_loading_enabled`
+  (abandonné : le mécanisme n'est plus conditionnel à un opt-out).
+- [x] Étape F57-6 : `tests/test_skill_lazy_loading.py` — 33 tests / 8 classes v3
+  (AlwaysSkillsCoder 3, CountSkillTokens 6, EnforceSkillBudget 6, BuildConditional-
+  SkillsBlock 4, LoadSkillTool 3, ArchitectTaskSkillsField 3, CatalogueEtendu 4,
+  NonRegression 4). 33/33 PASS.
 - [x] Étape F57-7 : Validation — py_compile OK (5 fichiers) + smoke test (system prompt
   -36.8% par step : 17386→10988 chars sur tâche web) + suite pytest complète 678 passed
   / 0 failed hors 3 pré-existants test_run_logging.py (non liés, confirmés par git stash),
@@ -602,6 +621,8 @@ odes.py et web_tester.py pour exiger une DÉCLARATION de fonction asynchrone non
 - [x] Étape F57-8 : État disque synchronisé (feature_list.json F-57 pending→completed,
   contract.md +critères 228-237, plan_usine_logicielle.md P10 PARTIEL + case cochée,
   progress.md, README.md section Coder, log.md). ATTENTE commit/PR.
-- [ ] Étape F57-9 : Run de validation Bubble Sort (comparatif tokens vs baseline
-  2026-08-04_1816). Critères : HTML complet + tokens IN réduits + Coder appelle
-  load_skill. SI réussite → déclenche Phase 2 (nœuds DSPy).
+- [ ] Étape F57-9 : Run de validation Bubble Sort. Critères v3 : HTML complet +
+  l'Architect sélectionne `subtask.skills` + `enforce_skill_budget` plafonne la
+  sélection + le Coder reçoit les corps complets (plus de dépendance à un appel
+  `load_skill` du modèle). SI réussite → déclenche Phase 2 (nœuds DSPy via
+  `methodology_context`).

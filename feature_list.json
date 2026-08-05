@@ -623,6 +623,45 @@
       "description": "Déplacement de graph_orchestrator.db de la racine du repo vers data/. Chemin par défaut ancré au paquet via config.DEFAULT_KG_PATH (résolu depuis graph_orchestrator/config.py → repo_root/data/), indépendant du cwd et résistant au chdir du workflow. Cohérent avec event_stream.py (DEFAULT_EVENT_DB_PATH) et runs_history.py (DEFAULT_HISTORY_DB_PATH) qui placent déjà leurs .duckdb dans data/. Création auto du dossier parent dans KnowledgeGraph.__init__. Impact : config.py, knowledge_graph.py, scripts/run_analyzer.py, .env*, docstrings. VALIDÉ : KnowledgeGraph lit data/graph_orchestrator.db (63 claims, 17 entities intacts), analyzer trouve la DB sans --db, pytest 30 passed.",
       "status": "completed",
       "dependencies": ["F-03"]
+    },
+    {
+      "id": "F-76",
+      "name": "Contextualisation par package (AGENTS.md localisés)",
+      "description": "Ajouter la capacité à lire un fichier AGENTS.md local au dossier cible de la sous-tâche pour injecter des directives spécifiques au composant (ex: règles i18n, design system) dans le prompt du Coder.",
+      "status": "pending",
+      "dependencies": []
+    },
+    {
+      "id": "F-77",
+      "name": "Traçabilité des forks de sessions (Fork Origin)",
+      "description": "Enregistrer l'origine d'un run lorsqu'il est bifurqué d'un point précédent (checkpoint), pour conserver l'arbre d'héritage et afficher l'historique complet.",
+      "status": "pending",
+      "dependencies": [
+        "F-24"
+      ]
+    },
+    {
+      "id": "F-78",
+      "name": "Validation Event Sourcing (Reducer JSONL)",
+      "description": "Ajout d'un validateur (reducer) pour détecter les corruptions dans l'event stream (ex: double ouverture d'opération, ou enregistrement après clôture) inspiré du projet pi.",
+      "status": "pending",
+      "dependencies": []
+    },
+    {
+      "id": "F-79",
+      "name": "Règles de Frontière de Phase",
+      "description": "Formaliser les Phase Boundaries pour déclencher la compaction de contexte au bon moment (ex: après réflexion, avant l'implémentation), évitant la perte d'informations critiques.",
+      "status": "pending",
+      "dependencies": []
+    },
+    {
+      "id": "F-80",
+      "name": "Pivot v3 : Coder sélection Architect (P10 Phase 1)",
+      "description": "PIVOT JUSTIFIÉ suite à l'échec de F-57 en validation (le Coder 9B n'appelait pas load_skill, perdant les skills conditionnels). Nouveau design : l'Architect SÉLECTIONNE les skills pertinents par sous-tâche (champ subtask.skills dans ArchitectOutput), plafonnés par un budget tokens (skill_budget_tokens, ~24% du contexte). Injection directe fiable à 100%.",
+      "status": "completed",
+      "dependencies": [
+        "F-57"
+      ]
     }
   ]
 }
