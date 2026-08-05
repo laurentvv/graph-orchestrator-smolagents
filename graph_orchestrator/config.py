@@ -347,7 +347,7 @@ def load_settings() -> Settings:
         fast_model_id=_get_str("FAST_MODEL_ID", "Qwen3.5-9B-Q4_K_M"),
         reasoning_model_id=_get_str(
             "REASONING_MODEL_ID",
-            "hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL",
+            "hf.co/protoLabsAI/Ornith-1.0-9B-MTP-GGUF",
         ),
         reasoning_max_tokens=_get_int("REASONING_MAX_TOKENS", 8192),
         fast_max_tokens=_get_int("FAST_MAX_TOKENS", 12000),

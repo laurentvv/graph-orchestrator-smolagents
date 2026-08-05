@@ -501,7 +501,9 @@ def _evaluate_visibility(
             # On NE flag PAS sur width==0 seul : en flexbox, un enfant sans
             # flex-basis est réduit à width=0 bien qu'affiché (faux positif).
             "    const hidden = (r.height === 0 "
-            "                     || cs.display === 'none' || cs.visibility === 'hidden');"
+            "                     || cs.display === 'none' || cs.visibility === 'hidden' "
+            "                     || cs.opacity === '0' "
+            "                     || (first.innerText.trim() === '' && cs.backgroundColor === 'rgba(0, 0, 0, 0)' && !['img','svg','canvas'].includes(first.tagName.toLowerCase())));"
             "    out.push({sel, count: els.length, h: r.height, hidden});"
             "  }"
             "  return JSON.stringify(out);"
@@ -524,10 +526,10 @@ def _evaluate_visibility(
                 h = item.get("h", 0)
                 errors.append(
                     f"[DOM] {count} élément(s) \"{sel}\" créé(s) par le JS mais "
-                    f"INVISIBLE(s) (height={h}, display:none ou visibility:hidden). "
-                    f"Bug CSS probable : `height` en pourcentage sur un conteneur "
-                    f"parent sans `height` explicite (le % se résout à 0), ou "
-                    f"élément en `position:absolute` hors écran. Vérifie le CSS."
+                    f"INVISIBLE(s) (height={h}, display:none, visibility:hidden, opacity:0, ou background transparent sans texte). "
+                    f"Bug CSS probable : `height` en pourcentage sur conteneur "
+                    f"sans `height` explicite, élément en `position:absolute` hors écran, "
+                    f"ou perte de classe CSS de couleur (ex: élément devenu transparent). Vérifie le CSS et le Javascript (classList)."
                 )
         return errors
     except Exception as e:

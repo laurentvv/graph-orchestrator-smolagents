@@ -534,8 +534,8 @@ async def execute_prompt_refiner_node(
                 "available_capabilities": capabilities,
             },
             settings=settings,
-            spec=settings.reasoning_spec,
-            think=True,
+            spec=settings.no_think_spec,
+            think=False,
             model_override=settings.prompt_refiner_model_id,
         )
         refined = result.output
@@ -545,7 +545,7 @@ async def execute_prompt_refiner_node(
 
         metrics = NodeMetrics(
             node="prompt_refiner_dspy",
-            model=settings.prompt_refiner_model_id or settings.reasoning_spec.model,
+            model=settings.prompt_refiner_model_id or settings.no_think_spec.model,
             duration_s=time.time() - start_time,
             input_tokens=0,
             output_tokens=0,
@@ -658,13 +658,13 @@ async def execute_security_reviewer_node(subtask: dict, reasoning_model, setting
                 "code": code_content or "Code manquant"
             },
             settings=settings,
-            spec=settings.reasoning_spec,
-            think=True,
+            spec=settings.no_think_spec,
+            think=False,
         )
         
         metrics = NodeMetrics(
             node="security_dspy",
-            model=settings.reasoning_spec.model,
+            model=settings.no_think_spec.model,
             duration_s=time.time() - start_time, 
             input_tokens=0, 
             output_tokens=0
@@ -725,13 +725,13 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
                 "task_requirements": task_requirements,
             },
             settings=settings,
-            spec=settings.reasoning_spec,
-            think=True,
+            spec=settings.no_think_spec,
+            think=False,
         )
         
         metrics = NodeMetrics(
             node="code_judge_dspy",
-            model=settings.reasoning_spec.model,
+            model=settings.no_think_spec.model,
             duration_s=time.time() - start_time,
             input_tokens=0,
             output_tokens=0
@@ -795,13 +795,13 @@ async def execute_escalation_node(subtask: dict, failure_history: str, reasoning
                 "current_code": current_code,
             },
             settings=settings,
-            spec=settings.reasoning_spec,
-            think=True,
+            spec=settings.no_think_spec,
+            think=False,
         )
 
         metrics = NodeMetrics(
             node="escalation_dspy",
-            model=settings.reasoning_spec.model,
+            model=settings.no_think_spec.model,
             duration_s=time.time() - start_time,
             input_tokens=0,
             output_tokens=0
