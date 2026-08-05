@@ -36,6 +36,7 @@ We don't waste expensive AI cycles verifying simple typos. Before any file is va
 - **The Static Tester** checks the web mechanics (are the buttons actually clickable?).
 - **The Anti-Loop Circuit Breaker** mathematically detects if the agent makes the exact same mistake 3 times in a row, triggering an Escalation (auto-post-mortem).
 - **The Read-Before-Write Gate** strictly forbids an agent from editing a file it hasn't read first.
+- **Context Compaction & Branch Summarization**: Dynamically compresses Python code via AST (Abstract Syntax Trees). But we go further: if an agent fails 10 times in a row, the engine summarizes the failed branch into a single learning insight. If it reads a file and then modifies it later, the obsolete reads are purged (File-State Compaction). This guarantees the agent never suffers from "Context Overflow".
 
 ---
 
@@ -43,6 +44,8 @@ We don't waste expensive AI cycles verifying simple typos. Before any file is va
 These AIs (the Architect, the Coder, the Tester) don't share a fragile history prompt that fades over time. They communicate and persist their knowledge inside a **local relational database (DuckDB)**.
 
 When a Coder fails and the Judge rejects the code, the reason for the rejection is etched into the Knowledge Graph. On the next iteration, the Coder queries this database to "learn from its mistakes", guaranteeing the system **never produces a regression**.
+
+> 💾 **Persistance** : la base du KG vit dans `data/graph_orchestrator.db` (chemin ancré au paquet, indépendant du cwd). Les autres bases DuckDB (`event_stream.duckdb`, `runs_history.duckdb`) sont regroupées au même endroit. Override possible via `KG_PATH` dans `.env`.
 
 ---
 

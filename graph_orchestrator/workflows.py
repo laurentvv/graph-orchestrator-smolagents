@@ -917,7 +917,11 @@ def main() -> None:
     # la résolution du dossier de run (coding/exploration), donc on doit englober
     # run_workflow() entier. Couvre les 3 modes + les 2 entry points (agent_graph.py
     # et -m graph_orchestrator.workflows importent tous deux cette fonction).
-    from .run_logging import tee_run_logging, resolve_log_path
+    from .run_logging import tee_run_logging, resolve_log_path, clean_old_logs
+    
+    # Nettoyage des anciens logs (rétention = output_retention)
+    clean_old_logs(settings.logs_dir, settings.output_retention)
+    
     log_path = resolve_log_path(settings.workflow_mode, settings.logs_dir)
     with tee_run_logging(log_path, enabled=settings.log_to_file):
         # 1ère ligne du log : permet à l'utilisateur de retrouver le chemin du fichier.

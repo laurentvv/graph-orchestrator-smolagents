@@ -12,12 +12,14 @@ Avantages clés (cf. guide §5) :
   - Survie à l'effacement du contexte (persistance fichier).
   - Déduplication durable (clé de hash normalisée).
 
-Persistance : fichier DuckDB unique (KG_PATH, défaut "graph_orchestrator.db").
+Persistance : fichier DuckDB unique (KG_PATH, défaut "data/graph_orchestrator.db"
+ancré au paquet via config.DEFAULT_KG_PATH — indépendant du cwd).
 Pour les tests : KnowledgeGraph(":memory:") — graphe volatil en RAM.
 """
 
 import hashlib
 import json
+import os
 from datetime import datetime, timedelta
 from typing import List, Optional
 
@@ -44,6 +46,12 @@ class KnowledgeGraph:
     def __init__(self, path: str = ":memory:"):
         # read_write, create_if_not_exists
         self.path = path
+        # S'assurer que le dossier parent existe (ex: data/). DuckDB crée le
+        # fichier mais PAS le répertoire parent — sans cela, un chemin ancré au
+        # paquet (data/graph_orchestrator.db) lèverait si data/ est absent.
+        # Cohérent avec event_stream.py / runs_history.py qui font de même.
+        if path != ":memory:":
+            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         self.conn = duckdb.connect(path, read_only=False) if path != ":memory:" else duckdb.connect(":memory:")
         self._init_schema()
 
@@ -116,6 +124,19 @@ class KnowledgeGraph:
                 op_key      VARCHAR NOT NULL,
                 created_at  TIMESTAMP DEFAULT now(),
                 PRIMARY KEY (run_id, op_key)
+            )
+        """)
+        # Journal d'événements (workflow introspection) : permet aux agents
+        # de lire leur propre historique d'exécution (ex: erreurs internes).
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS run_event (
+                id          BIGINT DEFAULT nextval('claim_seq'),
+                run_id      VARCHAR NOT NULL,
+                node        VARCHAR NOT NULL,
+                event_type  VARCHAR NOT NULL,
+                message     VARCHAR NOT NULL,
+                created_at  TIMESTAMP DEFAULT now(),
+                PRIMARY KEY (id)
             )
         """)
         c.commit()
@@ -259,6 +280,14 @@ class KnowledgeGraph:
         self.conn.execute("DELETE FROM idempotency_record WHERE run_id = ?", [run_id])
         self.conn.commit()
 
+    def add_run_event(self, run_id: str, node: str, event_type: str, message: str) -> None:
+        """Ajoute un événement d'exécution (ex: erreur interne du LLM)."""
+        self.conn.execute(
+            "INSERT INTO run_event(run_id, node, event_type, message) VALUES (?, ?, ?, ?)",
+            [run_id, node, event_type, message],
+        )
+        self.conn.commit()
+
     # ==========================================
     # Lectures
     # ==========================================
@@ -316,8 +345,32 @@ class KnowledgeGraph:
         ).fetchone()
         return dup is not None
 
+    def get_open_claims(self, entity_id: str) -> List[dict]:
+        """Retourne le contenu de toutes les claims ouvertes pour une entité."""
+        rows = self.conn.execute(
+            """
+            SELECT p.source, c.content 
+            FROM claim c
+            JOIN provenance p ON c.id = p.claim_id
+            WHERE c.entity_id = ? AND c.status = 'open'
+            """,
+            [entity_id],
+        ).fetchall()
+        return [{"source": r[0], "content": r[1]} for r in rows]
+
+    def get_run_events(self, run_id: str, node: Optional[str] = None) -> List[dict]:
+        """Retourne les événements d'un run_id."""
+        query = "SELECT node, event_type, message, created_at FROM run_event WHERE run_id = ?"
+        params = [run_id]
+        if node:
+            query += " AND node = ?"
+            params.append(node)
+        query += " ORDER BY created_at DESC"
+        rows = self.conn.execute(query, params).fetchall()
+        return [{"node": r[0], "event_type": r[1], "message": r[2], "created_at": r[3]} for r in rows]
+
     # ==========================================
-    # Debug / export
+    # Checkpoints (Priorité 3)
     # ==========================================
 
     def dump(self) -> dict:

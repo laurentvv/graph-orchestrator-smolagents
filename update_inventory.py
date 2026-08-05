@@ -10,6 +10,8 @@ Audit 19-23 (2026-08-03, procédure PROCEDURE-AUDIT-REFERENCE.md) :
   - 21 davidondrej-skills =  6 entrées (P8 denylist 27 regex + P10 doctrine)
   - 22 llm-council        =  4 entrées (P6 council anonymisé)
   - 23 mattpocock-skills  =  9 entrées (P10 doctrine fusion + P6/P0 engineering skills)
+Audit 24 (2026-08-05) :
+  - 24 pi                 =  7 entrées (P9 compaction, P6 Judge)
 
 Corrige aussi les reuse_rating globaux inversés par l'ancienne fiche bâclée :
   - qm : medium -> high   (algorithmes portables : compaction, mémoire, idempotency, queues)
@@ -516,11 +518,39 @@ MP_FILES = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# 24 — pi : compaction, branch summarization, vitest-evals (P9/P6)
+# ---------------------------------------------------------------------------
+PI_BASE = "references/pi"
+PI_FILES = [
+    {"path": f"{PI_BASE}/packages/coding-agent/src/core/compaction/compaction.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["compact", "extractFileOperations"],
+     "description": "Compaction du contexte basée sur les fichiers lus/écrits au lieu de la troncature brute. Blueprint parfait pour P9 (compaction DuckDB)."},
+    {"path": f"{PI_BASE}/packages/coding-agent/src/core/compaction/branch-summarization.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["BranchSummaryResult", "collectEntriesForBranchSummary"],
+     "description": "Algorithme résumant une branche abandonnée lors d'un 'undo', préservant l'apprentissage (P9)."},
+    {"path": f"{PI_BASE}/packages/evals/src/vitest-evals/harness-table.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["createJudge", "TargetTaskJudge"],
+     "description": "Implémentation de LLM-as-a-judge dans vitest (P6 Judge / TDD)."},
+    {"path": f"{PI_BASE}/packages/coding-agent/src/core/bash-executor.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["executeBashWithOperations"],
+     "description": "Abstraction de l'exécution Bash pour sandbox LLM (P8)."},
+    {"path": f"{PI_BASE}/packages/coding-agent/src/core/extensions/types.ts", "type": "spec", "reuse": "medium",
+     "key_symbols": ["ExtensionRunner", "ToolExecutionStartEvent"],
+     "description": "Système d'intercepteurs événementiels (middlewares) avant/après appel d'outil (P8 anti-crash)."},
+    {"path": f"{PI_BASE}/packages/coding-agent/src/core/skills.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["formatSkillsForPrompt", "Skill"],
+     "description": "Chargement des skills YAML+Markdown pour injection dans le System Prompt (P10)."},
+    {"path": f"{PI_BASE}/packages/agent/src/proxy.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["ProxyMessageEventStream"],
+     "description": "API pour streamer raisonnement et toolcalls, base pour event bus JSON (P11)."},
+]
+
 def main() -> None:
     data = json.loads(INVENTORY.read_text(encoding="utf-8"))
 
-    data["projects_audited"] = 23
-    data["audit_date"] = "2026-08-03"
+    data["projects_audited"] = 24
+    data["audit_date"] = "2026-08-05"
 
     updated = []
     seen_ids = set()
@@ -616,6 +646,15 @@ def main() -> None:
                 "summary": "Collection de ~41 skills agent (Matt Pocock, 'Skills For Real Engineers') + doctrine d'authoring formelle. Pivot de la fusion doctrine P10 (avec awesome-claude-skills 18 + davidondrej 21) : writing-great-skills/SKILL.md formalise une théorie (Predictability racine, deux charges cognitive/context, hiérarchie 3 rungs, 5 failure modes, leading words). Secondaire P6 : code-review (two axes en sub-agents parallèles) + tdd (vertical slices). Tout est Markdown+YAML+bash (zéro Python) ; philosophie small/composable/any-model à nuancer vs notre orchestrateur stateful. Exemples TS-biaisés.",
                 "files": MP_FILES,
             }
+        elif pid == "pi":
+            project = {
+                "id": "pi", "name": "pi",
+                "path": "references/pi",
+                "category": "agent-framework",
+                "reuse_rating": "high",
+                "summary": "Agent stateful interactif (monorepo TS). Brillante implémentation de compaction de contexte basée sur l'état des fichiers (P9) et de branch summarization pour l'undo. Système LLM-as-a-judge (vitest-evals) validant P6. Modèles clairs d'intercepteurs événementiels (P8) et de stream (P11). Fort couplage TS/Node à ignorer pour s'inspirer de l'architecture.",
+                "files": PI_FILES,
+            }
         updated.append(project)
         seen_ids.add(pid)
 
@@ -670,6 +709,11 @@ def main() -> None:
                         "path": "references/mattpocock-skills",
                         "category": "skills", "reuse_rating": "high",
                         "summary": "(ajouté par update_inventory.py)", "files": MP_FILES})
+    if "pi" not in seen_ids:
+        updated.append({"id": "pi", "name": "pi",
+                        "path": "references/pi",
+                        "category": "agent-framework", "reuse_rating": "high",
+                        "summary": "(ajouté par update_inventory.py)", "files": PI_FILES})
 
     data["projects"] = updated
 
@@ -683,7 +727,7 @@ def main() -> None:
             by_reuse[r] = by_reuse.get(r, 0) + 1
     print(f"OK — {len(data['projects'])} projets, {total} entrées au total.")
     print(f"Répartition : {by_reuse}")
-    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills"):
+    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi"):
         proj = next(p for p in data["projects"] if p["id"] == new_id)
         print(f"  {new_id} : {len(proj['files'])} entrées (reuse_rating={proj['reuse_rating']})")
 

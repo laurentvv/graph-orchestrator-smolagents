@@ -34,7 +34,8 @@ class WebTestRunner:
         # importable même si l'environnement web (Chrome/npx) n'est pas dispo
         # (ex: le runner Python n'en a pas besoin).
         from mcp import StdioServerParameters
-        from smolagents import ToolCollection, ToolCallingAgent, OpenAIServerModel
+        from smolagents import ToolCollection, CodeAgent, OpenAIServerModel
+        from graph_orchestrator.compaction import CompactingCodeAgent
 
         from ..nodes import run_with_retry, resolve_verbosity, _detect_idle_step
         from ..skills_loader import load_skill_body
@@ -72,6 +73,36 @@ class WebTestRunner:
                 # détecter des bugs visuels (layout cassé, superpositions).
                 screenshot_capture: list = []
                 tester_tools = wrap_screenshot_tools(tester_tools, screenshot_capture)
+
+                # Custom tools pour décharger le prompt du LLM
+                eval_tool = next((t for t in tester_tools if getattr(t, "name", "") == "puppeteer_evaluate"), None)
+                if eval_tool:
+                    from smolagents import Tool
+                    class PuppeteerAddVisualTagsTool(Tool):
+                        name = "puppeteer_add_visual_tags"
+                        description = "Ajoute des badges rouges (e1, e2...) sur tous les éléments cliquables VISIBLES de la page. À appeler SANS ARGUMENT AVANT take_screenshot pour faciliter le clic (méthode OpenFox)."
+                        inputs = {}
+                        output_type = "string"
+                        def __init__(self, e_tool: Tool):
+                            super().__init__()
+                            self.e_tool = e_tool
+                        def forward(self) -> str:
+                            script = "(() => { let c = 1; document.querySelectorAll('button, input, select, a').forEach(el => { const r = el.getBoundingClientRect(); if (r.width === 0 || r.height === 0) return; const b = document.createElement('div'); b.innerText = 'e' + c++; b.style.cssText = `position:absolute; left:${r.left+window.scrollX}px; top:${r.top+window.scrollY-10}px; background:red; color:white; font-size:12px; padding:2px; z-index:9999; pointer-events:none;`; document.body.appendChild(b); }); return 'Tags OpenFox injectés avec succès. Prends un screenshot maintenant !'; })()"
+                            return self.e_tool.forward(script=script)
+
+                    class PuppeteerCleanDomTool(Tool):
+                        name = "puppeteer_clean_dom"
+                        description = "Nettoie le DOM actuel (supprime script, style, svg, canvas) et renvoie le HTML allégé pour analyse. À appeler SANS ARGUMENT pour voir la structure de la page sans polluer ton contexte."
+                        inputs = {}
+                        output_type = "string"
+                        def __init__(self, e_tool: Tool):
+                            super().__init__()
+                            self.e_tool = e_tool
+                        def forward(self) -> str:
+                            script = "(() => { const clone = document.documentElement.cloneNode(true); clone.querySelectorAll('script,style,svg,canvas,iframe,noscript,template').forEach(el => el.remove()); return clone.outerHTML.replace(/<!--[\\s\\S]*?-->/g,'').replace(/\\s{2,}/g,' ').slice(0, 8000); })()"
+                            return self.e_tool.forward(script=script)
+                            
+                    tester_tools.extend([PuppeteerAddVisualTagsTool(eval_tool), PuppeteerCleanDomTool(eval_tool)])
 
                 # F-47 : mode re-test ciblé si itération >1 ET réfutations disponibles.
                 # Le Tester ne re-valide QUE les bugs signalés par le Judge + smoke-test,
@@ -138,12 +169,13 @@ class WebTestRunner:
                 # de Puppeteer). Vide si cdt_tools vide (backward-compat, Puppeteer seul).
                 devtools_hint = (
                     "\n## OUTILS COMPLÉMENTAIRES Chrome DevTools (en plus de Puppeteer)\n"
-                    "Tu as AUSSI accès à des outils DevTools (SANS préfixe puppeteer_) :\n"
+                    "Tu as AUSSI accès à des outils DevTools (SANS préfixe puppeteer_) très puissants, mais ATTENTION :\n"
+                    "  [DANGER FATAL] : N'utilise JAMAIS l'argument optionnel `filePath` dans AUCUN de ces outils (laisse-le omis/non défini). Si tu essaies de l'utiliser (même avec une chaîne vide), tu auras une erreur critique 'Access denied' MCP.\n"
                     "- `list_console_messages()` : erreurs JS avec source maps (plus précis que puppeteer_evaluate pour la console).\n"
-                    "- `take_snapshot()` : arbre a11y complet (structure de la page, IDs/textes).\n"
-                    "- `evaluate_script(function)` : JS dans la page (alternative à puppeteer_evaluate).\n"
-                    "  [WARNING CRITIQUE] : N'utilise JAMAIS 'await' au premier niveau (top-level await) dans evaluate_script. Le MCP chrome-devtools attend une DECLARATION de fonction (et l'invoque lui-même). Tu dois fournir une fonction asynchrone non invoquée. Correct : `async () => { await ... }` (NE FAIS PAS d'IIFE).\n"
-                    "- `take_screenshot()` : capture visuelle — l'image TE REVIENT, analyse le rendu (bugs CSS, superpositions).\n"
+                    "- `take_snapshot(verbose: true)` : arbre a11y complet (structure, IDs). Avec `verbose: true`, tu obtiendras tout le DOM ultra-détaillé.\n"
+                    "- `evaluate_script(function)` : JS dans la page. Fournis une déclaration `async () => { ... }` NON invoquée, sans `await` au niveau zéro.\n"
+                    "- `take_screenshot(fullPage: true)` : capture visuelle. Avec `fullPage: true`, capture toute la hauteur. L'image TE REVIENT.\n"
+                    "  [VISUAL BUG ALERT CRITIQUE] : Tu dois impérativement t'assurer qu'AUCUN élément clé ne disparaît ou ne devient invisible pendant l'interaction (ex: des barres qui s'effacent car elles perdent leur classe couleur sur un fond sombre). Si tu vois des éléments s'évaporer, c'est un FAILURE immédiat ! Tu peux aussi utiliser `puppeteer_evaluate` pour inspecter les styles calculés (ex: getComputedStyle) et vérifier que les éléments ont bien une couleur.\n"
                     "  [PYTHON BUILT-INS] : Si tu utilises `time.sleep()` en Python, n'oublie pas de faire `import time` au début de ton code.\n"
                     "Priorité : garde Puppeteer pour les assertions (skill maîtrisé). Utilise DevTools pour la console et le visuel.\n"
                     if cdt_tools else ""
@@ -191,38 +223,32 @@ ATTENTION - Le dossier de travail absolu est : {workspace_url}
 Pour utiliser 'puppeteer_navigate', tu dois ouvrir le fichier HTML principal à cette URL EXACTE : {primary_url}
 (N'utilise PAS {workspace_url}/index.html à la racine — le fichier est dans un sous-répertoire.)
 
-### 🧹 NETTOYAGE DOM (économise le contexte — Priorité 6)
-Quand tu inspectes le HTML de la page (via `puppeteer_evaluate("document.documentElement.outerHTML")`),
-NE renvoie JAMAIS le HTML brut dans ton raisonnement : les `<script>`, `<style>`, `<svg>`,
-`<canvas>` sont massifs et inutiles pour valider la logique. Applique TOUJOURS ce nettoyage
-avant d'analyser ou de citer le DOM dans ton rapport :
-```js
-// Récupère un DOM NETTOYÉ (script/style/svg/canvas/comments supprimés, whitespace compacté)
-(() => {{
-  const clone = document.documentElement.cloneNode(true);
-  clone.querySelectorAll('script,style,svg,canvas,iframe,noscript,template').forEach(el => el.remove());
-  return clone.outerHTML.replace(/<!--[\\s\\S]*?-->/g,'').replace(/\\s{{2,}}/g,' ').slice(0, 8000);
-}})()
-```
-Cela divise par ~10 la taille du HTML que tu manipules, sans perdre le texte/structure pertinents
-pour tes assertions fonctionnelles (IDs, classes, contenu textuel, attributs aria-*).
+### 🛠️ OUTILS DE NETTOYAGE ET TAGGING (Très Recommandés)
+Pour éviter d'écrire de longs scripts JS qui surchargent ton contexte, utilise ces deux outils dédiés :
+1. `puppeteer_clean_dom()` : Appelle cet outil (sans argument) pour récupérer le code HTML de la page nettoyé de tout le bruit (script, style, svg). Cela divise la taille du DOM par 10 !
+2. `puppeteer_add_visual_tags()` : Appelle cet outil (sans argument) AVANT de prendre ta capture d'écran (`take_screenshot`). Il collera un badge rouge (e1, e2...) sur tous les éléments cliquables de la page. S'il manque un badge, l'élément est invisible !
 
 Vérifie l'application web générée. N'oublie PAS l'étape 4 du skill (Functional Logic Testing) :
 identifie les comportements clés du cahier des charges ci-dessus et écris des assertions via
 'puppeteer_evaluate' pour vérifier qu'ils fonctionnent — pas seulement que la page ne crash pas.
 {devtools_hint}
-Une fois terminé, retourne ton résultat final STRICTEMENT en utilisant l'outil 'final_answer'.
-Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_answer :
-{{
-  "name": "final_answer",
-  "arguments": {{
-    "answer": {{
-      "task_id": "{task['id']}",
-      "status": "success ou failure",
-      "details": "Un résumé détaillé de tes tests visuels, console ET assertions fonctionnelles."
-    }}
-  }}
-}}
+Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JAMAIS expliquer sans agir.
+
+### RÈGLES CRITIQUES (numérotées)
+1. AGIS, ne raconte pas : quand tu dis "je vais faire X", tu DOIS faire X dans la foulée.
+2. ARGUMENTS NOMMÉS OBLIGATOIRES : Pour TOUS tes appels d'outils, tu DOIS utiliser des arguments nommés (ex: evaluate_script(script="...")). Les arguments positionnels feront crasher l'exécution.
+3. PYTHON BUILT-INS : Si tu utilises `time.sleep()` ou d'autres modules standards dans ton code Python, n'oublie pas de les importer (ex: `import time` au début du bloc).
+
+### FORMAT DE SORTIE (obligatoire)
+Tu écris du code Python dans un bloc ````python ... ```` qui appelle tes outils.
+Une fois terminé, retourne ton résultat final STRICTEMENT en appelant l'outil `final_answer`.
+Le dictionnaire passé à `final_answer` DOIT absolument respecter ce format exact :
+```python
+# Thought courte (1 phrase) PUIS appel immédiat — pas de longue réflexion
+puppeteer_add_visual_tags()
+# ... autres appels ...
+final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Un résumé détaillé de tes tests visuels, console ET assertions fonctionnelles."}})
+```
 """
                 # Guard anti-loop (fix TIMINGS_ANALYSE) : le Tester peut aussi boucler sur
                 # le même appel puppeteer_evaluate (ex: même script JS échouant répétitivement
@@ -242,7 +268,7 @@ Ton JSON DOIT absolument respecter ce format exact pour appeler l'outil final_an
                         max_tokens=settings.reasoning_max_tokens,
                         client_kwargs={"timeout": settings.llm_timeout_s},
                     )
-                    local_tester = ToolCallingAgent(
+                    local_tester = CompactingCodeAgent(
                         tools=tester_tools,
                         model=dynamic_tester_model,
                         name=f"tester_{task['id'].replace('-', '_')}",

@@ -153,3 +153,34 @@ def resolve_log_path(mode: str, logs_dir: str) -> str:
     stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
     safe_mode = re.sub(r"[^a-z0-9]+", "_", (mode or "").strip().lower()).strip("_") or "run"
     return os.path.join(logs_dir, f"run_{safe_mode}_{stamp}", "run_full.log")
+
+
+def clean_old_logs(logs_root: str, retention: int) -> None:
+    """Supprime les anciens dossiers de logs pour limiter la croissance.
+
+    Maintient uniquement les `retention` dossiers les plus récents (par date
+    de modification) dans le dossier de logs spécifié.
+    """
+    import shutil
+    if retention <= 0 or not os.path.isdir(logs_root):
+        return
+    
+    try:
+        candidates = []
+        for name in os.listdir(logs_root):
+            path = os.path.join(logs_root, name)
+            if os.path.isdir(path) and not name.startswith("."):
+                # Filtre pour ne prendre que les dossiers de logs (run_...)
+                if name.startswith("run_"):
+                    candidates.append((path, os.path.getmtime(path)))
+        
+        # Tri par modification la plus récente d'abord (descendant)
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        
+        if len(candidates) > retention:
+            to_delete = candidates[retention:]
+            for path, _ in to_delete:
+                shutil.rmtree(path, ignore_errors=True)
+                print(f"[🗑️] Ancien log supprimé (rétention={retention}) : {os.path.basename(path)}")
+    except Exception as e:
+        print(f"[⚠️] Échec du nettoyage des anciens logs dans {logs_root} : {e}")

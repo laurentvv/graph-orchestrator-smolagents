@@ -263,9 +263,9 @@
     },
     {
       "id": "F-31",
-      "name": "Tester en mode CodeAgent (à évaluer)",
-      "description": "P4 (hors finalisation P1-P3, à évaluer après). Le Web Tester (WebTestRunner) est le 2e candidat CodeAgent après le Coder : il fait du tool-calling multi-étapes (puppeteer_navigate → puppeteer_screenshot → puppeteer_evaluate pour les assertions). Si le TCA souffre du même problème que le Coder (modèle qui réfléchit sans émettre le tool_call JSON), CodeAgent pourrait l'aider. Test à faire via run_tester.py isolé (comparatif TCA vs CodeAgent sur Bubble Sort assertions). NON URGENT — le tester fonctionne en TCA actuellement, c'est une optimisation potentielle.",
-      "status": "pending",
+      "name": "Tester en mode CodeAgent (Migration)",
+      "description": "URGENT : Suite aux tests de la feature F-72 (Encapsulation Python), le modèle Gemma-12B sous forme de ToolCallingAgent échoue régulièrement à émettre des blocs JSON valides, épuisant son `max_steps` (ex: boucle sur `Error while parsing tool call`). Tout comme le Coder (F-29a), le Web Tester doit être migré en CodeAgent. Le modèle formulera ainsi ses requêtes en Python directement, ce qui éliminera les erreurs de syntaxe JSON et profitera grandement des nouveaux outils Python de F-72.",
+      "status": "completed",
       "dependencies": [
         "F-20"
       ]
@@ -580,16 +580,6 @@
       ]
     },
     {
-      "id": "F-69",
-      "name": "Budget LLM USD + Queue de runs à leases/reaper",
-      "description": "Priorité P3-bis du plan usine logicielle (audit cohérence INDEX fiche 14-qm, 2026-08-04). Deux briques runtime qm oubliées. (1) BUDGET LLM USD : createBudgetTracker qui suit le coût USD estimé (estimateCostUsd par fenêtre glissante 24h) et bloque l'exécution au-delà d'un plafond — coupe-circuit FINANCIER distinct du circuit-breaker itératif (F-36) et du max_iter (F-22) qui limitent les boucles, pas le coût. Priorité basse aujourd'hui (GPU-local = coût marginal nul) MAIS pré-requis avant tout passage en prod distant payant. ⚠️ Ne pas confondre avec ToolOutputBudgetMiddleware deer-flow (P8) qui tronque des tokens d'output d'outil. (2) QUEUE DE RUNS À LEASES : modélise la reprise après crash comme une queue (claim + heartbeat + reapExpired pour les runs abandonnés + errorParks pour les échecs). Complète le checkpoint F-24 qui ne gère que la reprise d'un run EN COURS, pas la détection/nettoyage des runs ABANDONNÉS (process tué, VRAM saturée). À reloger sur DuckDB. Inclut garde pour la compaction async (P9) : leases typés par rôle LeaseHolder (turn/compaction/fork) pour qu'une compaction async n'écrase pas un turn en cours. Référence : references/qm/src/ratelimit/budget.ts + runs/run-store.ts + sessions/session-store.ts.",
-      "status": "pending",
-      "dependencies": [
-        "F-24",
-        "F-36"
-      ]
-    },
-    {
       "id": "F-70",
       "name": "Diff multi-fichiers + métriques de benchmark du Judge",
       "description": "Sous-section P6-bis du plan usine logicielle (audit cohérence INDEX fiches 09-open-swe + 20-code-review-graph, 2026-08-04). Le Judge (F-44) exige « IN-DIFF ONLY » mais ne dispose pas de brique pour CONSTRUIRE ce diff multi-fichiers (runs/ est versionné git local depuis F-53, mais le diff n'est consommé que par le Tester ciblé, pas formalisé pour le Judge). (a) Diff full-content multi-fichiers à la build_pr_diff_files (open-swe) ; (b) format de sortie structuré Risk Assessment / File-by-File / Recommendations (skills/review-pr/SKILL.md code-review-graph) ; (c) MÉTRIQUES quantitatives de benchmark (compute_precision_recall + compute_mrr, eval/scorer.py code-review-graph) — aujourd'hui le Judge n'est évalué que qualitativement (lecture de logs), indispensable pour la P15 Meta-Analyste et toute regression-test du Judge.",
@@ -603,8 +593,36 @@
       "id": "F-71",
       "name": "Compression de code par skeleton (libcst, get_skeleton)",
       "description": "Priorité P9 du plan usine logicielle (audit cohérence INDEX fiche 04-repograph, 2026-08-04). Réduire le contexte LLM en remplaçant les corps de fonctions par ... via get_skeleton (garde ClassDef/FunctionDef/docstrings/constantes, supprime le corps). ORTHOGONAL au KG structural (P4 HORS-SCOPE) : ce n'est pas une brique de knowledge graph, c'est un utilitaire de réduction de contexte applicable même en création de code (ex: réinjecter l'existant runs/ ou un fichier partiellement écrit au Coder pour qu'il l'étende sans consommer tout le budget tokens). Le plan avait jeté get_skeleton avec le reste du trio académique RepoGraph/axon/graphify en P4 — à tort, classé séparément 🟢 Haute dans le Hall of Fame. Référence : references/RepoGraph/agentless/util/compress_file.py (CompressTransformer, get_skeleton, pur libcst indépendant).",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-72",
+      "name": "Outils Python dédiés pour simplification des Prompts (Prompt Offloading)",
+      "description": "Créer le maximum d'outils Python (tools dédiés) pour encapsuler la complexité (scripts JS, algorithmes longs) au lieu de l'injecter sous forme de texte brut dans les prompts systèmes des nœuds. Modèle : Web Tester (puppeteer_clean_dom, puppeteer_add_visual_tags). Réduit drastiquement la taille du prompt (pre-fill), allège la charge cognitive (baisse des crash de parsing JSON des petits LLMs) et accélère l'exécution.",
       "status": "pending",
       "dependencies": []
+    },
+    {
+      "id": "F-73",
+      "name": "Contexte à la Demande et Doctrine des Skills",
+      "description": "Validation de la Priorité 10 (Skill Activation Middleware, Découplage Structurel des Skills, Manuel MCP, Graceful Degradation). Mise en place d'un chargement paresseux (lazy loading), découplage des fichiers SKILL.md (scripts/ et references/), et formalisation de la gestion des dépendances d'outils via 2 ADRs.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-74",
+      "name": "Historisation Multi-BDD DuckDB et Nettoyage des Logs",
+      "description": "Validation de la Priorité 11 (Event Stream). Création de bases DuckDB dédiées (ex: runs_history.duckdb, event_stream.duckdb) pour isoler les statistiques, suivre la consommation des tokens et remplacer la croissance infinie des fichiers plats (log.md, traces).",
+      "status": "pending",
+      "dependencies": []
+    },
+    {
+      "id": "F-75",
+      "name": "Migration KG DuckDB vers data/ (chemin ancré au paquet)",
+      "description": "Déplacement de graph_orchestrator.db de la racine du repo vers data/. Chemin par défaut ancré au paquet via config.DEFAULT_KG_PATH (résolu depuis graph_orchestrator/config.py → repo_root/data/), indépendant du cwd et résistant au chdir du workflow. Cohérent avec event_stream.py (DEFAULT_EVENT_DB_PATH) et runs_history.py (DEFAULT_HISTORY_DB_PATH) qui placent déjà leurs .duckdb dans data/. Création auto du dossier parent dans KnowledgeGraph.__init__. Impact : config.py, knowledge_graph.py, scripts/run_analyzer.py, .env*, docstrings. VALIDÉ : KnowledgeGraph lit data/graph_orchestrator.db (63 claims, 17 entities intacts), analyzer trouve la DB sans --db, pytest 30 passed.",
+      "status": "completed",
+      "dependencies": ["F-03"]
     }
   ]
 }

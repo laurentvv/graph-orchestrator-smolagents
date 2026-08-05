@@ -1,28 +1,24 @@
 # Audit des références — Mode d'emploi
 
-Ce dossier est le **document de suivi** de l'audit radical du dossier `references/` (23 projets, ~10 000 fichiers pertinents). Il permet de retrouver instantanément n'importe quelle information, feature ou code utile, avec son **emplacement complet** et une **évaluation de réutilisabilité** pour `graph-orchestrator-smolagents`.
+Une base de connaissances structurée regroupant l'audit profond de **24 projets** de référence (frameworks, agents de coding, collections de prompts). L'objectif est d'alimenter `graph-orchestrator-smolagents` en algorithmes, patterns d'orchestration et system prompts de la plus haute qualité.
 
 ## 🚀 Par où commencer ?
 
-| Tu veux… | Va à |
-|---|---|
-| Une vue d'ensemble + la liste des 23 projets | **[INDEX.md](./INDEX.md)** ← document maître |
-| Le top des fichiers les plus réutilisables | **[INDEX.md > Hall of Fame](./INDEX.md#-hall-of-fame--top-25-fichiers-les-plus-réutilisables)** |
-| Savoir où chercher pour un besoin précis | **[INDEX.md > Guide de recherche](./INDEX.md#-guide-de-recherche--comment-retrouver-x)** |
-| Le détail d'un projet précis | **[projects/](./projects/)** (23 fiches) |
-| Filtrer/querier l'inventaire par programmation | **[inventory.json](./inventory.json)** (441 entrées) |
+1. [**INDEX.md**](./INDEX.md) : le document de navigation principal (la liste des 24 projets, la matrice de réutilisabilité et le guide « comment retrouver X »).
+2. [**projects/**](./projects/) : le dossier contenant les rapports d'audit détaillés (24 fiches au format Markdown canonique).
+3. [**inventory.json**](./inventory.json) : l'inventaire machine (448 entrées), généré automatiquement par `update_inventory.py`, permettant d'interroger la base programmatiquement.
 
 ## 📚 Structure
 
 ```
 docs/references-audit/
-├── README.md              ← tu es ici (mode d'emploi)
-├── INDEX.md               ← document maître (navigation + synthèse + Hall of Fame + matrice + guide)
-├── inventory.json         ← inventaire machine-lisible (23 projets, 441 entrées)
-└── projects/              ← 23 fiches détaillées (1 par projet)
+├── README.md              ← Ce document
+├── INDEX.md               ← Point d'entrée principal
+├── inventory.json         ← Inventaire JSON des 448 briques réutilisables
+└── projects/              ← 24 fiches d'audit
     ├── 01-prompt-vault.md  …  13-deer-flow-analysis.md
     ├── 14-qm.md  …  18-awesome-claude-skills.md
-    └── 19-loopx.md  …  23-mattpocock-skills.md
+    └── 19-loopx.md  …  24-pi.md
 ```
 
 ## 🎯 Convention de réutilisabilité

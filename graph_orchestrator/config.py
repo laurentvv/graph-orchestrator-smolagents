@@ -20,6 +20,14 @@ from dotenv import load_dotenv
 # ce qui rendait `FRESH_START=1 uv run ...` inopérant (toujours repris depuis .env).
 load_dotenv()
 
+# Chemin par défaut de la base DuckDB du Knowledge Graph, ancré au paquet
+# (résolu depuis graph_orchestrator/config.py → repo_root/data/). Indépendant du
+# cwd : la DB reste au même endroit quel que soit le répertoire de lancement,
+# et résiste au chdir du workflow dans le run output dir. Cohérent avec
+# event_stream.py (DEFAULT_EVENT_DB_PATH) et runs_history.py (DEFAULT_HISTORY_DB_PATH)
+# qui placent aussi leurs .duckdb dans data/. Override via KG_PATH dans .env.
+DEFAULT_KG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "graph_orchestrator.db")
+
 
 def _get_bool(key: str, default: bool) -> bool:
     raw = os.getenv(key)
@@ -167,7 +175,7 @@ class Settings:
     hitl_nodes: str  # nœuds déclenchant le HITL (CSV, ex "synth") — routage stratégique
 
     # --- Knowledge Graph persistant (Phase 5) ---
-    kg_path: str  # chemin du fichier DuckDB (ou ":memory:")
+    kg_path: str  # chemin du fichier DuckDB (défaut : data/graph_orchestrator.db ancré au paquet, ou ":memory:")
 
     # --- Mode de workflow ---
     workflow_mode: str  # "one_shot" (défaut) ou "exploration"
@@ -198,14 +206,14 @@ class Settings:
     # couverture. Opt-out : TESTER_MAX_STEPS plus haut si les assertions le nécessitent.
     # Valeur par défaut dans la dataclass : évite de casser les helpers de test qui
     # construisent Settings(...) à la main (même convention que loop_guard_threshold etc.).
-    tester_max_steps: int = 12
+    tester_max_steps: int = 25
     # Hard deadline wall-clock du Web Tester (smolagents ToolCallingAgent + MCP Puppeteer/
     # DevTools). Fix blocage : sans ce timeout, un appel MCP bloquant (Chrome hung, npx stdio
     # deadlock, page JS en boucle infinie) fige le Tester indéfiniment. À l'expiration,
     # run_with_retry rend un échec propre (None) → le Judge enchaîne. 0 = désactivé (legacy).
     # Si non setté, fallback sur test_timeout_s (rétro-compatibilité). Défaut 120 dans la
     # dataclass pour ne pas casser les helpers de test qui construisent Settings() à la main.
-    tester_timeout_s: int = 300
+    tester_timeout_s: int = 600
 
     # --- Nœud d'Escalade (Priorité 3 : post-mortem sur circuit breaker) ---
     # Quand une sous-tâche épuise le Circuit Breaker (3 itérations toutes rejetées),
@@ -347,7 +355,7 @@ def load_settings() -> Settings:
         fast_model_id=_get_str("FAST_MODEL_ID", "Qwen3.5-9B-Q4_K_M"),
         reasoning_model_id=_get_str(
             "REASONING_MODEL_ID",
-            "hf.co/unsloth/gemma-4-E4B-it-qat-GGUF:UD-Q4_K_XL",
+            "hf.co/protoLabsAI/Ornith-1.0-9B-MTP-GGUF",
         ),
         reasoning_max_tokens=_get_int("REASONING_MAX_TOKENS", 8192),
         fast_max_tokens=_get_int("FAST_MAX_TOKENS", 12000),
@@ -360,16 +368,16 @@ def load_settings() -> Settings:
         max_iterations=_get_int("MAX_ITERATIONS", 3),
         hitl_enabled=_get_bool("HITL_ENABLED", False),
         hitl_nodes=_get_str("HITL_NODES", "synth"),
-        kg_path=_get_str("KG_PATH", "graph_orchestrator.db"),
+        kg_path=_get_str("KG_PATH", DEFAULT_KG_PATH),
         workflow_mode=_get_str("WORKFLOW_MODE", "one_shot"),
         log_level=_get_str("LOG_LEVEL", "LOW"),
         fresh_start=_get_bool("FRESH_START", False),
         test_timeout_s=_get_int("TEST_TIMEOUT_S", 120),
-        tester_timeout_s=300,
+        tester_timeout_s=_get_int("TESTER_TIMEOUT_S", 600),
         stderr_head_lines=_get_int("STDERR_HEAD_LINES", 20),
         stderr_tail_lines=_get_int("STDERR_TAIL_LINES", 20),
         feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),
-        tester_max_steps=_get_int("TESTER_MAX_STEPS", 12),
+        tester_max_steps=_get_int("TESTER_MAX_STEPS", 25),
         escalation_enabled=_get_bool("ESCALATION_ENABLED", True),
         auto_install_deps=_get_bool("AUTO_INSTALL_DEPS", True),
         loop_guard_enabled=_get_bool("LOOP_GUARD_ENABLED", True),

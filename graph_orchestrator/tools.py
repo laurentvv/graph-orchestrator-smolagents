@@ -19,6 +19,35 @@ import threading
 _FILE_LOCKS: dict[str, threading.Lock] = {}
 _FILE_LOCKS_GUARD = threading.Lock()
 
+# --- Suivi d'état pour introspection (Coder) ---------------------------------
+# Trace les erreurs internes rencontrées par l'agent lors de la tentative précédente
+_RUN_ERRORS: list[str] = []
+
+def record_run_error(error_msg: str) -> None:
+    """Enregistre une erreur interne pour introspection future par l'agent."""
+    _RUN_ERRORS.append(error_msg)
+
+
+@tool
+def check_run_state() -> str:
+    """Checks the internal state of the current node execution.
+    If you previously crashed (e.g., due to a JSON parsing error, timeout, or Python syntax error),
+    this tool will return the exact errors you encountered in the previous attempts.
+    Always call this BEFORE creating files if you suspect you are in a retry loop.
+    
+    Returns:
+        A string describing the errors encountered in previous attempts, or a message saying no errors occurred.
+    """
+    if not _RUN_ERRORS:
+        return "Aucune erreur enregistrée. C'est votre première tentative ou tout s'est bien passé jusqu'ici."
+    
+    report = "ERREURS LORS DES TENTATIVES PRÉCÉDENTES :\n"
+    for i, err in enumerate(_RUN_ERRORS, 1):
+        report += f"[{i}] {err}\n"
+    report += "\nSi l'erreur précédente était liée à final_answer ou au formatage (ex: parsing JSON), les fichiers que tu as créés juste avant le crash SONT PROBABLEMENT DÉJÀ SUR LE DISQUE. Ne les recrée pas !\n"
+    report += "Passe directement à la suite en appelant SIMPLEMENT en Python :\n"
+    report += "final_answer({'task_id': 'ton_task_id', 'status': 'success', 'details': 'Fichiers récupérés intacts après crash du LLM.'})"
+    return report
 
 def _file_lock(path: str) -> threading.Lock:
     """Renvoie (et crée si besoin) le verrou associé à un chemin de fichier normalisé."""
@@ -50,6 +79,23 @@ def read_file(path: str, offset: int = 0, limit: int = -1) -> str:
         return "".join(f"{offset + i + 1:4}| {line}" for i, line in enumerate(selected))
     except Exception as e:
         return f"Error reading file {path}: {str(e)}"
+
+@tool
+def read_python_skeleton(path: str) -> str:
+    """Reads a Python file and returns its skeleton (classes, functions signatures, constants) 
+    while hiding the implementation bodies.
+    Useful for quickly understanding the structure of a large Python module without using too much context window.
+    
+    Args:
+        path: The absolute or relative path to the Python file.
+    """
+    try:
+        from .skeleton import get_skeleton
+        with open(path, 'r', encoding='utf-8') as f:
+            code = f.read()
+        return get_skeleton(code)
+    except Exception as e:
+        return f"Error generating skeleton for {path}: {str(e)}"
 
 @tool
 def list_directory(path: str = ".") -> str:
@@ -496,3 +542,24 @@ def multi_replace(path: str, replacements: list) -> str:
         return (f"ERROR: file '{path}' does not exist. Use write_file to CREATE a new file.")
     except Exception as e:
         return f"Error editing file {path}: {str(e)}"
+
+@tool
+def log_event(event_type: str, details: str) -> str:
+    """Logs a major event in the execution history.
+    Use this to keep a trace of the execution instead of writing to a text file.
+    
+    Args:
+        event_type: The type of event (e.g., 'init', 'gen', 'eval', 'fix', 'error').
+        details: A description of the event.
+    """
+    try:
+        from .idempotency import get_current_store
+        from .event_stream import get_event_db
+        store = get_current_store()
+        run_id = store.run_id if (store and store.run_id) else "unknown_run"
+        
+        db = get_event_db()
+        db.log_event(run_id, "agent", event_type, details)
+        return "Event logged successfully."
+    except Exception as e:
+        return f"Error logging event: {str(e)}"
