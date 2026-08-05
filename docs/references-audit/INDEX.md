@@ -9,8 +9,8 @@
 | Métrique | Valeur |
 |---|---|
 | **Date de l'audit** | 2026-08-05 |
-| **Projets/dossiers audités** | 24 |
-| **Entrées de fichiers inventoriées** | 448 (inventaire machine : [`inventory.json`](./inventory.json)) |
+| **Projets/dossiers audités** | 25 |
+| **Entrées de fichiers inventoriées** | 476 (inventaire machine : [`inventory.json`](./inventory.json)) |
 | **Fichiers pertinents scannés** (base) | ~11 300 (hors `.git/`, `node_modules/`, médias, fixtures) |
 | **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css`) + JSON/YAML de spec/contrat |
 | **Exclusions** | `.git/` (~730 MB), `node_modules/`, médias (1 293 SVG, 16 mp4…), fixtures de tests, traductions de README (1 conservée/projet) |
@@ -19,7 +19,7 @@
 
 ---
 
-## 🧭 Navigation — les 24 fiches
+## 🧭 Navigation — les 25 fiches
 
 | # | Projet | Réutilisabilité | Fiche | Résumé en 1 ligne |
 |---|---|---|---|---|
@@ -47,6 +47,7 @@
 | 22 | **llm-council** | 🟡 Moyenne | [22-llm-council](./projects/22-llm-council.md) | Pattern **council anonymisé** (labels A/B/C + mapping réversible + agrégation Borda) — option d'enrichissement du Judge (⚠️ coût 2N+1 appels) |
 | 23 | **mattpocock-skills** | 🟢 Haute | [23-mattpocock-skills](./projects/23-mattpocock-skills.md) | **Doctrine d'authoring formelle** (Predictability, deux charges, hiérarchie 3 rungs, 5 failure modes) — pivot de la fusion P10 + `code-review`/`tdd` engineering skills |
 | 24 | **pi** | 🟢 Haute | [24-pi](./projects/24-pi.md) | Agent stateful TS — **compaction contextuelle**, résumé de branche pour P9, et juge empirique vitest (P6) |
+| 25 | **hermes-agent** | 🟢 Haute | [25-hermes-agent](./projects/25-hermes-agent.md) | Agent auto-amélioré Python (Nous Research) — **5 axes en Python pur** : compaction offline+live (P9), SQLite FTS5 event-sourcing (P11), skills agentskills.io + guard + AST audit (P10), sécurité multi-couches (P3/P8), contrat middleware 4 kinds (P8) |
 
 ---
 
@@ -56,7 +57,7 @@
 `aider` (Python, mature), `crush` (Go), `nanocode` (Python, 1 fichier), `opencode` (TS, gigantesque), `openfox` (TS, local-LLM-first). → Valeur : edit-formats robustes (aider), anti-loop (crush), patterns d'outils minimaux (nanocode), specs de protocole (opencode), persistance event-sourcing (openfox).
 
 ### 2. 🔧 Frameworks d'orchestration d'agents (mixte code + docs)
-`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code), `loopx` (control plane — anti-loop déterministe + event sourcing + compaction, stdlib pure), `code-review-graph` (analyse d'impact + risk score composite), `pi` (agent stateful TS). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm, pi)**, **patterns harness Python natifs (learn-claude-code)**, **anti-loop déterministe + event ledger (loopx)**, **branch summarization (pi)**.
+`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code), `loopx` (control plane — anti-loop déterministe + event sourcing + compaction, stdlib pure), `code-review-graph` (analyse d'impact + risk score composite), `pi` (agent stateful TS), `hermes-agent` (agent auto-amélioré Python Nous Research — compaction + SQLite FTS5 + skills + sécurité + middleware). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm, pi, hermes-agent)**, **patterns harness Python natifs (learn-claude-code, hermes-agent)**, **anti-loop déterministe + event ledger (loopx)**, **branch summarization (pi)**, **persistance SQLite FTS5 + event-sourcing (hermes-agent)**, **sécurité multi-couches Python pur (hermes-agent)**.
 
 ### 3. 📚 Ressources & outils
 `Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante), `claude-code-unified-agents` (prompts de spécialisation), `system-prompts-and-models-of-ai-tools` (**bibliothèque de system prompts** d'outils commerciaux/open-source), `awesome-claude-skills` (**doctrine du format SKILL.md** + outillage), `davidondrej-skills` (denylist 27 regex + hooks anti-crash), `mattpocock-skills` (**doctrine d'authoring formelle** + engineering skills), `llm-council` (pattern council anonymisé).
@@ -223,6 +224,20 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | `…/webapp-testing/scripts/with_server.py` | `wait_for_port`, cycle de vie serveur | Complément Playwright au **nœud Tester** (notre `web_tester` est Puppeteer) |
 | **Format SKILL.md canonique** (section fiche 18) | frontmatter `name`+`description`, `When to Use`, `scripts/`+`references/`+`assets/` | Structure récurrente adoptée par la marketplace officielle Claude. Nos SKILL.md sont déjà compatibles (même frontmatter) |
 
+### Compaction + Persistence + Skills + Sécurité (hermes-agent — 5 axes orthogonaux Python pur)
+> 🏆 **Le dépôt le plus dense et portable du dossier.** Agent auto-amélioré de Nous Research (MIT, 8487 fichiers mais cœur utile dans ~15 fichiers Python). 5 axes orthogonaux couvrent P3/P8/P9/P10/P11 — souvent en **Python pur copiable quasi tel quel**, contrairement à qm (TypeScript) ou pi (TypeScript).
+
+| Fichier | Symbole(s) clé(s) | Apport |
+|---|---|---|
+| `references/hermes-agent/trajectory_compressor.py` | `TrajectoryCompressor`, `CompressionConfig`, `_find_protected_indices`, `_is_boundary_clean`, `_snap_boundary`, `_generate_summary` | **Compaction OFFLINE** : protège head+tail, "snappe" les boundaries pour ne pas couper une paire gpt→tool, summarise le milieu, budget cible. Python pur portable (P9) |
+| `references/hermes-agent/agent/context_compressor.py` | `ContextCompressor`, `should_compress`, `record_completed_compaction`, `record_timeout_failure`, `get_active_compression_failure_cooldown`, `_persist_ineffective_compression_count` | **Compaction LIVE** avec **garde-fous persistés** : cooldown/streak/ineffective counter en DB = anti-loop de compaction qui manque au projet. Chevauchement P3+P9 |
+| `references/hermes-agent/hermes_state_common.py` | `SCHEMA_SQL`, `FTS_SQL`, `FTS_TRIGRAM_SQL`, `_FTS_TRIGGERS`, `MAX_FTS5_QUERY_CHARS`, `SCHEMA_VERSION = 25` | **Schéma SQLite event-sourcing** : tables `sessions` (parent_session_id → lineage compaction), `messages`, `compression_locks` (verrou cross-process), `async_delegations` (subagents), FTS5 + trigram + sanitizer anti-injection. P11 |
+| `references/hermes-agent/tools/skills_tool.py` (+ `skills_sync.py`, `skill_provenance.py`, `skills_guard.py`, `skills_ast_audit.py`) | `_find_all_skills`, `_parse_frontmatter`, `skill_matches_platform`, `sync_skills`, `_content_hash`, `set_current_write_origin` (contextvars), `ScanResult` (verdict safe/caution/dangerous), `ast_scan_path` | **Système skills agentskills.io complet** : format SKILL.md + sync/diff (hash) + **provenance contextvars** (qui a créé/modifié) + **guard regex** (verdict 3 niveaux + trust_level) + **AST audit** (imports dynamiques). P10 + P8 |
+| `references/hermes-agent/tools/threat_patterns.py` (+ `approval.py`, `path_security.py`, `url_safety.py`) | `scan_for_threats(content, scope)`, `first_threat_message`, scopes `all`/`context`/`strict` ; `DANGEROUS_PATTERNS` (~260 regex), `detect_dangerous_command` ; `validate_within_dir`, `has_traversal_component` ; `is_safe_url`, `_is_blocked_ip`, `create_ssrf_safe_client`, `_SSRFGuardedNetworkBackend` | **Bibliothèque sécurité multi-couches Python pur** : threat patterns (injection/C2/frameworks offensifs/exfiltration) scope-aware + ~260 dangerous commands + path traversal blocker + **SSRF guards** (bloque IPs privées/métadonnées cloud). Copiable quasi tel quel pour le nœud Coder/Security. P3 + P0-bis + P8 |
+| `references/hermes-agent/docs/middleware/README.md` | `llm_request`, `tool_request`, `llm_execution`, `tool_execution`, `hermes.middleware.v1`, `middleware_trace` | **Contrat middleware modèle** à 4 points d'extension avec `next_call` chain of responsibility + **fail-open** + traçabilité. Runtime context complet (session/task/turn/provider/model/tool). Blueprint P8 |
+| `references/hermes-agent/tools/environments/base.py` | `BaseEnvironment` (ABC), `execute`, `_BoundedOutputCollector` (head+tail bounded, spill disk), `touch_activity_if_due` (heartbeat), `_pipe_stdin` (Windows-safe) | **ABC de sandbox** au contrat propre + output collector borné + heartbeat + stdin Windows-safe. Python pur (P1 + P8-bis) |
+| `references/hermes-agent/agent/error_classifier.py` | `FailoverReason`, `ClassifiedError`, `classify_api_error`, `_classify_400`/`_classify_402`/`_classify_by_status`/`_classify_by_message` | **Taxonomie fine d'erreurs API LLM** (400/402/by status/message/error_code) pour diagnostics failover. Python pur portable direct (P8 + P6) |
+
 ---
 
 ## 📊 Matrice réutilisabilité croisée
@@ -253,9 +268,10 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | **llm-council** | **1** | **1** | **2** | 🟡 **Moyenne** |
 | **mattpocock-skills** | **6** | **3** | **0** | 🟢 **Haute** |
 | **pi** | **3** | **4** | **0** | 🟢 **Haute** |
-| **Total** | **198** | **164** | **84** | — |
+| **hermes-agent** | **15** | **13** | **0** | 🟢 **Haute** |
+| **Total** | **213** | **177** | **84** | — |
 
-> ℹ️ Le total de la matrice (446 = 198+164+84) couvre les entrées classées H/M/L. L'inventaire machine compte 448 entrées au total (2 entrées pré-existantes non classées dans d'anciens projets).
+> ℹ️ Le total de la matrice (474 = 213+177+84) couvre les entrées classées H/M/L. L'inventaire machine compte 476 entrées au total (2 entrées pré-existantes non classées dans d'anciens projets).
 
 **Constats** :
 - **axon** (23 Haute) et **aider** (17 Haute) restent les mines d'or côté Python.
@@ -272,6 +288,7 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 - **davidondrej-skills** (3 Haute, 🟡 Moyenne) : **enrichit directement notre `bash_guard.py` (F-38)** de patterns manquants (gh delete, fork bomb, `curl|sh`, reflog expire) + doctrine fail-open + ~115 tests prêts à porter. ⚠️ Correction procédure : « 52 regex » = en réalité **27 regex** (fichier de 52 lignes).
 - **llm-council** (🟡 Moyenne) : un seul pattern utile (council anonymisé A/B/C + Borda) pour valider des findings à enjeu, mais **réserves majeures** (vibe-coded, coût 2N+1 appels, OpenRouter payant) → à traiter comme inspiration, pas dépendance.
 - **pi** (3 Haute, 🟢 Haute) : très forte valeur sur **P9 (compaction basée sur l'état fichier)** et **branch summarization**, approche complémentaire et mature à qm/loopx. Son TDD harness valide statistiquement nos choix P6.
+- **hermes-agent** (15 Haute, 🟢 Haute) : **le dépôt le plus dense et portable du dossier sur 5 axes orthogonaux**. Compaction offline (`trajectory_compressor`) + live avec garde-fous persistés (`context_compressor` cooldown/streak/ineffective), persistence SQLite FTS5 + lineage + event-sourcing subagents, skills agentskills.io avec provenance contextvars + guard + AST audit, **bibliothèque sécurité Python pur copiable quasi telle quelle** (threat patterns + ~260 dangerous commands + SSRF guards + path traversal), contrat middleware 4 kinds avec `next_call` chain + fail-open. Cœur utile concentré dans ~15 fichiers Python (malgré 8487 fichiers au total). Rejoint le peloton de tête avec axon (23 Haute) et aider (17 Haute). Réserves : pas DuckDB (transposer le pattern), adapters LLM cloud massifs non portables, god-files à découper.
 
 
 ---
@@ -334,6 +351,19 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | Une **doctrine d'authoring de skills** (théorie formelle) | Fiche **23-mattpocock-skills** → `writing-great-skills/SKILL.md` (Predictability, deux charges, 3 rungs, 5 failure modes) — pivot de la fusion P10 |
 | Un **judge à deux axes** (Standards + Spec) en sub-agents parallèles | Fiche **23-mattpocock-skills** → `engineering/code-review/SKILL.md` (jamais fusionnés ni re-rankés) |
 | Un **pattern hard-dependency vs soft-dependency** (fail-loud vs degrade) | Fiche **23-mattpocock-skills** → `.agents/adr/0001-*.md` |
+| **Compacter une trajectoire offline** (post-exécution, pour training/eval) | Fiche **25-hermes-agent** → `trajectory_compressor.py` (`TrajectoryCompressor`, head/tail protégé + milieu compressible + boundary snapping) |
+| Un **anti-loop de compaction** (cooldown/streak/ineffective persistés) | Fiche **25-hermes-agent** → `agent/context_compressor.py` (`record_timeout_failure`, `get_active_compression_failure_cooldown`, `_persist_ineffective_compression_count`) |
+| Un **schéma SQLite event-sourcing** (messages + lineage compaction + locks cross-process) | Fiche **25-hermes-agent** → `hermes_state_common.py` (`SCHEMA_SQL`, `FTS_SQL`, tables `sessions`/`messages`/`compression_locks`/`async_delegations`) |
+| Une **recherche full-text** sur l'historique (FTS5 + trigram + sanitizer) | Fiche **25-hermes-agent** → `hermes_state_search.py` (`search_messages`, `_sanitize_fts5_query`, `_run_trigram_search`) |
+| Un **système de skills complet** (loading + sync + provenance + guard + AST audit) | Fiche **25-hermes-agent** → `tools/skills_tool.py` + `skills_sync.py` + `skill_provenance.py` + `skills_guard.py` + `skills_ast_audit.py` |
+| Une **bibliothèque de threat patterns** (injection, C2, frameworks offensifs, exfiltration) | Fiche **25-hermes-agent** → `tools/threat_patterns.py` (`scan_for_threats`, scope-aware all/context/strict) |
+| Une **denylist de commandes dangereuses** (~260 patterns Python) | Fiche **25-hermes-agent** → `tools/approval.py` (`DANGEROUS_PATTERNS`, `detect_dangerous_command`) — enrichit davidondrej (21, 27 regex) et notre bash_guard.py |
+| Des **guards SSRF** (bloque IPs privées/métadonnées cloud) | Fiche **25-hermes-agent** → `tools/url_safety.py` (`is_safe_url`, `_is_blocked_ip`, `create_ssrf_safe_client`, `_SSRFGuardedNetworkBackend`) |
+| Un **path traversal blocker** (validate_within_dir) | Fiche **25-hermes-agent** → `tools/path_security.py` (`validate_within_dir`, `has_traversal_component`) |
+| Un **contrat de middleware** à 4 points d'extension (request/execution LLM+tool, next_call chain, fail-open) | Fiche **25-hermes-agent** → `docs/middleware/README.md` (`llm_request`/`tool_request`/`llm_execution`/`tool_execution`, `hermes.middleware.v1`) |
+| Une **taxonomie d'erreurs API LLM** (pour error recovery/escalation) | Fiche **25-hermes-agent** → `agent/error_classifier.py` (`classify_api_error`, `FailoverReason`, `_classify_400`/`_classify_402`) |
+| Une **ABC de sandbox** (contrat execute + output collector borné + heartbeat + stdin Windows-safe) | Fiche **25-hermes-agent** → `tools/environments/base.py` (`BaseEnvironment`, `_BoundedOutputCollector`, `touch_activity_if_due`, `_pipe_stdin`) |
+| Un **pattern de background review** (fork thread + digest + whitelist outils, Judge auto-apprenant) | Fiche **25-hermes-agent** → `agent/background_review.py` (`spawn_background_review_thread`, `_digest_history`, `_bg_review_auto_deny`) |
 
 ---
 
@@ -343,8 +373,8 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 docs/references-audit/
 ├── README.md              ← Mode d'emploi (start ici)
 ├── INDEX.md               ← CE DOCUMENT (navigation + synthèse + Hall of Fame)
-├── inventory.json         ← Inventaire machine-lisible (441 entrées, filtrable)
-└── projects/              ← 23 fiches détaillées (1 par projet)
+├── inventory.json         ← Inventaire machine-lisible (476 entrées, filtrable)
+└── projects/              ← 25 fiches détaillées (1 par projet)
     ├── 01-prompt-vault.md
     ├── 02-aider.md
     ├── ...
@@ -359,7 +389,8 @@ docs/references-audit/
     ├── 21-davidondrej-skills.md
     ├── 22-llm-council.md
     ├── 23-mattpocock-skills.md
-    └── 24-pi.md
+    ├── 24-pi.md
+    └── 25-hermes-agent.md
 ```
 
 **Pour recherche programmatique** : `inventory.json` est consommable directement :

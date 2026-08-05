@@ -546,10 +546,152 @@ PI_FILES = [
      "description": "API pour streamer raisonnement et toolcalls, base pour event bus JSON (P11)."},
 ]
 
+# 25 — hermes-agent (Nous Research) : agent auto-amélioré Python/TS. Cœur utile concentré
+# dans ~15 fichiers Python (racine + agent/ + tools/). 5 axes orthogonaux en Python pur :
+# compaction (P9), persistence SQLite FTS5 (P11), skills agentskills.io (P10), sécurité
+# multi-couches (P3/P8), contrat middleware 4 kinds (P8). Licence MIT.
+HERMES_BASE = "references/hermes-agent"
+HERMES_FILES = [
+    # --- P9 : Compaction (offline + live) ---
+    {"path": f"{HERMES_BASE}/trajectory_compressor.py", "type": "code", "reuse": "high",
+     "key_symbols": ["CompressionConfig", "TrajectoryMetrics", "AggregateMetrics",
+                     "TrajectoryCompressor", "_find_protected_indices", "_is_boundary_clean",
+                     "_snap_boundary", "_generate_summary", "count_trajectory_tokens",
+                     "process_directory"],
+     "description": "Compaction OFFLINE d'une trajectoire JSONL (post-exécution, pour training/eval). Protège head (system/first turn) + tail (last N turns), 'snappe' les boundaries pour ne pas couper une paire gpt→tool, summarise le milieu via LLM, maintient un budget cible. Async (max_concurrent_requests=50, timeout 300s). Python pur portable. Blueprint P9."},
+    {"path": f"{HERMES_BASE}/agent/context_compressor.py", "type": "code", "reuse": "high",
+     "key_symbols": ["ContextCompressor", "should_compress", "should_compress_info",
+                     "record_completed_compaction", "record_timeout_failure",
+                     "get_active_compression_failure_cooldown", "bind_session_state",
+                     "_refresh_durable_guards", "_automatic_compression_blocked",
+                     "_persist_ineffective_compression_count"],
+     "description": "Compaction LIVE mid-conversation avec garde-fous persistés en DB : seuil dynamique, 'fallback streak' + 'ineffective counter', cooldown après échec (anti-spam de compaction), snapshot images/pièces. Les durable breakers (cooldown/streak/ineffective) sont l'anti-loop de compaction qui manque au projet. P9 + chevauchement P3."},
+    {"path": f"{HERMES_BASE}/datagen-config-examples/trajectory_compression.yaml", "type": "config",
+     "reuse": "medium",
+     "key_symbols": ["CompressionConfig.from_yaml"],
+     "description": "Exemple de config YAML de compression (budget, head/tail sizes, max_concurrent_requests). Modèle pour le from_yaml de CompressionConfig (P9)."},
+
+    # --- P11 : Persistence SQLite FTS5 + event-sourcing ---
+    {"path": f"{HERMES_BASE}/hermes_state_common.py", "type": "code", "reuse": "high",
+     "key_symbols": ["SCHEMA_VERSION", "FTS_STORAGE_VERSION", "SCHEMA_SQL", "FTS_SQL",
+                     "FTS_TRIGRAM_SQL", "_FTS_TRIGGERS", "MAX_FTS5_QUERY_CHARS"],
+     "description": "Schéma SQL central : tables sessions (parent_session_id → lineage compaction), messages (role/content/tool_calls/token_count/active/compacted), compression_locks (verrou cross-process), async_delegations (event-sourcing subagents), session_model_usage. FTS5 sur messages.content via triggers + FTS5 trigram (CJK/fuzzy) + sanitizer anti-injection. P11."},
+    {"path": f"{HERMES_BASE}/hermes_state.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["SessionDB", "AsyncSessionDB", "apply_wal_with_fallback",
+                     "repair_state_db_schema", "quarantine_zeroed_state_db",
+                     "preflight_db_writability"],
+     "description": "Implémentation SessionDB (SessionSearchMixin + SessionSchemaMixin + SessionPortabilityMixin). WAL avec fallback automatique, repair DB corrompue, quarantine DB zerée. Pattern à transposer sur DuckDB (ou SQLite séparé pour le search). P11."},
+    {"path": f"{HERMES_BASE}/hermes_state_schema.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["SessionSchemaMixin", "_init_schema", "_reconcile_columns",
+                     "_rebuild_fts_indexes", "_migrate_broad_fts_update_triggers"],
+     "description": "Migration schema versionnée (jusqu'à v25) avec _reconcile_columns (ADD COLUMN rétrocompatible). Modèle de migration additive pour DuckDB. P11."},
+    {"path": f"{HERMES_BASE}/hermes_state_search.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["SessionSearchMixin", "search_messages", "_sanitize_fts5_query",
+                     "_run_trigram_search", "rebuild_fts", "optimize_fts"],
+     "description": "Recherche full-text sur messages (FTS5 + trigram fallback CJK/fuzzy) avec sanitizer anti-injection FTS5 operators. Pattern de search transposable. P11."},
+
+    # --- P10 : Skills agentskills.io (loading + sync + provenance + guard + AST audit) ---
+    {"path": f"{HERMES_BASE}/tools/skills_tool.py", "type": "code", "reuse": "high",
+     "key_symbols": ["SkillReadinessStatus", "check_skills_requirements", "_parse_frontmatter",
+                     "_find_all_skills", "skill_matches_platform", "skill_matches_environment",
+                     "_skills_scan_signature", "_capture_required_environment_variables"],
+     "description": "Loading des skills SKILL.md (YAML frontmatter + markdown, standard agentskills.io) : scan récursif, filtres platform/environment, cache de scan, capture des vars d'env requises. Python pur. P10."},
+    {"path": f"{HERMES_BASE}/tools/skills_sync.py", "type": "code", "reuse": "high",
+     "key_symbols": ["sync_skills", "_content_hash", "_dir_hash", "diff_bundled_skill",
+                     "_index_active_skills", "restore_official_optional_skill",
+                     "list_user_modified_bundled_skills"],
+     "description": "Sync/diff/restore des skills officiels vs modifiés par utilisateur (hash de contenu + dir hash). Détecte les modifications, permet reset/diff. P10."},
+    {"path": f"{HERMES_BASE}/tools/skill_provenance.py", "type": "code", "reuse": "high",
+     "key_symbols": ["set_current_write_origin", "reset_current_write_origin",
+                     "get_current_write_origin", "is_background_review"],
+     "description": "Traçabilité de l'origine de chaque écriture skill/memory via contextvars (user/agent/hub/background_review). Permet de savoir QUI a créé/modifié une ressource. Pattern transposable direct. P10."},
+    {"path": f"{HERMES_BASE}/tools/skills_guard.py", "type": "code", "reuse": "high",
+     "key_symbols": ["Finding", "ScanResult", "scan_skill", "scan_file",
+                     "should_allow_install", "format_scan_report", "_determine_verdict",
+                     "_resolve_trust_level"],
+     "description": "Guard de sécurité pour skills : scanne le contenu (regex os.system/eval…), verdict 3 niveaux (safe/caution/dangerous) + trust_level (community/trusted/agent_created). Python pur portable. P10 + P8."},
+    {"path": f"{HERMES_BASE}/tools/skills_ast_audit.py", "type": "code", "reuse": "high",
+     "key_symbols": ["ast_scan_path", "format_ast_report"],
+     "description": "Audit AST pour détecter imports dynamiques (importlib.import_module, __import__ computed, getattr computed, __dict__[computed]). Complément structurel au guard regex. P10 + P8."},
+    {"path": f"{HERMES_BASE}/skills/software-development/test-driven-development/SKILL.md",
+     "type": "skill", "reuse": "medium",
+     "key_symbols": [],
+     "description": "Exemple vivant de skill engineering TDD au format agentskills.io. Modèle d'authoring (P10)."},
+    {"path": f"{HERMES_BASE}/skills/software-development/systematic-debugging/SKILL.md",
+     "type": "skill", "reuse": "medium",
+     "key_symbols": [],
+     "description": "Exemple vivant de skill systematic-debugging au format agentskills.io. Modèle d'authoring (P10)."},
+
+    # --- P3 + P0-bis + P8 : Sécurité multi-couches (Python pur copiable) ---
+    {"path": f"{HERMES_BASE}/tools/threat_patterns.py", "type": "code", "reuse": "high",
+     "key_symbols": ["MAX_SCAN_CHARS", "_PATTERNS", "scan_for_threats", "first_threat_message",
+                     "_compile"],
+     "description": "Bibliothèque centrale de patterns de menaces (regex + scope all/context/strict) : prompt injection, role hijack, C2/Brainworm promptware, frameworks offensifs (cobalt strike/sliver/havoc/mythic), exfiltration curl+secrets, anti-forensic. Scope-aware pour calibrer faux positifs. Python pur copiable quasi tel quel. P3 + P0-bis + P8."},
+    {"path": f"{HERMES_BASE}/tools/approval.py", "type": "code", "reuse": "high",
+     "key_symbols": ["DANGEROUS_PATTERNS", "DANGEROUS_PATTERNS_COMPILED",
+                     "detect_dangerous_command"],
+     "description": "Détection de ~260 patterns de commandes shell dangereuses avant exécution. detect_dangerous_command(command) -> tuple. Enrichit davidondrej (21, 27 regex) et notre bash_guard.py (F-38). P8."},
+    {"path": f"{HERMES_BASE}/tools/path_security.py", "type": "code", "reuse": "high",
+     "key_symbols": ["validate_within_dir", "has_traversal_component"],
+     "description": "Bloque path traversal : validate_within_dir(path, root), has_traversal_component. Python pur sans dépendance. P8."},
+    {"path": f"{HERMES_BASE}/tools/url_safety.py", "type": "code", "reuse": "high",
+     "key_symbols": ["is_safe_url", "is_always_blocked_url", "_is_blocked_ip",
+                     "has_sensitive_query_params", "create_ssrf_safe_client",
+                     "create_ssrf_safe_async_client", "_SSRFGuardedNetworkBackend"],
+     "description": "Guards SSRF complets : bloque IPs privées/métadonnées cloud via interception connect_tcp, détecte query params sensibles (tokens/secrets). Python pur (httpx optionnel). P8."},
+    {"path": f"{HERMES_BASE}/tools/write_approval.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["GateDecision", "evaluate_gate", "stage_write", "list_pending",
+                     "get_pending", "pending_count", "skill_gist", "skill_pending_diff"],
+     "description": "Gate d'écriture pour skills/memory : stage/commit pattern avec diff en attente. Modèle d'approval gating pour écritures sensibles. P8."},
+    {"path": f"{HERMES_BASE}/agent/shell_hooks.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["ShellHookSpec", "register_from_config", "iter_configured_hooks",
+                     "load_allowlist", "save_allowlist", "_is_allowlisted", "run_once"],
+     "description": "Hooks shell externes via subprocess + JSON stdin/stdout, avec allowlist persistant. Modèle de hooks configurables bloquer/approuver. P8."},
+
+    # --- P8 : Contrat middleware 4 kinds ---
+    {"path": f"{HERMES_BASE}/docs/middleware/README.md", "type": "spec", "reuse": "high",
+     "key_symbols": ["llm_request", "tool_request", "llm_execution", "tool_execution",
+                     "hermes.middleware.v1", "hermes.observer.v1", "middleware_trace"],
+     "description": "Contrat formel de middleware à 4 points d'extension : request LLM, request tool (avant guardrails/approvals), execution LLM (avec next_call chain of responsibility), execution tool. Fail-open, traçabilité via middleware_trace. Runtime context (session_id/task_id/turn_id/provider/model/tool_name). Blueprint modèle pour P8."},
+    {"path": f"{HERMES_BASE}/gateway/hooks.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["HookRegistry", "discover_and_load", "_resolve_handlers", "loaded_hooks"],
+     "description": "Implémentation du registry de hooks (discovery + loading + resolution). Squelette de middleware registry transposable. P8."},
+
+    # --- P6 : Background review + curator + error classifier ---
+    {"path": f"{HERMES_BASE}/agent/background_review.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["spawn_background_review_thread", "_run_review_in_thread",
+                     "_resolve_review_runtime", "_digest_history", "build_memory_write_metadata",
+                     "_bg_review_auto_deny"],
+     "description": "Self-improvement loop asynchrone : fork thread daemon, replay conversation (full si même modèle pour cache, sinon digest compact), demande création/maj skill/mémoire. Outils whitelistés, autres deny runtime. Pattern transposable pour un Judge auto-apprenant. P6."},
+    {"path": f"{HERMES_BASE}/agent/curator.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["run_curator_review", "maybe_run_curator", "apply_automatic_transitions",
+                     "_render_report_markdown", "_write_run_report"],
+     "description": "Cron de maintenance : archive/stale skills peu utilisées, consolide mémoires, transitions d'état par âge. Modèle de housekeeping périodique pour skills/mémoire. P6 + P10."},
+    {"path": f"{HERMES_BASE}/agent/error_classifier.py", "type": "code", "reuse": "high",
+     "key_symbols": ["FailoverReason", "ClassifiedError", "classify_api_error",
+                     "_classify_400", "_classify_402", "_classify_by_status",
+                     "_classify_by_message", "_classify_by_error_code"],
+     "description": "Taxonomie fine d'erreurs API LLM (400/402/by status/by message/by error_code) pour diagnostics failover. Python pur portable direct, utile pour le nœud d'escalation/error recovery. P8 + P6."},
+
+    # --- P1 + P8-bis : Sandbox backends (ABC + 7 implémentations) ---
+    {"path": f"{HERMES_BASE}/tools/environments/base.py", "type": "code", "reuse": "high",
+     "key_symbols": ["BaseEnvironment", "execute", "stop", "cleanup", "_run_bash",
+                     "_before_execute", "_wrap_command", "_wait_for_process",
+                     "_BoundedOutputCollector", "touch_activity_if_due",
+                     "get_sandbox_dir", "_pipe_stdin"],
+     "description": "ABC de sandbox avec contrat execute(command)→{stdout,returncode,cwd}. Bounded output collector cap la taille stdout (head+tail+notice, spill disk). Heartbeat 10s. _pipe_stdin gère Windows \\n→\\r\\n. Python pur. P1 + P8-bis."},
+    {"path": f"{HERMES_BASE}/tools/environments/docker.py", "type": "code", "reuse": "medium",
+     "key_symbols": [],
+     "description": "Backend sandbox Docker concret (_run_bash, _before_execute, cleanup). Un des 7 backends — pertinent pour llama.cpp local conteneurisé. P1 + P8-bis."},
+    {"path": f"{HERMES_BASE}/tools/environments/local.py", "type": "code", "reuse": "medium",
+     "key_symbols": [],
+     "description": "Backend sandbox local concret (_run_bash subprocess direct). Le plus pertinent pour llama.cpp local natif. P1 + P8-bis."},
+]
+
 def main() -> None:
     data = json.loads(INVENTORY.read_text(encoding="utf-8"))
 
-    data["projects_audited"] = 24
+    data["projects_audited"] = 25
     data["audit_date"] = "2026-08-05"
 
     updated = []
@@ -655,6 +797,15 @@ def main() -> None:
                 "summary": "Agent stateful interactif (monorepo TS). Brillante implémentation de compaction de contexte basée sur l'état des fichiers (P9) et de branch summarization pour l'undo. Système LLM-as-a-judge (vitest-evals) validant P6. Modèles clairs d'intercepteurs événementiels (P8) et de stream (P11). Fort couplage TS/Node à ignorer pour s'inspirer de l'architecture.",
                 "files": PI_FILES,
             }
+        elif pid == "hermes-agent":
+            project = {
+                "id": "hermes-agent", "name": "hermes-agent",
+                "path": "references/hermes-agent",
+                "category": "agent-framework",
+                "reuse_rating": "high",
+                "summary": "Agent IA auto-amélioré de Nous Research (Python + TS, 8487 fichiers, MIT). Gisement exceptionnel sur 5 axes orthogonaux en Python pur : (1) compaction trajectoire offline+live avec garde-fous persistés (P9), (2) persistence SQLite FTS5+WAL + lineage parent/enfant + event-sourcing subagents (P11), (3) skills agentskills.io avec provenance contextvars + guard regex + AST audit (P10), (4) sécurité multi-couches (threat patterns, ~260 dangerous commands, SSRF guards, path traversal) copiable quasi tel quel (P3/P8), (5) contrat middleware 4 kinds avec next_call chain + fail-open (P8). Secondaire : 7 backends sandbox (P1/P8-bis), background review thread (P6). Cœur utile concentré dans ~15 fichiers Python. Réserves : pas DuckDB (transposer le pattern), adapters LLM cloud massifs non portables, god-files à découper.",
+                "files": HERMES_FILES,
+            }
         updated.append(project)
         seen_ids.add(pid)
 
@@ -714,6 +865,11 @@ def main() -> None:
                         "path": "references/pi",
                         "category": "agent-framework", "reuse_rating": "high",
                         "summary": "(ajouté par update_inventory.py)", "files": PI_FILES})
+    if "hermes-agent" not in seen_ids:
+        updated.append({"id": "hermes-agent", "name": "hermes-agent",
+                        "path": "references/hermes-agent",
+                        "category": "agent-framework", "reuse_rating": "high",
+                        "summary": "(ajouté par update_inventory.py)", "files": HERMES_FILES})
 
     data["projects"] = updated
 
@@ -727,7 +883,7 @@ def main() -> None:
             by_reuse[r] = by_reuse.get(r, 0) + 1
     print(f"OK — {len(data['projects'])} projets, {total} entrées au total.")
     print(f"Répartition : {by_reuse}")
-    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi"):
+    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi", "hermes-agent"):
         proj = next(p for p in data["projects"] if p["id"] == new_id)
         print(f"  {new_id} : {len(proj['files'])} entrées (reuse_rating={proj['reuse_rating']})")
 
