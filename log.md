@@ -3044,3 +3044,5 @@ de bout en bout. Run stoppé volontairement après constats (choix user : consig
 - CONTEXTE7 ARCHITECT : mécanisme existant (fetch_context7_brief, pré-fetch si lib externe)
   fonctionne. Amélioration possible : multi-lib (fetch Chart.js + Tailwind séparément).
   ROI moyen (4/12 Prompt-Vault mentionnent des libs, surtout Advanced/Hard). Cycle futur.
+
+## [2026-08-05 11:02:52] doc  | Mise a jour des plans : procedure de l audit avec PROCEDURE-AUDIT-REFERENCE.md, ajout de pi pour compaction state et judge empirique.
