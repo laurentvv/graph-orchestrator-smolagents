@@ -741,7 +741,8 @@ Code prêt pour la production, respectant les conventions du langage.
                 temperature=settings.coder_temperature,
                 client_kwargs={"timeout": settings.llm_timeout_s},
             )
-            local_coder = CodeAgent(
+            from .compaction import CompactingCodeAgent
+            local_coder = CompactingCodeAgent(
                 tools=coder_tools,
                 model=dynamic_fast_model,
                 name=f"coder_{task['id'].replace('-', '_')}",
