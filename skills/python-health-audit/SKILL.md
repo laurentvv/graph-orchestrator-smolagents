@@ -13,20 +13,11 @@ de façon **read-only** (tu ne modifies JAMAIS les fichiers `.py`, tu only lis e
 Pour auditer un projet situé dans un dossier `target` :
 
 1. **Explore** : utilise `list_dir` et `read_file` pour comprendre la structure.
-2. **Exécute les outils d'analyse** via `python_interpreter` ou `os_exec` (subprocess) :
-
-```python
-# Dead code local + global (Ruff + Vulture)
-import subprocess
-# Ruff : dead code local
-subprocess.run(["uvx", "ruff", "check", "--select", "F401,F841", target], capture_output=True)
-# Vulture : dead code global
-subprocess.run(["uvx", "vulture", target], capture_output=True)
-# Radon : complexité cyclomatique
-subprocess.run(["uvx", "radon", "cc", target, "-s"], capture_output=True)
-# Radon : Maintainability Index
-subprocess.run(["uvx", "radon", "mi", target, "-s"], capture_output=True)
+2. **Exécute les outils d'analyse** : Le code complexe a été factorisé. Utilise simplement `bash_command` pour exécuter le script pré-packagé :
+```bash
+python skills/python-health-audit/scripts/run_audit.py <target_directory>
 ```
+Le script se charge d'invoquer Ruff, Vulture et Radon proprement. S'il échoue car un outil n'est pas installé, `uvx` le gérera.
 
 3. **Compile les résultats** en un rapport structuré.
 
