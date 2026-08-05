@@ -419,11 +419,15 @@ def _parse_devtools_json(raw) -> list:
                     return []
         if isinstance(parsed, list):
             return parsed
+        if isinstance(parsed, dict):
+            # Un objet unique (ex: sonde Tier 3 retournant {t0, t1, ...}) → on l'enrobe
+            # dans une liste pour garder une API homogène (les appelants itèrent).
+            return [parsed]
         if isinstance(parsed, str):
             # parsed est encore une string (contenu doublement stringifié) → reloop.
             text = parsed
             continue
-        return []  # dict ou scalar → pas ce qu'on cherche
+        return []  # scalar → pas ce qu'on cherche
     return []
 
 
@@ -540,6 +544,174 @@ def _evaluate_visibility(
 
 
 # ==========================================
+# Tier 3 — Animation temporelle via DevTools (anti "animation instantanée")
+# ==========================================
+# Le bug : performStep() (appelée par requestAnimationFrame) contient les boucles
+# imbriquées complètes de l'algorithme → tout s'exécute en 1 tick JS → animation
+# instantanée invisible, delay/slider inopérants. Ni le Tier 1 (JS valide, tout wireé)
+# ni le Tier 2 (barres visibles) ne le voient. Le Tester LLM non plus : son pattern
+# d'animation (wait 2s then check final state) passe même si l'animation a duré 0 ms.
+#
+# Détection : on clique Start, on attend une fenêtre courte (400 ms), et on mesure la
+# progression d'un signal (compteur de comparaisons, nombre de .sorted). Si l'état est
+# déjà terminal après < 50 ms alors que l'animation devrait durer plus → instantané.
+
+# Fenêtre d'observation (ms). Assez courte pour rester déterministe, assez longue pour
+# qu'au moins une frame ait eu lieu (une animation légitime progresse déjà à ce stade).
+_TIER3_OBSERVE_MS = 400
+# Seuil (ms) en dessous duquel un état terminal = animation instantanée. Une animation
+# légitime à delay=1 ms sur 30 barres dure ~21 s ; à 50 ms elle reste >> seuil.
+_TIER3_INSTANT_THRESHOLD_MS = 50
+
+
+def _evaluate_temporal(
+    devtools_tools: list, url: str, primary_action_id: Optional[str] = None
+) -> List[str]:
+    """Tier 3 : détecte une animation instantanée (qui termine en < 50 ms au lieu de
+    progresser sur plusieurs secondes).
+
+    Réutilise le pattern DevTools de _evaluate_visibility (navigate + single
+    evaluate_script async), le helper _parse_devtools_json, et l'id d'action primaire
+    (_find_primary_action_id).
+
+    Protocole en UN seul evaluate_script (le navigateur garde l'état entre le snapshot
+    T0, le clic, l'attente et le snapshot T1) :
+      1. Snapshot T0 = signal de progression (compteur #counter/#comparisonCount si
+         présent, sinon nombre de .sorted, sinon -1 = indétectable).
+      2. performance.now() au clic du bouton primaire.
+      3. await setTimeout(400) — fenêtre d'observation.
+      4. Snapshot T1 + performance.now() → elapsed_ms.
+      5. Retourne JSON {t0, t1, elapsed_ms, finished}.
+
+    Verdict (côté Python) :
+      - elapsed_ms < 50 ET finished (état terminal atteint) → animation instantanée (FAIL).
+      - t1 > t0 non terminal → animation en cours (OK, pas de flag).
+      - t1 == t0 non terminal → non démarré ou signal indétectable → skip (jamais de FP).
+
+    Args:
+        primary_action_id: id du bouton primaire à cliquer (start/generate/run...).
+            None → pas de déclenchement possible, on skip sans flaguer.
+
+    Returns:
+        Liste d'erreurs (vide si OK ou si DevTools indispo / signal indétectable).
+    """
+    if not devtools_tools or not primary_action_id:
+        return []
+
+    by_name = {getattr(t, "name", str(t)): t for t in devtools_tools}
+    navigate = by_name.get("navigate_page") or by_name.get("navigate")
+    evaluate = by_name.get("evaluate_script") or by_name.get("evaluate")
+    if not navigate or not evaluate:
+        logger.debug("Static Tester Tier 3 : outils DevTools navigate/evaluate absents — skip.")
+        return []
+
+    def _eval(js_source: str):
+        inputs = getattr(evaluate, "inputs", {}) or {}
+        if "script" in inputs:
+            return evaluate(script=js_source)
+        if "function" in inputs:
+            return evaluate(function=js_source)
+        return evaluate(js_source)
+
+    try:
+        nav_kwargs = {"url": url}
+        if "url" not in (getattr(navigate, "inputs", {}) or {}):
+            nav_kwargs = {}
+        navigate(**nav_kwargs)
+
+        # Un seul evaluate_script async : snapshot T0 → clic → wait → snapshot T1.
+        # NB : chrome-devtools-mcp evaluate_script attend une DÉCLARATION de fonction
+        # (qu'il exécute lui-même). On autorise async () => { await ... } (documenté
+        # nodes.py:504) — on n'écrit JAMAIS d'IIFE `(() => {...})()` top-level await.
+        #
+        # DEUX signaux DISTINCTS :
+        #  - progression : compteur de comparaisons (#counter) si présent, sinon nombre
+        #    de .sorted. Sert à confirmer que le clic a déclenché l'algorithme (t1 > t0).
+        #  - finished : l'animation a atteint son état terminal. Détection GÉNÉRIQUE par
+        #    ordre croissant des hauteurs des .bar (un tri est terminé quand le tableau
+        #    est ordonné). On NE compare PAS le compteur au nombre de barres (un tri de
+        #    n éléments fait n*(n-1)/2 comparaisons, pas n — sinon faux "finished" dès
+        #    la n-ième comparaison sur une animation légitime).
+        js_probe = (
+            "async () => {"
+            "  const progression = () => {"
+            "    const c = document.querySelector('#counter, #comparisonCount');"
+            "    if (c) { const v = parseInt(c.textContent); if (!isNaN(v)) return v; }"
+            "    return document.querySelectorAll('.bar.sorted').length;"
+            "  };"
+            "  const heightsSorted = () => {"
+            "    const hs = [...document.querySelectorAll('.bar')].map(b => parseFloat(b.style.height) || 0);"
+            "    if (hs.length < 2) return false;"
+            "    for (let k = 1; k < hs.length; k++) { if (hs[k] < hs[k-1]) return false; }"
+            "    return true;"
+            "  };"
+            "  const allSorted = () => {"
+            "    const bars = document.querySelectorAll('.bar');"
+            "    return bars.length > 0 && bars.length === document.querySelectorAll('.bar.sorted').length;"
+            "  };"
+            "  const t0 = progression();"
+            f"  const btn = document.getElementById('{primary_action_id}');"
+            "  if (!btn) { return JSON.stringify({t0: -1, t1: -1, elapsed_ms: -1, finished: false, reason: 'no-btn'}); }"
+            "  const t_start = performance.now();"
+            "  btn.click();"
+            f"  await new Promise(r => setTimeout(r, {_TIER3_OBSERVE_MS}));"
+            "  const t1 = progression();"
+            "  const elapsed_ms = performance.now() - t_start;"
+            "  const finished = heightsSorted() || allSorted();"
+            "  return JSON.stringify({t0, t1, elapsed_ms, finished});"
+            "}"
+        )
+        raw = _eval(js_probe)
+        result_list = _parse_devtools_json(raw)
+
+        # _parse_devtools_json renvoie une liste ; on prend le 1er dict.
+        item = None
+        for r in result_list:
+            if isinstance(r, dict):
+                item = r
+                break
+        if not item:
+            return []
+
+        # Signal indétectable (pas de compteur, pas de .sorted) → on ne conclut pas.
+        if item.get("reason") == "no-btn":
+            return []
+
+        t0 = item.get("t0", -1)
+        t1 = item.get("t1", -1)
+        elapsed_ms = item.get("elapsed_ms", -1)
+        finished = bool(item.get("finished", False))
+
+        # Animation instantanée : l'état terminal est atteint pendant la fenêtre
+        # d'observation de _TIER3_OBSERVE_MS (400 ms). Une animation légitime censée
+        # durer > 1 s ne serait PAS terminée à 400 ms → finished=true ici prouve que tout
+        # s'est exécuté en (au plus) quelques frames. On exige t1 > t0 (la progression a
+        # bien eu lieu, le clic a déclenché l'algorithme) pour éviter les faux positifs
+        # sur une page déjà à l'état terminal avant le clic.
+        # NB : elapsed_ms inclut la fenêtre d'attente (await setTimeout(400)) ; on ne
+        # l'utilise pas comme seuil absolu (il vaut ~400 ms dans tous les cas) — il sert
+        # juste d'info contextuelle dans le message.
+        if finished and t1 > t0:
+            return [
+                f"[temporal] Animation instantanée détectée : l'action '{primary_action_id}' "
+                f"amène l'état à son terme (signal {t0}→{t1}, terminal) en moins de "
+                f"{_TIER3_OBSERVE_MS} ms, au lieu de progresser sur plusieurs secondes/frame. "
+                f"Cause typique : la fonction appelée par `requestAnimationFrame` (ou nommée "
+                f"step/tick/performStep) contient les boucles `for`/`while` complètes de "
+                f"l'algorithme → tout s'exécute en 1 tick JS. Corrige en n'avançant que d'UNE "
+                f"seule itération par frame (indices i/j persistés hors de la fonction). Le "
+                f"`delay`/slider de vitesse doit réellement contrôler le rythme."
+            ]
+        # Cas non terminal mais aucune progression : animation non démarrée OU signal
+        # non pertinent. On ne flag PAS (risque de faux positif : animation lente légitime
+        # où 400 ms < temps d'une itération). Le LLM Tester vérifiera le comportement réel.
+        return []
+    except Exception as e:
+        logger.debug("Static Tester Tier 3 skip (%s).", e)
+        return []
+
+
+# ==========================================
 # API publique
 # ==========================================
 @dataclass
@@ -548,7 +720,7 @@ class StaticCheckResult:
     path: str
     is_valid: bool
     errors: List[str] = field(default_factory=list)
-    tier_reached: str = "skipped"  # "tier1" | "tier2" | "skipped"
+    tier_reached: str = "skipped"  # "tier1" | "tier2" | "tier3" | "skipped"
 
 
 def _detect_html(path: str) -> bool:
@@ -557,15 +729,22 @@ def _detect_html(path: str) -> bool:
     return ext in (".html", ".htm")
 
 
-def static_check_html(path: str, run_devtools: bool = True, devtools_url: Optional[str] = None) -> StaticCheckResult:
-    """Check statique complet d'un fichier HTML : Tier 1 (+ Tier 2 si activé).
+def static_check_html(
+    path: str,
+    run_devtools: bool = True,
+    devtools_url: Optional[str] = None,
+    run_temporal: bool = True,
+) -> StaticCheckResult:
+    """Check statique complet d'un fichier HTML : Tier 1 (+ Tier 2/3 si activé).
 
     Args:
         path: Chemin du fichier HTML à valider.
-        run_devtools: True pour lancer le Tier 2 (visibilité DOM via Chrome).
-            False = Tier 1 seul (plus rapide, 0 dépendance Chrome).
-        devtools_url: URL file:/// à passer à navigate_page pour le Tier 2.
+        run_devtools: True pour lancer le Tier 2 (visibilité DOM via Chrome) et
+            le Tier 3 (animation temporelle via Chrome). False = Tier 1 seul.
+        devtools_url: URL file:/// à passer à navigate_page pour les Tiers 2/3.
             Si None, déduite du path.
+        run_temporal: True pour lancer le Tier 3 (détection animation instantanée).
+            False = Tier 2 seul. N'a d'effet que si run_devtools=True.
 
     Returns:
         StaticCheckResult avec is_valid=False si un bug est détecté.
@@ -594,7 +773,7 @@ def static_check_html(path: str, run_devtools: bool = True, devtools_url: Option
         # Page blanche garantie → Tier 2 inutile.
         return StaticCheckResult(path=path, is_valid=False, errors=errors, tier_reached="tier1")
 
-    # --- Tier 2 (optionnel, runtime DevTools) ---
+    # --- Tier 2 + Tier 3 (optionnels, runtime DevTools) ---
     if run_devtools:
         from .chrome_devtools_tool import chrome_devtools_tools
         try:
@@ -608,10 +787,21 @@ def static_check_html(path: str, run_devtools: bool = True, devtools_url: Option
                     tier2_errors = _evaluate_visibility(cdt, url, selectors, primary_id)
                     errors.extend(tier2_errors)
                     tier = "tier2"
+
+                    # --- Tier 3 (animation temporelle) ---
+                    # Détecte les animations instantanées (performStep qui contient tout
+                    # l'algorithme). On le lance uniquement si le Tier 2 n'a pas trouvé de
+                    # barre invisible (sinon l'animation ne serait de toute façon pas
+                    # visible — le bug Tier 2 est plus prioritaire). On partage la même
+                    # session DevTools (un seul spawn Chrome).
+                    if run_temporal:
+                        tier3_errors = _evaluate_temporal(cdt, url, primary_id)
+                        errors.extend(tier3_errors)
+                        tier = "tier3"
                 else:
                     tier = "tier1"  # Chrome absent → on reste au Tier 1
         except Exception as e:
-            logger.debug("Static Tester Tier 2 indisponible (%s).", e)
+            logger.debug("Static Tester Tier 2/3 indisponible (%s).", e)
             tier = "tier1"
 
     return StaticCheckResult(
@@ -665,18 +855,20 @@ def execute_static_tester_node(
 
     # Tier 2 activé sauf si STATIC_TESTER_DEVTOOLS=0.
     run_devtools = os.getenv("STATIC_TESTER_DEVTOOLS", "1").strip().lower() not in {"0", "false", "no", "off"}
+    # Tier 3 (animation temporelle) activé sauf si STATIC_TESTER_TEMPORAL=0.
+    run_temporal = os.getenv("STATIC_TESTER_TEMPORAL", "1").strip().lower() not in {"0", "false", "no", "off"}
 
     all_errors: List[str] = []
     tiers_reached: List[str] = []
     for html_path in html_targets:
-        res = static_check_html(html_path, run_devtools=run_devtools)
+        res = static_check_html(html_path, run_devtools=run_devtools, run_temporal=run_temporal)
         if not res.is_valid and res.errors:
             all_errors.append(f"\nFichier {html_path} :")
             all_errors.extend(f"  - {e}" for e in res.errors)
         tiers_reached.append(res.tier_reached)
 
     if not all_errors:
-        tier_summary = max(tiers_reached) if tiers_reached else "skipped"  # tier2 > tier1
+        tier_summary = max(tiers_reached) if tiers_reached else "skipped"  # tier3 > tier2 > tier1
         return (
             CoderOutput(task_id=task_id, status="success",
                         details=f"OK — checks statiques web valides ({tier_summary})."),

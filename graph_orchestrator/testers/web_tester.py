@@ -238,6 +238,15 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
 1. AGIS, ne raconte pas : quand tu dis "je vais faire X", tu DOIS faire X dans la foulée.
 2. ARGUMENTS NOMMÉS OBLIGATOIRES : Pour TOUS tes appels d'outils, tu DOIS utiliser des arguments nommés (ex: evaluate_script(script="...")). Les arguments positionnels feront crasher l'exécution.
 3. PYTHON BUILT-INS : Si tu utilises `time.sleep()` ou d'autres modules standards dans ton code Python, n'oublie pas de les importer (ex: `import time` au début du bloc).
+4. ANIMATION = TEST TEMPOREL, PAS ÉTAT FINAL : pour un visualiseur/animation, NE JAMAIS
+   te contenter d'attendre un délai fixe (ex: `setTimeout(r, 2000)`) puis vérifier l'état
+   final — un tri **instantané** (exécuté en 1 frame au lieu de progresser) passe ce test
+   alors que c'est un bug grave. Tu DOIS mesurer la progression dans le temps : snapshot
+   d'un signal de progression (compteur de comparaisons, nombre de `.sorted`, ou heights
+   des barres) AVANT le clic Start, re-snapshot après un court délai (~400ms), et vérifier
+   que la progression est PARTIELLE (ni 0 ni terminale, si l'animation doit durer > 400ms).
+   Une animation qui termine en < 50ms est un BUG (instantanée), pas un succès. Voir la
+   recette temporelle dans le skill.
 
 ### FORMAT DE SORTIE (obligatoire)
 Tu écris du code Python dans un bloc ````python ... ```` qui appelle tes outils.

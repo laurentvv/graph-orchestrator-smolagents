@@ -662,6 +662,15 @@
       "dependencies": [
         "F-57"
       ]
+    },
+    {
+      "id": "F-81",
+      "name": "Static Tester Tier 3 — détection déterministe des animations instantanées",
+      "description": "Extension du Static Tester (F-54) d'un Tier 3 comportemental temporel (0 LLM, ~5s) qui détecte les animations instantanées (bug : performStep() appelée par requestAnimationFrame contient les boucles imbriquées complètes de l'algorithme → tout s'exécute en 1 tick JS → animation invisible, delay/slider inopérants). Ni le Tier 1 (JS valide, wiring OK) ni le Tier 2 (barres visibles) ne le voient ; le Tester LLM non plus (son pattern animation = wait 2s puis check état final, qui passe même si l'animation a duré 0 ms). IMPLÉMENTÉ : (1) static_tester.py _evaluate_temporal() — sonde DevTools en UN seul evaluate_script async (snapshot progression T0 → clic bouton primaire → await 400ms → snapshot T1 ; verdict : état terminal atteint pendant la fenêtre de 400ms = animation instantanée). Terminaison générique par ordre croissant des hauteurs des .bar (un tri est fini quand le tableau est ordonné) OU toutes les .bar ont la classe .sorted — ne compare PAS le compteur au nombre de barres (un tri de n éléments fait n*(n-1)/2 comparaisons, pas n). Réutilise _eval, _parse_devtools_json (corrigé : gère aussi les objets dicts stringifiés, pas seulement les arrays), chrome_devtools_tools(), _find_primary_action_id. Opt-out STATIC_TESTER_TEMPORAL=0. Branché dans static_check_html après le Tier 2 (partage la même session Chrome) → CoderOutput(status=failure) → workflows.py court-circuite le Tester LLM identiquement au Tier 1/2 (aucune modif workflows.py). (2) Prévention Coder : règle 9 (nodes.py RÈGLES CRITIQUES) + paragraphe granularité step (skills/coding/SKILL.md — complément de la règle threading existante). (3) Détection LLM : règle 4 Tester (web_tester.py) + recette temporelle (skills/web-tester/SKILL.md — snapshot T0/clic/wait/snapshot T1 au lieu du pattern wait-2s-check-final qui rate le bug). VALIDATION : 33 tests pytest passent (5 nouveaux Tier 3 : instant détecté, progressive non-flaggué, opt-out env-var ×2, no-signal skip) ; harness debug/validate_tier3_temporal.py sur le VRAI fichier bugué runs/2026-08-05_1602_bubble_sort/index.html → détection en 4.5s (signal 0→435 comparaisons), pas de faux positif sur animation légitime ~2s. ÉTAPES V2 (Coder corrige) et V3 (Tester LLM valide) prêtes-à-lancer (harness standalone debug/test_gate_live_bubble.py + debug/run_web_tester_standalone.py adaptés), ~30-40 min GPU, non lancées ce cycle.",
+      "status": "completed",
+      "dependencies": [
+        "F-54"
+      ]
     }
   ]
 }

@@ -626,3 +626,70 @@ odes.py et web_tester.py pour exiger une DÉCLARATION de fonction asynchrone non
   sélection + le Coder reçoit les corps complets (plus de dépendance à un appel
   `load_skill` du modèle). SI réussite → déclenche Phase 2 (nœuds DSPy via
   `methodology_context`).
+
+## Jalons de l'Itération (cycle Static Tester Tier 3 — détection animations instantanées, F-81)
+- [x] Étape T3-1 : Diagnostic du bug réel (runs/2026-08-05_1602_bubble_sort/index.html) —
+  `performStep()` appelée par `requestAnimationFrame` contient les deux boucles imbriquées
+  complètes du bubble sort → tout le tri en 1 tick JS → animation instantanée invisible.
+  Tier 1 (JS valide, wiring OK) et Tier 2 (barres visibles) PASS ce fichier ; Tester LLM
+  aussi (son pattern animation = wait 2s puis check état final, qui passe même si
+  l'animation a duré 0 ms). Zone aveugle confirmée.
+- [x] Étape T3-2 : Prévention Coder (Partie A) — règle 9 (nodes.py RÈGLES CRITIQUES :
+  une itération par frame, jamais l'algorithme complet, ❌ FAUX/✅ JUSTE) + paragraphe
+  granularité step (skills/coding/SKILL.md, complément de la règle threading existante).
+- [x] Étape T3-3 : Détection LLM Tester (Partie C) — règle 4 (web_tester.py : test
+  temporel pas état final) + recette temporelle (skills/web-tester/SKILL.md : snapshot
+  T0/clic/wait 400ms/snapshot T1 au lieu du pattern wait-2s-check-final qui rate le bug).
+- [x] Étape T3-4 : Détection déterministe Static Tester Tier 3 (Partie B) —
+  `static_tester.py _evaluate_temporal()` : sonde DevTools en UN seul evaluate_script
+  async (snapshot progression T0 → clic bouton primaire → await 400ms → snapshot T1 ;
+  verdict : état terminal atteint pendant la fenêtre = animation instantanée).
+  Terminaison générique (hauteurs .bar ordonnées OU toutes .sorted — ne compare PAS le
+  compteur au nombre de barres). Opt-out STATIC_TESTER_TEMPORAL=0. Branché après Tier 2
+  (même session Chrome) → court-circuite le Tester LLM via l'existing failure path
+  (aucune modif workflows.py). `_parse_devtools_json` corrigé (gère les dicts stringifiés,
+  pas seulement les arrays).
+- [x] Étape T3-5 : Tests — `tests/test_static_tester.py` +5 tests Tier 3 (instant détecté,
+  progressive non-flaggué, opt-out env-var ×2, no-signal skip). Suite complète 33 passed /
+  1 skipped (le skip = test Tier 2 pré-existant, Chrome timing entre tests).
+- [x] Étape T3-6 : Validation V1 (harness standalone sur le VRAI fichier bugué) —
+  `debug/validate_tier3_temporal.py` : Scénario 1 (runs/.../index.html bugué) → FAILURE
+  en 4.5s (signal 0→435 comparaisons = tout le tri en 1 tick), Scénario 2 (animation
+  légitime ~2s) → SUCCESS (pas de faux positif). 🎉 VALIDATION RÉUSSIE.
+- [ ] Étape T3-7 (V2, optionnel, ~3-5 min GPU) : Coder corrige le fichier bugué —
+  `debug/test_gate_live_bubble.py` adapté, iteration=2 (mode correction), la règle 9
+  doit pousser le modèle à corriger performStep en une iteration par frame. Re-run V1
+  sur le corrigé doit passer.
+- [ ] Étape T3-8 (V3, optionnel, ~10-25 min GPU) : Tester LLM valide le fichier corrigé —
+  `debug/run_web_tester_standalone.py` corrigé (lit REASONING_NO_THINK_* au lieu de
+  FAST_BACKEND_URL). La règle 4 + recette temporelle doivent faire écrire une assertion
+  temporelle. Bonus : Tester LLM sur le fichier bugué non corrigé doit maintenant FAIL.
+
+### Résultats V2 + V3 (validations standalone GPU, 2026-08-05)
+- [x] **V2 — Coder corrige le fichier bugué** (`debug/validate_tier3_coder_fix.py`) :
+  iteration=2 (mode correction read_file + search_replace), feedback Tier 3 injecté +
+  règle 9 du prompt. **13 steps, 816s (~13.6 min), Qwen3.5-9B.** SUCCÈS : le Coder a
+  correctement transformé performStep (double boucle → if/else une itération par frame,
+  variables i/j persistées hors fonction), puis auto-validation visuelle complète
+  (navigate, console OK, screenshot avant/après clic). `final_answer: success`.
+- [x] **V2-4 — Static Tester Tier 3 sur le corrigé** : `success` (tier3 atteint, 7.9s,
+  0 LLM). Le Tier 3 ne flaggue PLUS l'animation → la correction est prouvée déterministe.
+- [x] **V3 — Tester LLM (Ornith-9B) sur le corrigé** (`debug/validate_tier3_tester_llm.py`) :
+  **timeout à 600s (step 25)** — MAIS valide Parts C1+C2 : le Tester a explicitement
+  annoncé "Now let me do the temporal test - click Start and measure progression over
+  400ms" (step 15) → la règle 4 + recette temporelle guident le LLM. Il a détecté un
+  bug réel (régression Coder : `i`/`j` non resetés dans `init()` → 2e clic inopérant,
+  counter=0). Le timeout vient de l'over-exploration du Tester (failure mode pré-existant
+  documenté TIMINGS_ANALYSE, pas lié au Tier 3).
+- [x] **V3-3 — Fix manuel i/j + runtime probe** : ajout de `i=0; j=0; isSorting=false;`
+  dans `init()`. Static Tester re-passé (`success`, tier3). Runtime probe manuelle :
+  `c0=0 → c1=10` en 600ms, `progressed=True`, `finished=False` (animation progressive,
+  non terminale). **L'animation marche pour de vrai maintenant.**
+
+Bilan global V1+V2+V3 : les 3 couches (Coder prévient, Static Tester rattrape, Tester
+LLM confirme) fonctionnent. Le Tier 3 déterministe est validé end-to-end (détecte le
+bug en 4.5s, ne flaggue pas le corrigé, 0 faux positif). Le Tester LLM applique bien
+le test temporel mais reste limité par son over-exploration (pré-existant). La règle 9
+Coder est appliquée correctement par Qwen3.5-9B.
+- [x] Étape T3-9 : État disque synchronisé (feature_list.json +F-81, progress.md, README.md,
+  log.md). Branche `feat/static-tester-tier3-temporal`. Commit.

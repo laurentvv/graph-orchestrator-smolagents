@@ -98,6 +98,36 @@ Le navigateur n'a qu'un seul thread. Une boucle `while (swapped)` ou un `for` lo
 `const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));`
 Puis dans tes boucles : `await sleep(vitesse);`. Sans ça, l'agent de test échouera à voir la moindre animation.
 
+### Granularité de la fonction de step (complément indispensable)
+
+La règle ci-dessus porte sur le **threading** (libérer le Main Thread). Il en manque une
+seconde, sur la **structure** : la fonction appelée à chaque étape (`step`, `tick`,
+`performStep`, le callback de `requestAnimationFrame`) ne doit avancer que d'**UNE SEULE**
+itération de l'algorithme par appel — **JAMAIS** contenir les boucles `for`/`while`
+complètes de l'algorithme.
+
+Pourquoi : si tu mets la double boucle du bubble sort dans la fonction de step, tout le tri
+s'exécute en un seul tick JS. Le navigateur ne repeint qu'après → l'utilisateur ne voit que
+l'état final (barres déjà triées), le `delay`/slider de vitesse ne contrôle plus rien, et le
+Static Tester Tier 3 détectera une animation « instantanée » (bug).
+
+**Pattern correct** : conserve les indices `i`/`j` et le tableau dans des variables
+persistantes (closure ou module), et avance d'un seul pas par appel de step :
+```js
+let i = 0, j = 0;              // état persistant hors de la fonction
+function performStep() {        // UNE comparaison par appel
+  if (i < n - 1) {
+    if (j < n - i - 1) {
+      if (arr[j] > arr[j + 1]) swap(j, j + 1);
+      j++;
+    } else { j = 0; i++; }
+  } else { finish(); }
+  requestAnimationFrame(performStep);  // re-programme la frame suivante
+}
+```
+Avec `await sleep(vitesse)` dans une boucle `async`, l'équivalent est une boucle `for`
+unique qui `await` à chaque itération — **jamais** les deux boucles imbriquées d'un coup.
+
 ## Format de réponse final
 
 Quand tu as résolu la tâche, utilise `final_answer` avec :

@@ -182,6 +182,31 @@ Règles de syntaxe générales :
   return JSON.stringify(bars) === JSON.stringify(sorted);
 })()
 ```
+⚠️ La recette ci-dessus vérifie l'**état final** seulement. Elle **passe** même si
+l'animation est **instantanée** (tri exécuté en 1 frame au lieu de progresser) — un bug
+grave. Pour un visualiseur/animation, AJOUTE obligatoirement la recette temporelle
+ci-dessous qui mesure la **progression dans le temps**.
+
+*Temporal — progression mesurée (DÉTECTE les animations instantanées) avec puppeteer_evaluate :*
+```javascript
+(async () => {
+  const signal = () => {
+    // Compteur de comparaisons si présent, sinon nombre de barres triées.
+    const c = document.querySelector('#comparisonCount, #counter');
+    if (c) return parseInt(c.textContent) || 0;
+    return document.querySelectorAll('.bar.sorted').length;
+  };
+  const t0 = signal();
+  document.getElementById('startBtn').click();   // déclenche l'animation
+  await new Promise(r => setTimeout(r, 400));     // fenêtre courte
+  const t1 = signal();
+  // Doit avoir progressé SANS être déjà terminal (< total) si l'animation dure > 400ms.
+  return JSON.stringify({ t0, t1, progressed: t1 > t0 });
+})()
+```
+Verdict : `progressed === false` après 400ms = animation **instantanée** ou non démarrée
+→ investiguer (FAIL si l'animation est censée être visible). `t1 > t0` = l'animation
+progresse bien dans le temps → OK.
 
 *Counter value (pure expression):*
 ```javascript

@@ -710,6 +710,15 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
    CONTENU, pas à l'appel. Mélanger les deux provoque un SyntaxError de parsing fatal.
    ❌ FAUX : search_replace(path="x", old_string="...", new_string="function() {{ ... }}"}}
    ✅ JUSTE : search_replace(path="x", old_string="...", new_string="function() {{ ... }}")
+9. ANIMATION PAS-À-PAS = UNE itération par frame, JAMAIS l'algorithme complet : dans un
+   visualiseur (tri, pathfinding, simulation), la fonction appelée par `requestAnimationFrame`
+   (ou nommée `step`/`tick`/`performStep`/`animate`) ne DOIT avancer que d'UNE SEULE
+   comparaison/itération par appel, PAS contenir les boucles `for`/`while` complètes de
+   l'algorithme. Sinon tout s'exécute en 1 tick JS → animation instantanée invisible,
+   `delay`/slider de vitesse inopérants. L'état (indices i/j, tableau) doit vivre dans des
+   variables persistantes hors de la fonction, avancées d'un pas à chaque frame.
+   ❌ FAUX : function performStep() {{ for (i...) {{ for (j...) {{ if(...) swap(); }} }} }}
+   ✅ JUSTE : function performStep() {{ if (j < n-i-1) {{ compareSwap(j); j++; }} else {{ i++; j=0; if(i>=n) finish(); }} }}
 
 ### FORMAT DE SORTIE (obligatoire)
 Tu écris du code Python dans un bloc ````python ... ```` qui appelle tes outils. Exemple one-shot :
