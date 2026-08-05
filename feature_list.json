@@ -504,8 +504,8 @@
     {
       "id": "F-61",
       "name": "Amélioration Continue automatisée (Self-Learning)",
-      "description": "Implémentation d'une boucle de feedback exploitant les rapports générés par `run_analyzer.py`. L'objectif est d'utiliser ces données pour ajuster dynamiquement les prompts des agents (nodes.py, SKILLS) et ainsi éviter les erreurs récurrentes (comme InterpreterError) lors des exécutions futures.",
-      "status": "pending",
+      "description": "Implémentation d'une boucle de feedback exploitant les rapports générés par `run_analyzer.py`. L'objectif est d'utiliser ces données pour ajuster dynamiquement les prompts des agents (nodes.py, SKILLS) et ainsi éviter les erreurs récurrentes (comme InterpreterError) lors des exécutions futures. PREMIÈRE ITÉRATION CONCRÈTE (post-mortem run 123955, branche fix/postmortem-run-123955) : 3 bugs récurrents détectés et corrigés — Security fail-open (hard block fail-closed), Tester click forbidden (allowlist DevTools élargie), Coder } au lieu de ) (règle prompt n°8 + skill coding). La boucle est opérationnelle mais itérative (statut in_progress).",
+      "status": "in_progress",
       "dependencies": [
         "F-60"
       ]

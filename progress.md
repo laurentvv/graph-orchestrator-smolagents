@@ -21,6 +21,21 @@
 - [x] Cycle TESTER FONCTIONNEL (assertions comportementales, F-20) : le tester ne
       testait que l'absence de crash → bugs de logique validés à tort. Implémentation
       TERMINÉE (skill puppeteer_* + assertions, propagation spec, Judge équipé).
+- [x] POST-MORTEM RUN 123955 (F-61 amélioration continue) : 3 bugs récurrents détectés
+      par `run_analyzer.py` et corrigés sur la branche `fix/postmortem-run-123955` :
+      (1) **Security fail-open CRITIQUE** — `security_res=None` (audit KO) était
+      silencieusement transformé en "Aucune vulnérabilité" → le Judge approuvait à
+      l'aveugle un code non audité (bs-001 APPROUVÉ juste après Error LLM). Fix :
+      hard block fail-closed dans `execute_code_judge_node` (retour `is_approved=False`
+      SANS appel LLM) + traçage KG de l'échec Security.
+      (2) **Tester `click` forbidden (6×)** — l'allowlist DevTools filtrait `click`/`fill`
+      alors que la doc les recommandait → smolagents rejetait l'appel. Fix : `click`/`fill`
+      ajoutés à l'allowlist `chrome_devtools_tool.py`.
+      (3) **Coder `}` au lieu de `)` (6×)** — quand `search_replace(new_string="<JS>")`
+      contient des accolades, le modèle fermait l'appel Python par `}`. Fix : règle n°8
+      dans le prompt Coder + section dédiée dans le skill coding (miroir du bloc IIFE
+      web-tester). Implémentation TERMINÉE (42 tests sur les 3 zones, 692 passed / 7
+      pré-existants non liés).
 
 ## Jalons de l'Itération (cycle Tester fonctionnel — F-20)
 - [x] Étape TF-1 : Diagnostic (4 causes racines : skill aveugle logique, noms MCP faux, spec non propagée, Judge sans requirements).

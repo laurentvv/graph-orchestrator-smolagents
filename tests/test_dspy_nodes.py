@@ -162,3 +162,37 @@ def test_execute_code_judge_node(mock_cot, mock_configure, mock_settings):
     assert output is not None
     assert output.is_approved is False
     assert "faille XSS" in output.final_feedback
+
+
+@patch("graph_orchestrator.dspy_nodes._configure_dspy")
+@patch("graph_orchestrator.dspy_nodes.dspy.ChainOfThought")
+def test_execute_code_judge_node_blocks_when_security_unavailable(mock_cot, mock_configure, mock_settings):
+    """Fail-closed (post-mortem run 123955) : security_res=None → approbation bloquée,
+    SANS appeler le LLM Judge. Avant ce fix, None était transformé en "Aucune vulnérabilité"
+    → le Juge approuvait à l'aveugle un code non audité."""
+    subtask_dict = {"id": "T2", "target_files": []}
+
+    output, metrics = asyncio.run(execute_code_judge_node(
+        subtask_dict,
+        "TESTS: SUCCESS",
+        None,  # security_res=None : audit Security en échec
+        mock_settings.reasoning_model_id,
+        mock_settings,
+    ))
+
+    # Verdict fail-closed : jamais approuvé sans audit sécurité
+    assert output is not None
+    assert output.is_approved is False
+    # Un finding critical documente le blocage
+    assert any(f.severity == "critical" for f in output.findings)
+    assert "INDISPONIBLE" in output.final_feedback or "bloqué" in output.final_feedback.lower()
+
+    # Hard block : le LLM Judge ne doit PAS être appelé (économise le budget,
+    # rend l'approbation impossible quelle que soit la sortie du modèle)
+    mock_cot.assert_not_called()
+    assert mock_configure.call_count == 0
+
+    # Métriques présentes (pour l'observabilité du post-mortem)
+    assert metrics is not None
+    assert metrics.input_tokens == 0  # aucun appel LLM
+
