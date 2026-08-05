@@ -9,6 +9,12 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 > Le détail des références est dans [`docs/references-audit/`](./docs/references-audit/INDEX.md).
 > 🔄 **Note de mise à jour** : Consulte toujours [`references/update_report.md`](./references/update_report.md) pour voir les dernières nouveautés ajoutées aux dépôts amonts (nouvelles "Skills", outils MCP, workflows, etc.) avant de concevoir une fonctionnalité.
 > 🧠 **Mémoire et Directives** : Le comportement des agents, la gestion d'état (`feature_list.json`, `progress.md`, `log.md`) et la topologie du graphe sont définis dans [`AGENTS.md`](./AGENTS.md) et [`docs/NODES_AND_SKILLS.md`](./docs/NODES_AND_SKILLS.md). Ce sont les sources de vérité absolues pour le runtime.
+> 🗺️ **Cartographie du projet** :
+> - `docs/` : Architecture (`NODES_AND_SKILLS.md`) et audit des références (`references-audit/`).
+> - `debug/` : Scripts de test isolés (ex: `run_web_tester_standalone.py`) pour exécuter/déboguer un nœud spécifique hors graphe.
+> - `scripts/` : Outils de maintenance, de préparation (ex: DL de modèles) et d'analyse (`run_analyzer.py`).
+> - `skills/` : Fonctionnalités modulaires chargeables par les agents (Lazy/Eager E-57).
+> - `prompts/` / `graph_orchestrator/prompts.py` : Définition des blocs et rôles comportementaux de l'orchestrateur.
 
 > **📊 ÉTAT D'AVANCEMENT (2026-07-31)**
 > | Priorité | Statut |
