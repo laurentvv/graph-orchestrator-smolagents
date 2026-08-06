@@ -693,3 +693,70 @@ le test temporel mais reste limité par son over-exploration (pré-existant). La
 Coder est appliquée correctement par Qwen3.5-9B.
 - [x] Étape T3-9 : État disque synchronisé (feature_list.json +F-81, progress.md, README.md,
   log.md). Branche `feat/static-tester-tier3-temporal`. Commit.
+
+## Jalons de l'Itération (cycle Diff + métriques Judge — F-70, P6-bis)
+- [x] Étape F70-1 : Reconnaissance (2 agents Explore parallèles) — Judge plumbing
+  cartographié (`execute_code_judge_node` dspy_nodes.py:777 recevait le full-file
+  concaténé `:799-805` passé au champ `code` `:858`, alors que le docstring + rôle
+  exigent IN-DIFF ONLY), F-53 git_snapshot fournit `get_last_diff` (déjà propagé dans
+  `sub_dict["git_diff"]` workflows.py:583, consommé seulement par le web_tester),
+  pattern d'injection `build_targeted_retest_block` identifié. Références localisées
+  (scorer.py, pr_diff.py, SKILL.md) — `compute_risk_score` (KG structural) et
+  `build_pr_diff_files` (fetcher GitHub UI) écartés justifiés.
+- [x] Étape F70-2 : `graph_orchestrator/judge_diff.py` — `build_judge_code_block`
+  (0 LLM). Iter 1 (diff vide) = full-file rétrocompat ; iter >1 = bloc diff annoté
+  IN-DIFF ONLY en tête + full-file tronqué (`truncate_output`, contexte vérif
+  exigences). Fail-open (fichier absent sauté). Miroir `targeted_retest`.
+- [x] Étape F70-3 : Branchement `dspy_nodes.py execute_code_judge_node` — boucle
+  full-file remplacée par `build_judge_code_block(...)`, import ajouté. Aucune
+  modif workflows.py (git_diff déjà propagé).
+- [x] Étape F70-4 : `graph_orchestrator/judge_metrics.py` (offline, 0 LLM) —
+  `canonicalize_finding` (ID stable `location|category|severity`, insensible
+  paraphrase), `compute_precision_recall`, `compute_mrr`, `judge_verdict_accuracy`
+  (TP/FP/FN). Ports typés de code-review-graph/eval/scorer.py.
+- [x] Étape F70-5 : Tests — `test_judge_diff.py` (12, miroir test_targeted_retest)
+  + `test_judge_metrics.py` (18, pure logique) + `test_dspy_nodes.py` +2 Judge
+  (git_diff non vide → mock reçoit bloc diff ; iter1 full-file pas de bloc).
+  32/32 PASS. Correctifs : Literal severity Pydantic stricte, marqueur troncature
+  "tronqu" matchait tmp_path → "lignes tronquées".
+- [x] Étape F70-6 : Validation — 0 régression confirmée par `git stash` (25 échecs
+  préexistants sur HEAD strictement identiques avant/après, tous E2E workflow +
+  guard + read_gate + skill_lazy_loading, AUCUN lié au Judge). `test_judge_diff` +
+  `test_judge_metrics` + Judge `test_dspy_nodes` tous PASS.
+- [x] Étape F70-7 : État disque synchronisé (feature_list.json F-70 completed,
+  contract +critères 238-244, plan P6-bis 2 cases cochées, progress, log).
+
+## Jalons de l'Itération (cycle F-61 Meta-Analyste — post-mortem run coding_d72dc8e36445c4b6)
+> Run Bubble Sort du 2026-08-06 17:16 : verdict `failure` (Coder crash). Post-mortem
+> via `run_analyzer.py` → 3 failure modes Coder récurrents identifiés (F-70 non impliqué,
+> Judge iter 1 OK). Correctifs appliqués (AGENTS.md §8 : diagnostiquer → proposer → valider
+> → appliquer).
+
+- [x] Étape F61-1 : Diagnostic (run_analyzer.py + lecture log) — 3 causes racines :
+  (1) `}` au lieu de `)` fermant search_replace (failure mode historique, règle prompt n°8
+  insuffisante) ; (2) Coder boucle 87 steps / 80 min / 18M tokens (max_steps=25 trop permissif
+  × worker_max_retries=3 × retries internes) ; (3) tours idle répétés sans tool call
+  (_detect_idle_step F-33 réinjecte un message mais ne coupe JAMAIS → boucle jusqu'à
+  épuisement). Crash final : litellm.InternalServerError Connection error (serveur llama.cpp
+  saturé sous charge).
+- [x] Étape F61-2 : Correctif 1 (Guard anti-`}`) — hook dans run_with_retry except Exception.
+  Détection INDEPENDANTE de la condition Syntax/parse (le message smolagents "Code parsing
+  failed" ne contient ni "Syntax" ni "parse" mais "parsing" — bug de condition corrigé :
+  la branche `}` est testée en PREMIER). Message SPÉCIFIQUE actionnable (Règle n°8 + exemple
+  correct) au lieu du générique "découpe".
+- [x] Étape F61-3 : Correctif 2 (CODER_MAX_STEPS configurable) — config coder_max_steps
+  (défaut 18, avant 25 hardcoded) + .env.example. Choix : Coder produit en 6-14 steps nominal,
+  18 laisse une marge sans brider.
+- [x] Étape F61-4 : Correctif 3 (Circuit-breaker idle consécutifs) — compteur consecutive_idle
+  dans run_with_retry, param idle_breaker_threshold (défaut 3). N idles consécutifs → échec
+  définitif propre. Reset sur run productif. Nœuds non-Coder (Judge/Synth/Adversary/Worker)
+  reçoivent threshold=10**9 (jamais coupés — le Judge réfléchit légitimement).
+- [x] Étape F61-5 : Tests tests/test_coder_hardening.py — 8 tests (config 3, hook `}` 2, idle
+  breaker 3). Découvertes de mock : type(agent).__name__ nécessite une vraie sous-classe
+  dynamique (MagicMock.__class__ assign + spec= ne changent pas type()) ; agent.memory.steps
+  purgé en fin d'attempt → repeupler dans le mock pour simuler N idles consécutifs.
+- [x] Étape F61-6 : Validation — 8/8 nouveaux tests PASS. Suite pytest complète 673 passed
+  (+8 vs baseline 665) / 25 échecs préexistants strictement identiques (confirmés via la
+  baseline F-70), 0 régression. py_compile OK (nodes.py + config.py).
+- [x] Étape F61-7 : État disque synchronisé (feature_list.json F-61 description + cycle,
+  contract +critères 245-250, progress, log).

@@ -21,6 +21,7 @@ import dspy
 
 from .config import Settings
 from .feedback_utils import truncate_output
+from .judge_diff import build_judge_code_block
 from .llama_server import model_lifecycle
 from .logging_utils import NodeMetrics
 from .models import (
@@ -796,13 +797,14 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
         CodeJudgeOutput dictant si le code est 'approved' ou s'il nécessite un feedback.
     """
     print(f"[*] DSPy Code Judge sur la tâche {subtask.get('id')}...")
-    code_content = ""
-    for file_path in subtask.get("target_files", []):
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                code_content += f"--- {file_path} ---\n{f.read()}\n\n"
-        except Exception:
-            pass
+    # F-70 : ancrage IN-DIFF ONLY. Le Judge reçoit le diff multi-fichiers (F-53,
+    # déjà propagé dans subtask["git_diff"]) en priorité + le code complet tronqué
+    # pour la vérification des exigences. En iter 1 (diff vide) = full-file pur,
+    # rétrocompat strict. Voir judge_diff.build_judge_code_block.
+    code_content = build_judge_code_block(
+        subtask.get("target_files", []),
+        subtask.get("git_diff", ""),
+    )
 
     # Fail-closed : pas d'audit sécurité = pas d'approbation. On court-circuite le
     # LLM Judge (économise le budget + rend l'approbation sans audit impossible).
