@@ -215,6 +215,23 @@ class Settings:
     # dataclass pour ne pas casser les helpers de test qui construisent Settings() à la main.
     tester_timeout_s: int = 600
 
+    # --- Cap steps du Coder (post-mortem run coding_d72dc8e36445c4b6, F-61) ---
+    # max_steps du CodeAgent Coder. Le défaut historique (25 hardcoded) laissait le
+    # modèle boucler jusqu'à 87 steps (observé : 80 min, 18M tokens → crash serveur
+    # llama.cpp par saturation). Le Coder produit typiquement en 6-14 steps (baseline
+    # Bubble Sort one-shot, audit_coder ~10 steps). 18 laisse une marge vs 25 sans
+    # brider les cas nominaux ni laisser diverger un modèle qui boucle. Opt-out :
+    # CODER_MAX_STEPS plus haut pour une tâche complexe nécessitant plus d'allers-
+    # retours outils. Valeur par défaut dans la dataclass (convention tester_max_steps).
+    coder_max_steps: int = 18
+    # Circuit-breaker sur tours idle consécutifs (post-mortem idem). _detect_idle_step
+    # (F-33) réinjecte un message à chaque tour "sans appel d'outil" mais ne coupe
+    # JAMAIS → le Coder peut enchaîner N tours idle jusqu'à épuisement des steps
+    # (l'anti-loop crypto F-36 ne déclenche pas : pas de tool call = pas de fingerprint).
+    # Ce seuil borne le nombre d'idles consécutifs tolérés avant échec définitif propre.
+    # 3 = tolère 2 ratées (réflexion légitime) puis coupe à la 3e (boucle avérée).
+    idle_breaker_threshold: int = 3
+
     # --- Nœud d'Escalade (Priorité 3 : post-mortem sur circuit breaker) ---
     # Quand une sous-tâche épuise le Circuit Breaker (3 itérations toutes rejetées),
     # un nœud DSPy synthétise les réfutations accumulées en un diagnostic post-mortem
@@ -378,6 +395,8 @@ def load_settings() -> Settings:
         stderr_tail_lines=_get_int("STDERR_TAIL_LINES", 20),
         feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),
         tester_max_steps=_get_int("TESTER_MAX_STEPS", 25),
+        coder_max_steps=_get_int("CODER_MAX_STEPS", 18),
+        idle_breaker_threshold=_get_int("IDLE_BREAKER_THRESHOLD", 3),
         escalation_enabled=_get_bool("ESCALATION_ENABLED", True),
         auto_install_deps=_get_bool("AUTO_INSTALL_DEPS", True),
         loop_guard_enabled=_get_bool("LOOP_GUARD_ENABLED", True),

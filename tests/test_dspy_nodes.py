@@ -166,6 +166,71 @@ def test_execute_code_judge_node(mock_cot, mock_configure, mock_settings):
 
 @patch("graph_orchestrator.dspy_nodes._configure_dspy")
 @patch("graph_orchestrator.dspy_nodes.dspy.ChainOfThought")
+def test_execute_code_judge_node_injects_git_diff_block(mock_cot, mock_configure, mock_settings, tmp_path):
+    """F-70 : en iter >1, le Judge reçoit le bloc diff (doctrine IN-DIFF ONLY) dans ``code``.
+
+    ``subtask["git_diff"]`` est déjà propagé par F-53 ; le nœud le lit et le passe
+    au LLM en tête du champ ``code``, suivi du code complet. Ce test garantit que
+    le branchement F-70 (a) envoie bien le diff jusqu'au predictor mocké.
+    """
+    mock_instance = MagicMock()
+    mock_prediction = MagicMock()
+    mock_prediction.output = CodeJudgeOutput(
+        task_id="T2", is_approved=True, final_feedback="ok"
+    )
+    mock_instance.return_value = mock_prediction
+    mock_cot.return_value = mock_instance
+
+    f = tmp_path / "index.html"
+    f.write_text("<html><body>hi</body></html>", encoding="utf-8")
+    diff = "diff --git a/index.html b/index.html\n-old\n+new"
+
+    subtask_dict = {"id": "T2", "target_files": [str(f)], "git_diff": diff}
+    security_res = SecurityOutput(task_id="T2", is_secure=True, vulnerabilities=[])
+
+    asyncio.run(execute_code_judge_node(
+        subtask_dict, "TESTS: SUCCESS", security_res,
+        mock_settings.reasoning_model_id, mock_settings,
+    ))
+
+    code_arg = mock_instance.call_args.kwargs["code"]
+    assert "DIFF MODIFIÉ" in code_arg        # bloc diff injecté en tête
+    assert diff in code_arg                  # contenu du diff
+    assert "CODE COMPLET" in code_arg        # full-file tronqué pour le contexte
+    assert "IN-DIFF ONLY" in code_arg        # doctrine ancrée
+
+
+@patch("graph_orchestrator.dspy_nodes._configure_dspy")
+@patch("graph_orchestrator.dspy_nodes.dspy.ChainOfThought")
+def test_execute_code_judge_node_iter1_full_file_no_diff_block(mock_cot, mock_configure, mock_settings, tmp_path):
+    """F-70 : en iter 1 (diff absent), le Judge reçoit le full-file sans bloc diff (rétrocompat)."""
+    mock_instance = MagicMock()
+    mock_prediction = MagicMock()
+    mock_prediction.output = CodeJudgeOutput(
+        task_id="T3", is_approved=True, final_feedback="ok"
+    )
+    mock_instance.return_value = mock_prediction
+    mock_cot.return_value = mock_instance
+
+    f = tmp_path / "app.js"
+    f.write_text("console.log('hello');", encoding="utf-8")
+
+    subtask_dict = {"id": "T3", "target_files": [str(f)]}  # pas de clé git_diff
+    security_res = SecurityOutput(task_id="T3", is_secure=True, vulnerabilities=[])
+
+    asyncio.run(execute_code_judge_node(
+        subtask_dict, "TESTS: SUCCESS", security_res,
+        mock_settings.reasoning_model_id, mock_settings,
+    ))
+
+    code_arg = mock_instance.call_args.kwargs["code"]
+    assert "console.log('hello');" in code_arg   # contenu du fichier
+    assert "DIFF MODIFIÉ" not in code_arg        # pas de bloc diff en iter 1
+    assert "```diff" not in code_arg
+
+
+@patch("graph_orchestrator.dspy_nodes._configure_dspy")
+@patch("graph_orchestrator.dspy_nodes.dspy.ChainOfThought")
 def test_execute_code_judge_node_blocks_when_security_unavailable(mock_cot, mock_configure, mock_settings):
     """Fail-closed (post-mortem run 123955) : security_res=None → approbation bloquée,
     SANS appeler le LLM Judge. Avant ce fix, None était transformé en "Aucune vulnérabilité"

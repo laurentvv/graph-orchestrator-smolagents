@@ -173,6 +173,7 @@ async def run_with_retry(
     model_id: Optional[str] = None,
     api_base: Optional[str] = None,
     timeout_s: Optional[float] = None,
+    idle_breaker_threshold: int = 3,
 ) -> Tuple[Optional[object], Optional[NodeMetrics]]:
     """Exécute un agent avec retry. Retourne (données_validées, métriques).
 
@@ -199,6 +200,14 @@ async def run_with_retry(
     last_metrics: Optional[NodeMetrics] = None
     # Détecte si l'agent est un CodeAgent (P1) pour adapter le message de retry
     is_code_agent = type(agent).__name__ == "CodeAgent"
+
+    # Post-mortem run coding_d72dc8e36445c4b6 (F-61) : circuit-breaker sur idles
+    # consécutifs. _detect_idle_step (F-33) réinjecte un message à chaque tour idle
+    # mais ne coupait JAMAIS → un Coder pouvait enchaîner N runs idle (chacun jusqu'à
+    # max_steps sans tool call) jusqu'à épuisement de max_retries. On borne : si
+    # `idle_breaker_threshold` runs consécutifs finissent idle, on casse tôt (échec
+    # définitif propre) au lieu de brûler des retries vains. Un run productif reset.
+    consecutive_idle = 0
 
     # Réinitialise les erreurs enregistrées pour ce nouveau run du nœud
     _RUN_ERRORS.clear()
@@ -296,12 +305,32 @@ async def run_with_retry(
             # F-33 (1) : tour sans tool call exécuté ? (modèle réfléchit sans agir)
             idle_msg = _detect_idle_step(agent, node_kind=node_kind)
             if idle_msg:
+                consecutive_idle += 1
+                # F-61 : circuit-breaker sur idles consécutifs. Si le seuil est atteint,
+                # on casse tôt (échec définitif propre) — réinjecter un message vain une
+                # Nème fois ne sert à rien, le modèle a déjà prouvé qu'il ne sort pas de
+                # sa boucle de réflexion sans action. last_metrics rendu pour l'observabilité.
+                if consecutive_idle >= idle_breaker_threshold:
+                    print(
+                        f"[-] Circuit-breaker idle : {consecutive_idle} runs consécutifs sans "
+                        f"appel d'outil pour {model_class.__name__} (seuil {idle_breaker_threshold}). "
+                        f"Échec définitif propre au lieu de brûler des retries vains."
+                    )
+                    record_run_error(
+                        f"Circuit-breaker idle : {consecutive_idle} runs consécutifs sans tool call "
+                        f"(seuil {idle_breaker_threshold}). Le modèle boucle sur de la réflexion "
+                        f"sans agir — abort pour économiser le budget."
+                    )
+                    return None, last_metrics
                 print(
                     f"[!] Tentative {attempt + 1}/{max_retries} : tour sans appel d'outil "
-                    f"({model_class.__name__}). Ré-injection d'une consigne d'action..."
+                    f"({model_class.__name__}, idle consécutif {consecutive_idle}/{idle_breaker_threshold}). "
+                    f"Ré-injection d'une consigne d'action..."
                 )
                 prompt += f"\n\n{idle_msg}"
             else:
+                # Un run productif (avec tool calls) reset le compteur d'idles consécutifs.
+                consecutive_idle = 0
                 print(
                     f"[!] Tentative {attempt + 1}/{max_retries} échouée pour "
                     f"{model_class.__name__}. Nouvelle tentative..."
@@ -337,7 +366,24 @@ async def run_with_retry(
             msg = str(e)
             print(f"[-] Erreur interne (Tentative {attempt + 1}/{max_retries}): {msg}")
             record_run_error(f"Tentative {attempt + 1} échouée (Exception Interne Python/LLM) : {msg}")
-            if is_code_agent and ("Syntax" in msg or "parse" in msg.lower() or "unterminated" in msg.lower()):
+            # Post-mortem run coding_d72dc8e36445c4b6 (F-61) : failure mode récurrent n°1, le modèle
+            # ferme search_replace(..., new_string="<JS>{...}") par `}}}` au lieu de `)`. La règle
+            # prompt n°8 existe mais ne suffit pas sous charge (leçon F-33 : un prompt seul ne suffit
+            # jamais). On donne un message SPÉCIFIQUE et actionnable (exemple correct) plutôt que le
+            # générique "découpe". Messages observés : "closing parenthesis '}' does not match
+            # opening '('", "Code parsing failed ... '}' does", etc.
+            # NB : cette détection est INDEPENDANTE de la condition Syntax/parse ci-dessous — le
+            # message smolagents "Code parsing failed" ne contient ni "Syntax" ni "parse" (mais
+            # "parsing"), donc on la teste en premier pour ne pas rater le failure mode n°1.
+            if is_code_agent and "}" in msg and ("parenthesis" in msg.lower() or "match" in msg.lower() or "closing" in msg.lower() or "parsing" in msg.lower()):
+                prompt += (
+                    "\n\nATTENTION — RÈGLE n°8 VIOLÉE : ton bloc Python s'est fermé par `}` au lieu "
+                    "de `)`. Quand `content`/`new_string` contient du JS/HTML avec des `{...}`, le `}` "
+                    "appartient au CONTENU, l'appel Python se termine TOUJOURS par `)`. Exemple correct :\n"
+                    "    search_replace(path=\"x\", old_string=\"...\", new_string=\"function() { startSort(); }\")\n"
+                    "Réessaie en fermant l'appel par `)`."
+                )
+            elif is_code_agent and ("Syntax" in msg or "parse" in msg.lower() or "unterminated" in msg.lower()):
                 prompt += (
                     "\n\nATTENTION : ton dernier bloc de code Python a échoué (syntaxe invalide : "
                     "string non fermée, parenthèse manquante...). NE RECOMMENCE PAS le même gros "
@@ -424,7 +470,7 @@ async def execute_worker_node(
     }}
     Contenu de la tâche : {task['content']}
     """
-    return await run_with_retry(local_worker, prompt, WorkerOutput, settings.worker_max_retries)
+    return await run_with_retry(local_worker, prompt, WorkerOutput, settings.worker_max_retries, idle_breaker_threshold=10**9)
 
 
 def _is_web_task(task: dict) -> bool:
@@ -787,14 +833,15 @@ Code prêt pour la production, respectant les conventions du langage.
                 name=f"coder_{task['id'].replace('-', '_')}",
                 description="Agent développeur capable d'explorer le projet, d'écrire, lire, modifier du code.",
                 verbosity_level=resolve_verbosity("HIGH"),
-                max_steps=25,
+                max_steps=settings.coder_max_steps,
                 add_base_tools=False,
                 code_block_tags="markdown",
                 step_callbacks=[make_screenshot_callback(screenshot_capture)],
                 additional_authorized_imports=["os", "subprocess"],
             )
             return await run_with_retry(
-                local_coder, prompt, CoderOutput, settings.worker_max_retries, loop_guard=guard
+                local_coder, prompt, CoderOutput, settings.worker_max_retries, loop_guard=guard,
+                idle_breaker_threshold=settings.idle_breaker_threshold,
             )
 
 
@@ -899,7 +946,7 @@ Si toutes les tâches sont rejetées, is_valid = false. Si au moins une est appr
 Résultats des workers : {json.dumps([r.model_dump() for r in worker_results], ensure_ascii=False)}
 Contenus originaux : {json.dumps(original_by_id, ensure_ascii=False)}
 """
-    return await run_with_retry(local_judge, prompt, JudgeOutput, settings.worker_max_retries)
+    return await run_with_retry(local_judge, prompt, JudgeOutput, settings.worker_max_retries, idle_breaker_threshold=10**9)
 
 
 async def execute_synth_node(
@@ -920,7 +967,7 @@ async def execute_synth_node(
 Schéma exact attendu : {{"global_summary": "ton résumé global des problèmes", "key_insights": ["insight 1", "insight 2"]}}
 Données validées : {json.dumps([r.model_dump() for r in approved_data], ensure_ascii=False)}
 """
-    return await run_with_retry(local_synth, prompt, FinalSynthesis, settings.worker_max_retries)
+    return await run_with_retry(local_synth, prompt, FinalSynthesis, settings.worker_max_retries, idle_breaker_threshold=10**9)
 
 
 # ==========================================
@@ -986,7 +1033,7 @@ Contenus originaux : {json.dumps(original_by_id, ensure_ascii=False)}
 """
         # run_with_retry attend un contrat à un seul objet ; on enveloppe la liste dans un contrat wrapper.
         validated, metrics = await run_with_retry(
-            skeptic, prompt, _AdversaryBatch, settings.worker_max_retries
+            skeptic, prompt, _AdversaryBatch, settings.worker_max_retries, idle_breaker_threshold=10**9
         )
         return validated, metrics
 
