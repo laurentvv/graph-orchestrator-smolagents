@@ -1,12 +1,12 @@
 # Audit des références — Mode d'emploi
 
-Une base de connaissances structurée regroupant l'audit profond de **25 projets** de référence (frameworks, agents de coding, collections de prompts). L'objectif est d'alimenter `graph-orchestrator-smolagents` en algorithmes, patterns d'orchestration et system prompts de la plus haute qualité.
+Une base de connaissances structurée regroupant l'audit profond de **26 projets** de référence (frameworks, agents de coding, collections de prompts). L'objectif est d'alimenter `graph-orchestrator-smolagents` en algorithmes, patterns d'orchestration et system prompts de la plus haute qualité.
 
 ## 🚀 Par où commencer ?
 
-1. [**INDEX.md**](./INDEX.md) : le document de navigation principal (la liste des 25 projets, la matrice de réutilisabilité et le guide « comment retrouver X »).
-2. [**projects/**](./projects/) : le dossier contenant les rapports d'audit détaillés (25 fiches au format Markdown canonique).
-3. [**inventory.json**](./inventory.json) : l'inventaire machine (476 entrées), généré automatiquement par `update_inventory.py`, permettant d'interroger la base programmatiquement.
+1. [**INDEX.md**](./INDEX.md) : le document de navigation principal (la liste des 26 projets, la matrice de réutilisabilité et le guide « comment retrouver X »).
+2. [**projects/**](./projects/) : le dossier contenant les rapports d'audit détaillés (26 fiches au format Markdown canonique).
+3. [**inventory.json**](./inventory.json) : l'inventaire machine (479 entrées), généré automatiquement par `update_inventory.py`, permettant d'interroger la base programmatiquement.
 
 ## 📚 Structure
 
@@ -14,11 +14,11 @@ Une base de connaissances structurée regroupant l'audit profond de **25 projets
 docs/references-audit/
 ├── README.md              ← Ce document
 ├── INDEX.md               ← Point d'entrée principal
-├── inventory.json         ← Inventaire JSON des 476 briques réutilisables
-└── projects/              ← 25 fiches d'audit
+├── inventory.json         ← Inventaire JSON des 479 briques réutilisables
+└── projects/              ← 26 fiches d'audit
     ├── 01-prompt-vault.md  …  13-deer-flow-analysis.md
     ├── 14-qm.md  …  18-awesome-claude-skills.md
-    └── 19-loopx.md  …  25-hermes-agent.md
+    └── 19-loopx.md  …  26-cloudflare-os.md
 ```
 
 ## 🎯 Convention de réutilisabilité

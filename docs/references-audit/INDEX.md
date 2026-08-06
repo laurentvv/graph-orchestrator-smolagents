@@ -8,9 +8,9 @@
 
 | Métrique | Valeur |
 |---|---|
-| **Date de l'audit** | 2026-08-05 |
-| **Projets/dossiers audités** | 25 |
-| **Entrées de fichiers inventoriées** | 476 (inventaire machine : [`inventory.json`](./inventory.json)) |
+| **Date de l'audit** | 2026-08-06 |
+| **Projets/dossiers audités** | 26 |
+| **Entrées de fichiers inventoriées** | 479 (inventaire machine : [`inventory.json`](./inventory.json)) |
 | **Fichiers pertinents scannés** (base) | ~11 300 (hors `.git/`, `node_modules/`, médias, fixtures) |
 | **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css`) + JSON/YAML de spec/contrat |
 | **Exclusions** | `.git/` (~730 MB), `node_modules/`, médias (1 293 SVG, 16 mp4…), fixtures de tests, traductions de README (1 conservée/projet) |
@@ -19,7 +19,7 @@
 
 ---
 
-## 🧭 Navigation — les 25 fiches
+## 🧭 Navigation — les 26 fiches
 
 | # | Projet | Réutilisabilité | Fiche | Résumé en 1 ligne |
 |---|---|---|---|---|
@@ -48,6 +48,7 @@
 | 23 | **mattpocock-skills** | 🟢 Haute | [23-mattpocock-skills](./projects/23-mattpocock-skills.md) | **Doctrine d'authoring formelle** (Predictability, deux charges, hiérarchie 3 rungs, 5 failure modes) — pivot de la fusion P10 + `code-review`/`tdd` engineering skills |
 | 24 | **pi** | 🟢 Haute | [24-pi](./projects/24-pi.md) | Agent stateful TS — **compaction contextuelle**, résumé de branche pour P9, et juge empirique vitest (P6) |
 | 25 | **hermes-agent** | 🟢 Haute | [25-hermes-agent](./projects/25-hermes-agent.md) | Agent auto-amélioré Python (Nous Research) — **5 axes en Python pur** : compaction offline+live (P9), SQLite FTS5 event-sourcing (P11), skills agentskills.io + guard + AST audit (P10), sécurité multi-couches (P3/P8), contrat middleware 4 kinds (P8) |
+| 26 | **cloudflare-os** | 🟡 Moyenne | [26-cloudflare-os](./projects/26-cloudflare-os.md) | Environnement agentique TS — Gatekeepers et sécurité basée sur les capacités, asynchrone |
 
 ---
 
@@ -57,7 +58,7 @@
 `aider` (Python, mature), `crush` (Go), `nanocode` (Python, 1 fichier), `opencode` (TS, gigantesque), `openfox` (TS, local-LLM-first). → Valeur : edit-formats robustes (aider), anti-loop (crush), patterns d'outils minimaux (nanocode), specs de protocole (opencode), persistance event-sourcing (openfox).
 
 ### 2. 🔧 Frameworks d'orchestration d'agents (mixte code + docs)
-`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code), `loopx` (control plane — anti-loop déterministe + event sourcing + compaction, stdlib pure), `code-review-graph` (analyse d'impact + risk score composite), `pi` (agent stateful TS), `hermes-agent` (agent auto-amélioré Python Nous Research — compaction + SQLite FTS5 + skills + sécurité + middleware). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm, pi, hermes-agent)**, **patterns harness Python natifs (learn-claude-code, hermes-agent)**, **anti-loop déterministe + event ledger (loopx)**, **branch summarization (pi)**, **persistance SQLite FTS5 + event-sourcing (hermes-agent)**, **sécurité multi-couches Python pur (hermes-agent)**.
+`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code), `loopx` (control plane — anti-loop déterministe + event sourcing + compaction, stdlib pure), `code-review-graph` (analyse d'impact + risk score composite), `pi` (agent stateful TS), `hermes-agent` (agent auto-amélioré Python Nous Research — compaction + SQLite FTS5 + skills + sécurité + middleware), `cloudflare-os` (architecture Gatekeepers, human in the loop asynchrone). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm, pi, hermes-agent)**, **patterns harness Python natifs (learn-claude-code, hermes-agent)**, **anti-loop déterministe + event ledger (loopx)**, **branch summarization (pi)**, **persistance SQLite FTS5 + event-sourcing (hermes-agent)**, **sécurité multi-couches Python pur (hermes-agent)**, **Gatekeepers (cloudflare-os)**.
 
 ### 3. 📚 Ressources & outils
 `Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante), `claude-code-unified-agents` (prompts de spécialisation), `system-prompts-and-models-of-ai-tools` (**bibliothèque de system prompts** d'outils commerciaux/open-source), `awesome-claude-skills` (**doctrine du format SKILL.md** + outillage), `davidondrej-skills` (denylist 27 regex + hooks anti-crash), `mattpocock-skills` (**doctrine d'authoring formelle** + engineering skills), `llm-council` (pattern council anonymisé).
@@ -269,9 +270,10 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | **mattpocock-skills** | **6** | **3** | **0** | 🟢 **Haute** |
 | **pi** | **3** | **4** | **0** | 🟢 **Haute** |
 | **hermes-agent** | **15** | **13** | **0** | 🟢 **Haute** |
-| **Total** | **213** | **177** | **84** | — |
+| **cloudflare-os** | **0** | **3** | **0** | 🟡 **Moyenne** |
+| **Total** | **213** | **180** | **84** | — |
 
-> ℹ️ Le total de la matrice (474 = 213+177+84) couvre les entrées classées H/M/L. L'inventaire machine compte 476 entrées au total (2 entrées pré-existantes non classées dans d'anciens projets).
+> ℹ️ Le total de la matrice (477 = 213+180+84) couvre les entrées classées H/M/L. L'inventaire machine compte 479 entrées au total (2 entrées pré-existantes non classées dans d'anciens projets).
 
 **Constats** :
 - **axon** (23 Haute) et **aider** (17 Haute) restent les mines d'or côté Python.
@@ -289,6 +291,7 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 - **llm-council** (🟡 Moyenne) : un seul pattern utile (council anonymisé A/B/C + Borda) pour valider des findings à enjeu, mais **réserves majeures** (vibe-coded, coût 2N+1 appels, OpenRouter payant) → à traiter comme inspiration, pas dépendance.
 - **pi** (3 Haute, 🟢 Haute) : très forte valeur sur **P9 (compaction basée sur l'état fichier)** et **branch summarization**, approche complémentaire et mature à qm/loopx. Son TDD harness valide statistiquement nos choix P6.
 - **hermes-agent** (15 Haute, 🟢 Haute) : **le dépôt le plus dense et portable du dossier sur 5 axes orthogonaux**. Compaction offline (`trajectory_compressor`) + live avec garde-fous persistés (`context_compressor` cooldown/streak/ineffective), persistence SQLite FTS5 + lineage + event-sourcing subagents, skills agentskills.io avec provenance contextvars + guard + AST audit, **bibliothèque sécurité Python pur copiable quasi telle quelle** (threat patterns + ~260 dangerous commands + SSRF guards + path traversal), contrat middleware 4 kinds avec `next_call` chain + fail-open. Cœur utile concentré dans ~15 fichiers Python (malgré 8487 fichiers au total). Rejoint le peloton de tête avec axon (23 Haute) et aider (17 Haute). Réserves : pas DuckDB (transposer le pattern), adapters LLM cloud massifs non portables, god-files à découper.
+- **cloudflare-os** (3 Moyenne, 🟡 Moyenne) : apporte un excellent pattern architectural de sécurité (**Gatekeepers**, Capability-based access control) et d'approbation asynchrone (human in the loop par simulation). Même si TS, la doctrine inspire fortement la gestion MCP.
 
 
 ---

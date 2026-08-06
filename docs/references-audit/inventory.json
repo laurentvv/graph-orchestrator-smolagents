@@ -1,5 +1,5 @@
 {
-  "audit_date": "2026-08-05",
+  "audit_date": "2026-08-06",
   "scope": "filtered-useful (docs + code + specs; excludes .git/node_modules/media/fixtures/translated-READMEs)",
   "projects": [
     {
@@ -5336,7 +5336,45 @@
           "description": "Backend sandbox local concret (_run_bash subprocess direct). Le plus pertinent pour llama.cpp local natif. P1 + P8-bis."
         }
       ]
+    },
+    {
+      "id": "cloudflare-os",
+      "name": "cloudflare-os",
+      "path": "references/cloudflare-os",
+      "category": "agent-os",
+      "reuse_rating": "medium",
+      "summary": "(ajouté par update_inventory.py)",
+      "files": [
+        {
+          "path": "references/cloudflare-os/packages/mcp-shared/src/tools.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "readOnlyHint",
+            "annotations"
+          ],
+          "description": "Implémentation de la frontière de confiance (trust boundary). Seuls les outils annotés read-only s'exécutent en direct, le reste est mis en file d'attente pour approbation. (P10)"
+        },
+        {
+          "path": "references/cloudflare-os/packages/workshop-backend/src/overseer.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "prepareChatBindings"
+          ],
+          "description": "Injection granulaire et sécurisée des 'bindings' (capacités) dans le contexte d'exécution de l'agent. (P10/P8)"
+        },
+        {
+          "path": "references/cloudflare-os/packages/workshop-backend/src/user.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "getGatekeeperClassFor"
+          ],
+          "description": "Point de contrôle central pour vérifier si un module de sécurité est activé avant de distribuer une capacité. (P8)"
+        }
+      ]
     }
   ],
-  "projects_audited": 25
+  "projects_audited": 26
 }

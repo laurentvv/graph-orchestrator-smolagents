@@ -12,6 +12,8 @@ Audit 19-23 (2026-08-03, procédure PROCEDURE-AUDIT-REFERENCE.md) :
   - 23 mattpocock-skills  =  9 entrées (P10 doctrine fusion + P6/P0 engineering skills)
 Audit 24 (2026-08-05) :
   - 24 pi                 =  7 entrées (P9 compaction, P6 Judge)
+Audit 26 (2026-08-06) :
+  - 26 cloudflare-os      =  3 entrées (P8-bis, P10, P12)
 
 Corrige aussi les reuse_rating globaux inversés par l'ancienne fiche bâclée :
   - qm : medium -> high   (algorithmes portables : compaction, mémoire, idempotency, queues)
@@ -688,11 +690,24 @@ HERMES_FILES = [
      "description": "Backend sandbox local concret (_run_bash subprocess direct). Le plus pertinent pour llama.cpp local natif. P1 + P8-bis."},
 ]
 
+CLOUDFLARE_OS_BASE = "references/cloudflare-os"
+CLOUDFLARE_OS_FILES = [
+    {"path": f"{CLOUDFLARE_OS_BASE}/packages/mcp-shared/src/tools.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["readOnlyHint", "annotations"],
+     "description": "Implémentation de la frontière de confiance (trust boundary). Seuls les outils annotés read-only s'exécutent en direct, le reste est mis en file d'attente pour approbation. (P10)"},
+    {"path": f"{CLOUDFLARE_OS_BASE}/packages/workshop-backend/src/overseer.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["prepareChatBindings"],
+     "description": "Injection granulaire et sécurisée des 'bindings' (capacités) dans le contexte d'exécution de l'agent. (P10/P8)"},
+    {"path": f"{CLOUDFLARE_OS_BASE}/packages/workshop-backend/src/user.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["getGatekeeperClassFor"],
+     "description": "Point de contrôle central pour vérifier si un module de sécurité est activé avant de distribuer une capacité. (P8)"},
+]
+
 def main() -> None:
     data = json.loads(INVENTORY.read_text(encoding="utf-8"))
 
-    data["projects_audited"] = 25
-    data["audit_date"] = "2026-08-05"
+    data["projects_audited"] = 26
+    data["audit_date"] = "2026-08-06"
 
     updated = []
     seen_ids = set()
@@ -806,6 +821,15 @@ def main() -> None:
                 "summary": "Agent IA auto-amélioré de Nous Research (Python + TS, 8487 fichiers, MIT). Gisement exceptionnel sur 5 axes orthogonaux en Python pur : (1) compaction trajectoire offline+live avec garde-fous persistés (P9), (2) persistence SQLite FTS5+WAL + lineage parent/enfant + event-sourcing subagents (P11), (3) skills agentskills.io avec provenance contextvars + guard regex + AST audit (P10), (4) sécurité multi-couches (threat patterns, ~260 dangerous commands, SSRF guards, path traversal) copiable quasi tel quel (P3/P8), (5) contrat middleware 4 kinds avec next_call chain + fail-open (P8). Secondaire : 7 backends sandbox (P1/P8-bis), background review thread (P6). Cœur utile concentré dans ~15 fichiers Python. Réserves : pas DuckDB (transposer le pattern), adapters LLM cloud massifs non portables, god-files à découper.",
                 "files": HERMES_FILES,
             }
+        elif pid == "cloudflare-os":
+            project = {
+                "id": "cloudflare-os", "name": "cloudflare-os",
+                "path": "references/cloudflare-os",
+                "category": "agent-os",
+                "reuse_rating": "medium",
+                "summary": "Environnement de productivité agentique avec modèle de Gatekeepers (P12) et Capability-based access control (P8-bis). Pattern d'approbation asynchrone (human in the loop via simulation) transposable pour P10.",
+                "files": CLOUDFLARE_OS_FILES,
+            }
         updated.append(project)
         seen_ids.add(pid)
 
@@ -870,6 +894,11 @@ def main() -> None:
                         "path": "references/hermes-agent",
                         "category": "agent-framework", "reuse_rating": "high",
                         "summary": "(ajouté par update_inventory.py)", "files": HERMES_FILES})
+    if "cloudflare-os" not in seen_ids:
+        updated.append({"id": "cloudflare-os", "name": "cloudflare-os",
+                        "path": "references/cloudflare-os",
+                        "category": "agent-os", "reuse_rating": "medium",
+                        "summary": "(ajouté par update_inventory.py)", "files": CLOUDFLARE_OS_FILES})
 
     data["projects"] = updated
 
@@ -883,7 +912,7 @@ def main() -> None:
             by_reuse[r] = by_reuse.get(r, 0) + 1
     print(f"OK — {len(data['projects'])} projets, {total} entrées au total.")
     print(f"Répartition : {by_reuse}")
-    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi", "hermes-agent"):
+    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi", "hermes-agent", "cloudflare-os"):
         proj = next(p for p in data["projects"] if p["id"] == new_id)
         print(f"  {new_id} : {len(proj['files'])} entrées (reuse_rating={proj['reuse_rating']})")
 
