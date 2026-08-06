@@ -31,6 +31,7 @@ from .models import (
     PromptRefinerOutput,
     RouterOutput,
     SecurityOutput,
+    DrafterOutput,
 )
 from .prompts import with_invariants
 
@@ -199,6 +200,26 @@ class ArchitectSignature(dspy.Signature):
     )
     task_content: str = dspy.InputField(desc="Le cahier des charges global de la fonctionnalité ou du projet à développer")
     output: ArchitectOutput = dspy.OutputField(desc="Plan : liste de sous-tâches (2-4 max). Chaque ArchitectTask a target_files + strategy + sections (si incremental). Définis aussi 'skills' (pour le Coder, ex: ['tdd']), 'tester_skills' (pour le Tester, ex: ['webapp-testing']), 'judge_skills' (ex: ['code-review']).")
+
+
+class DrafterSignature(dspy.Signature):
+    __doc__ = with_invariants(
+        "drafter",
+        """Agit comme le 'Cerveau' de l'ingénierie logicielle.
+        Reçoit la description de la sous-tâche et conçoit l'algorithme complet en Markdown brut.
+        
+        RÈGLES CRITIQUES :
+        1. Ne génère QUE du code et de la logique pure. N'utilise aucun outil.
+        2. TU DOIS GÉNÉRER LE CODE POUR **TOUS** LES FICHIERS CIBLES MENTIONNÉS DANS `target_files`.
+        3. Chaque fichier doit être dans son propre bloc Markdown (ex: ```html ... ```, ```css ... ```, ```javascript ... ```).
+        4. N'omets AUCUN fichier. Si la cible demande HTML, CSS et JS, tu dois fournir les 3 blocs complets l'un à la suite de l'autre.
+        5. L'implémentation doit être fonctionnelle de bout en bout, sans placeholder.
+        """,
+    )
+    subtask_description: str = dspy.InputField(desc="Description de la sous-tâche")
+    strategy: str = dspy.InputField(desc="Stratégie choisie par l'architecte")
+    target_files: str = dspy.InputField(desc="Liste stricte des fichiers que tu DOIS générer")
+    draft_markdown: str = dspy.OutputField(desc="Le brouillon contenant tous les blocs de code en Markdown.")
 
 
 class SecuritySignature(dspy.Signature):
@@ -377,7 +398,7 @@ def _no_think_model_id(settings: Settings) -> str:
     return settings.reasoning_no_think_model_id or settings.reasoning_model_id
 
 
-async def _run_dspy_node(signature, predictor_kwargs: dict, settings: Settings, spec, think: bool = False, model_override: Optional[str] = None) -> Any:
+async def _run_dspy_node(signature, predictor_kwargs: dict, settings: Settings, spec, think: bool = False, model_override: Optional[str] = None, module_class=None, tools: list = None) -> Any:
     """Helper pour exécuter un nœud DSPy avec le cycle de vie du modèle."""
     with model_lifecycle(spec) as srv:
         _mid = model_override or srv.model_id or spec.model
@@ -385,7 +406,13 @@ async def _run_dspy_node(signature, predictor_kwargs: dict, settings: Settings, 
         _key = srv.api_key
         lm = _configure_dspy(settings, _mid, think=think, api_base=_base, api_key=_key)
         with dspy.context(lm=lm):
-            predictor = dspy.ChainOfThought(signature)
+            if module_class is not None:
+                if tools:
+                    predictor = module_class(signature, tools=tools)
+                else:
+                    predictor = module_class(signature)
+            else:
+                predictor = dspy.ChainOfThought(signature)
             return await asyncio.to_thread(predictor, **predictor_kwargs)
 
 
@@ -612,6 +639,38 @@ async def execute_architect_node(task: dict, reasoning_model, settings: Settings
         else:
             print("[*] Architect : Context7 indisponible/non pertinent — planification sans brief.")
     try:
+        # F-82 : Recherche dynamique de skills via ReAct avant l'élaboration du plan
+        print("[*] Architect : Vérification des besoins en skills dynamiques (ReAct)...")
+        from .tools import search_and_install_skill
+        
+        # On définit une signature simple pour le ReAct
+        class SkillResearchSignature(dspy.Signature):
+            """Évalue si le projet nécessite des compétences spécialisées (skills) non disponibles par défaut. 
+            Utilise l'outil search_and_install_skill pour trouver et installer un skill pertinent (ex: 'react', 'tailwind', 'seo').
+            Si tu penses qu'aucun skill n'est nécessaire ou s'il y a une erreur d'installation, réponds simplement 'Aucun skill ajouté'.
+            """
+            task_content: str = dspy.InputField(desc="Le cahier des charges global")
+            research_summary: str = dspy.OutputField(desc="Résumé des skills installés ou 'Aucun skill ajouté'")
+            
+        def _search_skill_wrapper(query: str, author: str = None) -> str:
+            """Outil de recherche. Utilise 'query' pour chercher le skill (ex: 'react')."""
+            return search_and_install_skill.forward(query, author)
+            
+        react_result = await _run_dspy_node(
+            signature=SkillResearchSignature,
+            predictor_kwargs={"task_content": task_content_raw},
+            settings=settings,
+            spec=settings.reasoning_spec,
+            think=True,
+            module_class=dspy.ReAct,
+            tools=[_search_skill_wrapper]
+        )
+        
+        research_summary = react_result.research_summary
+        if research_summary and "Aucun" not in research_summary:
+            print(f"[+] Architect : Résultat de la recherche de skills : {research_summary}")
+            architect_input = f"RÉSULTAT DE L'INSTALLATION DYNAMIQUE DE SKILLS :\n{research_summary}\n\n---\n\n{architect_input}"
+        
         result = await _run_dspy_node(
             signature=ArchitectSignature,
             predictor_kwargs={"task_content": architect_input},
@@ -631,6 +690,45 @@ async def execute_architect_node(task: dict, reasoning_model, settings: Settings
     except Exception as e:
         print(f"[-] Erreur critique DSPy (Architect) : {e}")
         return None, None
+
+
+async def execute_drafter_node(
+    subtask_dict: dict, reasoning_model, settings: Settings
+) -> Tuple[Optional[DrafterOutput], Optional[NodeMetrics]]:
+    """Nœud Algorithm Drafter : génère la logique pure (sans outil)."""
+    task_id = subtask_dict["id"]
+    print(f"[*] DSPy Algorithm Drafter sur la sous-tâche {task_id}...")
+    
+    t0 = time.time()
+    try:
+        result = await _run_dspy_node(
+            signature=DrafterSignature,
+            predictor_kwargs={
+                "subtask_description": subtask_dict["content"],
+                "strategy": subtask_dict.get("strategy", "simple"),
+                "target_files": ", ".join(subtask_dict.get("target_files", []))
+            },
+            settings=settings,
+            spec=settings.reasoning_spec,
+            think=True,
+        )
+        dur = time.time() - t0
+        metrics = NodeMetrics(
+            node="drafter_dspy",
+            model=settings.reasoning_spec.model,
+            duration_s=dur,
+            input_tokens=0,
+            output_tokens=0
+        )
+        from .models import DrafterOutput
+        draft_out = DrafterOutput(task_id=task_id, draft_markdown=result.draft_markdown)
+        return draft_out, metrics
+    except Exception as e:
+        print(f"[-] Erreur Drafter_DSPy : {str(e)[:200]}")
+    
+    dur = time.time() - t0
+    metrics = NodeMetrics("drafter_dspy", settings.reasoning_spec.model, dur, 0, 0)
+    return None, metrics
 
 
 async def execute_security_reviewer_node(subtask: dict, reasoning_model, settings: Settings) -> Tuple[Optional[SecurityOutput], Optional[NodeMetrics]]:

@@ -31,6 +31,7 @@ from .skills_loader import (
     build_skills_block,
     build_conditional_skills_block,
     enforce_skill_budget,
+    ALWAYS_SKILLS_CODER,
 )
 from .skill_loader_tool import load_skill
 from .skills_loader import load_skill_body
@@ -467,23 +468,17 @@ def _build_devtools_blocks(task: dict, cdt_tools: list) -> tuple[str, str]:
 
     preview_block = f"""### 🖥️ VALIDATION VISUELLE (Chrome DevTools — F-45)
 Tu disposes d'un navigateur Chrome pilotable pour VÉRIFIER ta page AVANT final_answer.
-Le screenshot que tu prendras te sera RENVOYÉ EN IMAGE (tu le vois) — utilise-le pour
-détecter les bugs visuels (layout cassé, éléments superposés, page blanche).
 
 ⚠️ PIÈGE FRÉQUENT : une page au rendu "joli" (CSS ok) peut avoir TOUT son JS cassé
 silencieusement (boutons morts, éléments non générés). Seule la console le révèle.
-DONC vérifie la console EN PREMIER, le screenshot EN SECOND.
 
 Workflow de validation (À FAIRE après avoir créé les fichiers, AVANT final_answer) :
 1. `navigate_page(url="{primary_url}")` — ouvre ta page dans Chrome (URL absolue ci-dessous).
-2. `list_console_messages()` — OBLIGATOIRE EN PREMIER. Vérifie 0 erreur JS (SyntaxError,
+2. `take_screenshot()` — OBLIGATOIRE EN PREMIER.
+3. `list_console_messages()` — OBLIGATOIRE EN DEUXIÈME. Vérifie 0 erreur JS (SyntaxError,
    Unexpected token, Uncaught = bug critique → corrige AVANT de continuer).
-3. `take_screenshot()` — capture l'état visuel. L'image te revient : ANALISE-LA.
-4. Teste une interaction clé (ex: `click` sur le bouton principal) pour confirmer que le
-   JS fonctionne — un screenshot seul ne prouve pas que les interactions marchent.
-5. Si erreur console/bug visuel/interaction morte : CORRIGE via search_replace, puis
-   re-`navigate_page` + re-`list_console_messages` + re-`take_screenshot`.
-6. final_answer uniquement quand : 0 erreur console ET rendu correct ET interactions OK.
+4. Si erreur (visuelle ou console) : CORRIGE via search_replace, puis re-`navigate_page` + re-`take_screenshot` + re-`list_console_messages`.
+5. final_answer uniquement quand : 1) le rendu est conforme, 2) 0 erreur console.
 
 URL exacte de ta page (primary target) : {primary_url}
 ATTENTION : si ta page n'est pas à la racine du run, navigate_page DOIT pointer sur le
@@ -496,16 +491,11 @@ vrai fichier (ex: landing_page/index.html), pas sur la racine du workspace."""
 # le contexte. Le Coder n'a pas besoin de Lighthouse/perf (ça, c'est le Tester).
 _DEVTOOLS_TOOLS_DOC = """
 - `navigate_page(url="...")` : ouvre une URL dans Chrome (utilise file:/// absolu pour un fichier local).
-- `take_screenshot()` : capture l'écran → l'image TE REVIENT (tu la vois). Format JPEG (léger).
 - `list_console_messages()` : liste les erreurs/warnings JS de la console. ⚠️ Cet outil renvoie une chaîne de caractères Markdown directement affichable (ne fais surtout pas de boucle `for` ni de `.get()`, utilise simplement `print(list_console_messages())`).
-- `click(uid="...")` / `fill(uid="...", value="...")` : interagit (utile si tu veux tester un bouton, ex: démarrer un tri).
-- `evaluate_script(script="...")` : exécute du JS dans la page (ex: lire une valeur du DOM).
-  ⚠️ ATTENTION : Les arguments nommés sont OBLIGATOIRES pour tous ces outils (ex: `evaluate_script(script="...")`).
+- `evaluate_script(function="...")` : exécute du JS dans la page (ex: lire une valeur du DOM).
+  ⚠️ ATTENTION : Les arguments nommés sont OBLIGATOIRES pour tous ces outils (ex: `evaluate_script(function="...")`).
   ⚠️ CRITIQUE : N'utilise JAMAIS 'await' au premier niveau (top-level await) dans evaluate_script. Le MCP chrome-devtools attend une DECLARATION de fonction (et l'invoque lui-même). Tu dois fournir une fonction asynchrone non invoquée. Correct : `async () => { await ... }` (NE FAIS PAS d'IIFE).
-Note : les `uid` d'éléments viennent de `take_snapshot()` (arbre a11y). Pour un simple check visuel,
-take_screenshot + list_console_messages suffisent dans 90% des cas."""
-
-
+Note : pour un check rapide de syntaxe, `navigate_page` puis `list_console_messages` suffisent dans 90% des cas."""
 async def execute_coder_node(
     task: dict,
     fast_model: OpenAIServerModel,
@@ -540,10 +530,9 @@ async def execute_coder_node(
         )
         coder_tools = [list_directory, read_file, read_python_skeleton, write_file, append_file, edit_file, search_replace, multi_replace, check_run_state, log_event, DuckDuckGoSearchTool()]
         coder_tools.extend(c7_tools)
-        # F-45 : Chrome DevTools (navigate_page, take_screenshot, list_console_messages,
-        # click, fill...) pour auto-valider visuellement la page générée AVANT
-        # final_answer. Le modèle fast (Qwen3.5-9B) a la vision (validé runtime).
-        coder_tools.extend(cdt_tools)
+        # On redonne tous les outils web au coder, incluant vision
+        coder_cdt_tools = [t for t in cdt_tools if t.name in ["navigate_page", "list_console_messages", "evaluate_script", "take_screenshot"]]
+        coder_tools.extend(coder_cdt_tools)
         # F-57 (Priorité 10) : tool load_skill pour la flexibilité. Les skills
         # sélectionnés par l'Architect sont déjà injectés en corps complet dans le
         # system prompt (voir skills_block ci-dessous), mais le Coder peut appeler
@@ -599,10 +588,9 @@ async def execute_coder_node(
   (ex: pour `landing_page/index.html`, le dossier `landing_page/` est créé) — mais
   ne préfixe JAMAIS par le dossier de run lui-même.
 - ⚠️ AVANT TOUTE CHOSE : Appelle l'outil `check_run_state()` pour vérifier si tu es dans une boucle de redémarrage. Si cet outil t'indique que tu as crashé lors de la tentative précédente (ex: erreur de JSON ou de syntaxe sur l'appel final), LES FICHIERS SONT SÛREMENT DÉJÀ LÀ. Ne les écrase pas aveuglément !
-- ⚠️ AVANT DE CRÉER UN FICHIER : Vérifie TOUJOURS s'il existe déjà (via read_file
-  avec le chemin COURT, ex: `read_file(path="index.html")`). S'il existe et semble
-  complet, NE LE RÉÉCRIS PAS.
-- Sinon, tu DOIS créer le fichier avant de passer au reste."""
+- ⚠️ AVANT DE CRÉER UN FICHIER : Vérifie TOUJOURS s'il existe déjà en utilisant l'outil `list_directory(path=".")`. S'il est listé et semble complet, NE LE RÉÉCRIS PAS en entier (utilise search_replace/append_file).
+- Sinon, tu DOIS créer le fichier avant de passer au reste.
+- 🚀 AUTO-VALIDATION RAPIDE (JS) : Si tu génères ou modifies du JavaScript, vérifie instantanément sa syntaxe AVANT d'appeler final_answer. Fais-le en exécutant `import subprocess; print(subprocess.run(["node", "--check", "ton_script.js"], capture_output=True, text=True).stderr)` dans ton bloc Python. Cela te coûte 1 step et t'évite un rejet du Linter."""
 
         # Skills ciblés pour cette tâche. F-57 (Priorité 10) : L'ARCHITECT SÉLECTIONNE
         # les skills dans son plan (subtask.skills), et le Coder reçoit leur corps
@@ -614,10 +602,12 @@ async def execute_coder_node(
         architect_skills = task.get("skills", [])
         if architect_skills:
             # F-57 v3 : budget de tokens anti-saturation. L'Architect peut sélectionner
-            # trop de skills → on rogne pour rester sous skill_budget_tokens (défaut 8000,
-            # ~24% du contexte Qwen 9B). Le socle ALWAYS est toujours conservé.
+            # trop de skills → on rogne pour rester sous skill_budget_tokens (défaut 16000,
+            # Application du budget de tokens pour les skills (F-57)
             architect_skills = enforce_skill_budget(
-                architect_skills, budget_tokens=settings.skill_budget_tokens
+                selected_skills=architect_skills,
+                budget_tokens=16000,
+                always_skills=ALWAYS_SKILLS_CODER
             )
             blocks: list = []
             for name in architect_skills:
@@ -680,14 +670,19 @@ write_file massif (ça s'essouffle/tronque). Procède ainsi :
 4. final_answer quand c'est terminé."""
         elif strategy == "multifile":
             strategy_block = """### WORKFLOW (stratégie MULTIFILE imposée par l'Architect)
-Construis chaque fichier cible de façon autonome (1 module logique = 1 fichier, chacun
-< ~200 lignes). Tu PEUX enchaîner plusieurs write_file dans le même bloc de code.
-1. Pour chaque fichier cible : write_file(path=..., content=...) avec le contenu COMPLET.
-2. final_answer quand tous les fichiers sont créés."""
+Construis chaque fichier cible de façon autonome (1 module logique = 1 fichier).
+⚠️ CRITIQUE ET OBLIGATOIRE : TU NE DOIS JAMAIS ÉCRIRE UN FICHIER COMPLET D'UN COUP AVEC write_file.
+Le modèle plantera (troncature) si tu sors trop de lignes. Tu ES OBLIGÉ d'utiliser l'édition par bloc :
+1. Étape 1 : Fais un `write_file` UNIQUEMENT pour le squelette vide ou basique du premier fichier. Laisse le tour s'arrêter.
+2. Étape 2 : Au tour suivant, utilise OBLIGATOIREMENT `append_file` ou `multi_replace` pour injecter le vrai code.
+3. Répète ce processus (squelette puis append/replace) pour chaque fichier, UN PAR UN. Ne traite JAMAIS deux fichiers dans le même tour.
+4. Teste l'interface visuellement. final_answer quand tout marche."""
         else:  # simple (défaut, rétro-compat)
             strategy_block = """### WORKFLOW (stratégie SIMPLE)
-1. write_file(path=..., content=...) pour créer le fichier cible (contenu complet).
-2. final_answer quand c'est terminé."""
+⚠️ CRITIQUE ET OBLIGATOIRE : TU NE DOIS JAMAIS ÉCRIRE UN FICHIER COMPLET D'UN COUP AVEC write_file.
+1. Utilise `write_file(path=..., content=...)` UNIQUEMENT pour créer le squelette du fichier. Laisse ton tour s'arrêter.
+2. Au tour suivant, utilise OBLIGATOIREMENT `append_file` ou `multi_replace` pour injecter le code.
+3. final_answer quand c'est terminé."""
 
         # F-45 : section preview visuelle (Chrome DevTools) — ACTIVE uniquement pour
         # les tâches web (HTML/CSS/JS). Pour les autres technos (Python), les outils
@@ -704,7 +699,7 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
    Une réponse sans appel d'outil est considérée comme une TÂCHE TERMINÉE (échec).
 2. INTERDICTION ABSOLUE d'utiliser des backticks (`) dans ta pensée (Thought).
    Utilise-les UNIQUEMENT pour ouvrir et fermer le bloc de code ```python.
-3. ARGUMENTS NOMMÉS OBLIGATOIRES : Pour TOUS tes appels d'outils, tu DOIS utiliser des arguments nommés (ex: evaluate_script(script="...")). Les arguments positionnels feront crasher l'exécution.
+3. ARGUMENTS NOMMÉS OBLIGATOIRES : Pour TOUS tes appels d'outils, tu DOIS utiliser des arguments nommés (ex: evaluate_script(function="...")). Les arguments positionnels feront crasher l'exécution.
 4. BLOCS COMPLETS : chaque appel write_file/append_file doit contenir un bloc SYNTAXIQUEMENT
    COMPLET (quotes/braces/parenthèses équilibrées). NE JAMAIS laisser une string/brace
    ouverte entre 2 appels. Si le contenu dépasse ~60 lignes, DÉCOUPE en plusieurs append_file.
@@ -718,16 +713,9 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
    CONTENU, pas à l'appel. Mélanger les deux provoque un SyntaxError de parsing fatal.
    ❌ FAUX : search_replace(path="x", old_string="...", new_string="function() {{ ... }}"}}
    ✅ JUSTE : search_replace(path="x", old_string="...", new_string="function() {{ ... }}")
-9. ANIMATION PAS-À-PAS = UNE itération par frame, JAMAIS l'algorithme complet : dans un
-   visualiseur (tri, pathfinding, simulation), la fonction appelée par `requestAnimationFrame`
-   (ou nommée `step`/`tick`/`performStep`/`animate`) ne DOIT avancer que d'UNE SEULE
-   étape de l'algorithme par appel, PAS contenir les boucles `for`/`while` complètes de
-   l'algorithme. Sinon tout s'exécute en 1 tick JS → animation instantanée invisible,
-   `delay`/slider de vitesse inopérants. L'état (indices, données) doit vivre dans des
-   variables persistantes hors de la fonction, avancées d'un pas à chaque frame, puis la
-   frame suivante re-programmée.
-   ❌ FAUX : function step() {{ for (...) {{ for (...) {{ /* tout l'algo */ }} }} }}
-   ✅ JUSTE : function step() {{ if (!encours) {{ finish(); return; }} avanceUnSeulPas(); requestAnimationFrame(step); }}
+9. ANIMATION PAS-À-PAS (Visualiseurs/Algos) : Pour les visualisations d'algorithmes (tri, pathfinding, etc.), utilise TOUJOURS `async`/`await` avec une fonction `sleep` (ex: `const sleep = ms => new Promise(r => setTimeout(r, ms));`). N'utilise JAMAIS de boucle `while` ou `for` classique contenant un simple `setTimeout` asynchrone, cela exécute tout instantanément.
+   ❌ FAUX : function sort() {{ while(swapped) {{ setTimeout(() => swap(), delay); }} }}
+   ✅ JUSTE : async function sort() {{ while(swapped) {{ await sleep(delay); swap(); }} }}
 
 ### FORMAT DE SORTIE (obligatoire)
 Tu écris du code Python dans un bloc ````python ... ```` qui appelle tes outils. Exemple one-shot :
@@ -803,7 +791,7 @@ Code prêt pour la production, respectant les conventions du langage.
                 add_base_tools=False,
                 code_block_tags="markdown",
                 step_callbacks=[make_screenshot_callback(screenshot_capture)],
-                additional_authorized_imports=["os"],
+                additional_authorized_imports=["os", "subprocess"],
             )
             return await run_with_retry(
                 local_coder, prompt, CoderOutput, settings.worker_max_retries, loop_guard=guard

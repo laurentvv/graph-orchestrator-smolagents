@@ -114,41 +114,38 @@ _SCRIPT_INLINE_RE = re.compile(
 )
 
 
-def extract_inline_js(html: str) -> str:
-    """Extrait et concatène le JS des balises <script> inline (sans src).
+_SCRIPT_EXTERNAL_RE = re.compile(
+    r'<script[^>]*\bsrc\s*=\s*["\']([^"\']+)["\'][^>]*>',
+    re.IGNORECASE
+)
 
-    Exclut explicitement les scripts externes (<script src="...">) car on ne
-    dispose pas de leur code ici. Retourne le JS concaténé (séparé par \\n\\n
-    pour que les erreurs de l'un ne cascade pas sur l'autre).
-
-    Exemples:
-        >>> extract_inline_js('<script>let x = 1;</script>')
-        'let x = 1;'
-        >>> extract_inline_js('<script src="app.js"></script>')
-        ''
-        >>> extract_inline_js('<script type="module">const y: number = 2;</script>')
-        'const y: number = 2;'
-    """
+def extract_all_js(html: str, html_path: str = None) -> str:
+    """Extrait le JS (inline + externe) pour l'analyse statique."""
     if not html:
         return ""
     blocks = _SCRIPT_INLINE_RE.findall(html)
-    return "\n\n".join(b.strip() for b in blocks if b.strip())
+    js_blocks = [b.strip() for b in blocks if b.strip()]
+    
+    if html_path:
+        base_dir = os.path.dirname(html_path)
+        for m in _SCRIPT_EXTERNAL_RE.finditer(html):
+            src = m.group(1)
+            if src.startswith("http") or src.startswith("//") or os.path.isabs(src):
+                continue
+            script_path = os.path.join(base_dir, src)
+            try:
+                with open(script_path, "r", encoding="utf-8", errors="replace") as f:
+                    js_blocks.append(f.read().strip())
+            except OSError:
+                pass
+                
+    return "\n\n".join(js_blocks)
 
 
-def _check_js_syntax(html: str) -> List[str]:
-    """Tier 1a : valide la syntaxe du JS inline via `node --check`.
-
-    Déterministe, 0 LLM, <1s. Attrape le bug n°1 du Coder : TypeScript dans
-    du vanilla JS (`: type`, `as Cast`) → SyntaxError → page blanche. Un
-    screenshot ne le détecte PAS (la page est juste vide).
-
-    Returns:
-        Liste de messages d'erreur (vide si OK ou node absent). On garde le
-        premier message de stderr de node (le plus pertinent = la cause).
-    """
-    js = extract_inline_js(html)
+def _check_js_syntax(js: str) -> List[str]:
+    """Tier 1a : valide la syntaxe du JS via `node --check`."""
     if not js.strip():
-        return []  # rien à valider (HTML statique sans JS, ou JS externe uniquement)
+        return []  # rien à valider
 
     if len(js) > _MAX_JS_CHARS:
         js = js[:_MAX_JS_CHARS]  # sécurité : éviter ligne de commande trop longue
@@ -196,37 +193,16 @@ def _line_of(html: str, needle: str) -> int:
     return html.count("\n", 0, idx) + 1
 
 
-def _check_event_wiring(html: str) -> List[str]:
-    """Tier 1b : vérifie que chaque contrôle interactif est branché au JS.
-
-    Déterministe, 0 LLM, <1s. Attrape le piège n°1 du Coder : un élément HTML
-    présent visuellement mais INACTIF car non connecté au JS. Bug concret :
-    `<input id="speedSlider" type="range">` sans `speedSlider.addEventListener(...)`
-    → slider visible mais qui ne fait rien.
-
-    GÉNÉRIQUE : scanne TOUS les contrôles du HTML. Ne connaît pas « speedSlider ».
-
-    Tolère les patterns légitimes :
-      - onclick/onchange/... inline (attributs on*)
-      - <button type="submit"> dans un <form> (submit natif)
-      - <a href> (navigation native, pas besoin de JS)
-      - <input type="hidden"> (pas interactif)
-
-    Returns:
-        Liste de messages (vide si OK). Un message par contrôle non-wiré.
-    """
+def _check_event_wiring(html: str, js: str) -> List[str]:
+    """Tier 1b : vérifie que chaque contrôle interactif est branché au JS."""
     errors: List[str] = []
 
-    # Rassemble tous les ids référencés en JS (via getElementById/querySelector)
-    # pour tolérer le pattern `document.getElementById('x').addEventListener(...)`.
+    combined = html + "\n" + js
     referenced_ids: set = set()
-    for m in _GETBY_RE.finditer(html):
+    for m in _GETBY_RE.finditer(combined):
         referenced_ids.add(m.group(1) or m.group(2))
-    # De même : si au moins un addEventListener existe globalement, on est
-    # indulgent (le Coder peut brancher via querySelectorAll('.class') — on ne
-    # peut pas tout matcher). On ne flag QUE s'il n'y a AUCUN handler OU
-    # l'id n'est référencé nulle part.
-    has_any_handler = bool(_ADD_EVENT_RE.search(html)) or bool(_ONCLICK_RE.search(html))
+        
+    has_any_handler = bool(_ADD_EVENT_RE.search(combined)) or bool(_ONCLICK_RE.search(html))
 
     for tag, attrs in _INTERACTIVE_RE.findall(html):
         type_m = _TYPE_ATTR_RE.search(attrs)
@@ -306,22 +282,10 @@ _PRIMARY_ACTION_RE = re.compile(
 )
 
 
-def _discover_visibility_targets(html: str) -> List[str]:
-    """Découvre les sélecteurs CSS candidats à vérifier pour la visibilité.
-
-    GÉNÉRIQUE : on ne hardcode pas `.bar`. Deux sources de candidats :
-      1. Classes assignées en JS (b.className = "bar", classList.add("bar")) —
-         ces éléments sont CRÉÉS dynamiquement (ils n'existent pas au load,
-         donc on ne peut pas les voir dans le HTML statique).
-      2. Classes présentes dans le HTML + citées dans un appendChild/innerHTML.
-
-    La source 1 est cruciale : c'est elle qui détecte les éléments créés au clic
-    (le bug des barres invisibles : .bar est créé via createElement + className,
-    jamais présent dans le HTML au load).
-    """
+def _discover_visibility_targets(html: str, js: str) -> List[str]:
+    """Découvre les sélecteurs CSS candidats à vérifier pour la visibilité."""
     targets: List[str] = []
     seen = set()
-    js = extract_inline_js(html)
 
     # 1. Classes assignées en JS (éléments créés dynamiquement) — PRIORITAIRE.
     if js:
@@ -781,9 +745,11 @@ def static_check_html(
 
     errors: List[str] = []
 
+    js = extract_all_js(html, path)
+
     # --- Tier 1 (toujours, statique pur) ---
-    errors.extend(_check_js_syntax(html))
-    errors.extend(_check_event_wiring(html))
+    errors.extend(_check_js_syntax(js))
+    errors.extend(_check_event_wiring(html, js))
     tier = "tier1"
 
     # Décision : si Tier 1 a déjà trouvé un bug SYNTAXE (page blanche garantie),
@@ -801,7 +767,7 @@ def static_check_html(
             with chrome_devtools_tools() as cdt:
                 if cdt:  # Chrome dispo
                     url = devtools_url or ("file:///" + os.path.abspath(path).replace("\\", "/"))
-                    selectors = _discover_visibility_targets(html)
+                    selectors = _discover_visibility_targets(html, js)
                     # Étape 7 : déclenche l'action primaire (start/generate) pour
                     # créer les éléments dynamiques avant de vérifier leur visibilité.
                     primary_id = _find_primary_action_id(html)

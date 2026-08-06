@@ -670,7 +670,13 @@
       "status": "completed",
       "dependencies": [
         "F-54"
-      ]
+    },
+    {
+      "id": "F-82",
+      "name": "Chercheur de skills à la volée (Skill Finder)",
+      "description": "Ajout d'un outil search_and_install_skill() pluggé à l'Architecte avec modification de son system prompt pour l'utiliser en cas de lacune. Le processus devra : (1) interroger l'API skills.sh, (2) évaluer les notes de sécurité (Socket/Snyk) et n'autoriser que les auteurs de confiance (ex: vercel-labs, microsoft), (3) télécharger le skill dans skills/, (4) mettre à jour dynamiquement skills_loader.py (règles DYNAMIC_SKILL_RULES + Regex) pour que la sélection soit reconnue par le Coder pour cette tâche et les futures.",
+      "status": "pending",
+      "dependencies": []
     }
   ]
 }

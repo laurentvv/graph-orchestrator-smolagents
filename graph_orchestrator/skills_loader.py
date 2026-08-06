@@ -71,6 +71,10 @@ DYNAMIC_SKILL_RULES: List[tuple] = [
     # (sinon cdt_tools=[] et le prompt n'affiche pas la section preview).
     (r"\b(html5?|css|landing\s*page|front[- ]?end|landing|portfolio|interface web|page web|responsive)\b",
      "devtools-preview"),
+    (r"\b(animation|visualiseur|visualizer|interactif|jeu|canvas)\b", "web-animation"),
+    (r"\b(animation|visualiseur|visualizer|interactif|jeu|canvas)\b", "animation-vocabulary"),
+    (r"\b(animation|visualiseur|visualizer|interactif|jeu|canvas)\b", "improve-animations"),
+    (r"\b(animation|visualiseur|visualizer|interactif|jeu|canvas)\b", "review-animations"),
     (r"\bpython\b", "python-health-audit"),
     # Libs/frameworks externes → force le skill context7-research (double sécurité
     # avec le socle). Le skill lui-même dit "ne cherche PAS pour du vanilla" : ces
@@ -354,6 +358,7 @@ def build_conditional_skills_block(task_content: str) -> str:
     injecté sur une tâche web, et vice-versa.
     """
     names = select_skills_for_coder(task_content)
+    names = enforce_skill_budget(names, budget_tokens=16000)
     blocks: List[str] = []
     for name in names:
         body = load_skill_body(name)
