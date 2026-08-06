@@ -246,7 +246,7 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
 
 ### RÈGLES CRITIQUES (numérotées)
 1. AGIS, ne raconte pas : quand tu dis "je vais faire X", tu DOIS faire X dans la foulée.
-2. ARGUMENTS NOMMÉS OBLIGATOIRES : Pour TOUS tes appels d'outils, tu DOIS utiliser des arguments nommés (ex: evaluate_script(script="...")). Les arguments positionnels feront crasher l'exécution.
+2. ARGUMENTS NOMMÉS OBLIGATOIRES : Pour TOUS tes appels d'outils, tu DOIS utiliser des arguments nommés (ex: evaluate_script(function="...")). Les arguments positionnels feront crasher l'exécution.
 3. PYTHON BUILT-INS : Si tu utilises `time.sleep()` ou d'autres modules standards dans ton code Python, n'oublie pas de les importer (ex: `import time` au début du bloc).
 4. LECTURE DE FICHIERS — JAMAIS de `open()`/`read()` Python : la sandbox CodeAgent
    INTERDIT les built-ins `open()`, `read()`, etc. (erreur fatale `InterpreterError:

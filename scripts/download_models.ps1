@@ -10,16 +10,16 @@ $ModelsDir = Join-Path $ProjectDir "models"
 # Configuration des modèles
 $Models = @(
     @{
-        Name = "Qwen 3.5 9B (Coder, Router)"
-        Folder = "qwen35-mtp"
-        File = "Qwen3.5-9B-Q4_K_M.gguf"
-        Url = "https://huggingface.co/unsloth/Qwen3.5-9B-MTP-GGUF/resolve/main/Qwen3.5-9B-Q4_K_M.gguf"
+        Name = "Qwen 3.5 4B (Coder, Router)"
+        Folder = "qwen35-4b"
+        File = "Qwen3.5-4B-Q4_K_M.gguf"
+        Url = "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf"
     },
     @{
-        Name = "Qwen 3.5 9B - Vision Projector (mmproj)"
-        Folder = "qwen35-mtp"
+        Name = "Qwen 3.5 4B - Vision Projector (mmproj)"
+        Folder = "qwen35-4b"
         File = "mmproj-F16.gguf"
-        Url = "https://huggingface.co/unsloth/Qwen3.5-9B-MTP-GGUF/resolve/main/mmproj-F16.gguf"
+        Url = "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/mmproj-F16.gguf"
     },
     @{
         Name = "Ornith 1.0 9B (Architect, Tester, Judge, Security)"
@@ -66,6 +66,6 @@ foreach ($Model in $Models) {
 Write-Host "=========================================" -ForegroundColor Cyan
 Write-Host "Tous les téléchargements sont terminés." -ForegroundColor Cyan
 Write-Host "Assurez-vous que votre fichier .env pointe bien vers :"
-Write-Host "FAST_MODEL = $ModelsDir\qwen35-mtp\Qwen3.5-9B-Q4_K_M.gguf"
+Write-Host "FAST_MODEL = `$ModelsDir\qwen35-4b\Qwen3.5-4B-Q4_K_M.gguf"
 Write-Host "REASONING_MODEL = $ModelsDir\ornith-1.0\Ornith-1.0-9B-MTP-Q4_K_M.gguf"
 Write-Host "=========================================" -ForegroundColor Cyan

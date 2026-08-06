@@ -246,7 +246,7 @@ class _GatedWriteTool(BaseTool):
         # amont ou en aval selon l'ordre de la chaîne) — on ne fait que gate.
         allowed, reason = self._gate.check_write(kwargs.get("path"), self.name)
         if not allowed:
-            return reason
+            raise RuntimeError(reason)
         result = self._wrapped(*args, **kwargs)
         return self._check_and_record(kwargs, result)
 
@@ -254,7 +254,7 @@ class _GatedWriteTool(BaseTool):
         # Chemin TCA / fallback. Même logique que __call__.
         allowed, reason = self._gate.check_write(kwargs.get("path"), self.name)
         if not allowed:
-            return reason
+            raise RuntimeError(reason)
         result = self._wrapped.forward(*args, **kwargs)
         return self._check_and_record(kwargs, result)
 

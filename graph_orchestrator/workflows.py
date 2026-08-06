@@ -395,11 +395,12 @@ async def run_coding_workflow(
         from .dspy_nodes import (
             execute_architect_node,
             execute_security_reviewer_node,
-        execute_code_judge_node,
-        execute_escalation_node,
-        execute_router_node,
-        execute_prompt_refiner_node,
-    )
+            execute_code_judge_node,
+            execute_escalation_node,
+            execute_router_node,
+            execute_prompt_refiner_node,
+            execute_drafter_node,
+        )
     
         # Routine initiale de routage
         task_content = seed_tasks[0]['content'] if seed_tasks else ""
@@ -551,6 +552,18 @@ async def run_coding_workflow(
                     # Vide en itération 1 → Tester en mode complet (checklist F-46).
                     "refutations": refutations_raw,
                 }
+
+                # 0. Drafter (iteration 1 uniquement)
+                if iteration == 1:
+                    draft_res, m_draft = await execute_drafter_node(sub_dict, reasoning_model, settings)
+                    if m_draft: sub_metrics.append(m_draft)
+                    if draft_res:
+                        import os
+                        draft_filename = f"draft_{subtask.task_id.replace('-', '_')}.md"
+                        draft_path = os.path.join(run_output_dir, draft_filename)
+                        with open(draft_path, "w", encoding="utf-8") as f:
+                            f.write(draft_res.draft_markdown)
+                        sub_dict["content"] += f"\n\n### BROUILLON DE L'ALGORITHM DRAFTER\nL'Algorithm Drafter (Architecte Logiciel) a conçu la logique parfaite pour toi. Il a écrit tout le code brut dans le fichier `{draft_filename}` (à la racine du projet).\n\n⚠️ INSTRUCTION CRITIQUE : Ton PREMIER appel d'outil DOIT ÊTRE `read_file(path=\"{draft_filename}\")` pour récupérer ce code. Ensuite, utilise tes outils `write_file` ou `append_file` pour l'injecter proprement dans les vrais fichiers cibles."
 
                 # 1. Coder (smolagents, modèle FAST)
                 coder_res, m1 = await execute_coder_node(sub_dict, fast_model, settings)

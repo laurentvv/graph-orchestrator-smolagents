@@ -1,0 +1,25 @@
+{
+  "exploration": [
+    {
+      "id": "e1",
+      "content": "Identifie TOUTES les causes possibles d'une charge CPU à 95% sur un serveur de base de données. Explore chaque piste : requêtes, locks, index manquants, paramétrage, concurrence, fuites."
+    },
+    {
+      "id": "e2",
+      "content": "Identifie TOUTES les causes possibles de 45 erreurs HTTP 502 sur un reverse proxy. Explore chaque piste : backend down, timeouts, saturation de connexions, DNS, TLS, config."
+    }
+  ],
+  "coding": [
+    {
+      "id": "bubble_sort",
+      "content": "Crée un visualiseur d'algorithme Bubble Sort (tri à bulles) interactif en HTML/CSS/JS vanilla (un seul fichier index.html, pas de framework ni CDN externe). L'interface doit montrer un tableau de barres verticales (hauteurs proportionnelles aux valeurs) qui s'animent pendant le tri. Fonctionnalités attendues : (1) un bouton « Démarrer le tri » qui lance l'animation pas-à-pas de Bubble Sort avec un délai visible entre chaque comparaison/échange ; (2) un bouton « Réinitialiser » qui génère un nouveau tableau aléatoire ; (3) un curseur/slidebar pour régler la vitesse d'animation ; (4) un compteur affichant le nombre de comparaisons effectuées ; (5) un code couleur clair : barre en cours de comparaison = une couleur, barre déjà triée = une autre couleur, barres non encore traitées = couleur par défaut. Design soigné, responsive, avec un thème sombre (dark mode).",
+      "target_files": ["index.html"]
+    }
+  ],
+  "one_shot": [
+    {
+      "id": "os1",
+      "content": "Tâche simple de test."
+    }
+  ]
+}

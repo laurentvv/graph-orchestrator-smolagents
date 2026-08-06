@@ -22,6 +22,22 @@ def _synthetic_action_step(step_number: int) -> ActionStep:
     now = _time.time()
     return ActionStep(step_number=step_number, timing=Timing(start_time=now, end_time=now))
 
+def apply_image_purge(memory: AgentMemory):
+    """Purge all visual memory except the very last step's image to prevent context explosion."""
+    action_steps = [step for step in memory.steps if isinstance(step, ActionStep)]
+    if not action_steps:
+        return
+        
+    # Process older steps, keeping only the image of the last step
+    for step in action_steps[:-1]:
+        if hasattr(step, "observations_images") and step.observations_images:
+            step.observations_images = []
+            
+    # As a secondary safety, if the last step has multiple images, only keep the last 1
+    last_step = action_steps[-1]
+    if hasattr(last_step, "observations_images") and last_step.observations_images and len(last_step.observations_images) > 1:
+        last_step.observations_images = last_step.observations_images[-1:]
+
 def apply_micro_compact(memory: AgentMemory, keep_recent: int = 3, threshold: int = 150):
     """L2: Replace old large tool results with a placeholder."""
     action_steps = [step for step in memory.steps if isinstance(step, ActionStep)]
@@ -32,9 +48,6 @@ def apply_micro_compact(memory: AgentMemory, keep_recent: int = 3, threshold: in
     for step in action_steps[:-keep_recent]:
         if step.observations and len(str(step.observations)) > threshold:
             step.observations = "[Compacted: Earlier tool result truncated. Re-run if needed.]"
-        # Also clear images if any to save token space
-        if hasattr(step, "observations_images") and step.observations_images:
-            step.observations_images = []
 
 def apply_snip_compact(memory: AgentMemory, max_steps: int = 15):
     """L1: Trim middle steps if the history is getting too long."""
@@ -90,6 +103,9 @@ class CompactingCodeAgent(CodeAgent):
     Implements the Event-Sourcing & Reducers patterns from qm and learn-claude-code.
     """
     def write_memory_to_messages(self, summary_mode: bool = False):
+        # 0. Visual Memory Purge: aggressively remove old images (1 image = ~5k tokens)
+        apply_image_purge(self.memory)
+        
         # 1. Budget: truncate massive single outputs (protects the current turn)
         apply_tool_result_budget(self.memory)
         
@@ -134,13 +150,24 @@ class CompactingCodeAgent(CodeAgent):
             # If we reach a non-error step, flush the failed branch
             if len(failed_branch) > 1:
                 summary_step = _synthetic_action_step(failed_branch[0].step_number)
-                summary_step.model_output = f"[Branch Summarization] Attempted {len(failed_branch)} actions which all resulted in errors. Learning: the previous approaches are invalid and must not be repeated."
                 errors = []
+                actions = []
                 for s in failed_branch:
                     err = str(getattr(s, "error", "")) or str(s.observations)
-                    # Keep only the first line of the error to save tokens
                     errors.append(err.split("\\n")[0][:100])
-                summary_step.observations = "Errors encountered: " + ", ".join(errors)
+                    code = str(getattr(s, "model_output", "") or getattr(s, "code_action", ""))
+                    # Extract the python code block if it exists
+                    import re
+                    match = re.search(r"```python\\s*(.*?)\\s*```", code, re.DOTALL)
+                    if match:
+                        code_snippet = match.group(1).strip().replace("\\n", " ")[:150]
+                    else:
+                        code_snippet = code.replace("\\n", " ")[:150]
+                    actions.append(f"`{code_snippet}`")
+                
+                actions_str = ", ".join(actions)
+                summary_step.model_output = f"[Branch Summarization] Attempted {len(failed_branch)} actions which all resulted in errors. Failed code: {actions_str}. Learning: the previous approaches are invalid and must not be repeated."
+                summary_step.observations = "Errors encountered: " + " | ".join(errors)
                 new_steps.append(summary_step)
             elif len(failed_branch) == 1:
                 new_steps.append(failed_branch[0])
@@ -150,7 +177,23 @@ class CompactingCodeAgent(CodeAgent):
             
         if len(failed_branch) > 1:
             summary_step = _synthetic_action_step(failed_branch[0].step_number)
-            summary_step.model_output = f"[Branch Summarization] Attempted {len(failed_branch)} actions which all resulted in errors. Learning: the previous approaches are invalid and must not be repeated."
+            errors = []
+            actions = []
+            for s in failed_branch:
+                err = str(getattr(s, "error", "")) or str(s.observations)
+                errors.append(err.split("\\n")[0][:100])
+                code = str(getattr(s, "model_output", "") or getattr(s, "code_action", ""))
+                import re
+                match = re.search(r"```python\\s*(.*?)\\s*```", code, re.DOTALL)
+                if match:
+                    code_snippet = match.group(1).strip().replace("\\n", " ")[:150]
+                else:
+                    code_snippet = code.replace("\\n", " ")[:150]
+                actions.append(f"`{code_snippet}`")
+            
+            actions_str = ", ".join(actions)
+            summary_step.model_output = f"[Branch Summarization] Attempted {len(failed_branch)} actions which all resulted in errors. Failed code: {actions_str}. Learning: the previous approaches are invalid and must not be repeated."
+            summary_step.observations = "Errors encountered: " + " | ".join(errors)
             new_steps.append(summary_step)
         elif len(failed_branch) == 1:
             new_steps.append(failed_branch[0])

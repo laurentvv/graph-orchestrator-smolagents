@@ -115,7 +115,13 @@ class CoderOutput(BaseModel):
     status: Literal["success", "failure"]
     details: str
     linter_ok: bool = Field(default=False, description="As-tu vérifié ton code via le linter ou un test unitaire ?")
-    vision_ok: bool = Field(default=False, description="Pour une tâche Frontend, as-tu navigué sur la page ET pris un screenshot pour vérifier le rendu visuel ?")
+    vision_ok: bool = Field(default=False, description="Pour une tâche Frontend, as-tu navigué sur la page ET vérifié la console (screenshot n'est plus requis) ?")
+
+class DrafterOutput(BaseModel):
+    """Résultat du nœud Algorithm Drafter (brouillon de code pur)."""
+    task_id: str
+    draft_markdown: str = Field(description="Brouillon complet du code source en Markdown (avec blocs ```langage). Logique pure uniquement.")
+
 class SecurityOutput(BaseModel):
     """Verdict du noeud d'audit de sécurité sur le code généré."""
     task_id: str
