@@ -284,3 +284,62 @@ async def test_idle_breaker_disabled_for_non_coder_nodes():
 
     assert call_count["n"] == 3  # tous les retries consommés, pas de coupure anticipée
     assert result is None
+
+
+# ==========================================
+# Correctif 4 — final_answer valide prioritaire sur LoopGuard (F-36)
+# ==========================================
+
+@pytest.mark.anyio
+async def test_valid_final_answer_wins_over_loop_guard():
+    """Un final_answer valide (CoderOutput success) doit être retourné même si le
+    LoopGuard (F-36) détecte une répétition d'outil dans l'historique.
+
+    Post-mortem run coding_d72dc8e36445c4b6 (failure mode n°4, découvert itération 3) :
+    le Coder a atteint max_steps=18 en itérant légitimement (write_file/search_replace
+    rejoués après relecture du fichier). Le LoopGuard a comptabilisé ces répétitions
+    légitimes et a éjecté un final_answer ``{"status":"success",...}`` pourtant valide
+    → verdict graphe ``failure`` (Coder crash) alors que les 3 fichiers étaient bons.
+
+    Cause racine : ``run_with_retry`` faisait ``if loop_msg: pass`` dans le bloc
+    ``if validated:``, jetant silencieusement le résultat. Désormais un validated
+    réussi prime toujours sur loop_msg.
+    """
+    from graph_orchestrator.loop_guard import LoopGuard
+
+    # Agent dont l'historique contient 3× le même write_file (itération de correction
+    # légitime → déclenche loop_guard.repeated_action()).
+    repeated_step = _make_step(code_action='write_file(path="index.html", content="x")')
+    agent = _make_agent_of_type("CodeAgent", [repeated_step, repeated_step, repeated_step])
+
+    valid_output = CoderOutput(
+        task_id="ts-001", status="success",
+        details="Visualiseur Bubble Sort créé.",
+        linter_ok=True, vision_ok=True,
+    )
+    run_result = MagicMock()
+    run_result.output = valid_output  # extract_and_validate le retourne tel quel (déjà un CoderOutput)
+    run_result.timing = MagicMock(duration=0.1)
+    run_result.token_usage = MagicMock(input_tokens=1, output_tokens=1)
+
+    call_count = {"n": 0}
+
+    async def counting_to_thread(fn, *args, **kwargs):
+        call_count["n"] += 1
+        return run_result
+
+    guard = LoopGuard(threshold=3, enabled=True)
+
+    with patch("graph_orchestrator.nodes.asyncio.to_thread", new=counting_to_thread):
+        with patch("graph_orchestrator.nodes.extract_and_validate", return_value=valid_output):
+            result, metrics = await run_with_retry(
+                agent, "PROMPT", CoderOutput,
+                max_retries=3, loop_guard=guard,
+            )
+
+    # Le final_answer valide est retourné (pas jeté par le LoopGuard).
+    assert result is valid_output, "un final_answer valide doit primer sur loop_msg"
+    assert result.status == "success"
+    assert call_count["n"] == 1, "succès au 1er attempt, aucun retry ne doit être consommé"
+    # Le LoopGuard a bien détecté la répétition (confirme qu'on teste le bon chemin) :
+    assert guard.repeated_action() is not None

@@ -761,3 +761,31 @@ Coder est appliquée correctement par Qwen3.5-9B.
   baseline F-70), 0 régression. py_compile OK (nodes.py + config.py).
 - [x] Étape F61-7 : État disque synchronisé (feature_list.json F-61 description + cycle,
   contract +critères 245-250, progress, log).
+
+## Jalons de l'Itération (cycle F-61 itération 3 — final_answer valide vs LoopGuard)
+> Run E2E Bubble Sort multi-fichier du 2026-08-06 20:16 : verdict `failure` (Coder crash),
+> mais les 3 fichiers générés étaient fonctionnels. Post-mortem via `run_analyzer.py` →
+> bug logiciel `run_with_retry` identifié (un final_answer valide éjecté par le LoopGuard).
+
+- [x] Étape F61-8 : Run E2E Bubble Sort multi-fichier (WORKFLOW_MODE=coding, FRESH_START=true)
+  — 2390s (~40 min), 294k tokens. Validations E2E réussies : F-58 (llama.cpp dyn.), F-59
+  (multi_replace en mode correction), F-67 (Read-Before-Write Gate a BLOCKÉ une édition
+  sans relecture), F-61 (max_steps 18 + idle breaker), F-33 (rattrapage parsing triple-quote),
+  F-50 (auto-validation visuelle Coder). Verdict failure (cause logicielle, pas code produit).
+- [x] Étape F61-9 : Post-mortem `run_analyzer.py` — cause racine : `run_with_retry` lignes
+  296-297 `if loop_msg: pass`. Le LoopGuard (F-36) scanne tout l'historique et comptabilise
+  comme "répétition" l'itération de correction légitime, puis le bloc `if validated:` jette
+  silencieusement le final_answer valide (`pass` au lieu de `return`). 3 retries reproduisent
+  → échec définitif. Diagnostic confirmé par agent Explore (lecture code nodes.py + loop_guard).
+- [x] Étape F61-10 : Correctif — bloc `if validated:` inversé. Un `validated` réussi prime
+  TOUJOURS sur `loop_msg`. Le `if loop_msg: pass` supprimé. `loop_msg` reste dans le prompt
+  de retry (ligne 279) pour guider le retry UNIQUEMENT quand `validated is None`. Message
+  d'observabilité ajouté pour tracer le chemin. Branche `fix/coder-final-answer-loopguard-priority`.
+- [x] Étape F61-11 : Test de non-régression `test_valid_final_answer_wins_over_loop_guard`
+  (test_coder_hardening.py) — agent avec 3× write_file identique (déclenche loop_guard) +
+  final_answer valide → assert succès retourné (pas None), 0 retry consommé. 9/9 PASS.
+- [x] Étape F61-12 : Validation — suite pytest 674 passed (+1 vs baseline 673) / 26 échecs
+  préexistants strictement identiques (confirmés via `git stash` : 26 failed avant ET après,
+  aucun lié au LoopGuard). py_compile OK. 0 régression.
+- [x] Étape F61-13 : État disque synchronisé (feature_list.json F-61 description + itération 3,
+  contract +critères 251-254, progress, log).
