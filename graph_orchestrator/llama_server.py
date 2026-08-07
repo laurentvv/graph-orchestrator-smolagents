@@ -33,6 +33,7 @@ Usage (dans les nœuds) :
 """
 import logging
 import os
+import shutil
 import socket
 import subprocess
 import time
@@ -47,26 +48,63 @@ import threading
 _spawn_lock = threading.Lock()  # sérialise les spawns (évite 2 modèles concurrents).
 
 
+def _has_nvidia_gpu() -> bool:
+    """Détecte la présence d'un GPU NVIDIA via nvidia-smi (cross-plateforme, ~10 ms).
+
+    nvidia-smi est livré avec le driver NVIDIA et présent sur tout Windows/Linux
+    ayant un GPU NVIDIA actif. On l'invoque en query mode (rapide, pas de server).
+    Sur Windows, le PATH contient C:\\Windows\\System32\\nvidia-smi.exe ; sur Linux,
+    /usr/bin/nvidia-smi. Absent = pas de GPU NVIDIA (ou driver non installé).
+    """
+    nvidia_smi = shutil.which("nvidia-smi")
+    if not nvidia_smi:
+        return False
+    try:
+        # -L : liste les GPU (sortie courte, immédiate). exit 0 = GPU présent.
+        r = subprocess.run(
+            [nvidia_smi, "-L"], capture_output=True, text=True, timeout=10
+        )
+        return r.returncode == 0 and bool(r.stdout.strip())
+    except (subprocess.SubprocessError, OSError):
+        return False
+
+
 def _resolve_llama_bin() -> str:
     """Résout le binaire llama-server : priorise un build CUDA bundlé, puis le PATH.
 
-    Ordre de recherche (le 1er trouvé gagne) :
-      1. vendor/llamacpp-cuda/llama-server(.exe) — build CUDA précompilé inclus dans
-         le projet (gitignoré). ~2-3x plus rapide que Vulkan sur GPU NVIDIA, et gère
-         mieux l'offload (gros blocs contigus Vulkan → OOM même à -ngl 10).
-      2. llama-server dans le PATH système (fallback — ex: build Vulkan WinGet).
+    Ordre de recherche (le 1er dossier contenant llama-server gagne) :
+      1. vendor/llamacpp-cuda13/ — build CUDA 13.x précompilé (si GPU NVIDIA présent).
+         ~2-3x plus rapide que Vulkan sur GPU NVIDIA, gère mieux l'offload. CUDA 13
+         est la dernière majeure ; requiert un driver NVIDIA récent (>=570).
+      2. vendor/llamacpp-cuda/ — build CUDA 12.x précompilé (repli si GPU NVIDIA
+         mais driver trop ancien pour CUDA 13, ou build manuel legacy).
+      3. llama-server dans le PATH système (fallback — ex: build Vulkan WinGet).
+
+    Détection GPU NVIDIA : si aucun GPU NVIDIA n'est présent, on SAUTE les dossiers
+    CUDA (sinon llama-server crash au démarrage sur ggml-cuda.dll manquante) et on
+    tombe directement sur le fallback PATH (build Vulkan/CPU).
 
     Retourne le chemin absolu ou "llama-server" (résolution PATH au spawn).
     """
-    # 1. Build CUDA bundlé : vendor/llamacpp-cuda/ relatif à la racine du projet.
-    #    On remonte depuis ce fichier (graph_orchestrator/) pour trouver la racine.
+    # On remonte depuis ce fichier (graph_orchestrator/) pour trouver la racine.
     _pkg_dir = os.path.dirname(os.path.abspath(__file__))
     _project_root = os.path.dirname(_pkg_dir)
-    for exe_name in ("llama-server.exe", "llama-server"):
-        candidate = os.path.join(_project_root, "vendor", "llamacpp-cuda", exe_name)
-        if os.path.isfile(candidate):
-            return candidate
-    # 2. Fallback : binaire système (PATH). Résolu par subprocess au spawn.
+
+    # Dossiers candidats, ordre de préférence. On ne garde que ceux qui matchent
+    # le matériel : CUDA uniquement si un GPU NVIDIA est présent.
+    nvidia = _has_nvidia_gpu()
+    candidates: list[str] = []
+    if nvidia:
+        candidates.append("llamacpp-cuda13")
+        candidates.append("llamacpp-cuda")
+    # Si pas de NVIDIA, on ne propose aucun dossier CUDA → fallback PATH (Vulkan/CPU).
+
+    for sub in candidates:
+        for exe_name in ("llama-server.exe", "llama-server"):
+            candidate = os.path.join(_project_root, "vendor", sub, exe_name)
+            if os.path.isfile(candidate):
+                return candidate
+    # Fallback : binaire système (PATH). Résolu par subprocess au spawn.
     return "llama-server"
 
 
