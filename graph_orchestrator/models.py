@@ -268,9 +268,19 @@ def extract_and_validate(response: Any, model_class: type[BaseModel], api_base: 
             lm = dspy.LM(f"openai/{use_model_id}", api_base=use_api_base, api_key=settings.local_api_key)
             with dspy.context(lm=lm):
                 class JSONFixSignature(dspy.Signature):
-                    """Extract the exact JSON fields from the broken text into the correct schema."""
-                    broken_text: str = dspy.InputField()
-                    fixed_data: model_class = dspy.OutputField()
+                    """Récupère le JSON cassé en extrayant les champs du schéma cible depuis le texte.
+
+                    RÈGLES DE FIDÉLITÉ STRICTE :
+                    1. N'invente JAMAIS une valeur absente du texte source — si un champ manque,
+                       mets ``null`` (ou la valeur par défaut du schéma), n'invente pas.
+                    2. Ne corrige que la STRUCTURE (quotes/braces manquants, clés mal placées),
+                       pas le SENS du contenu. Le texte d'origine est la seule source de vérité.
+                    3. Si le texte est totalement illisible (pas du tout du JSON), renvoie le
+                       défaut du schéma plutôt que d'inventer du contenu plausible.
+                    4. Préserve les chaînes exactes (ne « nettoie » pas, ne reformule pas).
+                    """
+                    broken_text: str = dspy.InputField(desc="Le texte JSON cassé/brisé à récupérer")
+                    fixed_data: model_class = dspy.OutputField(desc="L'objet typé reconstruit fidèlement, null sur les champs absents")
                 
                 predictor = dspy.Predict(JSONFixSignature)
                 result = predictor(broken_text=str(response))

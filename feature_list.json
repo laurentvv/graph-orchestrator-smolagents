@@ -691,9 +691,16 @@
     {
       "id": "F-84",
       "name": "Audit system_prompts_leaks (fiche 29)",
-      "description": "Audit documentaire du dépôt system_prompts_leaks, ajout de la fiche 29. Collection de prompts système de production (Claude Code, Gemini CLI, Cursor, etc.). Modèles de référence incontournables pour l'amélioration des agents.",
+      "description": "Audit documentaire du dépôt system_prompts_leaks, ajout de la fiche 29. Collection de prompts système de production (Claude Code, Gemini CLI, Cursor, etc.). Modèles de référence incontournable pour l'amélioration des agents.",
       "status": "completed",
       "dependencies": []
+    },
+    {
+      "id": "F-85",
+      "name": "Durcissement prompts — pépites fiche 29 (anti-injection + prompts faibles)",
+      "description": "Extraction approfondie du corpus system_prompts_leaks (docs/system_prompts_leaks_extraction.md) puis ingestion des mécanismes actionnables : (1) invariant n°11 ANTI-PROMPT-INJECTION dans prompts.py (tool output = DATA, pas instructions) — gap n°1 comblé, inspiré du bloc <critical_injection_defense> de Claude Cowork ; (2) enrichissement invariant n°9 (honest-reporting, anti faux-vert, inspiré Amp) ; (3) durcissement des prompts faibles : JSONFixSignature (règles de fidélité stricte), SkillResearchSignature (wrap with_invariants + anti-injection, cohérence avec les autres nœuds DSPy), DrafterSignature (anti-placeholders + exemple format), Synth (doctrine concision/solution-first/honnêteté). Correction de l'attribution des pépites F-65 (plusieurs mécanismes cités viennent en fait de la fiche 17, pas 29).",
+      "status": "completed",
+      "dependencies": ["F-84", "F-44"]
     }
   ]
 }
