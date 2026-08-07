@@ -293,13 +293,25 @@ async def run_with_retry(
                         if not used_vision:
                             error_msg = "ERREUR FATALE: Tu as déclaré la tâche terminée mais tu n'as PAS utilisé 'take_screenshot' pour vérifier visuellement ton UI. C'est OBLIGATOIRE. Recommence, navigue sur la page, prends le screenshot, et vérifie que ça marche vraiment."
                 
-                if loop_msg:
-                    pass # anti-loop caught it
-                elif error_msg:
+                if error_msg:
                     print(f"[-] Checklist échouée : {error_msg}")
                     prompt += f"\n\n{error_msg}"
                     validated = None
                 else:
+                    # Un final_answer valide prime sur le LoopGuard (F-36). Le guard
+                    # scanne tout l'historique du run et peut comptabiliser comme
+                    # "répétition" une itération de correction légitime (même write_file
+                    # /search_replace rejoué après lecture). Éjecter un résultat réussi
+                    # pour ça le transforme en échec technique (post-mortem run
+                    # coding_d72dc8e36445c4b6 : final_answer success jeté → verdict
+                    # failure). loop_msg reste ajouté au prompt de retry (ligne ci-dessus)
+                    # pour le cas où validated est None — il guide alors le retry suivant.
+                    if loop_msg:
+                        print(
+                            f"[i] LoopGuard a signalé une répétition, mais le "
+                            f"final_answer est valide → succès conservé (priorité au "
+                            f"résultat sur le guard F-36)."
+                        )
                     return validated, last_metrics
 
             # F-33 (1) : tour sans tool call exécuté ? (modèle réfléchit sans agir)

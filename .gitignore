@@ -52,8 +52,10 @@ runs/
 debug/
 logs/
 
-# Binaires lourds bundlés (build CUDA llama.cpp, ~1 Go) — gitignoré.
-# llama_server.py le découvre automatiquement si présent (vendor/llamacpp-cuda/).
+# Binaires lourds bundlés (build CUDA llama.cpp, ~0,7-1 Go) — gitignoré.
+# llama_server.py détecte le GPU NVIDIA (nvidia-smi) et découvre automatiquement :
+#   vendor/llamacpp-cuda13/ (préféré, CUDA 13.x) → vendor/llamacpp-cuda/ (legacy 12.x)
+#   → PATH système (fallback Vulkan/CPU). MAJ : scripts/update_llamacpp.ps1
 vendor/
 python_health_report.md
 
