@@ -558,7 +558,11 @@ async def run_coding_workflow(
                     draft_res, m_draft = await execute_drafter_node(sub_dict, reasoning_model, settings)
                     if m_draft: sub_metrics.append(m_draft)
                     if draft_res:
-                        import os
+                        # 'os' est importé en tête de module (ligne 16). Un import local
+                        # ici ferait de 'os' une variable locale à toute la fonction
+                        # run_coding_workflow → UnboundLocalError à la première autre
+                        # utilisation de os (ex. os.getenv ligne ~678). Bug révélé par
+                        # le fix LoopGuard qui a débloqué le chemin jusqu'aux audits.
                         draft_filename = f"draft_{subtask.task_id.replace('-', '_')}.md"
                         draft_path = os.path.join(run_output_dir, draft_filename)
                         with open(draft_path, "w", encoding="utf-8") as f:
@@ -900,7 +904,6 @@ CODING_SEED_TASKS = [
 
 
 def load_tasks_from_json(mode: str, fallback_tasks: List[dict]) -> List[dict]:
-    import os
     tasks_file = "tasks.json"
     if os.path.exists(tasks_file):
         try:
