@@ -5381,7 +5381,7 @@
       "path": "references/browser-use",
       "category": "browser-automation",
       "reuse_rating": "high",
-      "summary": "(ajouté par update_inventory.py)",
+      "summary": "Framework Python d'automatisation de navigateur par IA. Gère l'état du navigateur, la compaction du DOM (HTML -> Markdown) et un système d'évaluation Judge.",
       "files": [
         {
           "path": "references/browser-use/AGENTS.md",
@@ -5442,7 +5442,60 @@
           "description": "Historique des messages et formatage d'événements LLM. (P11)"
         }
       ]
+    },
+    {
+      "id": "TencentDB-Agent-Memory",
+      "name": "TencentDB-Agent-Memory",
+      "path": "references/TencentDB-Agent-Memory",
+      "category": "agent-memory",
+      "reuse_rating": "medium",
+      "summary": "(ajouté par update_inventory.py)",
+      "files": [
+        {
+          "path": "references/TencentDB-Agent-Memory/MemoryCore/src/core/skill/skill-store.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "SqliteSkillStore",
+            "appendVersion",
+            "archiveHead"
+          ],
+          "description": "Stockage SQLite pour skills avec multi-versioning (is_head=1). Modèle direct pour la persistance DuckDB des skills. (P10)"
+        },
+        {
+          "path": "references/TencentDB-Agent-Memory/MemoryCore/src/core/skill/skill-extractor.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "SkillExtractor",
+            "formatTranscript",
+            "truncateHeadTail"
+          ],
+          "description": "Extraction de skills. Utilise des tags non naturels pour isoler le transcript et éviter l'hallucination LLM. (P10)"
+        },
+        {
+          "path": "references/TencentDB-Agent-Memory/MemoryCore/src/core/types.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "LLMRunner",
+            "RuntimeContext",
+            "TraceContext"
+          ],
+          "description": "Interfaces agnostiques isolant le Core du Host. (P9)"
+        },
+        {
+          "path": "references/TencentDB-Agent-Memory/MemoryCore/src/core/conversation/l0-recorder.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "L0MessageRecord",
+            "L0ConversationRecord"
+          ],
+          "description": "Structure d'enregistrement brut des conversations (L0). (P9)"
+        }
+      ]
     }
   ],
-  "projects_audited": 27
+  "projects_audited": 28
 }

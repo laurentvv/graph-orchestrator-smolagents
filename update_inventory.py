@@ -725,10 +725,26 @@ BROWSER_USE_FILES = [
      "description": "Historique des messages et formatage d'événements LLM. (P11)"},
 ]
 
+TENCENT_BASE = "references/TencentDB-Agent-Memory"
+TENCENT_FILES = [
+    {"path": f"{TENCENT_BASE}/MemoryCore/src/core/skill/skill-store.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["SqliteSkillStore", "appendVersion", "archiveHead"],
+     "description": "Stockage SQLite pour skills avec multi-versioning (is_head=1). Modèle direct pour la persistance DuckDB des skills. (P10)"},
+    {"path": f"{TENCENT_BASE}/MemoryCore/src/core/skill/skill-extractor.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["SkillExtractor", "formatTranscript", "truncateHeadTail"],
+     "description": "Extraction de skills. Utilise des tags non naturels pour isoler le transcript et éviter l'hallucination LLM. (P10)"},
+    {"path": f"{TENCENT_BASE}/MemoryCore/src/core/types.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["LLMRunner", "RuntimeContext", "TraceContext"],
+     "description": "Interfaces agnostiques isolant le Core du Host. (P9)"},
+    {"path": f"{TENCENT_BASE}/MemoryCore/src/core/conversation/l0-recorder.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["L0MessageRecord", "L0ConversationRecord"],
+     "description": "Structure d'enregistrement brut des conversations (L0). (P9)"},
+]
+
 def main() -> None:
     data = json.loads(INVENTORY.read_text(encoding="utf-8"))
 
-    data["projects_audited"] = 27
+    data["projects_audited"] = 28
     data["audit_date"] = "2026-08-07"
 
     updated = []
@@ -861,6 +877,15 @@ def main() -> None:
                 "summary": "Framework Python d'automatisation de navigateur par IA. Gère l'état du navigateur, la compaction du DOM (HTML -> Markdown) et un système d'évaluation Judge.",
                 "files": BROWSER_USE_FILES,
             }
+        elif pid == "TencentDB-Agent-Memory":
+            project = {
+                "id": "TencentDB-Agent-Memory", "name": "TencentDB-Agent-Memory",
+                "path": "references/TencentDB-Agent-Memory",
+                "category": "agent-memory",
+                "reuse_rating": "medium",
+                "summary": "Framework de mémoire avancée pour agents (L0-L3, Hub, Proxy). Implémente une séparation claire des rôles pour l'extraction (SkillExtractor avec isolation de rôle) et un store multi-versionné pour les Memory Assets (SqliteSkillStore). Excellente source d'inspiration architecturale et de prompting.",
+                "files": TENCENT_FILES,
+            }
         updated.append(project)
         seen_ids.add(pid)
 
@@ -935,6 +960,11 @@ def main() -> None:
                         "path": "references/browser-use",
                         "category": "browser-automation", "reuse_rating": "high",
                         "summary": "(ajouté par update_inventory.py)", "files": BROWSER_USE_FILES})
+    if "TencentDB-Agent-Memory" not in seen_ids:
+        updated.append({"id": "TencentDB-Agent-Memory", "name": "TencentDB-Agent-Memory",
+                        "path": "references/TencentDB-Agent-Memory",
+                        "category": "agent-memory", "reuse_rating": "medium",
+                        "summary": "(ajouté par update_inventory.py)", "files": TENCENT_FILES})
 
     data["projects"] = updated
 
@@ -948,7 +978,7 @@ def main() -> None:
             by_reuse[r] = by_reuse.get(r, 0) + 1
     print(f"OK — {len(data['projects'])} projets, {total} entrées au total.")
     print(f"Répartition : {by_reuse}")
-    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi", "hermes-agent", "cloudflare-os", "browser-use"):
+    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi", "hermes-agent", "cloudflare-os", "browser-use", "TencentDB-Agent-Memory"):
         proj = next(p for p in data["projects"] if p["id"] == new_id)
         print(f"  {new_id} : {len(proj['files'])} entrées (reuse_rating={proj['reuse_rating']})")
 
