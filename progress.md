@@ -789,3 +789,36 @@ Coder est appliquée correctement par Qwen3.5-9B.
   aucun lié au LoopGuard). py_compile OK. 0 régression.
 - [x] Étape F61-13 : État disque synchronisé (feature_list.json F-61 description + itération 3,
   contract +critères 251-254, progress, log).
+
+## Jalons de l'Itération (audit approfondi TencentDB-Agent-Memory — fiche 28 enrichie)
+> Re-analyse de `references/TencentDB-Agent-Memory` (audit F-83 initial superficiel : 4
+> briques seulement, noté 🟡 Moyenne). Objectif : récupérer les infos pour enrichir les
+> prompts actuels et la roadmap (plan_usine_logicielle.md / feature_list.json).
+
+- [x] Étape AUDIT-1 : Exploration exhaustive (2 subagents parallèles) — carte complète des
+  prompts/méthodologie de TencentDB (7 modules : l1-extraction, l1-dedup, scene-extraction,
+  persona-generation, offload L1/L1.5/L2, skill-review) + map de nos prompts actuels
+  (prompts.py, dspy_nodes.py, nodes.py, web_tester.py) et de l'existant mémoire (F-68, F-83).
+- [x] Étape AUDIT-2 : Enrichissement fiche 28 (`docs/references-audit/projects/28-TencentDB-Agent-Memory.md`)
+  — table "Documentation pertinente" (4→14 lignes) + table "Code réutilisable" (4→13 lignes)
+  + synthèse + correspondance plan. Renotée 🟡 Moyenne → 🟢 Haute.
+- [x] Étape AUDIT-3 : Enrichissement `plan_usine_logicielle.md` — 2 items sous P6-ter (pipeline
+  L0→L3 extraction+dédup+oubli par chaleur ; recall hybride + split stable/dynamic), 1 item
+  sous P9 (context-offload Mermaid scoré + cognitive tombstones), 1 item sous P10 (Skill
+  Review gate 5-critères + 4-dim/100pts). En-tête P6-ter + dashboard P6 mis à jour.
+- [x] Étape AUDIT-4 : Enrichissement `feature_list.json` — F-68 étoffée (pipeline L0-L3 complet,
+  2 références qm+TencentDB nécessaires ensemble), +2 nouveaux IDs F-86 (context-offload P9,
+  pending) et F-87 (Skill Review gate P10, pending). Total 85→87 features. JSON validé.
+- [x] Étape AUDIT-5 : Analyse prompts runtime (3 candidats) — VERDICT : les 3 sont soit
+  redondants (Coder règle 4+5 couvre déjà "独立完整"), soit prématurés (Skill Review gate =
+  dépend F-65/F-80/F-87 pending, pas de pipeline génération aujourd'hui), soit contre
+  l'architecture (compaction 0-LLM par design = tombstones LLM régresserait). Décision
+  VALIDÉE par l'utilisateur : ne pas toucher aux prompts runtime (AGENTS.md §8 respecté).
+- [x] Étape AUDIT-6 : Mise à jour INDEX (`docs/references-audit/INDEX.md`) — résumé fiche 28,
+  compteur (1H/3M → 8H/5M), totaux (217/186/84 → 224/188/84), constat dédié.
+- [x] Étape AUDIT-7 : Branche `feat/tencent-memory-prompts-enrichment` créée (règle d'or Git).
+
+> **Décision clé** : la valeur de l'audit TencentDB se situe dans la **roadmap** (mémoire
+> durable F-68 complétée, F-86/F-87 ajoutés), PAS dans des modifications spéculatives du
+> runtime aujourd'hui. Les 3 changements de prompts envisagés auraient été contre-productifs
+> ou redondants — la validation humaine (AGENTS.md §8) a protégé d'un changement inutile.

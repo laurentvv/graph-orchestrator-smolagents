@@ -50,7 +50,7 @@
 | 25 | **hermes-agent** | 🟢 Haute | [25-hermes-agent](./projects/25-hermes-agent.md) | Agent auto-amélioré Python (Nous Research) — **5 axes en Python pur** : compaction offline+live (P9), SQLite FTS5 event-sourcing (P11), skills agentskills.io + guard + AST audit (P10), sécurité multi-couches (P3/P8), contrat middleware 4 kinds (P8) |
 | 26 | **cloudflare-os** | 🟡 Moyenne | [26-cloudflare-os](./projects/26-cloudflare-os.md) | Environnement agentique TS — Gatekeepers et sécurité basée sur les capacités, asynchrone |
 | 27 | **browser-use** | 🟢 Haute | [27-browser-use](./projects/27-browser-use.md) | Framework Python d'automatisation de navigateur par IA. Gère l'état du navigateur, la compaction du DOM et le système Judge |
-| 28 | **TencentDB-Agent-Memory** | 🟡 Moyenne | [28-TencentDB-Agent-Memory](./projects/28-TencentDB-Agent-Memory.md) | Framework de mémoire avancée (L0-L3), extraction de skills avec isolation de rôle, store multi-versionné (is_head) |
+| 28 | **TencentDB-Agent-Memory** | 🟢 Haute | [28-TencentDB-Agent-Memory](./projects/28-TencentDB-Agent-Memory.md) | Framework de mémoire avancée (pipeline L0→L3 complet, dédup `store/skip/update/merge` supérieure, oubli par chaleur, Skill Review gate 5-critères/4-dim, context-offload Mermaid scoré) — prompts TypeScript transposables quasi-directement |
 | 29 | **system-prompts-leaks** | 🟢 Haute | [29-system-prompts-leaks](./projects/29-system-prompts-leaks.md) | Collection de prompts système de production (Claude Code, Gemini CLI, Cursor, etc.). Références incontournables |
 
 ---
@@ -275,10 +275,10 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | **hermes-agent** | **15** | **13** | **0** | 🟢 **Haute** |
 | **cloudflare-os** | **0** | **3** | **0** | 🟡 **Moyenne** |
 | **browser-use** | **3** | **3** | **0** | 🟢 **Haute** |
-| **TencentDB-Agent-Memory** | **1** | **3** | **0** | 🟡 **Moyenne** |
-| **Total** | **217** | **186** | **84** | — |
+| **TencentDB-Agent-Memory** | **8** | **5** | **0** | 🟢 **Haute** |
+| **Total** | **224** | **188** | **84** | — |
 
-> ℹ️ Le total de la matrice (487 = 217+186+84) couvre les entrées classées H/M/L. L'inventaire machine compte 489 entrées au total.
+> ℹ️ Le total de la matrice (496 = 224+188+84) couvre les entrées classées H/M/L. L'inventaire machine compte 489 entrées au total.
 
 **Constats** :
 - **axon** (23 Haute) et **aider** (17 Haute) restent les mines d'or côté Python.
@@ -297,6 +297,7 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 - **pi** (3 Haute, 🟢 Haute) : très forte valeur sur **P9 (compaction basée sur l'état fichier)** et **branch summarization**, approche complémentaire et mature à qm/loopx. Son TDD harness valide statistiquement nos choix P6.
 - **hermes-agent** (15 Haute, 🟢 Haute) : **le dépôt le plus dense et portable du dossier sur 5 axes orthogonaux**. Compaction offline (`trajectory_compressor`) + live avec garde-fous persistés (`context_compressor` cooldown/streak/ineffective), persistence SQLite FTS5 + lineage + event-sourcing subagents, skills agentskills.io avec provenance contextvars + guard + AST audit, **bibliothèque sécurité Python pur copiable quasi telle quelle** (threat patterns + ~260 dangerous commands + SSRF guards + path traversal), contrat middleware 4 kinds avec `next_call` chain + fail-open. Cœur utile concentré dans ~15 fichiers Python (malgré 8487 fichiers au total). Rejoint le peloton de tête avec axon (23 Haute) et aider (17 Haute). Réserves : pas DuckDB (transposer le pattern), adapters LLM cloud massifs non portables, god-files à découper.
 - **cloudflare-os** (3 Moyenne, 🟡 Moyenne) : apporte un excellent pattern architectural de sécurité (**Gatekeepers**, Capability-based access control) et d'approbation asynchrone (human in the loop par simulation). Même si TS, la doctrine inspire fortement la gestion MCP.
+- **TencentDB-Agent-Memory** (8 Haute, 🟢 **Haute** — renotée 2026-08-07) : la fiche initiale était superficielle (4 briques, notée Moyenne). L'audit approfondi des **prompts** révèle un gisement complémentaire à qm pour **P6-ter (F-68)** : là où qm fournit le contrat de persistance scratch/notebook (`recall`/`capture`/`replaceIfRevision`), TencentDB couvre les **3 maillons que qm ne couvre pas** — (a) **extraction L1** d'atomes (3 principes : qualité>quantité, valide hors-contexte, fusion causale ; dualité chat/code), (b) **dédup L1** par `store/skip/update/merge` **supérieure** au `UPDATE/DELETE/ADD` de qm (merge cross-type + many-to-many + bump priorité), (c) **oubli par chaleur** (heat : new=1/update=old+1/merge=sum+1 + `[DELETED]`) qui manque totalement à notre KG. Bonus : **Skill Review gate** 5-critères + 4-dim/100pts (P10/F-87), **context-offload Mermaid scoré** + cognitive tombstones (P9/F-86). Ce sont des **prompts** TypeScript, transposables quasi-directement (pas du code runtime). Les 2 références qm+TencentDB sont **nécessaires ensemble** pour F-68.
 
 
 ---
