@@ -9,8 +9,8 @@
 | Métrique | Valeur |
 |---|---|
 | **Date de l'audit** | 2026-08-07 |
-| **Projets/dossiers audités** | 28 |
-| **Entrées de fichiers inventoriées** | 490 (inventaire machine : [`inventory.json`](./inventory.json)) |
+| **Projets/dossiers audités** | 29 |
+| **Entrées de fichiers inventoriées** | 494 (inventaire machine : [`inventory.json`](./inventory.json)) |
 | **Fichiers pertinents scannés** (base) | ~11 770 (hors `.git/`, `node_modules/`, médias, fixtures) |
 | **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css`) + JSON/YAML de spec/contrat |
 | **Exclusions** | `.git/` (~730 MB), `node_modules/`, médias (1 293 SVG, 16 mp4…), fixtures de tests, traductions de README (1 conservée/projet) |
@@ -50,7 +50,8 @@
 | 25 | **hermes-agent** | 🟢 Haute | [25-hermes-agent](./projects/25-hermes-agent.md) | Agent auto-amélioré Python (Nous Research) — **5 axes en Python pur** : compaction offline+live (P9), SQLite FTS5 event-sourcing (P11), skills agentskills.io + guard + AST audit (P10), sécurité multi-couches (P3/P8), contrat middleware 4 kinds (P8) |
 | 26 | **cloudflare-os** | 🟡 Moyenne | [26-cloudflare-os](./projects/26-cloudflare-os.md) | Environnement agentique TS — Gatekeepers et sécurité basée sur les capacités, asynchrone |
 | 27 | **browser-use** | 🟢 Haute | [27-browser-use](./projects/27-browser-use.md) | Framework Python d'automatisation de navigateur par IA. Gère l'état du navigateur, la compaction du DOM et le système Judge |
-| 28 | **system-prompts-leaks** | 🟢 Haute | [28-system-prompts-leaks](./projects/28-system-prompts-leaks.md) | Collection de prompts système de production (Claude Code, Gemini CLI, Cursor, etc.). Références incontournables |
+| 28 | **TencentDB-Agent-Memory** | 🟡 Moyenne | [28-TencentDB-Agent-Memory](./projects/28-TencentDB-Agent-Memory.md) | Framework de mémoire avancée (L0-L3), extraction de skills avec isolation de rôle, store multi-versionné (is_head) |
+| 29 | **system-prompts-leaks** | 🟢 Haute | [29-system-prompts-leaks](./projects/29-system-prompts-leaks.md) | Collection de prompts système de production (Claude Code, Gemini CLI, Cursor, etc.). Références incontournables |
 
 ---
 
@@ -273,9 +274,11 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | **pi** | **3** | **4** | **0** | 🟢 **Haute** |
 | **hermes-agent** | **15** | **13** | **0** | 🟢 **Haute** |
 | **cloudflare-os** | **0** | **3** | **0** | 🟡 **Moyenne** |
-| **Total** | **213** | **180** | **84** | — |
+| **browser-use** | **3** | **3** | **0** | 🟢 **Haute** |
+| **TencentDB-Agent-Memory** | **1** | **3** | **0** | 🟡 **Moyenne** |
+| **Total** | **217** | **186** | **84** | — |
 
-> ℹ️ Le total de la matrice (477 = 213+180+84) couvre les entrées classées H/M/L. L'inventaire machine compte 479 entrées au total (2 entrées pré-existantes non classées dans d'anciens projets).
+> ℹ️ Le total de la matrice (487 = 217+186+84) couvre les entrées classées H/M/L. L'inventaire machine compte 489 entrées au total.
 
 **Constats** :
 - **axon** (23 Haute) et **aider** (17 Haute) restent les mines d'or côté Python.
@@ -378,8 +381,8 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 docs/references-audit/
 ├── README.md              ← Mode d'emploi (start ici)
 ├── INDEX.md               ← CE DOCUMENT (navigation + synthèse + Hall of Fame)
-├── inventory.json         ← Inventaire machine-lisible (476 entrées, filtrable)
-└── projects/              ← 25 fiches détaillées (1 par projet)
+├── inventory.json         ← Inventaire machine-lisible (489 entrées, filtrable)
+└── projects/              ← 28 fiches détaillées (1 par projet)
     ├── 01-prompt-vault.md
     ├── 02-aider.md
     ├── ...
@@ -395,7 +398,10 @@ docs/references-audit/
     ├── 22-llm-council.md
     ├── 23-mattpocock-skills.md
     ├── 24-pi.md
-    └── 25-hermes-agent.md
+    ├── 25-hermes-agent.md
+    ├── 26-cloudflare-os.md
+    ├── 27-browser-use.md
+    └── 28-TencentDB-Agent-Memory.md
 ```
 
 **Pour recherche programmatique** : `inventory.json` est consommable directement :
