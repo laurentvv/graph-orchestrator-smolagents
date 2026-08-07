@@ -9,8 +9,8 @@
 | Métrique | Valeur |
 |---|---|
 | **Date de l'audit** | 2026-08-07 |
-| **Projets/dossiers audités** | 27 |
-| **Entrées de fichiers inventoriées** | 485 (inventaire machine : [`inventory.json`](./inventory.json)) |
+| **Projets/dossiers audités** | 28 |
+| **Entrées de fichiers inventoriées** | 490 (inventaire machine : [`inventory.json`](./inventory.json)) |
 | **Fichiers pertinents scannés** (base) | ~11 770 (hors `.git/`, `node_modules/`, médias, fixtures) |
 | **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css`) + JSON/YAML de spec/contrat |
 | **Exclusions** | `.git/` (~730 MB), `node_modules/`, médias (1 293 SVG, 16 mp4…), fixtures de tests, traductions de README (1 conservée/projet) |
@@ -50,6 +50,7 @@
 | 25 | **hermes-agent** | 🟢 Haute | [25-hermes-agent](./projects/25-hermes-agent.md) | Agent auto-amélioré Python (Nous Research) — **5 axes en Python pur** : compaction offline+live (P9), SQLite FTS5 event-sourcing (P11), skills agentskills.io + guard + AST audit (P10), sécurité multi-couches (P3/P8), contrat middleware 4 kinds (P8) |
 | 26 | **cloudflare-os** | 🟡 Moyenne | [26-cloudflare-os](./projects/26-cloudflare-os.md) | Environnement agentique TS — Gatekeepers et sécurité basée sur les capacités, asynchrone |
 | 27 | **browser-use** | 🟢 Haute | [27-browser-use](./projects/27-browser-use.md) | Framework Python d'automatisation de navigateur par IA. Gère l'état du navigateur, la compaction du DOM et le système Judge |
+| 28 | **system-prompts-leaks** | 🟢 Haute | [28-system-prompts-leaks](./projects/28-system-prompts-leaks.md) | Collection de prompts système de production (Claude Code, Gemini CLI, Cursor, etc.). Références incontournables |
 
 ---
 

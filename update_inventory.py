@@ -725,10 +725,32 @@ BROWSER_USE_FILES = [
      "description": "Historique des messages et formatage d'événements LLM. (P11)"},
 ]
 
+# ---------------------------------------------------------------------------
+# 28 — system-prompts-leaks
+# ---------------------------------------------------------------------------
+LEAKS_BASE = "references/system_prompts_leaks"
+LEAKS_FILES = [
+    {"path": f"{LEAKS_BASE}/Anthropic/Claude Code/claude-code-opus-5.md", "type": "prompt", "reuse": "high",
+     "key_symbols": ["tool usage policy", "Git Safety", "read-before-edit"],
+     "description": "Système prompt de Claude Code (Opus 5). Référence majeure pour l'agent Coder."},
+    {"path": f"{LEAKS_BASE}/Anthropic/claude-design.md", "type": "prompt", "reuse": "high",
+     "key_symbols": ["starter components", "Design System"],
+     "description": "Système prompt de Claude Design. Modèle d'agent UI/UX."},
+    {"path": f"{LEAKS_BASE}/Google/antigravity-cli.md", "type": "prompt", "reuse": "high",
+     "key_symbols": ["CLI tools", "Workspace"],
+     "description": "Agent CLI Google (Antigravity)."},
+    {"path": f"{LEAKS_BASE}/Cursor/cursor.md", "type": "prompt", "reuse": "high",
+     "key_symbols": ["status_update_spec", "maximize_parallel_tool_calls"],
+     "description": "Système prompt de l'IDE Cursor."},
+    {"path": f"{LEAKS_BASE}/OpenCode/opencode.md", "type": "prompt", "reuse": "high",
+     "key_symbols": ["multi-agent", "IDE context"],
+     "description": "Agent OpenCode."},
+]
+
 def main() -> None:
     data = json.loads(INVENTORY.read_text(encoding="utf-8"))
 
-    data["projects_audited"] = 27
+    data["projects_audited"] = 28
     data["audit_date"] = "2026-08-07"
 
     updated = []
@@ -935,6 +957,12 @@ def main() -> None:
                         "path": "references/browser-use",
                         "category": "browser-automation", "reuse_rating": "high",
                         "summary": "(ajouté par update_inventory.py)", "files": BROWSER_USE_FILES})
+    if "system-prompts-leaks" not in seen_ids:
+        updated.append({"id": "system-prompts-leaks", "name": "system-prompts-leaks",
+                        "path": "references/system_prompts_leaks",
+                        "category": "system-prompts", "reuse_rating": "high",
+                        "summary": "Collection massive de prompts de production (Claude Code, Cursor, Gemini, etc.).",
+                        "files": LEAKS_FILES})
 
     data["projects"] = updated
 
@@ -948,7 +976,7 @@ def main() -> None:
             by_reuse[r] = by_reuse.get(r, 0) + 1
     print(f"OK — {len(data['projects'])} projets, {total} entrées au total.")
     print(f"Répartition : {by_reuse}")
-    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi", "hermes-agent", "cloudflare-os", "browser-use"):
+    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi", "hermes-agent", "cloudflare-os", "browser-use", "system-prompts-leaks"):
         proj = next(p for p in data["projects"] if p["id"] == new_id)
         print(f"  {new_id} : {len(proj['files'])} entrées (reuse_rating={proj['reuse_rating']})")
 

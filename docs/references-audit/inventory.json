@@ -5381,7 +5381,7 @@
       "path": "references/browser-use",
       "category": "browser-automation",
       "reuse_rating": "high",
-      "summary": "(ajouté par update_inventory.py)",
+      "summary": "Framework Python d'automatisation de navigateur par IA. Gère l'état du navigateur, la compaction du DOM (HTML -> Markdown) et un système d'évaluation Judge.",
       "files": [
         {
           "path": "references/browser-use/AGENTS.md",
@@ -5442,7 +5442,68 @@
           "description": "Historique des messages et formatage d'événements LLM. (P11)"
         }
       ]
+    },
+    {
+      "id": "system-prompts-leaks",
+      "name": "system-prompts-leaks",
+      "path": "references/system_prompts_leaks",
+      "category": "system-prompts",
+      "reuse_rating": "high",
+      "summary": "Collection massive de prompts de production (Claude Code, Cursor, Gemini, etc.).",
+      "files": [
+        {
+          "path": "references/system_prompts_leaks/Anthropic/Claude Code/claude-code-opus-5.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [
+            "tool usage policy",
+            "Git Safety",
+            "read-before-edit"
+          ],
+          "description": "Système prompt de Claude Code (Opus 5). Référence majeure pour l'agent Coder."
+        },
+        {
+          "path": "references/system_prompts_leaks/Anthropic/claude-design.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [
+            "starter components",
+            "Design System"
+          ],
+          "description": "Système prompt de Claude Design. Modèle d'agent UI/UX."
+        },
+        {
+          "path": "references/system_prompts_leaks/Google/antigravity-cli.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [
+            "CLI tools",
+            "Workspace"
+          ],
+          "description": "Agent CLI Google (Antigravity)."
+        },
+        {
+          "path": "references/system_prompts_leaks/Cursor/cursor.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [
+            "status_update_spec",
+            "maximize_parallel_tool_calls"
+          ],
+          "description": "Système prompt de l'IDE Cursor."
+        },
+        {
+          "path": "references/system_prompts_leaks/OpenCode/opencode.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [
+            "multi-agent",
+            "IDE context"
+          ],
+          "description": "Agent OpenCode."
+        }
+      ]
     }
   ],
-  "projects_audited": 27
+  "projects_audited": 28
 }

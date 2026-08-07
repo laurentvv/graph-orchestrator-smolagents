@@ -1,12 +1,12 @@
 # Audit des références — Mode d'emploi
 
-Une base de connaissances structurée regroupant l'audit profond de **27 projets** de référence (frameworks, agents de coding, collections de prompts). L'objectif est d'alimenter `graph-orchestrator-smolagents` en algorithmes, patterns d'orchestration et system prompts de la plus haute qualité.
+Une base de connaissances structurée regroupant l'audit profond de **28 projets** de référence (frameworks, agents de coding, collections de prompts). L'objectif est d'alimenter `graph-orchestrator-smolagents` en algorithmes, patterns d'orchestration et system prompts de la plus haute qualité.
 
 ## 🚀 Par où commencer ?
 
 1. [**INDEX.md**](./INDEX.md) : le document de navigation principal (la liste des 27 projets, la matrice de réutilisabilité et le guide « comment retrouver X »).
-2. [**projects/**](./projects/) : le dossier contenant les rapports d'audit détaillés (27 fiches au format Markdown canonique).
-3. [**inventory.json**](./inventory.json) : l'inventaire machine (485 entrées), généré automatiquement par `update_inventory.py`, permettant d'interroger la base programmatiquement.
+2. [**projects/**](./projects/) : le dossier contenant les rapports d'audit détaillés (28 fiches au format Markdown canonique).
+3. [**inventory.json**](./inventory.json) : l'inventaire machine (490 entrées), généré automatiquement par `update_inventory.py`, permettant d'interroger la base programmatiquement.
 
 ## 📚 Structure
 
@@ -14,11 +14,11 @@ Une base de connaissances structurée regroupant l'audit profond de **27 projets
 docs/references-audit/
 ├── README.md              ← Ce document
 ├── INDEX.md               ← Point d'entrée principal
-├── inventory.json         ← Inventaire JSON des 485 briques réutilisables
-└── projects/              ← 27 fiches d'audit
+├── inventory.json         ← Inventaire JSON des 490 briques réutilisables
+└── projects/              ← 28 fiches d'audit
     ├── 01-prompt-vault.md  …  13-deer-flow-analysis.md
     ├── 14-qm.md  …  18-awesome-claude-skills.md
-    └── 19-loopx.md  …  27-browser-use.md
+    ├── 19-loopx.md  …  28-system-prompts-leaks.md
 ```
 
 ## 🎯 Convention de réutilisabilité
