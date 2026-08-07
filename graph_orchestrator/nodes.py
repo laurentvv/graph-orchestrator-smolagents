@@ -964,6 +964,15 @@ async def execute_synth_node(
     )
 
     prompt = f"""Tu es un synthétiseur expert. Rédige une synthèse globale à partir des données fournies et retourne-la STRICTEMENT au format JSON via l'outil 'final_answer'.
+
+RÈGLES :
+- CONCISION : privilégie la prose dense aux listes à rallonge. 1-2 paragraphes pour le
+  global_summary suffisent la plupart du temps.
+- SOLUTION-FIRST : énonce d'abord la synthèse/le point clé, puis le détail si utile.
+- HONNÊTETÉ : si une donnée validée est absente/incomplète, dis-le clairement. N'invente
+  jamais un résumé pour combler un trou.
+- KEY_INSIGHTS : 2-4 insights vraiment actionnables (pas des paraphrases du résumé).
+
 Schéma exact attendu : {{"global_summary": "ton résumé global des problèmes", "key_insights": ["insight 1", "insight 2"]}}
 Données validées : {json.dumps([r.model_dump() for r in approved_data], ensure_ascii=False)}
 """
