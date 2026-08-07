@@ -622,7 +622,9 @@
       "name": "Migration KG DuckDB vers data/ (chemin ancré au paquet)",
       "description": "Déplacement de graph_orchestrator.db de la racine du repo vers data/. Chemin par défaut ancré au paquet via config.DEFAULT_KG_PATH (résolu depuis graph_orchestrator/config.py → repo_root/data/), indépendant du cwd et résistant au chdir du workflow. Cohérent avec event_stream.py (DEFAULT_EVENT_DB_PATH) et runs_history.py (DEFAULT_HISTORY_DB_PATH) qui placent déjà leurs .duckdb dans data/. Création auto du dossier parent dans KnowledgeGraph.__init__. Impact : config.py, knowledge_graph.py, scripts/run_analyzer.py, .env*, docstrings. VALIDÉ : KnowledgeGraph lit data/graph_orchestrator.db (63 claims, 17 entities intacts), analyzer trouve la DB sans --db, pytest 30 passed.",
       "status": "completed",
-      "dependencies": ["F-03"]
+      "dependencies": [
+        "F-03"
+      ]
     },
     {
       "id": "F-76",
@@ -677,6 +679,20 @@
       "name": "Chercheur de skills à la volée (Skill Finder)",
       "description": "Ajout d'un outil search_and_install_skill() pluggé à l'Architecte avec modification de son system prompt pour l'utiliser en cas de lacune. Le processus devra : (1) interroger l'API skills.sh, (2) évaluer les notes de sécurité (Socket/Snyk) et n'autoriser que les auteurs de confiance (ex: vercel-labs, microsoft), (3) télécharger le skill dans skills/, (4) mettre à jour dynamiquement skills_loader.py (règles DYNAMIC_SKILL_RULES + Regex) pour que la sélection soit reconnue par le Coder pour cette tâche et les futures.",
       "status": "pending",
+      "dependencies": []
+    },
+    {
+      "id": "F-83",
+      "name": "Audit TencentDB-Agent-Memory (fiche 28)",
+      "description": "Audit documentaire du dépôt TencentDB-Agent-Memory, ajout de la fiche 28. Analyse du framework de mémoire avancée (L0-L3), de l'extraction de skills avec isolation de rôle, et du store multi-versionné (is_head).",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-84",
+      "name": "Audit system_prompts_leaks (fiche 29)",
+      "description": "Audit documentaire du dépôt system_prompts_leaks, ajout de la fiche 29. Collection de prompts système de production (Claude Code, Gemini CLI, Cursor, etc.). Modèles de référence incontournables pour l'amélioration des agents.",
+      "status": "completed",
       "dependencies": []
     }
   ]
