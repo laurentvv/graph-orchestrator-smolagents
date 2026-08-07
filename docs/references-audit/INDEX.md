@@ -8,10 +8,10 @@
 
 | Métrique | Valeur |
 |---|---|
-| **Date de l'audit** | 2026-08-06 |
-| **Projets/dossiers audités** | 26 |
-| **Entrées de fichiers inventoriées** | 479 (inventaire machine : [`inventory.json`](./inventory.json)) |
-| **Fichiers pertinents scannés** (base) | ~11 300 (hors `.git/`, `node_modules/`, médias, fixtures) |
+| **Date de l'audit** | 2026-08-07 |
+| **Projets/dossiers audités** | 27 |
+| **Entrées de fichiers inventoriées** | 485 (inventaire machine : [`inventory.json`](./inventory.json)) |
+| **Fichiers pertinents scannés** (base) | ~11 770 (hors `.git/`, `node_modules/`, médias, fixtures) |
 | **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css`) + JSON/YAML de spec/contrat |
 | **Exclusions** | `.git/` (~730 MB), `node_modules/`, médias (1 293 SVG, 16 mp4…), fixtures de tests, traductions de README (1 conservée/projet) |
 
@@ -19,7 +19,7 @@
 
 ---
 
-## 🧭 Navigation — les 26 fiches
+## 🧭 Navigation — les 27 fiches
 
 | # | Projet | Réutilisabilité | Fiche | Résumé en 1 ligne |
 |---|---|---|---|---|
@@ -49,6 +49,7 @@
 | 24 | **pi** | 🟢 Haute | [24-pi](./projects/24-pi.md) | Agent stateful TS — **compaction contextuelle**, résumé de branche pour P9, et juge empirique vitest (P6) |
 | 25 | **hermes-agent** | 🟢 Haute | [25-hermes-agent](./projects/25-hermes-agent.md) | Agent auto-amélioré Python (Nous Research) — **5 axes en Python pur** : compaction offline+live (P9), SQLite FTS5 event-sourcing (P11), skills agentskills.io + guard + AST audit (P10), sécurité multi-couches (P3/P8), contrat middleware 4 kinds (P8) |
 | 26 | **cloudflare-os** | 🟡 Moyenne | [26-cloudflare-os](./projects/26-cloudflare-os.md) | Environnement agentique TS — Gatekeepers et sécurité basée sur les capacités, asynchrone |
+| 27 | **browser-use** | 🟢 Haute | [27-browser-use](./projects/27-browser-use.md) | Framework Python d'automatisation de navigateur par IA. Gère l'état du navigateur, la compaction du DOM et le système Judge |
 
 ---
 
@@ -58,7 +59,7 @@
 `aider` (Python, mature), `crush` (Go), `nanocode` (Python, 1 fichier), `opencode` (TS, gigantesque), `openfox` (TS, local-LLM-first). → Valeur : edit-formats robustes (aider), anti-loop (crush), patterns d'outils minimaux (nanocode), specs de protocole (opencode), persistance event-sourcing (openfox).
 
 ### 2. 🔧 Frameworks d'orchestration d'agents (mixte code + docs)
-`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code), `loopx` (control plane — anti-loop déterministe + event sourcing + compaction, stdlib pure), `code-review-graph` (analyse d'impact + risk score composite), `pi` (agent stateful TS), `hermes-agent` (agent auto-amélioré Python Nous Research — compaction + SQLite FTS5 + skills + sécurité + middleware), `cloudflare-os` (architecture Gatekeepers, human in the loop asynchrone). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm, pi, hermes-agent)**, **patterns harness Python natifs (learn-claude-code, hermes-agent)**, **anti-loop déterministe + event ledger (loopx)**, **branch summarization (pi)**, **persistance SQLite FTS5 + event-sourcing (hermes-agent)**, **sécurité multi-couches Python pur (hermes-agent)**, **Gatekeepers (cloudflare-os)**.
+`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code), `loopx` (control plane — anti-loop déterministe + event sourcing + compaction, stdlib pure), `code-review-graph` (analyse d'impact + risk score composite), `pi` (agent stateful TS), `hermes-agent` (agent auto-amélioré Python Nous Research — compaction + SQLite FTS5 + skills + sécurité + middleware), `cloudflare-os` (architecture Gatekeepers, human in the loop asynchrone), `browser-use` (automatisation web Python). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm, pi, hermes-agent, browser-use)**, **patterns harness Python natifs (learn-claude-code, hermes-agent)**, **anti-loop déterministe + event ledger (loopx)**, **branch summarization (pi)**, **persistance SQLite FTS5 + event-sourcing (hermes-agent)**, **sécurité multi-couches Python pur (hermes-agent)**, **Gatekeepers (cloudflare-os)**, **compaction du DOM et prompts system vision (browser-use)**.
 
 ### 3. 📚 Ressources & outils
 `Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante), `claude-code-unified-agents` (prompts de spécialisation), `system-prompts-and-models-of-ai-tools` (**bibliothèque de system prompts** d'outils commerciaux/open-source), `awesome-claude-skills` (**doctrine du format SKILL.md** + outillage), `davidondrej-skills` (denylist 27 regex + hooks anti-crash), `mattpocock-skills` (**doctrine d'authoring formelle** + engineering skills), `llm-council` (pattern council anonymisé).
