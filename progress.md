@@ -856,3 +856,53 @@ Coder est appliquée correctement par Qwen3.5-9B.
 > touche contrat runners + extraction Judge) ; parallélisation réelle fan-out Coder (scope C,
 > risky sur VRAM 6 Go, ReadGate à durcir) ; compatibilité Synth/Drafter avec système
 > d'invariants ; autres secondaires F-65 (notify vs ask Manus, 8 templates Qoder).
+
+## Jalons de l'Itération (cycle Anti-loop v2 — F-88, P3-bis)
+> Le plan P3-bis (lignes 109-114) demande 3 patterns anti-loop de la référence loopx
+> (fiche 19) : stall detector + hash d'output matériel + vocabulaire delivery_outcome.
+> F-36 (LoopGuard) ne hashe que ToolName + Input → aveugle à 2 failure modes :
+> (a) même contenu réécrit avec input cosmétiquement différent, (b) série de turns
+> sans livrable matériel nouveau.
+
+- [x] Étape SD-1 : Exploration (3 agents parallèles) — contrat F-36 exhaustif (LoopGuard,
+  run_with_retry, _detect_idle_step, breaker idle, test_valid_final_answer_wins_over_loop_guard),
+  patterns loopx vérifiés en Python pur stdlib (recent_runs.py, pr_monitor_materialization.py,
+  delivery_outcome.py + transaction.py), conventions projet (modules/tests/config/contract).
+- [x] Étape SD-2 : Plan approuvé (décision design clé : module ORTHOGONAL, LoopGuard intact —
+  préserve la cohérence F-36 et le test fragile test_valid_final_answer_wins_over_loop_guard).
+- [x] Étape SD-3 : Module `graph_orchestrator/stall_detector.py` (~210 lignes, 0 LLM, 100%
+  Python natif, thread-safe) — DeliveryOutcome enum (3 valeurs) + ACCOUNTABLE_OUTCOMES +
+  WRITE_TOOLS + classify_turn + compute_material_fingerprint (port _group_fingerprint, hash
+  contenu tronqué 16 hex) + _dominant_material_hash + StallDetector (threshold=2, table de
+  vérité ACCOUNTABLE-différent→reset / ACCOUNTABLE-identique→incrément / PROGRESS-IDLE→incrément).
+- [x] Étape SD-4 : Tests `tests/test_stall_detector.py` — 26 tests (enum 2, classify_turn 4,
+  compute_material_fingerprint 6, StallDetector 8, thread-safety 1, intégration run_with_retry 3,
+  non-régression F-36 2). Style test_loop_guard.py (une fonction par cas, @pytest.mark.anyio,
+  SimpleNamespace, bannières # ===).
+- [x] Étape SD-5 : Branchement `nodes.py run_with_retry` — nouveau param optionnel
+  `stall_detector=None` (non-cassant). Pour chaque step de agent.memory.steps : classify_turn +
+  compute_material_fingerprint + record. Si is_stalled() ET validated is None → message au prompt.
+  reset() aligné sur loop_guard.reset(). Priorité validated conservée (log informatif dédié).
+  Correctif pendant dev : record par STEP (pas par attempt) — sinon un run multi-steps ne déclenche
+  qu'1 incrément et le stall n'est jamais atteint.
+- [x] Étape SD-6 : Branchement production `execute_coder_node` — instancie StallDetector à côté
+  du LoopGuard et le passe à run_with_retry. WebTester hérite du défaut (actif). Judge/Synth/
+  Adversary ne le passent pas (nœuds de raisonnement, idle_breaker_threshold=10**9).
+- [x] Étape SD-7 : Config — config.py (stall_detector_enabled défaut True + stall_detector_threshold
+  défaut 2, bloc commenté style loop_guard) + load_settings (_get_bool/_get_int) + .env.example
+  (bloc # --- Stall Detector ---) + .env local (AGENTS.md §7).
+- [x] Étape SD-8 : Validation — 26/26 tests stall_detector PASS. Suite pytest complète 714 passed
+  / 12 failed (les 12 échecs PRÉ-EXISTANTS confirmés via git stash : architect/escalation/guard-
+  timeout/prompt_refiner(3)/read_gate(4)/skill_lazy_loading(2), AUCUN lié au stall detector),
+  1 error collection test_static_tester (pré-existant sur main, import extract_inline_js manquant).
+  0 régression. py_compile OK (stall_detector.py + nodes.py + config.py).
+- [x] Étape SD-9 : État disque synchronisé (feature_list.json +F-88 completed deps [F-36],
+  contract.md +critères 255-267, plan_usine_logicielle.md P3-bis 3 cases cochées + écarts
+  justifiés, progress.md, log.md). Branche `feat/stall-detector-p3bis`.
+
+> **Décision clé** : module orthogonal (LoopGuard intact) plutôt qu'extension de LoopGuard.
+> La case P3-bis "Hash d'output matériel" disait "Étendre notre LoopGuard (F-36)" — décision
+> contraire justifiée : le docstring loop_guard.py:10-12 dit "on n'inclut pas l'Output" (inverser
+> casserait la cohérence F-36) ET le test test_valid_final_answer_wins_over_loop_guard est fragile
+> (asserte guard.repeated_action() is not None après return validated). Le stall detector opère à
+> un autre niveau (step/turn) que le LoopGuard (tool call isolé) — gardes complémentaires.

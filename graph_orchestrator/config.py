@@ -264,6 +264,17 @@ class Settings:
     loop_guard_enabled: bool = True
     loop_guard_threshold: int = 3
 
+    # --- Stall Detector (Priorité 3-bis / F-88) ---
+    # Complément de l'Anti-Loop F-36 : détecte (a) un même CONTENU réécrit (hash
+    # d'output identique — le cas que F-36 rate car il ne hashe que l'input), et
+    # (b) une série de turns sans livrable matériel nouveau (PROGRESS/IDLE).
+    # Inspiré de loopx (fiche 19 : recent_runs, pr_monitor_materialization,
+    # delivery_outcome). Seuil 2 = loopx MONITOR_DEBT_UNCHANGED_TURN_THRESHOLD
+    # (1 tour gratuit est légitime = réflexion/relecture, 2 = stall avéré). Opt-out
+    # `STALL_DETECTOR_ENABLED=0` pour A/B ou debug.
+    stall_detector_enabled: bool = True
+    stall_detector_threshold: int = 2
+
     # --- Sanitizer (Auto-typage, Priorité 8 / F-42) ---
     # Coerce best-effort les arguments d'outil malformés émis par un petit LLM
     # (ex: `"1, 80"` → `80` pour un champ integer) AVANT l'appel d'outil, pour
@@ -401,6 +412,8 @@ def load_settings() -> Settings:
         auto_install_deps=_get_bool("AUTO_INSTALL_DEPS", True),
         loop_guard_enabled=_get_bool("LOOP_GUARD_ENABLED", True),
         loop_guard_threshold=_get_int("LOOP_GUARD_THRESHOLD", 3),
+        stall_detector_enabled=_get_bool("STALL_DETECTOR_ENABLED", True),
+        stall_detector_threshold=_get_int("STALL_DETECTOR_THRESHOLD", 2),
         sanitizer_enabled=_get_bool("SANITIZER_ENABLED", True),
         read_before_write_enabled=_get_bool("READ_BEFORE_WRITE_ENABLED", True),
         skill_budget_tokens=_get_int("SKILL_BUDGET_TOKENS", 8000),
