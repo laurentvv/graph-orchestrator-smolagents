@@ -177,17 +177,23 @@ class WebTestRunner:
 
                 # F-45 : hint DevTools si Chrome DevTools est disponible (en complément
                 # de Puppeteer). Vide si cdt_tools vide (backward-compat, Puppeteer seul).
+                # Note 2026-08 : DevTools est désormais le pilote PRIMAIRE (navigation +
+                # snapshot + console + assertions). Puppeteer navigate ne charge pas les
+                # fichiers file:// locaux (bug du serveur @modelcontextprotocol/server-puppeteer
+                # déprécié) → orientation DevTools-first pour fiabiliser le Tester.
                 devtools_hint = (
-                    "\n## OUTILS COMPLÉMENTAIRES Chrome DevTools (en plus de Puppeteer)\n"
-                    "Tu as AUSSI accès à des outils DevTools (SANS préfixe puppeteer_) très puissants, mais ATTENTION :\n"
+                    "\n## OUTILS Chrome DevTools (pilote PRIMAIRE — navigation + assertions)\n"
+                    "Tu as accès à des outils DevTools (SANS préfixe puppeteer_). Ce sont désormais tes outils PRINCIPAUX (la navigation Puppeteer ne charge pas les fichiers locaux). ATTENTION :\n"
                     "  [DANGER FATAL] : N'utilise JAMAIS l'argument optionnel `filePath` dans AUCUN de ces outils (laisse-le omis/non défini). Si tu essaies de l'utiliser (même avec une chaîne vide), tu auras une erreur critique 'Access denied' MCP.\n"
+                    "- `navigate_page(url=..., type='url')` : ouvre la page (OBLIGATOIRE pour la navigation initiale, cf. ci-dessus).\n"
                     "- `list_console_messages()` : erreurs JS avec source maps (plus précis que puppeteer_evaluate pour la console).\n"
                     "- `take_snapshot(verbose: true)` : arbre a11y complet (structure, IDs). Avec `verbose: true`, tu obtiendras tout le DOM ultra-détaillé.\n"
-                    "- `evaluate_script(function)` : JS dans la page. Fournis une déclaration `async () => { ... }` NON invoquée, sans `await` au niveau zéro.\n"
+                    "- `evaluate_script(function)` : JS dans la page — utilise-le pour tes ASSERTIONS fonctionnelles (au lieu de puppeteer_evaluate). Fournis une déclaration `async () => { ... }` NON invoquée, sans `await` au niveau zéro.\n"
+                    "- `click(uid=...)` / `fill(uid=..., value=...)` : interactions (uids vus dans take_snapshot).\n"
                     "- `take_screenshot(fullPage: true)` : capture visuelle. Avec `fullPage: true`, capture toute la hauteur. L'image TE REVIENT.\n"
-                    "  [VISUAL BUG ALERT CRITIQUE] : Tu dois impérativement t'assurer qu'AUCUN élément clé ne disparaît ou ne devient invisible pendant l'interaction (ex: des barres qui s'effacent car elles perdent leur classe couleur sur un fond sombre). Si tu vois des éléments s'évaporer, c'est un FAILURE immédiat ! Tu peux aussi utiliser `puppeteer_evaluate` pour inspecter les styles calculés (ex: getComputedStyle) et vérifier que les éléments ont bien une couleur.\n"
+                    "  [VISUAL BUG ALERT CRITIQUE] : Tu dois impérativement t'assurer qu'AUCUN élément clé ne disparaît ou ne devient invisible pendant l'interaction (ex: des barres qui s'effacent car elles perdent leur classe couleur sur un fond sombre). Si tu vois des éléments s'évaporer, c'est un FAILURE immédiat ! Tu peux utiliser `evaluate_script` pour inspecter les styles calculés (ex: getComputedStyle) et vérifier que les éléments ont bien une couleur.\n"
                     "  [PYTHON BUILT-INS] : Si tu utilises `time.sleep()` en Python, n'oublie pas de faire `import time` au début de ton code.\n"
-                    "Priorité : garde Puppeteer pour les assertions (skill maîtrisé). Utilise DevTools pour la console et le visuel.\n"
+                    "Priorité : DevTools pour TOUT (navigation, assertions, console, visuel). N'utilise les outils `puppeteer_*` QUE si DevTools est indisponible.\n"
                     if cdt_tools else ""
                 )
 
@@ -230,17 +236,34 @@ Voici tes instructions obligatoires (Skill) :
 
 ATTENTION - Le dossier de travail absolu est : {workspace_url}
 {target_files_urls}
-Pour utiliser 'puppeteer_navigate', tu dois ouvrir le fichier HTML principal à cette URL EXACTE : {primary_url}
-(N'utilise PAS {workspace_url}/index.html à la racine — le fichier est dans un sous-répertoire.)
 
-### 🛠️ OUTILS DE NETTOYAGE ET TAGGING (Très Recommandés)
-Pour éviter d'écrire de longs scripts JS qui surchargent ton contexte, utilise ces deux outils dédiés :
-1. `puppeteer_clean_dom()` : Appelle cet outil (sans argument) pour récupérer le code HTML de la page nettoyé de tout le bruit (script, style, svg). Cela divise la taille du DOM par 10 !
-2. `puppeteer_add_visual_tags()` : Appelle cet outil (sans argument) AVANT de prendre ta capture d'écran (`take_screenshot`). Il collera un badge rouge (e1, e2...) sur tous les éléments cliquables de la page. S'il manque un badge, l'élément est invisible !
+### ⚠️ NAVIGATION OBLIGATOIRE avec DevTools `navigate_page` (PAS puppeteer_navigate)
+[BUG CONNU CRITIQUE] Le serveur `puppeteer_navigate` répond "Navigated to ..." mais ne
+charge PAS réellement le fichier local file:// — la page reste `about:blank` et tous tes
+`puppeteer_evaluate`/`take_snapshot` verront une page VIDE. Tu perdrais alors 16 steps en
+boucle puis le nœud timeout (600s) → FAILURE systématique.
+SOLUTION : utilise UNIQUEMENT `navigate_page(url="{primary_url}")` (outil Chrome DevTools,
+SANS préfixe puppeteer_) pour ouvrir la page. C'est le seul pilote qui charge réellement
+les fichiers file:// dans cet environnement.
+URL EXACTE à passer : {primary_url}
+(N'utilise PAS {workspace_url}/index.html à la racine — le fichier est dans un sous-répertoire.)
+[2 NAVIGATEURS SÉPARÉS] Puppeteer et DevTools MCP pilotent chacun leur propre instance de
+Chrome. Ne mélange JAMAIS : si tu navigues avec `navigate_page` (DevTools), fais TOUT le
+reste (snapshot, console, evaluate, click, screenshot) avec les outils DevTools SANS préfixe
+`puppeteer_`. Les assertions via `puppeteer_evaluate` verraient l'AUTRE navigateur (vide).
+
+### 🛠️ INSPECTION DU DOM (préfère DevTools)
+Pour inspecter la structure sans surcharger ton contexte :
+1. `take_snapshot()` (DevTools) : arbre a11y complet — structure, IDs, visibilité. C'est ta vue
+   principale du DOM. Utilise `verbose=True` pour le détail complet.
+2. `evaluate_script(function="async () => document.body.innerHTML.length")` (DevTools) : pour
+   des checks ponctuels (nombre d'éléments, valeurs, styles calculés).
+Les outils `puppeteer_clean_dom()` / `puppeteer_add_visual_tags()` instrumentent l'AUTRE
+navigateur (Puppeteer) qui ne charge pas la page — NE LES UTILISE PAS (tu verrais un DOM vide).
 
 Vérifie l'application web générée. N'oublie PAS l'étape 4 du skill (Functional Logic Testing) :
 identifie les comportements clés du cahier des charges ci-dessus et écris des assertions via
-'puppeteer_evaluate' pour vérifier qu'ils fonctionnent — pas seulement que la page ne crash pas.
+`evaluate_script` (DevTools) pour vérifier qu'ils fonctionnent — pas seulement que la page ne crash pas.
 {devtools_hint}
 Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JAMAIS expliquer sans agir.
 
