@@ -703,11 +703,33 @@ CLOUDFLARE_OS_FILES = [
      "description": "Point de contrôle central pour vérifier si un module de sécurité est activé avant de distribuer une capacité. (P8)"},
 ]
 
+BROWSER_USE_BASE = "references/browser-use"
+BROWSER_USE_FILES = [
+    {"path": f"{BROWSER_USE_BASE}/AGENTS.md", "type": "doc", "reuse": "high",
+     "key_symbols": ["uv", "development rules"],
+     "description": "Directives et règles de développement pour l'agent (instructions uv). (P0)"},
+    {"path": f"{BROWSER_USE_BASE}/CLAUDE.md", "type": "doc", "reuse": "high",
+     "key_symbols": ["build", "test", "lint"],
+     "description": "Commandes de build, test, lint, et bonnes pratiques d'architecture. (P0)"},
+    {"path": f"{BROWSER_USE_BASE}/browser_use/agent/judge.py", "type": "code", "reuse": "high",
+     "key_symbols": ["construct_judge_messages"],
+     "description": "Construit les prompts pour qu'un Judge LLM évalue la trace d'un agent avec support vision. (P6)"},
+    {"path": f"{BROWSER_USE_BASE}/browser_use/dom/markdown_extractor.py", "type": "code", "reuse": "high",
+     "key_symbols": ["extract_clean_markdown"],
+     "description": "Réduit un arbre DOM (HTML) en markdown épuré. Idéal extraction contexte allégé. (P9)"},
+    {"path": f"{BROWSER_USE_BASE}/browser_use/agent/prompts.py", "type": "code", "reuse": "high",
+     "key_symbols": ["SystemPrompt", "cache"],
+     "description": "Gestion dynamique des prompts système avec caching (Anthropic/flash/thinking). (P0)"},
+    {"path": f"{BROWSER_USE_BASE}/browser_use/agent/message_manager/service.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["MessageManagerState"],
+     "description": "Historique des messages et formatage d'événements LLM. (P11)"},
+]
+
 def main() -> None:
     data = json.loads(INVENTORY.read_text(encoding="utf-8"))
 
-    data["projects_audited"] = 26
-    data["audit_date"] = "2026-08-06"
+    data["projects_audited"] = 27
+    data["audit_date"] = "2026-08-07"
 
     updated = []
     seen_ids = set()
@@ -830,6 +852,15 @@ def main() -> None:
                 "summary": "Environnement de productivité agentique avec modèle de Gatekeepers (P12) et Capability-based access control (P8-bis). Pattern d'approbation asynchrone (human in the loop via simulation) transposable pour P10.",
                 "files": CLOUDFLARE_OS_FILES,
             }
+        elif pid == "browser-use":
+            project = {
+                "id": "browser-use", "name": "browser-use",
+                "path": "references/browser-use",
+                "category": "browser-automation",
+                "reuse_rating": "high",
+                "summary": "Framework Python d'automatisation de navigateur par IA. Gère l'état du navigateur, la compaction du DOM (HTML -> Markdown) et un système d'évaluation Judge.",
+                "files": BROWSER_USE_FILES,
+            }
         updated.append(project)
         seen_ids.add(pid)
 
@@ -899,6 +930,11 @@ def main() -> None:
                         "path": "references/cloudflare-os",
                         "category": "agent-os", "reuse_rating": "medium",
                         "summary": "(ajouté par update_inventory.py)", "files": CLOUDFLARE_OS_FILES})
+    if "browser-use" not in seen_ids:
+        updated.append({"id": "browser-use", "name": "browser-use",
+                        "path": "references/browser-use",
+                        "category": "browser-automation", "reuse_rating": "high",
+                        "summary": "(ajouté par update_inventory.py)", "files": BROWSER_USE_FILES})
 
     data["projects"] = updated
 
@@ -912,7 +948,7 @@ def main() -> None:
             by_reuse[r] = by_reuse.get(r, 0) + 1
     print(f"OK — {len(data['projects'])} projets, {total} entrées au total.")
     print(f"Répartition : {by_reuse}")
-    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi", "hermes-agent", "cloudflare-os"):
+    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi", "hermes-agent", "cloudflare-os", "browser-use"):
         proj = next(p for p in data["projects"] if p["id"] == new_id)
         print(f"  {new_id} : {len(proj['files'])} entrées (reuse_rating={proj['reuse_rating']})")
 

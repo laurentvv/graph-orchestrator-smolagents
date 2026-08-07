@@ -1,5 +1,5 @@
 {
-  "audit_date": "2026-08-06",
+  "audit_date": "2026-08-07",
   "scope": "filtered-useful (docs + code + specs; excludes .git/node_modules/media/fixtures/translated-READMEs)",
   "projects": [
     {
@@ -5343,7 +5343,7 @@
       "path": "references/cloudflare-os",
       "category": "agent-os",
       "reuse_rating": "medium",
-      "summary": "(ajouté par update_inventory.py)",
+      "summary": "Environnement de productivité agentique avec modèle de Gatekeepers (P12) et Capability-based access control (P8-bis). Pattern d'approbation asynchrone (human in the loop via simulation) transposable pour P10.",
       "files": [
         {
           "path": "references/cloudflare-os/packages/mcp-shared/src/tools.ts",
@@ -5374,7 +5374,75 @@
           "description": "Point de contrôle central pour vérifier si un module de sécurité est activé avant de distribuer une capacité. (P8)"
         }
       ]
+    },
+    {
+      "id": "browser-use",
+      "name": "browser-use",
+      "path": "references/browser-use",
+      "category": "browser-automation",
+      "reuse_rating": "high",
+      "summary": "(ajouté par update_inventory.py)",
+      "files": [
+        {
+          "path": "references/browser-use/AGENTS.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [
+            "uv",
+            "development rules"
+          ],
+          "description": "Directives et règles de développement pour l'agent (instructions uv). (P0)"
+        },
+        {
+          "path": "references/browser-use/CLAUDE.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [
+            "build",
+            "test",
+            "lint"
+          ],
+          "description": "Commandes de build, test, lint, et bonnes pratiques d'architecture. (P0)"
+        },
+        {
+          "path": "references/browser-use/browser_use/agent/judge.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "construct_judge_messages"
+          ],
+          "description": "Construit les prompts pour qu'un Judge LLM évalue la trace d'un agent avec support vision. (P6)"
+        },
+        {
+          "path": "references/browser-use/browser_use/dom/markdown_extractor.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "extract_clean_markdown"
+          ],
+          "description": "Réduit un arbre DOM (HTML) en markdown épuré. Idéal extraction contexte allégé. (P9)"
+        },
+        {
+          "path": "references/browser-use/browser_use/agent/prompts.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "SystemPrompt",
+            "cache"
+          ],
+          "description": "Gestion dynamique des prompts système avec caching (Anthropic/flash/thinking). (P0)"
+        },
+        {
+          "path": "references/browser-use/browser_use/agent/message_manager/service.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "MessageManagerState"
+          ],
+          "description": "Historique des messages et formatage d'événements LLM. (P11)"
+        }
+      ]
     }
   ],
-  "projects_audited": 26
+  "projects_audited": 27
 }

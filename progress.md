@@ -4,6 +4,7 @@
 - [x] Valider le coding workflow de bout en bout sur un prompt "landing page premium"
       (Architect → Coder → Tester → Judge → verdict). ATTEINT (run #12 HTML propre,
       run #13 cycle complet + reprise après crash multi-crash).
+- [x] Ajouter `browser-use` aux références et exécuter le workflow d'audit. TERMINÉ.
 - [x] Cycle CHROME DEVTOOLS MCP + VALIDATION VISUELLE (F-45) : auto-validation visuelle
       du Coder (screenshot vu par gemma-4-E4B multimodal avant final_answer) + complément
       d'outils DevTools au WebTester (cumul avec Puppeteer, pas de suppression).
