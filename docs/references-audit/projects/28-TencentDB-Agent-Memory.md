@@ -10,7 +10,7 @@
 ## Synthèse
 TencentDB-Agent-Memory est un système avancé de gestion de mémoire pour agents LLM, structuré en couches d'abstraction sémantique (L0 Conversation, L1 Atom, L2 Scenario, L3 Persona). Il propose une séparation très claire entre un Memory Core (extraction/stockage), un Memory Hub (panel de contrôle humain) et un Proxy pour l'interfaçage.
 
-Sa proposition de valeur principale réside dans le concept de "Memory Assets" : Chat Memory, Skills, Wiki, et CodeGraph. L'expérience n'est pas qu'un log de chat, mais des entités partageables et assignables à des agents spécifiaux avec un système ACL (private, team, restricted).
+Sa proposition de valeur principale réside dans le concept de "Memory Assets" : Chat Memory, Skills, Wiki, et CodeGraph. L'expérience n'est pas qu'un log de chat, mais des entités partageables et assignables à des agents spécifiques avec un système ACL (private, team, restricted).
 
 ### Gisement de prompts/méthodologie (audit approfondi 2026-08-07)
 L'audit initial (superficiel) n'avait retenu que 4 briques (skill-store `is_head`, skill-extractor `<<past-user>>`, types, l0-recorder). L'exploration approfondie des **prompts** révèle un second gisement, plus valuable pour nous : **7 modules de prompts TypeScript** implémentant une méthodologie de mémoire complète et éprouvée. Tous les prompts sont stockés comme constantes string exportées (pas de fichiers `.txt` séparés). Plusieurs concepts n'apparaissent dans **aucune** autre référence auditée et sont **supérieurs** aux équivalents cités dans notre P6-ter (qui ne référence que qm) :
