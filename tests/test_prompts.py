@@ -37,26 +37,38 @@ from graph_orchestrator.prompts import (
 # ==========================================
 
 class TestUniversalInvariants:
-    def test_all_10_patterns_present(self):
-        """Les 10 patterns universels sont numérotés 1 à 10 dans la constante."""
-        for i in range(1, 11):
+    def test_all_patterns_present(self):
+        """Les 12 patterns universels sont numérotés 1 à 12 dans la constante.
+
+        F-44 = 10 patterns initiaux. F-85 = invariant n°11 (anti-injection).
+        F-65 = invariant n°12 (self-correction vérifiable).
+        """
+        for i in range(1, 13):
             assert f"{i}." in UNIVERSAL_INVARIANTS, f"Pattern universel n°{i} manquant"
 
     def test_key_doctrinal_markers_present(self):
-        """Les marqueurs doctrinaux clés (fiche 17) sont présents."""
+        """Les marqueurs doctrinaux clés (fiches 17 + 29) sont présents."""
         markers = [
             "READ-BEFORE-WRITE",
             "VÉRIFIE LES DÉPENDANCES",  # never assume library available
             "VÉRIFIE APRÈS CHAQUE ÉDITION",  # verify-after
-            "APPROVAL GATING",
+            "APPROVAL GATING",  # devenu APPROVAL GATING PAR RISQUE (F-65)
             "ANTI-BOUCLE",
             "CONCISION",
             "PARALLEL TOOL CALLS",
             "FACTUEL ET OBJECTIF",  # professional objectivity
             "SÉCURITÉ DÉFENSIVE",  # defensive security only
+            "SELF-CORRECTION VÉRIFIABLE",  # F-65 n°12 (don't end with a promise)
         ]
         for marker in markers:
             assert marker in UNIVERSAL_INVARIANTS, f"Marqueur doctrinal manquant : {marker}"
+
+    def test_invariant_5_has_reversibility_grid(self):
+        """F-65 mécanisme 1 : l'invariant n°5 APPROVAL GATING est enrichi d'une grille
+        de réversibilité (Codex 4-tier + Claude Code 3-tier matrix, fiche 29)."""
+        assert "RÉVERSIBILITÉ" in UNIVERSAL_INVARIANTS
+        assert "BLAST-RADIUS" in UNIVERSAL_INVARIANTS
+        assert "PAR-ACTION" in UNIVERSAL_INVARIANTS  # per-action, pas de généralisation
 
 
 # ==========================================
@@ -74,25 +86,36 @@ class TestRoleBlocks:
 
     @pytest.mark.parametrize("role,marker", [
         ("router", "ROUTEUR"),
+        ("router", "CIBLES D'ÉCRITURE"),   # F-65 méca 2 : write-lock parallel policy
+        ("router", "CONTRAT PARTAGÉ"),     # F-65 méca 2 : serialize si contrat partagé
         ("architect", "READ-ONLY STRICT"),
         ("architect", "scalabilité"),
+        ("architect", "EARS"),             # F-65 quick win A : format EARS
         ("prompt_refiner", "STRUCTURES"),
         ("coder", "Type hints"),
         ("coder", "VÉRIFIE"),
+        ("coder", "ENGINEERING MINDSET"),  # F-65 quick win B : cas limites
         ("coder_frontend", "accessibilité"),
+        ("coder_frontend", "CAS LIMITES"),  # F-65 quick win B
         ("web_tester", "AAA"),
         ("web_tester", "Pyramide"),
+        ("web_tester", "REQUIREMENTS COVERAGE"),  # F-65 méca 5 : quality gates triage
+        ("web_tester", "DELTAS"),                  # F-65 méca 5 : deltas PASS/FAIL
         ("judge", "professional objectivity"),
         ("judge", "IN-DIFF ONLY"),
         ("judge", "ANTI-NITS"),
+        ("judge", "SELF-CORRECTION VÉRIFIABLE"),  # F-65 méca 3
+        ("judge", "file:start-end"),              # F-65 méca 4 : citation canonique
         ("security", "OWASP"),
         ("security", "CVSS"),
         ("security", "DEFENSIVE"),
+        ("security", "RÉVERSIBILITÉ"),     # F-65 méca 1 : classification par réversibilité
+        ("security", "{{secret_name}}"),   # F-65 quick win C : secret canary
         ("escalation", "POST-MORTEM"),
         ("escalation", "racine"),
     ])
     def test_role_contains_doctrinal_marker(self, role, marker):
-        """Chaque rôle porte ses marqueurs doctrinaux spécifiques (fiches 15 + 17).
+        """Chaque rôle porte ses marqueurs doctrinaux spécifiques (fiches 15 + 17 + 29).
 
         NB : on cherche des mots-clef compacts (pas des phrases) car le wrapping de ligne
         peut couper une expression au milieu (« cause\\nracine »). On teste la présence du

@@ -822,3 +822,37 @@ Coder est appliquée correctement par Qwen3.5-9B.
 > durable F-68 complétée, F-86/F-87 ajoutés), PAS dans des modifications spéculatives du
 > runtime aujourd'hui. Les 3 changements de prompts envisagés auraient été contre-productifs
 > ou redondants — la validation humaine (AGENTS.md §8) a protégé d'un changement inutile.
+
+## Jalons de l'Itération (cycle F-65 — pépites prompts différenciantes, scope A)
+> Successeur direct de F-85 (lignée F-44 → F-56 → F-85 → F-65). F-85 n'avait ingéré que les
+> quick wins de la fiche 29. F-65 porte les 5 mécanismes différenciants prioritaires + 3
+> quick wins, **en enrichissement de prompts uniquement** (scope A validé utilisateur).
+
+- [x] Étape F65-1 : Branche `feat/prompt-pepites-f65` créée (règle d'or Git).
+- [x] Étape F65-2 : Exploration code (3 subagents parallèles) — map précis des attach points
+  (prompts.py invariants/rôles, dspy_nodes.py signatures, models.py Finding, workflows.py
+  fan-out, testers/ contrat) + extraction fidèle des 5 mécanismes avec attributions exactes
+  (corrections d'erreurs initiales du plan confirmées par grep indépendant).
+- [x] Étape F65-3 : `prompts.py` — invariant n°5 enrichi (grille réversibilité/blast-radius,
+  Codex 4-tier + Claude Code 3-tier fiche 29) + nouvel invariant n°12 (self-correction
+  vérifiable « don't end with a promise », Claude Code fiche 29 + Cursor fiche 17) + 7 role
+  blocks enrichis (router write-lock policy, architect EARS, coder/coder_frontend engineering
+  mindset, web_tester deltas+requirements coverage, judge self-correction+citation file:start-end,
+  security réversibilité+`{{secret_name}}` canary) + commentaires stale corrigés (10→12).
+- [x] Étape F65-4 : `tests/test_prompts.py` — 28 cas paramétrés (11 nouveaux marqueurs
+  doctrinaux) + test compte invariants mis à jour (10→12) + test grille réversibilité.
+- [x] Étape F65-5 : `uv run pytest tests/test_prompts.py` → **52 passed / 0 failed**.
+- [x] Étape F65-6 : Suite complète `uv run pytest tests/ --ignore=tests/test_static_tester.py`
+  → **711 passed / 12 failed**. Comparatif sur `main` : **mêmes 12 échecs pré-existants**
+  (test_static_tester collection error, test_read_gate, test_skill_lazy_loading, etc. —
+  tests appelant vrais modèles/env, non mockés). **0 régression F-65.**
+- [x] Étape F65-7 : `docs/NODES_AND_SKILLS.md` — passage de 11 à 12 invariants + nouvelle
+  section F-65 (tableau attributions exactes + corrections d'erreurs d'attribution).
+- [x] Étape F65-8 : État disque finalisé (`plan_usine_logicielle.md` items F-65 cochés + stub
+  corrigé, `feature_list.json` F-65 → completed, `progress.md` ce bloc).
+
+> **Hors scope (cycles futurs)** : gate logicielle `requires_approval` réelle sur bash_command
+> (scope B, étend bash_guard F-38) ; modèle `TestResult` structuré PASS/FAIL delta (scope B,
+> touche contrat runners + extraction Judge) ; parallélisation réelle fan-out Coder (scope C,
+> risky sur VRAM 6 Go, ReadGate à durcir) ; compatibilité Synth/Drafter avec système
+> d'invariants ; autres secondaires F-65 (notify vs ask Manus, 8 templates Qoder).
