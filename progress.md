@@ -906,3 +906,43 @@ Coder est appliquée correctement par Qwen3.5-9B.
 > casserait la cohérence F-36) ET le test test_valid_final_answer_wins_over_loop_guard est fragile
 > (asserte guard.repeated_action() is not None après return validated). Le stall detector opère à
 > un autre niveau (step/turn) que le LoopGuard (tool call isolé) — gardes complémentaires.
+
+## Jalons de l'Itération (cycle Hotfix F-88 — hash CodeAgent vide, post-run E2E 2026-08-08)
+> Run E2E Bubble Sort multi-fichier (FRESH_START=true) : verdict FAILURE après 1h10. Le stall
+> detector s'est déclenché 8 fois à tort (jusqu'à "17 turns consécutifs sans changement matériel")
+> sur du debug légitime du Coder, polluant son prompt avec des messages "CHANGE D'APPROCHE" →
+> confusion → max_steps atteint sans final_answer valide. Régression réelle vs main (sans F-88).
+> Leçon : un test unitaire mocké ne suffit pas — il faut un run réel (ou isolé) pour valider une
+> feature qui touche au chemin chaud du Coder.
+
+- [x] Étape HF-1 : Diagnostic — grep du log E2E révèle 8 déclenchements stall + "CIRCUIT BREAKER
+  (Stall Detector) : 17 turns". 0 LoopGuard (le Coder ne bouclait pas — il debuguait). Le compteur
+  stall ne resetait JAMAIS sur matériel nouveau (write_file répétés en phase de debug).
+- [x] Étape HF-2 : Reproduction isolée sur le VRAI parseur (pas un mock) — `extract_tool_calls_from_step`
+  CodeAgent retourne args = ligne source Python strippée (ex: 'write_file(path="a", content="x")'),
+  PAS un dict. Or `_extract_str` ne gérait que dict + JSON-string. Pour une ligne source Python,
+  retournait "" → tous les writes CodeAgent avaient le même hash SHA256("") → jamais de reset.
+  BUG CONFIRMÉ : deux writes au contenu totalement différent (AAA vs BBB) → même hash e3b0c44298fc1c14.
+- [x] Étape HF-3 : Fix `stall_detector.py _extract_str` — 3e cas ajouté (ligne source Python CodeAgent)
+  via regex qui extrait la valeur après `key=` (guillemets doubles/simples, DOTALL). Best-effort :
+  suffisant pour distinguer deux writes au contenu différent (le but du stall detector).
+- [x] Étape HF-4 : Validation sur le vrai parseur — write(content=AAA) → hash X ; write(content=BBB)
+  → hash Y (différent → reset) ; write(content=AAA) → hash X (identique → reproduction = stall).
+  search_replace → hash non vide. CORRECT.
+- [x] Étape HF-5 : 2 tests de non-régression ajoutés (test_stall_detector.py) :
+  `test_material_fingerprint_codeagent_source_line_differs_on_content` (unitaire) +
+  `test_stall_detector_resets_on_codeagent_write_with_new_content` (end-to-end sur la vraie chaîne
+  extract_tool_calls_from_step → classify_turn → record). 28 tests PASS (26 + 2 nouveaux).
+- [x] Étape HF-6 : Script d'isolation `debug/run_coder.py` créé (multi-fichier + draft injecté
+  optionnel + vrai execute_coder_node). Convention F-55 étendue aux nœuds LLM. Permet la boucle
+  de debug "couper si erreur, corriger, relancer" en minutes au lieu de 30-40 min.
+- [x] Étape HF-7 : Validation run Coder isolé multi-fichier + draft (F-88 activé, STALL_DETECTOR=true
+  seuil 2) : 0 stall sur 8 steps avec 43 tool calls d'écriture. Le fix tient en conditions E2E réelles.
+- [x] Étape HF-8 : État disque synchronisé — hotfix commit + push PR #47. contract.md +critère 268.
+  feature_list.json +F-89 (jeux de tests par nœud P17 MAX). plan_usine_logicielle.md +Priorité 17
+  (Jeux de tests par nœud, priorité MAX) + dashboard P17 🟡 PARTIEL.
+
+> **Leçon structurante (alimente P17/F-89)** : le bug du hash CodeAgent vide était reproductible
+> en <1s sur le vrai parseur, mais a mis 1h10 de run E2E + post-mortem manuel à diagnostiquer.
+> C'est la preuve que les scripts d'isolation par nœud + jeux de fixtures sont INDISPENSABLES —
+> pas un nice-to-have. Placé en priorité MAX (P17) pour le cycle suivant.
