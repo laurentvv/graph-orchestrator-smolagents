@@ -320,6 +320,19 @@
 - [x] Critère 253 : Test de non-régression — `test_valid_final_answer_wins_over_loop_guard` (test_coder_hardening.py) : agent dont l'historique contient 3× le même `write_file` (déclenche `loop_guard.repeated_action()` non-None) + `final_answer` valide (CoderOutput success) → assert `result is valid_output` (pas None), `call_count == 1` (succès au 1er attempt, 0 retry consommé), `guard.repeated_action() is not None` (confirme qu'on teste bien le chemin LoopGuard). 9 tests test_coder_hardening.py PASS.
 - [x] Critère 254 : Non-régression — suite pytest 674 passed (+1 vs baseline 673) / 26 échecs préexistants strictement identiques (confirmés par `git stash` : 26 failed avant ET après mon fix, tous E2E workflow + guard timeout + read_gate + skill_lazy_loading + prompt_refiner + escalation + feedback + output_dir, AUCUN lié au LoopGuard ou au bloc `if validated:`). py_compile OK (nodes.py + test_coder_hardening.py). 0 régression.
 
+### F-65 — Pépites prompts différenciantes (scope A : tier prompts 5/5 + 3 quick wins)
+- [x] Critère 255 : Invariant n°5 enrichi — `UNIVERSAL_INVARIANTS` contient "RÉVERSIBILITÉ" + "BLAST-RADIUS" + "PAR-ACTION" (grille de décision Codex 4-tier + Claude Code 3-tier, fiche 29). Plus "APPROVAL GATING PAR RISQUE" (renommage du titre).
+- [x] Critère 256 : Invariant n°12 ajouté — `UNIVERSAL_INVARIANTS` contient "SELF-CORRECTION VÉRIFIABLE" + "promesse" (Claude Code « don't end with a promise » fiche 29). Les 12 patterns sont numérotés 1 à 12 (`test_all_patterns_present`).
+- [x] Critère 257 : Role `router` enrichi — contient "CIBLES D'ÉCRITURE" + "CONTRAT PARTAGÉ" (write-lock parallel policy, Amp `amp-code.md` + Codex `codex-full.md` fiche 29).
+- [x] Critère 258 : Role `architect` enrichi — contient "EARS" (format EARS, Kiro fiche 17).
+- [x] Critère 259 : Roles `coder` + `coder_frontend` enrichis — contiennent "ENGINEERING MINDSET" + "CAS LIMITES" (VSCode gpt-5 fiche 17).
+- [x] Critère 260 : Role `web_tester` enrichi — contient "REQUIREMENTS COVERAGE" + "DELTAS" (quality gates triage, VSCode gpt-5 fiche 17 — absent fiche 29).
+- [x] Critère 261 : Role `judge` enrichi — contient "SELF-CORRECTION VÉRIFIABLE" (verdict sur vérifications effectives) + "file:start-end" (citation canonique, Devin+Cursor fiche 29).
+- [x] Critère 262 : Role `security` enrichi — contient "RÉVERSIBILITÉ" (classification par réversibilité) + "{{secret_name}}" (canary, Warp fiche 29).
+- [x] Critère 263 : Aucune modification de schéma — `models.py` inchangé (vérifié `git diff main...HEAD -- graph_orchestrator/models.py` = vide). `Finding.location` (F-44) réutilisé tel quel, seul le format attendu est standardisé en prompt.
+- [x] Critère 264 : Aucune régression — suite pytest `tests/ --ignore=tests/test_static_tester.py` → 711 passed / 12 failed, **les 12 échecs sont strictement identiques à `main`** (comparatif `git stash` + checkout main : mêmes 12 failed). `test_prompts.py` seul → 52 passed / 0 failed.
+- [x] Critère 265 : Attributions vérifiées — `tools_used=>update_emitted` attribué à Cursor fiche 17 (PAS fiche 29) ; `<cite>` balise attribuée à DeepWiki fiche 17 (n'existe pas en fiche 29) ; quality gates triage attribué à VSCode gpt-5 fiche 17 (absent fiche 29). Corrections confirmées par grep indépendant sur les deux corpus. Documentation dans `docs/NODES_AND_SKILLS.md` section F-65.
+
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.
 * Validation process : `uv run python -m graph_orchestrator.workflows` (WORKFLOW_MODE=coding) →

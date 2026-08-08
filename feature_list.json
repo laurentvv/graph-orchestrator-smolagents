@@ -542,7 +542,7 @@
       "id": "F-65",
       "name": "Ingestion des pépites prompts différenciantes (gates bloquantes + policies)",
       "description": "Issue de l'audit F-64 : 20 mécanismes différenciants identifiés dans le corpus externe, non ingérés dans prompts.py. Actionnables priorisés : (1) GATES BLOQUANTES — requires_approval bool (Cline) + matrice sandbox×approval Codex + is_dangerous Replit ; nos rôles Judge/Security sont déclaratifs ('DEFENSIVE ONLY'), pas de mécanisme attaché → porter un mécanisme de gate par risque. (2) WRITE-LOCK PARALLEL POLICY (Amp GPT-5) — paralléliser writes iff write targets disjoints, sérialiser si contrat partagé (types/schema/API) ; notre Coder fan-out ne décide pas parallèle vs séquentiel sur ce critère. (3) SELF-CORRECTION VÉRIFIABLE (Cursor 2025-09-03) — règle tools_used_in_turn => update_emitted pour Judge. (4) CITATION <cite> OBLIGATOIRE (Devin DeepWiki) — justifier verdicts Judge par localisation code. (5) QUALITY GATES TRIAGE (VSCode gpt-5) — rapport Tester en deltas PASS/FAIL + requirements coverage line. Secondaires : EARS format Architect (Kiro), engineering mindset contract+edge cases (VSCode), {{secret_name}} placeholder + canary decoy Security (Warp/CodeBuddy), notify vs ask gating (Manus), 8 templates par type de repo Architect (Qoder). Référence complète : docs/system_prompts_audit_full.md §6-7.",
-      "status": "pending",
+      "status": "completed",
       "dependencies": [
         "F-64",
         "F-44",
@@ -700,7 +700,10 @@
       "name": "Durcissement prompts — pépites fiche 29 (anti-injection + prompts faibles)",
       "description": "Extraction approfondie du corpus system_prompts_leaks (docs/system_prompts_leaks_extraction.md) puis ingestion des mécanismes actionnables : (1) invariant n°11 ANTI-PROMPT-INJECTION dans prompts.py (tool output = DATA, pas instructions) — gap n°1 comblé, inspiré du bloc <critical_injection_defense> de Claude Cowork ; (2) enrichissement invariant n°9 (honest-reporting, anti faux-vert, inspiré Amp) ; (3) durcissement des prompts faibles : JSONFixSignature (règles de fidélité stricte), SkillResearchSignature (wrap with_invariants + anti-injection, cohérence avec les autres nœuds DSPy), DrafterSignature (anti-placeholders + exemple format), Synth (doctrine concision/solution-first/honnêteté). Correction de l'attribution des pépites F-65 (plusieurs mécanismes cités viennent en fait de la fiche 17, pas 29).",
       "status": "completed",
-      "dependencies": ["F-84", "F-44"]
+      "dependencies": [
+        "F-84",
+        "F-44"
+      ]
     },
     {
       "id": "F-86",
