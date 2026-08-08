@@ -49,8 +49,20 @@ web/dist/
 
 # Output daté par run (Priorité 13 du plan usine logicielle)
 runs/
-debug/
 logs/
+
+# debug/ : scripts d'isolation + méthodologies VERSIONNÉS (F-55, F-89).
+# On ignore uniquement les artefacts régénérables (output, snapshots, caches), PAS les
+# scripts .py ni les .md de méthodologie/convention — ils font partie de l'usine de debug.
+debug/__pycache__/
+debug/coder_isolation_out/
+debug/drafter_isolation_out/
+debug/gate_test_bubble/
+debug/isolation/__pycache__/
+debug/isolation/_demo/
+debug/run6_20260801_200231/
+debug/run_gpu_20260801_204945/
+debug/tier3_validation/
 
 # Binaires lourds bundlés (build CUDA llama.cpp, ~0,7-1 Go) — gitignoré.
 # llama_server.py détecte le GPU NVIDIA (nvidia-smi) et découvre automatiquement :

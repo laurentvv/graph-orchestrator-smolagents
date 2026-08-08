@@ -946,3 +946,40 @@ Coder est appliquée correctement par Qwen3.5-9B.
 > en <1s sur le vrai parseur, mais a mis 1h10 de run E2E + post-mortem manuel à diagnostiquer.
 > C'est la preuve que les scripts d'isolation par nœud + jeux de fixtures sont INDISPENSABLES —
 > pas un nice-to-have. Placé en priorité MAX (P17) pour le cycle suivant.
+
+## Jalons de l'Itération (cycle Jeux de tests par nœud — F-89, P17 MAX)
+> Priorité MAX du plan usine logicielle. 6 scripts d'isolation LLM créés — chacun appelle la
+> VRAIE fonction de production (0 mock, 0 duplication) avec fixtures figées. Permet d'itérer
+> en secondes/minutes sur un nœud sans relancer le workflow E2E de 30-40 min.
+
+- [x] Étape F89-1 : Exploration (2 agents parallèles) — signatures exactes des 6 nœuds LLM
+  cartographiées (Router/PromptRefiner/Architect/Drafter/Security/Judge), clés dict lues,
+  modèles utilisés (tous ignorent le param *_model → _run_dspy_node → model_lifecycle(spec)),
+  config settings + 3 backends spawn. Modèles Pydantic output listés. Pattern run_coder.py
+  (existant fix F-88) = référence pour la convention.
+- [x] Étape F89-2 : `debug/run_router.py` — 5 prompts figés (Python mots-clés web piège /
+  React JSX / HTML-CSS-JS vanilla / Rust / ambigu). Valide bug F-56a (débordement JS).
+- [x] Étape F89-3 : `debug/run_prompt_refiner.py` — 3 prompts figés (vagues / déjà structuré /
+  minimaliste). Affiche ambiguities_detected + refined_prompt.
+- [x] Étape F89-4 : `debug/run_architect.py` — spec Bubble Sort figée. Affiche ArchitectOutput
+  (plan_id, global_architecture, sous-tâches + stratégie + skills).
+- [x] Étape F89-5 : `debug/run_drafter.py` — sub_dict Bubble Sort figé (configurable). Sauvegarde
+  draft_markdown dans debug/drafter_isolation_out/ pour réinjection run_coder.py --draft.
+- [x] Étape F89-6 : `debug/run_security.py` — 4 codes figés (propre/XSS-innerHTML/eval-URL/
+  pickle.loads). Fixtures en tempfile (le nœud lit target_files depuis disque).
+- [x] Étape F89-7 : `debug/run_judge.py` — 4 scénarios figés (correct+PASS / bug+FAIL / nit+PASS /
+  fail-closed security=None). SecurityOutput Pydantic + test_res dict construits. Le fail-closed
+  valide le hard block SANS LLM (post-mortem run 123955).
+- [x] Étape F89-8 : `debug/fixtures/golden/README.md` — convention golden files (déterministe =
+  golden possible ; LLM = non-golden, entrées figées seulement).
+- [x] Étape F89-9 : `debug/isolation/README.md` mis à jour — 2 familles (méthodologies manuelles
+  F-55 + scripts d'isolation LLM F-89) + tableau des 8 scripts.
+- [x] Étape F89-10 : `debug/` retiré du `.gitignore` — 37 fichiers d'outillage versionnés
+  (F-55 croyait l'avoir fait, ne l'était pas). Artefacts régénérables gardés ignorés
+  (coder_isolation_out, drafter_isolation_out, run dirs, __pycache__).
+- [x] Étape F89-11 : Validation — py_compile OK (6 scripts), imports OK (3 backends spawn
+  validés), suite pytest 729 passed / 12 échecs pré-existants (confirmés identiques, AUCUN
+  lié à F-89). 0 code de production modifié. 0 régression.
+- [x] Étape F89-12 : État disque synchronisé (feature_list.json F-89 pending→completed,
+  contract.md +critères 280-293, plan_usine_logicielle.md P17 🟡→🟢 + cases cochées,
+  progress.md, README.md). Commit + push + PR.
