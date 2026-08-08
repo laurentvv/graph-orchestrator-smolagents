@@ -983,3 +983,61 @@ Coder est appliquée correctement par Qwen3.5-9B.
 - [x] Étape F89-12 : État disque synchronisé (feature_list.json F-89 pending→completed,
   contract.md +critères 280-293, plan_usine_logicielle.md P17 🟡→🟢 + cases cochées,
   progress.md, README.md). Commit + push + PR.
+
+## Jalons de l'Itération (cycle Consolidation mémoire KG — F-68 Phase 1, P6-ter)
+> Priorité HAUTE (gisement d'écarts le plus massif de l'audit de cohérence INDEX qm).
+> Le KG DuckDB grossit indéfiniment : dedup_key ne capte que les doublons EXACTS (case/
+> espace), le nœud d'escalade F-23 concatène toutes les réfutations sans réduction, et
+> rien n'oublie jamais. Découpage en 3 phases (décision utilisateur : Phase 1 seule ce
+> cycle). Phase 1 = socle directement actionnable : consolidation LLM-juge (format qm
+> UPDATE/DELETE/ADD en JSON typé) + oubli par rétention temporelle. Phase 2 (scratch/
+> notebook cross-run) et Phase 3 (extraction sémantique L0-L3 TencentDB + heat) reportées.
+
+- [x] Étape F68-1 : Exploration (3 agents parallèles) — KG actuel cartographié (6 tables,
+  dedup_key = SHA1 lower/strip, add_claim dedup seulement si status='open', AUCUNE
+  consolidation aujourd'hui), références qm + TencentDB analysées (qm = contrat stockage
+  + consolidation UPDATE/DELETE/ADD line-oriented + oubli FIFO ; TencentDB = sémantique
+  riche store/skip/update/merge + heat + L0-L3 + recall hybride), points d'intégration
+  identifiés (fin de run workflows.py:858, miroir pattern escalation F-23).
+- [x] Étape F68-2 : Modèles Pydantic `models.py` — ConsolidationAction (kind update/delete/
+  add, index 1-based, text) + ConsolidationOutput (entity_id, actions, summary). Convention
+  additive (défauts []) — non-cassant.
+- [x] Étape F68-3 : Méthodes KG `knowledge_graph.py` — get_claims_by_run (JOIN provenance),
+  get_entities_by_run (distinct, fidèle qm ScopeId), update_claim_content (UPDATE + recalcul
+  dedup_key), delete_claim (CASCADE manuelle provenance+edges, jamais d'exception),
+  prune_old_claims (miroir prune_idempotency, preserve_kinds escalation+insight par défaut).
+  AUCUNE migration schéma (created_at/kind/status existent déjà).
+- [x] Étape F68-4 : Applier déterministe `apply_consolidation_actions` (module-level, 0 LLM,
+  port qm applyConsolidationActions) — ordre DELETE-d'abord puis UPDATE puis ADD, index
+  1-based, invalide → skip fail-open, ADD via add_claim kind='insight' source='consolidation'.
+- [x] Étape F68-5 : Config `config.py` + `.env.example` + `.env` — memory_consolidation_enabled
+  (défaut True), memory_consolidation_after (défaut 10 = qm DEFAULT_CONSOLIDATE_AFTER),
+  memory_retention_days (défaut 30). Opt-out MEMORY_CONSOLIDATION_ENABLED=false.
+- [x] Étape F68-6 : Nœud DSPy `dspy_nodes.py` — ConsolidationSignature (rôle judge + invariants
+  F-44 + procédure obligatoire 5 étapes + anti-nits + index 1-based) + execute_consolidation_node
+  (parcourt entités par run, skip si < seuil, numérote 1-based, truncate_output, _run_dspy_node
+  spec=no_think_spec think=False, applique via apply_consolidation_actions, NodeMetrics par
+  entité, dégradation gracieuse None/None si LLM down).
+- [x] Étape F68-7 : Branchement `workflows.py` fin de run — execute_consolidation_node si
+  enabled + prune_old_claims TOUJOURS (indépendant du flag). Dégradation gracieuse try/except.
+  Import execute_consolidation_node ajouté au bloc différé dspy_nodes.
+- [x] Étape F68-8 : Tests `tests/test_consolidation.py` — 24 tests (Tier 1 applier+KG 17,
+  Tier 2 nœud DSPy mocké 5, Tier 3 E2E workflow 3). Miroir test_escalation.py (mock
+  _configure_dspy + dspy.ChainOfThought, _setup_workflow_mocks avec fake_consolidation).
+- [x] Étape F68-9 : Script d'isolation `debug/run_consolidation.py` (convention F-89) — 3
+  scénarios figés (doublons/mixed/clean), KG temporaire isolé (ne pollue pas data/), affiche
+  claims avant/après + actions émises + vérif leçons préservées.
+- [x] Étape F68-10 : Validation — py_compile OK (7 fichiers), suite pytest 763 passed / 13
+  failed (12 pré-existants + 1 flaky `test_e2e_resume_reuses_same_run_dir` confirmé passant
+  en isolation). 0 régression F-68. 24/24 tests consolidation PASS.
+- [x] Étape F68-11 : État disque synchronisé (feature_list.json F-68 pending→in_progress,
+  contract.md +critères 294-303, plan_usine_logicielle.md P6-ter case consolidation cochée +
+  dashboard P6 mis à jour, progress.md, .env.example). Branche `feat/kg-memory-consolidation-f68`.
+
+> **Décision clé** : Phase 1 seule ce cycle (consolidation + oubli). Le plan original F-68
+> combinait 4 briques de 2 références (consolidation + scratch/notebook + extraction L0-L3 +
+> recall hybride) — trop pour un cycle unique. Le format JSON typé (OutputField DSPy) a été
+> préféré au format line-oriented pur qm car la convention projet (Judge/Security/Escalation)
+> émet du JSON structuré, plus fiable sur 9B. L'oubli par rétention temporelle a été préféré
+> au heat TencentDB (plus simple, miroir prune_idempotency, Pas de migration schéma).
+> Phases 2+3 = cycles futurs conditionnels.

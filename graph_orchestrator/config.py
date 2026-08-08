@@ -275,6 +275,19 @@ class Settings:
     stall_detector_enabled: bool = True
     stall_detector_threshold: int = 2
 
+    # --- Consolidation mémoire KG (Priorité 6-ter / F-68 Phase 1) ---
+    # Le KG DuckDB grossit indéfiniment : dedup_key ne capte que les doublons
+    # EXACTS, et rien n'oublie jamais. La consolidation (LLM-juge qm émettant
+    # UPDATE/DELETE/ADD sur claims numérotés) déduplique/fusionne les réfutations
+    # rabâchées à la fin d'un run. `memory_consolidation_after` = seuil minimal
+    # de claims par entité pour déclencher un appel LLM (qm DEFAULT_CONSOLIDATE_AFTER
+    # = 10 — en dessous, pas assez de matière pour consolider). `memory_retention_days`
+    # = oubli par rétention temporelle (prune des claims obsolètes, préserve
+    # escalation+insight = leçons durables). Opt-out `MEMORY_CONSOLIDATION_ENABLED=0`.
+    memory_consolidation_enabled: bool = True
+    memory_consolidation_after: int = 10
+    memory_retention_days: int = 30
+
     # --- Sanitizer (Auto-typage, Priorité 8 / F-42) ---
     # Coerce best-effort les arguments d'outil malformés émis par un petit LLM
     # (ex: `"1, 80"` → `80` pour un champ integer) AVANT l'appel d'outil, pour
@@ -414,6 +427,9 @@ def load_settings() -> Settings:
         loop_guard_threshold=_get_int("LOOP_GUARD_THRESHOLD", 3),
         stall_detector_enabled=_get_bool("STALL_DETECTOR_ENABLED", True),
         stall_detector_threshold=_get_int("STALL_DETECTOR_THRESHOLD", 2),
+        memory_consolidation_enabled=_get_bool("MEMORY_CONSOLIDATION_ENABLED", True),
+        memory_consolidation_after=_get_int("MEMORY_CONSOLIDATION_AFTER", 10),
+        memory_retention_days=_get_int("MEMORY_RETENTION_DAYS", 30),
         sanitizer_enabled=_get_bool("SANITIZER_ENABLED", True),
         read_before_write_enabled=_get_bool("READ_BEFORE_WRITE_ENABLED", True),
         skill_budget_tokens=_get_int("SKILL_BUDGET_TOKENS", 8000),

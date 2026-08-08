@@ -400,6 +400,7 @@ async def run_coding_workflow(
             execute_router_node,
             execute_prompt_refiner_node,
             execute_drafter_node,
+            execute_consolidation_node,
         )
     
         # Routine initiale de routage
@@ -856,6 +857,26 @@ async def run_coding_workflow(
                 results.append(res)
 
             print(f"\n[*] 3. Fusion des sous-tâches terminée pour {task['id']}.")
+
+        # Consolidation mémoire du KG (F-68 Phase 1, P6-ter) : dédup/fusion des
+        # claims rabâchés par entité via un LLM-juge (format qm UPDATE/DELETE/ADD).
+        # Puis oubli par rétention temporelle (prune des claims obsolètes, préserve
+        # escalation+insight = leçons durables). Toujours exécuté (même si consolidation
+        # désactivée — le prune est indépendant). Dégradation gracieuse : si le LLM
+        # est down, le KG reste intact (aucune mutation), on replie silencieusement.
+        if settings.memory_consolidation_enabled:
+            try:
+                cons_res, m_cons = await execute_consolidation_node(kg, run_id, settings)
+                if m_cons:
+                    all_metrics.extend(m_cons)
+            except Exception as cons_err:
+                print(f"[-] Consolidation mémoire en erreur ({cons_err}) — repli silencieux.")
+        try:
+            pruned = kg.prune_old_claims(settings.memory_retention_days)
+            if pruned:
+                print(f"[*] Oubli KG : {pruned} claim(s) > {settings.memory_retention_days}j prunée(s).")
+        except Exception as prune_err:
+            print(f"[-] Prune KG en erreur ({prune_err}) — repli silencieux.")
 
         # Toutes les sous-tâches sont traitées : on marque le run comme terminé.
         kg.clear_checkpoint(run_id)

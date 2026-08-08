@@ -46,6 +46,8 @@ These AIs (the Architect, the Coder, the Tester) don't share a fragile history p
 
 When a Coder fails and the Judge rejects the code, the reason for the rejection is etched into the Knowledge Graph. On the next iteration, the Coder queries this database to "learn from its mistakes", guaranteeing the system **never produces a regression**.
 
+> 🧹 **Consolidation + oubli (F-68)** : sans maintenance, le KG grossit indéfiniment avec des réfutations rabâchées. En fin de run, un nœud DSPy (LLM-juge, format qm `UPDATE/DELETE/ADD`) déduplique et fusionne les claims redondants par entité. Un oubli par rétention temporelle (`MEMORY_RETENTION_DAYS=30`) prune les claims obsolètes tout en préservant les leçons durables (`escalation` + `insight`). Opt-out `MEMORY_CONSOLIDATION_ENABLED=false`.
+
 > 💾 **Persistance** : la base du KG vit dans `data/graph_orchestrator.db` (chemin ancré au paquet, indépendant du cwd). Les autres bases DuckDB (`event_stream.duckdb`, `runs_history.duckdb`) sont regroupées au même endroit. Override possible via `KG_PATH` dans `.env`.
 
 ---
@@ -100,6 +102,7 @@ Debugging a single node (prompt, skill, logic) used to require relaunching the f
 | `debug/run_web_tester_standalone.py` | Web Tester | HTML correct/bugged | Functional assertions (F-45) |
 | `debug/isolation/run_linter.py` | Linter | 7 buggy/correct files | Syntax gatekeeper (deterministic, F-55) |
 | `debug/validate_static_tester_live.py` | Static Tester | HTML corrupted/correct | DOM + wiring gatekeeper (deterministic, F-54) |
+| `debug/run_consolidation.py` | Consolidation | 3 scenarios (duplicates/mixed/clean) | KG claim dedup/merge + forgetting (F-68) |
 
 ```bash
 uv run python debug/run_router.py                   # default fixture set

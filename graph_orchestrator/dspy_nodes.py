@@ -27,6 +27,7 @@ from .logging_utils import NodeMetrics
 from .models import (
     ArchitectOutput,
     CodeJudgeOutput,
+    ConsolidationOutput,
     EscalationOutput,
     Finding,
     PromptRefinerOutput,
@@ -35,6 +36,7 @@ from .models import (
     DrafterOutput,
 )
 from .prompts import with_invariants
+from .knowledge_graph import apply_consolidation_actions
 
 
 # ==========================================
@@ -365,6 +367,38 @@ class EscalationSignature(dspy.Signature):
     failure_history: str = dspy.InputField(desc="Historique concaténé des réfutations du Juge (bugs non résolus sur les 3 itérations). C'est la matière première du diagnostic.")
     current_code: str = dspy.InputField(desc="L'état actuel du code sur disque après le dernier échec")
     output: EscalationOutput = dspy.OutputField(desc="Diagnostic post-mortem structuré : cause racine, tentatives, leçon, gravité")
+
+
+class ConsolidationSignature(dspy.Signature):
+    __doc__ = with_invariants(
+        "judge",
+        """Memory Consolidation Architect (F-68, P6-ter) — consolidation de claims du Knowledge Graph.
+
+        Tu reçois N claims numérotés (1..N) pour une entité (fichier/sous-tâche). Ces claims sont
+        des observations et réfutations accumulées pendant le run. Ton rôle est de DÉDUPLIQUER et
+        FUSIONNER les claims redondants ou évolutifs pour éviter que le KG ne grossisse indéfiniment
+        avec du rabâchage.
+
+        PROCÉDURE OBLIGATOIRE :
+        1. Lis les N claims numérotés. Identifie les DOUBLONS SÉMANTIQUES (même idée, wording
+           différent — ex: "SyntaxError ligne 5" et "Erreur de syntaxe à la ligne 5").
+        2. Pour chaque groupe de doublons : émets UPDATE <index_du_meilleur>: <texte fusionné>
+           puis DELETE <index_des_autres>. Préfère UPDATE sur DELETE+ADD quand un fait a évolué.
+        3. DELETE le bruit : mécanique pure lookupable (chemins de fichiers, détails d'API triviaux,
+           timestamps) qui n'apporte rien à un run futur. MAIS NE JAMAIS supprimer un fait exploitant.
+        4. Si tu découvres un PATRON transversal (leçon qui émerge de plusieurs claims), émets
+           ADD: <insight consolidé> pour le capturer comme une nouvelle claim durable.
+        5. Si rien à consolider (peu de claims, peu de chevauchement), retourne actions=[].
+
+        ANTI-NITS : ne delete pas un claim juste pour un wording imparfait. Delete = redondance
+        RÉELLE ou bruit trivial. Update = fusion de 2+ claims sur le même sujet.
+
+        Les index sont 1-based (premier claim = index 1). Index invalide = action ignorée.
+        """,
+    )
+    entity_id: str = dspy.InputField(desc="L'entité (fichier/sous-tâche) consolidée")
+    numbered_claims: str = dspy.InputField(desc="Claims numérotés 1..N (format: 'N°1: <content>\\nN°2: <content>...'). Matière première de la consolidation.")
+    output: ConsolidationOutput = dspy.OutputField(desc="Actions de consolidation UPDATE/DELETE/ADD (index 1-based) + résumé")
 
 
 # ==========================================
@@ -981,3 +1015,116 @@ async def execute_escalation_node(subtask: dict, failure_history: str, reasoning
     except Exception as e:
         print(f"[-] Erreur critique DSPy (Escalation) : {e}")
         return None, None
+
+
+async def execute_consolidation_node(
+    kg,
+    run_id: str,
+    settings: Settings,
+) -> Tuple[Optional[dict], Optional[List[NodeMetrics]]]:
+    """Exécute la consolidation mémoire du Knowledge Graph (F-68 Phase 1, P6-ter).
+
+    Parcourt les claims de chaque entité du run, et pour celles qui dépassent le
+    seuil ``memory_consolidation_after``, demande à un LLM-juge d'émettre des actions
+    UPDATE/DELETE/ADD (format qm consolidation.ts) pour dédupliquer/fusionner les
+    claims rabâchés. L'applier déterministe (apply_consolidation_actions, 0 LLM)
+    applique ensuite ces actions.
+
+    Déclenché en fin de run (workflows.py), APRÈS la boucle des sous-tâches, AVANT
+    clear_checkpoint. Dégradation gracieuse : si le LLM est down, le KG reste intact
+    (aucune mutation), on retourne (None, None) et l'appelant replie silencieusement.
+
+    Args:
+        kg: Le KnowledgeGraph (instance de graph_orchestrator.knowledge_graph.KnowledgeGraph).
+            Typé ``Any`` ici pour éviter un import circulaire (knowledge_graph n'importe
+            rien de ce module, mais on évite le couplage type statique).
+        run_id (str): L'identifiant stable du run (pour filtrer les claims).
+        settings (Settings): Configuration globale (memory_consolidation_after, specs).
+
+    Returns:
+        Tuple (summary_dict | None, metrics_list | None). summary_dict =
+        {entity_id: {updated, deleted, added, skipped}} par entité consolidée.
+        (None, None) si rien à consolider ou erreur LLM.
+    """
+    if not settings.memory_consolidation_enabled:
+        return None, None
+
+    print("[*] DSPy Nœud de Consolidation mémoire (F-68) — parcours des entités du run...")
+    entities = kg.get_entities_by_run(run_id)
+    if not entities:
+        print("[*] Aucune entité à consolider pour ce run.")
+        return None, None
+
+    all_metrics: List[NodeMetrics] = []
+    summary: dict = {}
+
+    for entity_id in entities:
+        # On consolide uniquement les observations + réfutations (rabâchage).
+        # escalation + insight sont des leçons durables, préservées.
+        claims = [
+            c for c in kg.get_claims(entity_id)
+            if c.get("kind") in ("observation", "refutation")
+        ]
+        if len(claims) < settings.memory_consolidation_after:
+            continue  # qm maybeMaintain : pas assez de matière pour consolider
+
+        # Numérotation 1-based (convention qm).
+        numbered_text = "\n".join(
+            f"N°{i}: {c.get('content', '')}"
+            for i, c in enumerate(claims, start=1)
+        )
+        # Troncature pour protéger le contexte LLM.
+        numbered_text = truncate_output(
+            numbered_text,
+            head_lines=settings.stderr_head_lines,
+            tail_lines=settings.stderr_tail_lines,
+            max_chars=settings.feedback_max_chars,
+        )
+
+        print(f"[*] Consolidation de {entity_id} ({len(claims)} claims)...")
+        start_time = time.time()
+        try:
+            result = await _run_dspy_node(
+                signature=ConsolidationSignature,
+                predictor_kwargs={
+                    "entity_id": entity_id,
+                    "numbered_claims": numbered_text,
+                },
+                settings=settings,
+                spec=settings.no_think_spec,
+                think=False,
+            )
+            cons_output: ConsolidationOutput = result.output
+
+            # Applier déterministe (0 LLM) — le LLM décide, le code applique.
+            apply_result = apply_consolidation_actions(
+                kg=kg,
+                numbered_claims=claims,
+                actions=cons_output.actions,
+                entity_id=entity_id,
+                run_id=run_id,
+            )
+            summary[entity_id] = apply_result
+
+            all_metrics.append(NodeMetrics(
+                node="consolidation_dspy",
+                model=settings.no_think_spec.model,
+                duration_s=time.time() - start_time,
+                input_tokens=0,
+                output_tokens=0,
+            ))
+            print(
+                f"[*] {entity_id}: {apply_result['updated']} maj, "
+                f"{apply_result['deleted']} suppr, {apply_result['added']} ajouts, "
+                f"{apply_result['skipped']} skip."
+            )
+        except Exception as e:
+            print(f"[-] Erreur consolidation {entity_id} ({e}) — KG intact, skip.")
+            continue
+
+    if not summary:
+        print("[*] Aucune entité n'a dépassé le seuil de consolidation.")
+        return None, None
+
+    print(f"[*] Consolidation terminée : {len(summary)} entité(s) traitée(s).")
+    return summary, all_metrics if all_metrics else None
