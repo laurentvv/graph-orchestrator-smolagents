@@ -162,6 +162,34 @@ class EscalationOutput(BaseModel):
     severity: Literal["low", "medium", "high"]  # gravité de l'échec
 
 
+class ConsolidationAction(BaseModel):
+    """Action de consolidation émise par le LLM-juge sur un claim numéroté (1-based).
+
+    Port Python du type ConsolidationAction de qm (consolidation.ts) en JSON typé.
+    Le LLM-juge reçoit N claims numérotés 1..N et émet des actions pour dédupliquer
+    et fusionner les claims redondants ou évolutifs. L'applier déterministe
+    (apply_consolidation_actions, 0 LLM) consomme ensuite ces actions.
+    """
+    kind: Literal["update", "delete", "add"]
+    index: Optional[int] = None  # 1-based pour update/delete (numérotation qm)
+    text: Optional[str] = None  # nouveau texte pour update/add
+
+
+class ConsolidationOutput(BaseModel):
+    """Résultat d'une consolidation de claims par le LLM-juge (F-68 Phase 1, P6-ter).
+
+    Le nœud execute_consolidation_node lit les claims d'une entité (file:task_id),
+    les numérote, demande à un LLM-juge d'émettre des actions UPDATE/DELETE/ADD
+    (format qm line-oriented adapté en JSON typé — plus fiable sur 9B que du texte
+    libre), puis applique ces actions via apply_consolidation_actions (déterministe,
+    0 LLM). But : éviter que le KG DuckDB ne grossisse indéfiniment avec des
+    réfutations rabâchées d'une itération à l'autre.
+    """
+    entity_id: str
+    actions: List[ConsolidationAction] = []
+    summary: str = ""
+
+
 class AdversaryVerdict(BaseModel):
     """Verdict d'un sceptique sur UNE tâche (§5 : vérification adversaire)."""
     task_id: str

@@ -206,6 +206,94 @@ class KnowledgeGraph:
         self.conn.commit()
 
     # ==========================================
+    # Consolidation mémoire (F-68 — Priorité 6-ter)
+    # ==========================================
+    # Le KG DuckDB grossit indéfiniment : dedup_key ne capte que les doublons
+    # EXACTS (case/espace), le nœud d'escalade F-23 concatène toutes les
+    # réfutations sans réduction, et rien n'oublie jamais. Ces méthodes
+    # supportent la consolidation (LLM-juge émet UPDATE/DELETE/ADD, qm) et
+    # l'oubli par rétention temporelle (prune des claims obsolètes).
+    # Inspiration : references/qm/src/memory/strategies/consolidation.ts.
+
+    def update_claim_content(self, claim_id: int, content: str) -> bool:
+        """Met à jour le contenu d'une claim et recalcule son dedup_key.
+
+        Retourne True si la claim existait et a été modifiée, False sinon.
+        Utilisé par apply_consolidation_actions (action UPDATE). Le recalcul
+        du dedup_key garantit que la claim fusionnée ne sera pas réinsérée
+        comme doublon à la prochaine itération.
+        """
+        key = dedup_key(content)
+        cur = self.conn.execute(
+            "UPDATE claim SET content = ?, dedup_key = ? WHERE id = ?",
+            [content, key, claim_id],
+        )
+        self.conn.commit()
+        # DuckDB cursor rows affected — cur.rowcount peut être -1 selon le backend.
+        row = self.conn.execute(
+            "SELECT 1 FROM claim WHERE id = ? LIMIT 1", [claim_id]
+        ).fetchone()
+        return row is not None
+
+    def delete_claim(self, claim_id: int) -> bool:
+        """Supprime une claim et ses dépendances (provenance + edges).
+
+        CASCADE manuelle (DuckDB n'a pas de FK enforced) : supprime les rows
+        de provenance et les edges (src OU dst) avant la claim. Ne lève jamais
+        d'exception (claim absente = no-op). Utilisé par apply_consolidation_actions
+        (action DELETE) et prune_old_claims (oubli par rétention).
+        Retourne True si la claim existait.
+        """
+        row = self.conn.execute(
+            "SELECT 1 FROM claim WHERE id = ? LIMIT 1", [claim_id]
+        ).fetchone()
+        if row is None:
+            return False
+        self.conn.execute("DELETE FROM provenance WHERE claim_id = ?", [claim_id])
+        self.conn.execute(
+            "DELETE FROM edge WHERE src_claim_id = ? OR dst_claim_id = ?",
+            [claim_id, claim_id],
+        )
+        self.conn.execute("DELETE FROM claim WHERE id = ?", [claim_id])
+        self.conn.commit()
+        return True
+
+    def prune_old_claims(
+        self,
+        retention_days: int,
+        preserve_kinds: Optional[set] = None,
+    ) -> int:
+        """Supprime les claims plus anciens que ``retention_days`` jours.
+
+        Miroir de prune_idempotency (oubli par rétention temporelle). Préserve
+        par défaut les claims ``escalation`` et ``insight`` (leçons durables qui
+        survivent d'un run à l'autre — c'est le cœur de la mémoire cross-run).
+        Nettoie aussi les provenances/edges orphelins après suppression des claims.
+        Retourne le nombre de claims supprimées.
+        """
+        if preserve_kinds is None:
+            preserve_kinds = {"escalation", "insight"}
+        cutoff = datetime.now() - timedelta(days=retention_days)
+        # Sélection des ids à supprimer (kind non préservé ET ancien).
+        placeholders = ",".join(["?"] * len(preserve_kinds)) if preserve_kinds else ""
+        if preserve_kinds:
+            rows = self.conn.execute(
+                f"SELECT id FROM claim WHERE created_at < ? AND kind NOT IN ({placeholders})",
+                [cutoff, *preserve_kinds],
+            ).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT id FROM claim WHERE created_at < ?",
+                [cutoff],
+            ).fetchall()
+        ids = [r[0] for r in rows]
+        if not ids:
+            return 0
+        for cid in ids:
+            self.delete_claim(cid)  # gère la cascade
+        return len(ids)
+
+    # ==========================================
     # Checkpoints (Persistance d'État — Priorité 3)
     # ==========================================
 
@@ -325,6 +413,40 @@ class KnowledgeGraph:
             for r in rows
         ]
 
+    def get_claims_by_run(self, run_id: str) -> List[dict]:
+        """Retourne toutes les claims d'un run (JOIN claim+provenance sur run_id).
+
+        Utilisé par execute_consolidation_node pour parcourir les claims à
+        consolider à la fin d'un run (F-68). Inclut created_at pour permettre
+        le tri temporel et l'oubli par rétention.
+        """
+        rows = self.conn.execute(
+            "SELECT c.id, c.entity_id, c.content, c.kind, c.status, c.created_at "
+            "FROM claim c JOIN provenance p ON c.id = p.claim_id "
+            "WHERE p.run_id = ? ORDER BY c.id",
+            [run_id],
+        ).fetchall()
+        return [
+            {"id": r[0], "entity_id": r[1], "content": r[2], "kind": r[3],
+             "status": r[4], "created_at": str(r[5])}
+            for r in rows
+        ]
+
+    def get_entities_by_run(self, run_id: str) -> List[str]:
+        """Retourne les entity_id distincts ayant au moins une claim pour ce run.
+
+        Utilisé par execute_consolidation_node pour itérer entité par entité
+        (fidèle à qm createKeyedQueue<ScopeId> — on consolide par scope, on ne
+        mélange pas les réfutations de fichiers différents).
+        """
+        rows = self.conn.execute(
+            "SELECT DISTINCT c.entity_id FROM claim c "
+            "JOIN provenance p ON c.id = p.claim_id WHERE p.run_id = ? "
+            "ORDER BY c.entity_id",
+            [run_id],
+        ).fetchall()
+        return [r[0] for r in rows]
+
     def get_provenance(self, claim_id: int) -> List[dict]:
         """Retourne la provenance d'une claim (qui l'a produite, avec quel modèle)."""
         rows = self.conn.execute(
@@ -402,3 +524,122 @@ class KnowledgeGraph:
 
     def close(self) -> None:
         self.conn.close()
+
+
+# ==========================================
+# Applier de consolidation (F-68 — Priorité 6-ter)
+# ==========================================
+
+def apply_consolidation_actions(
+    kg: "KnowledgeGraph",
+    numbered_claims: List[dict],
+    actions: list,
+    entity_id: str,
+    run_id: Optional[str] = None,
+) -> dict:
+    """Applique des actions UPDATE/DELETE/ADD sur des claims numérotés (1-based).
+
+    Port Python de applyConsolidationActions (qm, consolidation.ts). 100% déterministe,
+    0 LLM — le LLM-juge DÉCIDE (execute_consolidation_node), cette fonction APPLIQUE.
+
+    Args:
+        kg: Le KnowledgeGraph où appliquer les mutations.
+        numbered_claims: Liste de dicts claims avec clé 'id' et 'content',
+            numérotés 1..N dans l'ordre (l'index qm est 1-based).
+        actions: Liste de ConsolidationAction (Pydantic) ou dicts
+            {kind, index?, text?}. kind ∈ {'update','delete','add'}.
+        entity_id: L'entité consolidée (pour logger et pour les ADD).
+        run_id: run_id pour les provenances des ADD (optionnel).
+
+    Returns:
+        Dict résumé {updated, deleted, added, skipped} pour observabilité.
+
+    Sémantique (fidèle qm) :
+      - DELETE : supprime la claim à l'index 1-based (cascade provenance+edges).
+      - UPDATE : remplace le contenu de la claim à l'index 1-based.
+      - ADD    : ajoute une nouvelle claim kind='insight' (source='consolidation').
+      - Index invalide (hors 1..N) → skip (fail-open, jamais crash).
+      - Ordre : on applique d'abord les DELETE, puis les UPDATE, puis les ADD,
+        pour éviter qu'un UPDATE sur un index déjà supprimé ne pointe vers la
+        mauvaise claim (qm applique delete set + update map simultanément via
+        reconstruction ; ici on opère par id stable donc l'ordre importe peu,
+        mais DELETE-d'abord reste le plus sûr).
+    """
+    n_updated = 0
+    n_deleted = 0
+    n_added = 0
+    n_skipped = 0
+
+    # Indexage 1-based → id de claim (stable, ne change pas pendant l'application).
+    index_to_id: dict = {}
+    for i, claim in enumerate(numbered_claims, start=1):
+        index_to_id[i] = claim.get("id")
+
+    def _get(action, key, default=None):
+        """Lit un champ depuis un ConsolidationAction Pydantic ou un dict."""
+        if hasattr(action, key):
+            return getattr(action, key)
+        return action.get(key, default) if isinstance(action, dict) else default
+
+    # 1) DELETE — on collecte les ids puis supprime (évite double suppression).
+    to_delete = set()
+    for action in actions:
+        kind = _get(action, "kind")
+        if kind != "delete":
+            continue
+        idx = _get(action, "index")
+        if idx is None or idx not in index_to_id:
+            n_skipped += 1
+            continue
+        to_delete.add(index_to_id[idx])
+    for cid in to_delete:
+        if kg.delete_claim(cid):
+            n_deleted += 1
+
+    # 2) UPDATE — remplace le contenu.
+    for action in actions:
+        kind = _get(action, "kind")
+        if kind != "update":
+            continue
+        idx = _get(action, "index")
+        text = _get(action, "text")
+        if idx is None or idx not in index_to_id or not text:
+            n_skipped += 1
+            continue
+        cid = index_to_id[idx]
+        if cid in to_delete:
+            # Déjà supprimée — on ne peut pas updater un fantôme.
+            n_skipped += 1
+            continue
+        if kg.update_claim_content(cid, text):
+            n_updated += 1
+
+    # 3) ADD — nouvelles claims consolidées (leçons/faits fusionnés).
+    for action in actions:
+        kind = _get(action, "kind")
+        if kind != "add":
+            continue
+        text = _get(action, "text")
+        if not text:
+            n_skipped += 1
+            continue
+        new_id = kg.add_claim(
+            entity_id=entity_id,
+            content=text,
+            kind="insight",
+            confidence=0.8,
+            source="consolidation",
+            run_id=run_id,
+        )
+        if new_id is not None:
+            n_added += 1
+        else:
+            n_skipped += 1  # doublon exact (dedup_key)
+
+    return {
+        "updated": n_updated,
+        "deleted": n_deleted,
+        "added": n_added,
+        "skipped": n_skipped,
+    }
+
