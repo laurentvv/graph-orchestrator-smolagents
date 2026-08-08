@@ -724,8 +724,16 @@ async def execute_coder_node(
                 target_dirs = [os.path.dirname(f) for f in task["target_files"]]
                 common_dir = os.path.commonpath(target_dirs) if target_dirs else ""
                 agents_md_path = os.path.join(common_dir, "AGENTS.md") if common_dir else "AGENTS.md"
-                if os.path.exists(agents_md_path):
-                    with open(agents_md_path, "r", encoding="utf-8") as f:
+                # Défense path traversal (review Kilo) : target_files vient potentiellement
+                # d'un LLM (Architect). On valide que le chemin résolu reste dans le workspace
+                # (cwd = dossier du run, cf F-40 _scoped_chdir). Un chemin comme
+                # "../../etc/passwd" est rejeté silencieusement (fail-open, pas de crash).
+                workspace_root = os.path.realpath(os.getcwd())
+                resolved = os.path.realpath(agents_md_path)
+                if os.path.exists(resolved) and (
+                    resolved == workspace_root or resolved.startswith(workspace_root + os.sep)
+                ):
+                    with open(resolved, "r", encoding="utf-8") as f:
                         local_agents_content = f.read()
                     local_agents_md_block = f"\n### DIRECTIVES SPÉCIFIQUES AU COMPOSANT (AGENTS.md)\n{local_agents_content}\n"
             except Exception:
