@@ -25,6 +25,7 @@ from graph_orchestrator.stall_detector import (
     WRITE_TOOLS,
     DeliveryOutcome,
     StallDetector,
+    _dominant_material_hash,
     classify_turn,
     compute_material_fingerprint,
 )
@@ -169,6 +170,57 @@ def test_material_fingerprint_string_arguments():
     h1 = compute_material_fingerprint("write_file", {"path": "a", "content": "hello"})
     h2 = compute_material_fingerprint("write_file", args_str)
     assert h1 == h2
+
+
+def test_material_fingerprint_codeagent_source_line_differs_on_content():
+    """NON-RÉGRESSION bug F-88 : ligne source Python (CodeAgent) distinguée par contenu.
+
+    BUG : extract_tool_calls_from_step CodeAgent retourne args = la ligne source
+    strippée entière (ex: 'write_file(path="a", content="AAA")'), PAS un dict.
+    Avant le fix, _extract_str retournait "" pour ce cas (pas un dict, pas du JSON)
+    → tous les writes CodeAgent avaient le même hash SHA256("") → le stall detector
+    ne resetait JAMAIS son compteur → faux positif à 17 turns sur du debug légitime.
+    Après le fix : _extract_str parse la valeur après content= via regex.
+    """
+    # Deux lignes source CodeAgent au contenu différent → hashs différents.
+    line_a = 'write_file(path="index.html", content="<html>AAA</html>")'
+    line_b = 'write_file(path="index.html", content="<html>BBB</html>")'
+    h_a = compute_material_fingerprint("write_file", line_a)
+    h_b = compute_material_fingerprint("write_file", line_b)
+    assert h_a != h_b, "deux writes au contenu différent doivent avoir des hashs différents"
+    assert h_a != "", "un write CodeAgent doit produire un hash non vide (pas SHA256(''))"
+
+    # Même contenu rejoué → même hash (reproduction = stall, le vrai cas à détecter).
+    line_c = 'write_file(path="index.html", content="<html>AAA</html>")'
+    h_c = compute_material_fingerprint("write_file", line_c)
+    assert h_a == h_c, "deux writes au contenu identique doivent avoir le même hash"
+
+
+def test_stall_detector_resets_on_codeagent_write_with_new_content():
+    """NON-RÉGRESSION bug F-88 : end-to-end sur la vraie chaîne CodeAgent.
+
+    Reproduit le failure mode du run E2E (17 turns sans reset) : un Coder CodeAgent
+    qui alterne read (PROGRESS) + write (ACCOUNTABLE) avec un contenu qui change.
+    Avant le fix : tous les writes avaient le même hash → jamais de reset → stall faux.
+    Après le fix : le hash change avec le contenu → reset sur matériel nouveau.
+    """
+    from graph_orchestrator.loop_guard import extract_tool_calls_from_step
+
+    sd = StallDetector(threshold=3)
+    # Turn 1 : read (PROGRESS, pas de matériel) → incrément.
+    read_step = SimpleNamespace(code_action='read_file(path="a.js")')
+    sd.record(classify_turn(extract_tool_calls_from_step(read_step)),
+              _dominant_material_hash(extract_tool_calls_from_step(read_step)))
+    # Turn 2 : write AAA (ACCOUNTABLE, matériel nouveau) → reset.
+    write_a = SimpleNamespace(code_action='write_file(path="a.js", content="AAA")')
+    sd.record(classify_turn(extract_tool_calls_from_step(write_a)),
+              _dominant_material_hash(extract_tool_calls_from_step(write_a)))
+    assert not sd.is_stalled(), "un write avec contenu nouveau doit resetter le compteur"
+    # Turn 3 : write BBB (ACCOUNTABLE, contenu DIFFÉRENT) → reset (pas stall).
+    write_b = SimpleNamespace(code_action='write_file(path="a.js", content="BBB")')
+    sd.record(classify_turn(extract_tool_calls_from_step(write_b)),
+              _dominant_material_hash(extract_tool_calls_from_step(write_b)))
+    assert not sd.is_stalled(), "un write avec contenu différent doit resetter (pas stall)"
 
 
 # ==========================================

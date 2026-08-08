@@ -101,12 +101,24 @@ def classify_turn(tool_calls: list[tuple[str, Any]]) -> DeliveryOutcome:
 
 
 def _extract_str(arguments: Any, key: str) -> str:
-    """Extrait une valeur string d'un dict d'arguments (peut être dict ou JSON-string)."""
+    """Extrait une valeur string d'un dict d'arguments.
+
+    Gère 3 formes d'arguments (selon le type d'agent) :
+      1. dict structuré (ToolCallingAgent natif) → .get(key).
+      2. JSON-string (ToolCallingAgent sérialisé) → json.loads puis .get(key).
+      3. Ligne source Python (CodeAgent, ex: 'write_file(path="a", content="x")')
+         → regex qui extrait la valeur après `key=`. C'est le cas qui manquait
+         et qui causait le bug F-88 : extract_tool_calls_from_step CodeAgent
+         retourne la ligne source strippée entière, pas un dict. Sans ce
+         fallback, _extract_str retournait toujours "" → tous les writes
+         CodeAgent avaient le même hash → le stall detector ne resetait JAMAIS
+         son compteur → faux positif à 17 turns sur du debug légitime.
+    """
     if isinstance(arguments, dict):
         val = arguments.get(key, "")
         return val if isinstance(val, str) else str(val)
     if isinstance(arguments, str):
-        # Cas ToolCallingAgent : arguments sérialisés en JSON-string.
+        # Cas 2 : JSON-string (ToolCallingAgent sérialisé).
         import json
 
         try:
@@ -116,6 +128,20 @@ def _extract_str(arguments: Any, key: str) -> str:
                 return val if isinstance(val, str) else str(val)
         except (json.JSONDecodeError, ValueError):
             pass
+        # Cas 3 : ligne source Python (CodeAgent). On parse la valeur après
+        # `key=` (guillemets doubles ou simples). Best-effort : si la valeur
+        # contient elle-même des guillemets imbriqués, on prend tout jusqu'au
+        # prochain `, <ident>=` ou fin de parenthèse. Suffisant pour distinguer
+        # deux writes au contenu différent (le but du stall detector).
+        import re
+
+        # Cherche key="..." ou key='...' (gourmand, jusqu'au guillemet fermant).
+        m = re.search(rf"{re.escape(key)}\s*=\s*\"(.*?)\"", arguments, re.DOTALL)
+        if m:
+            return m.group(1)
+        m = re.search(rf"{re.escape(key)}\s*=\s*'(.*?)'", arguments, re.DOTALL)
+        if m:
+            return m.group(1)
     return ""
 
 
