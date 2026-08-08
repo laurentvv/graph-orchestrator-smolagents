@@ -681,7 +681,7 @@ async def execute_coder_node(
 - 'write_file' crée automatiquement les sous-répertoires manquants NÉCESSAIRES
   (ex: pour `landing_page/index.html`, le dossier `landing_page/` est créé) — mais
   ne préfixe JAMAIS par le dossier de run lui-même.
-- ⚠️ AVANT TOUTE CHOSE : Appelle l'outil `check_run_state()` pour vérifier si tu es dans une boucle de redémarrage. Si cet outil t'indique que tu as crashé lors de la tentative précédente (ex: erreur de JSON ou de syntaxe sur l'appel final), LES FICHIERS SONT SÛREMENT DÉJÀ LÀ. Ne les écrase pas aveuglément !
+- ⚠️ AVANT TOUTE CHOSE : Si tu as un BROUILLON DRAFTER (section '### BROUILLON DE L'ALGORITHM DRAFTER' ci-dessous), SAUTE check_run_state et va DIRECTEMENT lire le draft — c'est ton point de départ, pas la peine de vérifier l'état (tu es en iteration 1 propre). Sinon (pas de draft), appelle `check_run_state()` pour vérifier si tu es dans une boucle de redémarrage.
 - ⚠️ AVANT DE CRÉER UN FICHIER : Vérifie TOUJOURS s'il existe déjà en utilisant l'outil `list_directory(path=".")`. S'il est listé et semble complet, NE LE RÉÉCRIS PAS en entier (utilise search_replace/append_file).
 - Sinon, tu DOIS créer le fichier avant de passer au reste.
 - 🚀 AUTO-VALIDATION RAPIDE (JS) : Si tu génères ou modifies du JavaScript, vérifie instantanément sa syntaxe AVANT d'appeler final_answer. Fais-le en exécutant `import subprocess; print(subprocess.run(["node", "--check", "ton_script.js"], capture_output=True, text=True).stderr)` dans ton bloc Python. Cela te coûte 1 step et t'évite un rejet du Linter."""
@@ -810,6 +810,13 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
 9. ANIMATION PAS-À-PAS (Visualiseurs/Algos) : Pour les visualisations d'algorithmes (tri, pathfinding, etc.), utilise TOUJOURS `async`/`await` avec une fonction `sleep` (ex: `const sleep = ms => new Promise(r => setTimeout(r, ms));`). N'utilise JAMAIS de boucle `while` ou `for` classique contenant un simple `setTimeout` asynchrone, cela exécute tout instantanément.
    ❌ FAUX : function sort() {{ while(swapped) {{ setTimeout(() => swap(), delay); }} }}
    ✅ JUSTE : async function sort() {{ while(swapped) {{ await sleep(delay); swap(); }} }}
+10. VOIS LES RÉSULTATS DE TES OUTILS : une assignation `x = read_file(...)` retourne
+   `None` (tu ne vois PAS le contenu). Pour LIRE un résultat, tu DOIS soit faire
+   `print(read_file(path="..."))` soit appeler l'outil directement comme dernière
+   expression du bloc (`read_file(path="...")` sans assignation). SANS le print,
+   le contenu est INVISIBLE → tu boucleras en croyant que la lecture a échoué.
+   ❌ FAUX : contenu = read_file(path="draft.md")  → Out: None (aveugle)
+   ✅ JUSTE : print(read_file(path="draft.md"))    → Out: <le contenu>
 
 ### FORMAT DE SORTIE (obligatoire)
 Tu écris du code Python dans un bloc ````python ... ```` qui appelle tes outils. Exemple one-shot :
