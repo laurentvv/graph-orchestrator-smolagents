@@ -716,6 +716,29 @@ async def execute_coder_node(
             # Repli : sélection contextuelle (regex) si l'Architect n'a rien sélectionné.
             skills_block = build_conditional_skills_block(task.get("content", ""))
 
+        # F-76 : Contextualisation par package (AGENTS.md localisés)
+        local_agents_md_block = ""
+        if "target_files" in task and task["target_files"]:
+            import os
+            try:
+                target_dirs = [os.path.dirname(f) for f in task["target_files"]]
+                common_dir = os.path.commonpath(target_dirs) if target_dirs else ""
+                agents_md_path = os.path.join(common_dir, "AGENTS.md") if common_dir else "AGENTS.md"
+                # Défense path traversal (review Kilo) : target_files vient potentiellement
+                # d'un LLM (Architect). On valide que le chemin résolu reste dans le workspace
+                # (cwd = dossier du run, cf F-40 _scoped_chdir). Un chemin comme
+                # "../../etc/passwd" est rejeté silencieusement (fail-open, pas de crash).
+                workspace_root = os.path.realpath(os.getcwd())
+                resolved = os.path.realpath(agents_md_path)
+                if os.path.exists(resolved) and (
+                    resolved == workspace_root or resolved.startswith(workspace_root + os.sep)
+                ):
+                    with open(resolved, "r", encoding="utf-8") as f:
+                        local_agents_content = f.read()
+                    local_agents_md_block = f"\n### DIRECTIVES SPÉCIFIQUES AU COMPOSANT (AGENTS.md)\n{local_agents_content}\n"
+            except Exception:
+                pass
+
         # F-32 : prompt réécrit selon la structure canonique des audits (references aider/
         # crush/opencode/openfox/deer-flow + web Anthropic/OpenAI/Cline/SWE-agent) :
         # Rôle → Règles critiques → Format sortie → One-shot → Workflow (adapté stratégie)
@@ -850,11 +873,13 @@ NOTE CRITIQUE : "linter_ok" doit être True SEULEMENT si tu as vérifié ton cod
 
 ### EXIGENCE DE QUALITÉ
 Code prêt pour la production, respectant les conventions du langage.
-{skills_block}
+{skills_block}{local_agents_md_block}
 
 ### Contenu de la tâche
 {task['content']}
-""" + (f"\n### Contexte global (Rappel du cahier des charges initial)\n{task['original_content']}\n" if task.get("original_content") else "") + """
+""" + (f"\n### Contexte global (Rappel du cahier des charges initial)\n{task['original_content']}\n" if task.get("original_content") else "") + (
+    f"\n{task['lessons']}\n" if task.get("lessons") else ""
+) + """
 ### RAPPEL (récence)
 - AGIS via des appels d'outils Python, ne raconte pas.
 - Chaque bloc syntaxiquement complet, ≤ 60 lignes ou découpe via append_file.
