@@ -46,7 +46,11 @@ These AIs (the Architect, the Coder, the Tester) don't share a fragile history p
 
 When a Coder fails and the Judge rejects the code, the reason for the rejection is etched into the Knowledge Graph. On the next iteration, the Coder queries this database to "learn from its mistakes", guaranteeing the system **never produces a regression**.
 
-> 🧹 **Consolidation + oubli (F-68)** : sans maintenance, le KG grossit indéfiniment avec des réfutations rabâchées. En fin de run, un nœud DSPy (LLM-juge, format qm `UPDATE/DELETE/ADD`) déduplique et fusionne les claims redondants par entité. Un oubli par rétention temporelle (`MEMORY_RETENTION_DAYS=30`) prune les claims obsolètes tout en préservant les leçons durables (`escalation` + `insight`). Opt-out `MEMORY_CONSOLIDATION_ENABLED=false`.
+> 🧹 **Consolidation + oubli (F-68 Phase 1)** : sans maintenance, le KG grossit indéfiniment avec des réfutations rabâchées. En fin de run, un nœud DSPy (LLM-juge, format qm `UPDATE/DELETE/ADD`) déduplique et fusionne les claims redondants par entité. Un oubli par rétention temporelle (`MEMORY_RETENTION_DAYS=30`) prune les claims obsolètes tout en préservant les leçons durables (`escalation` + `insight`). Opt-out `MEMORY_CONSOLIDATION_ENABLED=false`.
+
+> 🔁 **Recall cross-run (F-68 Phase 2)** : la mémoire survive d'un run à l'autre. En DÉBUT de run, les N leçons durables les plus récentes (`insight` + `escalation` — les kinds que l'oubli préserve) sont rappelées et injectées dans le prompt du Coder. Un run qui a appris qu'« une itération par `requestAnimationFrame` évite l'animation instantanée » transmet cette leçon aux runs suivants. Déterministe (0 LLM, 1 query SQL globale), top-N par récence, note « ignore si non pertinent ». Opt-out `MEMORY_RECALL_ENABLED=false`.
+
+> 📦 **Contextualisation par package (F-76)** : un fichier `AGENTS.md` au niveau du dossier cible des `target_files` est lu et injecté dans le prompt du Coder comme directives spécifiques au composant (règles i18n, design system, conventions d'un sous-projet). Défense path traversal (containment realpath, fail-open).
 
 > 💾 **Persistance** : la base du KG vit dans `data/graph_orchestrator.db` (chemin ancré au paquet, indépendant du cwd). Les autres bases DuckDB (`event_stream.duckdb`, `runs_history.duckdb`) sont regroupées au même endroit. Override possible via `KG_PATH` dans `.env`.
 
@@ -102,7 +106,8 @@ Debugging a single node (prompt, skill, logic) used to require relaunching the f
 | `debug/run_web_tester_standalone.py` | Web Tester | HTML correct/bugged | Functional assertions (F-45) |
 | `debug/isolation/run_linter.py` | Linter | 7 buggy/correct files | Syntax gatekeeper (deterministic, F-55) |
 | `debug/validate_static_tester_live.py` | Static Tester | HTML corrupted/correct | DOM + wiring gatekeeper (deterministic, F-54) |
-| `debug/run_consolidation.py` | Consolidation | 3 scenarios (duplicates/mixed/clean) | KG claim dedup/merge + forgetting (F-68) |
+| `debug/run_consolidation.py` | Consolidation | 3 scenarios (duplicates/mixed/clean) | KG claim dedup/merge + forgetting (F-68 Ph1) |
+| `debug/run_lesson_recall.py` | Lesson Recall | 3 scenarios (default/empty/scratch) | Cross-run durable lesson recall (F-68 Ph2) |
 
 ```bash
 uv run python debug/run_router.py                   # default fixture set

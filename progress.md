@@ -1041,3 +1041,52 @@ Coder est appliquée correctement par Qwen3.5-9B.
 > émet du JSON structuré, plus fiable sur 9B. L'oubli par rétention temporelle a été préféré
 > au heat TencentDB (plus simple, miroir prune_idempotency, Pas de migration schéma).
 > Phases 2+3 = cycles futurs conditionnels.
+
+## Jalons de l'Itération (cycle F-68 Phase 2 — Recall cross-run scratch/notebook)
+> Deux-tier DÉJÀ IMPLICITE après Phase 1 : scratch = observation/refutation (éphémère,
+> pruné 30j), notebook = insight/escalation (durable, préservé cross-run par
+> prune_old_claims). Promotion = consolidation Phase 1 (déjà câblée). Ce qui manquait =
+> le RECALL (qm memory-service.ts:recall = 0 LLM). Décision utilisateur : Recall-centric +
+> Global unique (top-N par récence, note « ignore si non pertinent »).
+
+- [x] Étape P2-1 : `graph_orchestrator/knowledge_graph.py` — méthode `recall_lessons(kinds,
+  limit)` (query SQL globale : SELECT content,kind,created_at WHERE kind IN (insight,
+  escalation) AND status='open' ORDER BY created_at DESC LIMIT N, PAS de filtre entity_id
+  ni run_id = global). Kinds défaut {insight,escalation} cohérent avec preserve_kinds.
+- [x] Étape P2-2 : `graph_orchestrator/lesson_recall.py` (nouveau module, 0 LLM, miroir
+  targeted_retest.py/judge_diff.py) — `recall_lessons` (wrapper) + `build_lessons_block`
+  (formatage markdown numéroté + badges [LEÇON]/[ESCALATION] + note explicite + troncature
+  truncate_output) + `DEFAULT_LESSON_KINDS`.
+- [x] Étape P2-3 : `config.py` + `load_settings()` — memory_recall_enabled (défaut True),
+  memory_recall_limit (défaut 8), memory_recall_max_chars (défaut 1500). `.env.example`
+  + `.env` local (AGENTS.md §7). Opt-out MEMORY_RECALL_ENABLED=false.
+- [x] Étape P2-4 : `workflows.py` — recall DÉBUT de run (après Router, avant boucle sous-
+  tâches) → lessons_block → sub_dict['lessons']. Dégradation gracieuse try/except. Pas de
+  checkpoint (cheap, refait pour fraîcheur).
+- [x] Étape P2-5 : `nodes.py` — injection prompt Coder (pattern conditionnel original_content
+  étendu, task.get('lessons') après original_content avant RAPPEL récence).
+- [x] Étape P2-6 : `tests/test_lesson_recall.py` — 31 tests / 6 classes (recall_lessons KG
+  10 + wrapper 2 + build_lessons_block 8 + prompt injection 4 + E2E workflow 4 + config 3).
+  Migration tempfile.mkdtemp() → tmp_path fixture (review Kilo, anti-fuite disque).
+- [x] Étape P2-7 : Script isolation `debug/run_lesson_recall.py` (convention F-89) — 3
+  scénarios default/empty/scratch, KG temporaire isolé, vérif d'invariance (scratch non
+  rappelé). `debug/print_lessons.py` corrigé (table 'claims' → 'claim', review Kilo CRITICAL).
+- [x] Étape P2-8 : Validation — py_compile OK (7 fichiers), 31 tests PASS, suite pytest main
+  final 785 passed / 11 failed (pré-existants confirmés identiques). Smoke recall : 4 leçons
+  durables rappelées, scratch ignoré. 0 régression.
+
+## Jalons de l'Itération (cycle F-76 — Contextualisation par package AGENTS.md localisés)
+- [x] Étape F76-1 : `nodes.py execute_coder_node` — lecture `AGENTS.md` au commonpath des
+  dirname des target_files, injection sous `### DIRECTIVES SPÉCIFIQUES AU COMPOSANT`.
+- [x] Étape F76-2 : Défense path traversal (review Kilo WARNING) — containment realpath,
+  workspace_root = os.path.realpath(os.getcwd()), fail-open silencieux.
+- [x] Étape F76-3 : feature_list.json F-76 completed + plan_usine_logicielle.md case cochée.
+
+## Synthèse merge (#50 + #51)
+- [x] PR #50 (F-76) squash-merged → main (37e6ec0). Branche supprimée.
+- [x] PR #51 (F-68 Phase 2) squash-merged → main (0694fac) après rebase (skip commit F-76
+  base déjà mergé). Branche supprimée.
+- [x] 3 retours Kilo adressés : CRITICAL print_lessons.py table + WARNING ×2 tempfile leaks
+  + WARNING path traversal F-76.
+- [x] Validation main final : py_compile OK, 785 passed / 11 pré-existants (0 régression),
+  smoke recall OK, branches nettoyées.
