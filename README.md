@@ -84,6 +84,31 @@ uv run python scripts/parse_run_result.py --dry-run                         # pr
 ```
 The script parses the "RÉSULTAT FINAL DU GRAPHE" block, derives the status (✅/❌/⚠️/⏹️), and appends a row (duplicate-guarded). The recommended first validation is `bubble-sort-monofile` (bounded, single file).
 
+## 🔬 Node Isolation Scripts (F-55 + F-89)
+
+Debugging a single node (prompt, skill, logic) used to require relaunching the full 30-40 min graph. The `debug/` folder ships **isolation scripts** that call the **real production function** for each node (0 mock, 0 duplication) with fixed fixtures — so you iterate in **seconds/minutes**, not tens of minutes.
+
+| Script | Node | Fixed inputs | What it validates |
+| :--- | :--- | :--- | :--- |
+| `debug/run_router.py` | Router | 5 prompts (Python/React/HTML/Rust/ambiguous) | No JS-overflow (F-56a bug) |
+| `debug/run_prompt_refiner.py` | PromptRefiner | 3 prompts (vague/structured/minimal) | Vague-term detection without scope invention |
+| `debug/run_architect.py` | Architect | Bubble Sort spec | 1 file = 1 subtask, techno-driven strategy |
+| `debug/run_drafter.py` | Drafter | Bubble Sort JS subtask | Draft logic quality (reinjectable into Coder) |
+| `debug/run_security.py` | Security | 4 codes (clean/XSS/eval/pickle) | OWASP detection without false positives |
+| `debug/run_judge.py` | Judge | 4 scenarios (correct/bug/nit/fail-closed) | Verdict + fail-closed without LLM |
+| `debug/run_coder.py` | Coder | Bubble Sort 3 files (+ optional draft) | Full code output (F-88) |
+| `debug/run_web_tester_standalone.py` | Web Tester | HTML correct/bugged | Functional assertions (F-45) |
+| `debug/isolation/run_linter.py` | Linter | 7 buggy/correct files | Syntax gatekeeper (deterministic, F-55) |
+| `debug/validate_static_tester_live.py` | Static Tester | HTML corrupted/correct | DOM + wiring gatekeeper (deterministic, F-54) |
+
+```bash
+uv run python debug/run_router.py                   # default fixture set
+uv run python debug/run_judge.py fail-closed        # single named scenario
+uv run python debug/run_architect.py @prompts/spec.md  # custom input from file
+```
+
+See [`debug/isolation/README.md`](debug/isolation/README.md) for the full convention (manual methodologies F-55 + LLM isolation scripts F-89 + golden files).
+
 ---
 
 > 📖 **For Systems Engineers & Architects:**

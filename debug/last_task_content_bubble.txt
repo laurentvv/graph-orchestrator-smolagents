@@ -1,0 +1,66 @@
+Créer index.html complet : squelette HTML5 + CSS dark-mode responsive       
+ (body, header, contrôles, conteneur barres, footer) + JS Bubble Sort animé. 
+ Valeurs : 20 éléments, plage 1–100. Couleurs : #4fc3f7 (A=comparé), #a5d6a7 
+ (B=trié), #78909c (C=non traité). Boutons : Réinitialiser, Démarrer. Slider 
+ vitesse (ms). Compteur comparaisons. Animation via                          
+ setTimeout(requestAnimationFrame). Layout responsive mobile/desktop. Barres 
+ verticales proportionnelles. Pas de librairie externe.                      
+                                                                             
+ ### Contexte global (Rappel du cahier des charges initial)                  
+ ## Objectif                                                                 
+ Créer un visualiseur interactif et autonome de l'algorithme Bubble Sort en  
+ un seul fichier HTML (incluant CSS et JS). L'objectif est de permettre à    
+ l'utilisateur de comprendre visuellement le fonctionnement du tri par des   
+ animations fluides et un feedback en temps réel.                            
+                                                                             
+ ## Fonctionnalités attendues                                                
+ - **Génération de données** : Bouton « Réinitialiser » qui génère un        
+ tableau de nombres aléatoires (taille fixe ou variable, ex: 20 éléments).   
+ - **Animation du tri** : Bouton « Démarrer le tri » qui exécute le Bubble   
+ Sort avec une animation pas-à-pas.                                          
+ - **Contrôle de vitesse** : Un curseur (slider) permettant de modifier      
+ dynamiquement le délai (en ms) entre chaque comparaison et échange.         
+ - **Compteur de performance** : Affichage en temps réel du nombre total de  
+ comparaisons effectuées.                                                    
+ - **Code couleur dynamique** :                                              
+     - Couleur A : Barres actuellement comparées.                            
+     - Couleur B : Barres déjà triées (fixées en fin de tableau).            
+     - Couleur C : Barres non encore traitées (état initial).                
+ - **Interface Utilisateur** :                                               
+     - Design en mode sombre (Dark Mode).                                    
+     - Layout responsive (adapté aux mobiles et desktops).                   
+     - Barres verticales dont la hauteur est proportionnelle à la valeur     
+ numérique.                                                                  
+                                                                             
+ ## Contraintes techniques                                                   
+ - **Stack** : HTML5, CSS3, JavaScript Vanilla uniquement.                   
+ - **Fichier unique** : Tout le code doit être contenu dans `index.html`     
+ (pas de fichiers `.css` ou `.js` externes, pas de bibliothèques externes    
+ comme jQuery ou Tailwind via CDN).                                          
+ - **Performance** : Utiliser `requestAnimationFrame` ou `setTimeout` de     
+ manière propre pour ne pas bloquer le thread principal pendant l'animation. 
+ - **Design** : Appliquer les principes de la capacité `frontend-design`     
+ (typographie lisible, contrastes élevés pour le mode sombre, espacements    
+ harmonieux).                                                                
+                                                                             
+ ## Critères de validation                                                   
+ - **Test de rendu** : La page doit s'afficher correctement sans erreur dans 
+ la console.                                                                 
+ - **Test fonctionnel** :                                                    
+     - Cliquer sur 'Réinitialiser' doit changer les hauteurs des barres.     
+     - Cliquer sur 'Démarrer' doit déclencher une séquence d'animations où   
+ les couleurs changent correctement.                                         
+     - Le compteur de comparaisons doit s'incrémenter à chaque étape.        
+     - La vitesse doit varier proportionnellement au curseur.                
+ - **Validation visuelle** : Utiliser `devtools-preview` pour confirmer que  
+ les barres sont bien proportionnelles et que le design est responsive.      
+                                                                             
+ ## À clarifier                                                              
+ - Taille du tableau par défaut (ex: 15, 30, 50 éléments ?).                 
+ - Plage de valeurs des nombres aléatoires (ex: 1 à 100 ?).                  
+                                                                             
+ ### RAPPEL (récence)                                                        
+ - AGIS via des appels d'outils Python, ne raconte pas.                      
+ - Chaque bloc syntaxiquement complet, ≤ 60 lignes ou découpe via            
+ append_file.                                                                
+ - AUCUN placeholder. final_answer quand les fichiers cibles sont créés.
