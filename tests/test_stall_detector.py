@@ -25,7 +25,7 @@ from graph_orchestrator.stall_detector import (
     WRITE_TOOLS,
     DeliveryOutcome,
     StallDetector,
-    _dominant_material_hash,
+    dominant_material_hash,
     classify_turn,
     compute_material_fingerprint,
 )
@@ -172,6 +172,24 @@ def test_material_fingerprint_string_arguments():
     assert h1 == h2
 
 
+def test_material_fingerprint_multi_replace_codeagent_source_line():
+    """NON-RÉGRESSION review Spec #2 : multi_replace CodeAgent doit produire un hash non vide.
+
+    Bug : compute_material_fingerprint ne gérait multi_replace que via
+    arguments.get("replacements") (suppose un dict). Pour un CodeAgent, arguments
+    est une ligne source Python → repl=None → retour "" (hash vide). Le hotfix F-88
+    initial couvrait write_file/append/edit/search_replace mais avait oublié multi_replace.
+    Maintenant : fallback hash de la ligne source pour distinguer 2 multi_replace différents.
+    """
+    line_a = 'multi_replace(path="a.js", replacements=[{"old_string": "foo", "new_string": "bar"}])'
+    line_b = 'multi_replace(path="a.js", replacements=[{"old_string": "baz", "new_string": "qux"}])'
+    h_a = compute_material_fingerprint("multi_replace", line_a)
+    h_b = compute_material_fingerprint("multi_replace", line_b)
+    assert h_a != h_b, "deux multi_replace au contenu différent doivent avoir des hashs différents"
+    assert h_a != "", "un multi_replace CodeAgent doit produire un hash non vide (pas '')"
+
+
+
 def test_material_fingerprint_codeagent_source_line_differs_on_content():
     """NON-RÉGRESSION bug F-88 : ligne source Python (CodeAgent) distinguée par contenu.
 
@@ -210,16 +228,16 @@ def test_stall_detector_resets_on_codeagent_write_with_new_content():
     # Turn 1 : read (PROGRESS, pas de matériel) → incrément.
     read_step = SimpleNamespace(code_action='read_file(path="a.js")')
     sd.record(classify_turn(extract_tool_calls_from_step(read_step)),
-              _dominant_material_hash(extract_tool_calls_from_step(read_step)))
+              dominant_material_hash(extract_tool_calls_from_step(read_step)))
     # Turn 2 : write AAA (ACCOUNTABLE, matériel nouveau) → reset.
     write_a = SimpleNamespace(code_action='write_file(path="a.js", content="AAA")')
     sd.record(classify_turn(extract_tool_calls_from_step(write_a)),
-              _dominant_material_hash(extract_tool_calls_from_step(write_a)))
+              dominant_material_hash(extract_tool_calls_from_step(write_a)))
     assert not sd.is_stalled(), "un write avec contenu nouveau doit resetter le compteur"
     # Turn 3 : write BBB (ACCOUNTABLE, contenu DIFFÉRENT) → reset (pas stall).
     write_b = SimpleNamespace(code_action='write_file(path="a.js", content="BBB")')
     sd.record(classify_turn(extract_tool_calls_from_step(write_b)),
-              _dominant_material_hash(extract_tool_calls_from_step(write_b)))
+              dominant_material_hash(extract_tool_calls_from_step(write_b)))
     assert not sd.is_stalled(), "un write avec contenu différent doit resetter (pas stall)"
 
 

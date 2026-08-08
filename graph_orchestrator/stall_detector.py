@@ -181,6 +181,14 @@ def compute_material_fingerprint(tool_name: str, arguments: Any) -> str:
                     )
             payload = "\n".join(parts)
             return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+        # Cas CodeAgent (ligne source Python) : _extract_str via regex extrait le
+        # contenu brut de replacements= (qui peut être une repr de list Python).
+        # On hashe la portion de la ligne source après "replacements=" — suffisant
+        # pour distinguer deux multi_replace au contenu différent (le but du stall
+        # detector). HOTFIX parallèle au 3e cas de _extract_str (bug F-88 initial
+        # qui ne couvrait que write_file/append/edit/search_replace, pas multi_replace).
+        if isinstance(arguments, str):
+            return hashlib.sha256(arguments.encode("utf-8")).hexdigest()[:16]
         return ""
 
     # write_file / append_file : content. edit_file / search_replace : old + new.
@@ -194,7 +202,7 @@ def compute_material_fingerprint(tool_name: str, arguments: Any) -> str:
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 
-def _dominant_material_hash(tool_calls: list[tuple[str, Any]]) -> str:
+def dominant_material_hash(tool_calls: list[tuple[str, Any]]) -> str:
     """Hash matériel dominant d'un turn = celui du DERNIER write du turn.
 
     Un turn peut enchaîner plusieurs writes (ex: squelette + append). Le

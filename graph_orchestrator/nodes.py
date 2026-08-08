@@ -36,7 +36,7 @@ from .skills_loader import (
 from .skill_loader_tool import load_skill
 from .skills_loader import load_skill_body
 from .loop_guard import LoopGuard, extract_tool_calls_from_step
-from .stall_detector import StallDetector, classify_turn, _dominant_material_hash
+from .stall_detector import StallDetector, classify_turn, dominant_material_hash
 from .llama_server import model_lifecycle
 from .orphan_repair import repair_orphan_steps
 from .sanitizer import sanitize_tools
@@ -294,7 +294,7 @@ async def run_with_retry(
                 for step in steps:
                     step_calls = extract_tool_calls_from_step(step)
                     outcome = classify_turn(step_calls)
-                    material_hash = _dominant_material_hash(step_calls)
+                    material_hash = dominant_material_hash(step_calls)
                     stall_detector.record(outcome, material_hash)
                 if stall_detector.is_stalled():
                     stall_msg = stall_detector.signal()
