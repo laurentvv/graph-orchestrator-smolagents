@@ -22,7 +22,7 @@ import pytest
 from graph_orchestrator.static_tester import (
     execute_static_tester_node,
     static_check_html,
-    extract_inline_js,
+    extract_all_js,
     _check_js_syntax,
     _check_event_wiring,
     _detect_html,
@@ -97,26 +97,26 @@ def test_detect_html_extensions():
 # ==========================================
 # Extraction JS inline
 # ==========================================
-def test_extract_inline_js_basic():
-    assert extract_inline_js("<script>let x = 1;</script>") == "let x = 1;"
+def test_extract_all_js_basic():
+    assert extract_all_js("<script>let x = 1;</script>") == "let x = 1;"
 
 
-def test_extract_inline_js_skips_external_src():
+def test_extract_all_js_skips_external_src():
     """Un <script src='app.js'> ne doit PAS être extrait (code externe indispo)."""
     html = '<script src="app.js"></script><script>let y = 2;</script>'
-    js = extract_inline_js(html)
+    js = extract_all_js(html)
     assert "let y = 2;" in js
     assert "app.js" not in js
 
 
-def test_extract_inline_js_multiple_blocks():
+def test_extract_all_js_multiple_blocks():
     html = "<script>a()</script><script>b()</script>"
-    assert "a()" in extract_inline_js(html)
-    assert "b()" in extract_inline_js(html)
+    assert "a()" in extract_all_js(html)
+    assert "b()" in extract_all_js(html)
 
 
-def test_extract_inline_js_empty_when_no_script():
-    assert extract_inline_js("<html><body><h1>Hi</h1></body></html>") == ""
+def test_extract_all_js_empty_when_no_script():
+    assert extract_all_js("<html><body><h1>Hi</h1></body></html>") == ""
 
 
 # ==========================================

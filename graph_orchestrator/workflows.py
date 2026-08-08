@@ -444,6 +444,30 @@ async def run_coding_workflow(
         else:
             coding_router_lang = None
 
+        # --- Recall mémoire cross-run (F-68 Phase 2, P6-ter) -------------------
+        # Récupère les N leçons durables (insight+escalation) les plus récentes de
+        # TOUS les runs passés — ce sont celles qui ont survécu à l'oubli
+        # (prune_old_claims préserve escalation+insight). Injectées dans le prompt
+        # Coder via sub_dict["lessons"] pour fermer la boucle d'apprentissage.
+        # Déterministe (0 LLM, 1 query SQL), refait à chaque run (pas de checkpoint
+        # — cheap, et garantit les leçons les plus fraîches). Dégradation gracieuse
+        # (KG illisible → bloc vide, le Coder tourne sans mémoire).
+        lessons_block = ""
+        if settings.memory_recall_enabled:
+            try:
+                from .lesson_recall import recall_lessons, build_lessons_block
+                recalled = recall_lessons(kg, limit=settings.memory_recall_limit)
+                lessons_block = build_lessons_block(
+                    recalled, max_chars=settings.memory_recall_max_chars
+                )
+                if lessons_block:
+                    print(
+                        f"[*] Recall mémoire cross-run : {len(recalled)} leçon(s) "
+                        f"durable(s) injectée(s) au Coder."
+                    )
+            except Exception as recall_err:
+                print(f"[-] Recall mémoire en erreur ({recall_err}) — repli silencieux.")
+
         # --- État de progression (Persistance d'État — Priorité 3 : Checkpoints) --
         # Holder mutable partagé entre les scopes de la fonction. Contient le plan de
         # l'Architect sérialisé (évite de relancer ce nœud LLM coûteux à la reprise) +
@@ -552,6 +576,11 @@ async def run_coding_workflow(
                     # ciblé (max_steps 6, prompt priorise les bugs, smoke-test rapide).
                     # Vide en itération 1 → Tester en mode complet (checklist F-46).
                     "refutations": refutations_raw,
+                    # F-68 Phase 2 : leçons durables cross-run (notebook global). Rappelées
+                    # en DÉBUT de run (recall déterministe 0 LLM) et identiques pour toutes
+                    # les sous-tâches/itérations du run. Bloc vide si recall désactivé/KG vide
+                    # → le Coder tourne sans mémoire (rétrocompat stricte).
+                    "lessons": lessons_block,
                 }
 
                 # 0. Drafter (iteration 1 uniquement)
@@ -568,7 +597,7 @@ async def run_coding_workflow(
                         draft_path = os.path.join(run_output_dir, draft_filename)
                         with open(draft_path, "w", encoding="utf-8") as f:
                             f.write(draft_res.draft_markdown)
-                        sub_dict["content"] += f"\n\n### BROUILLON DE L'ALGORITHM DRAFTER\nL'Algorithm Drafter (Architecte Logiciel) a conçu la logique parfaite pour toi. Il a écrit tout le code brut dans le fichier `{draft_filename}` (à la racine du projet).\n\n⚠️ INSTRUCTION CRITIQUE : Ton PREMIER appel d'outil DOIT ÊTRE `read_file(path=\"{draft_filename}\")` pour récupérer ce code. Ensuite, utilise tes outils `write_file` ou `append_file` pour l'injecter proprement dans les vrais fichiers cibles."
+                        sub_dict["draft_instruction"] = f"\n\n### BROUILLON DE L'ALGORITHM DRAFTER\nL'Algorithm Drafter (Architecte Logiciel) a conçu la logique parfaite pour toi. Il a écrit tout le code brut dans le fichier `{draft_filename}` (à la racine du projet).\n\n⚠️ INSTRUCTION CRITIQUE : Ton PREMIER appel d'outil DOIT ÊTRE `read_file(path=\"{draft_filename}\")` pour récupérer ce code. Ensuite, utilise tes outils `write_file` ou `append_file` pour l'injecter proprement dans les vrais fichiers cibles."
 
                 # 1. Coder (smolagents, modèle FAST)
                 coder_res, m1 = await execute_coder_node(sub_dict, fast_model, settings)

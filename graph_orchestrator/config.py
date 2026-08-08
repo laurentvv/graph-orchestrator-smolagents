@@ -288,6 +288,19 @@ class Settings:
     memory_consolidation_after: int = 10
     memory_retention_days: int = 30
 
+    # --- Mémoire cross-run recall (Priorité 6-ter / F-68 Phase 2) ---
+    # Rappelle en DÉBUT de run les N leçons durables (insight+escalation) les plus
+    # récentes de TOUS les runs passés — ce sont celles qui ont survécu à l'oubli
+    # (prune_old_claims préserve escalation+insight). Injectées dans le prompt
+    # Coder pour fermer la boucle d'apprentissage. Déterministe (0 LLM, 1 query
+    # SQL). `memory_recall_limit` = top-N par récence (qm recall = last RECALL_MAX_CHARS
+    # du notebook ; ici on borne par compte, plus prévisible sur 9B). `memory_recall_
+    # max_chars` = budget caractères du bloc injecté (défense anti-saturation contexte).
+    # Opt-out `MEMORY_RECALL_ENABLED=0` (A/B ou debug).
+    memory_recall_enabled: bool = True
+    memory_recall_limit: int = 8
+    memory_recall_max_chars: int = 1500
+
     # --- Sanitizer (Auto-typage, Priorité 8 / F-42) ---
     # Coerce best-effort les arguments d'outil malformés émis par un petit LLM
     # (ex: `"1, 80"` → `80` pour un champ integer) AVANT l'appel d'outil, pour
@@ -430,6 +443,9 @@ def load_settings() -> Settings:
         memory_consolidation_enabled=_get_bool("MEMORY_CONSOLIDATION_ENABLED", True),
         memory_consolidation_after=_get_int("MEMORY_CONSOLIDATION_AFTER", 10),
         memory_retention_days=_get_int("MEMORY_RETENTION_DAYS", 30),
+        memory_recall_enabled=_get_bool("MEMORY_RECALL_ENABLED", True),
+        memory_recall_limit=_get_int("MEMORY_RECALL_LIMIT", 8),
+        memory_recall_max_chars=_get_int("MEMORY_RECALL_MAX_CHARS", 1500),
         sanitizer_enabled=_get_bool("SANITIZER_ENABLED", True),
         read_before_write_enabled=_get_bool("READ_BEFORE_WRITE_ENABLED", True),
         skill_budget_tokens=_get_int("SKILL_BUDGET_TOKENS", 8000),
