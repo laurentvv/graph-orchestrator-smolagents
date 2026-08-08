@@ -122,3 +122,41 @@ Pour assurer l'amélioration continue de l'usine logicielle (Feature F-61), nous
 4. **Application** : Une fois la validation obtenue, interviens directement dans le code source pour durcir les prompts ou les skills.
 
 *Exemple réel : L'interdiction du top-level await dans Puppeteer et l'obligation d'utiliser des déclarations de fonction pour `evaluate_script` ont été diagnostiquées via l'analyse des crashes et fixées en direct dans les prompts des nœuds.*
+
+## 9. Tests Rapides par Nœud (Isolation LLM — F-89)
+
+**Problème** : Un run E2E complet (`uv run agent_graph.py`, §7) dure 30-40 min en GPU-local. Quand on modifie le prompt, un skill ou la logique d'**un seul nœud**, relancer tout le graphe pour valider la modification est un gaspillage massif — 95% du temps est passé à valider des nœuds non modifiés.
+
+**Solution** : Le dossier `debug/` contient un **script d'isolation par nœud LLM** (Feature F-89). Chaque script appelle la **vraie fonction de production** (0 mock, 0 duplication) avec des **entrées figées** (fixtures), ce qui permet de couper, corriger, relancer en **secondes/minutes** au lieu de dizaines de minutes.
+
+**Quand l'utiliser** : à chaque fois qu'une modification impacte un ou plusieurs nœuds (changement de prompt, de skill, de config, de logique), **avant** de lancer le run E2E complet. C'est la boucle de debug itérative recommandée.
+
+### Scripts disponibles
+
+| Script | Nœud testé | Commande | Usage type |
+|---|---|---|---|
+| `debug/run_router.py` | Router (classification langage) | `uv run python debug/run_router.py` | Valider qu'un prompt Python ne déborde pas vers JS (bug F-56a). Jeu de 5 prompts (Python/React/HTML/Rust/ambigu). |
+| `debug/run_prompt_refiner.py` | PromptRefiner (meta-prompt) | `uv run python debug/run_prompt_refiner.py` | Valider la détection de termes vagues sans inventer de scope. 3 prompts (vagues/structuré/minimaliste). |
+| `debug/run_architect.py` | Architect (découpage + stratégie) | `uv run python debug/run_architect.py` | Valider le découpage (1 fichier = 1 sous-tâche, stratégie techno-driven). Spec Bubble Sort par défaut. |
+| `debug/run_drafter.py` | Drafter (logique pure) | `uv run python debug/run_drafter.py` | Valider la qualité du draft de logique. Sauvegarde le draft pour réinjection dans le Coder. |
+| `debug/run_security.py` | Security (audit OWASP) | `uv run python debug/run_security.py` | Valider la détection XSS/eval/pickle sans faux positifs. 4 codes (propre/XSS/eval/pickle). |
+| `debug/run_judge.py` | Judge (verdict final) | `uv run python debug/run_judge.py` | Valider le verdict + le fail-closed (security=None sans LLM). 4 scénarios (correct/bug/nit/fail-closed). |
+| `debug/run_coder.py` | Coder (génération code) | `uv run python debug/run_coder.py` | Valider le code produit (3 fichiers). Draft optionnel : `--draft debug/drafter_isolation_out/draft_isolation.md`. |
+| `debug/run_web_tester_standalone.py` | Web Tester (assertions) | `uv run python debug/run_web_tester_standalone.py` | Valider les assertions fonctionnelles sur un HTML donné. |
+| `debug/isolation/run_linter.py` | Linter (déterministe, 0 LLM) | `uv run python debug/isolation/run_linter.py` | Valider le gatekeeper syntaxe (7 scénarios buggés/corrects, millisecondes). |
+| `debug/validate_static_tester_live.py` | Static Tester (déterministe) | `uv run python debug/validate_static_tester_live.py` | Valider le gatekeeper DOM + wiring (2 scénarios, <6s). |
+
+### Boucle de debug recommandée
+
+1. **Identifier le nœud impacté** par ta modification (ex: tu as changé le prompt du Judge dans `dspy_nodes.py`).
+2. **Lancer son script d'isolation** : `uv run python debug/run_judge.py`.
+3. **Observer le verdict** : le script affiche le contrat (modèle, durée) + la sortie (verdict, findings, métriques).
+4. **Couper si erreur**, corriger le prompt/code, relancer (la boucle prend des secondes à minutes, pas 30 min).
+5. **Input ad hoc** : pour tester un cas spécifique sans modifier le script, passe l'input en CLI — `uv run python debug/run_judge.py bug` (scénario nommé) ou `uv run python debug/run_router.py "ma description de tâche"` (prompt unique), ou `@fichier` pour charger depuis un fichier.
+6. **Une fois le nœud validé isolément**, relancer le run E2E complet (§7) pour valider l'intégration de bout en bout.
+
+### Détail technique important
+
+Tous les nœuds DSPy (Router/PromptRefiner/Architect/Drafter/Security/Judge) **ignorent** le paramètre `*_model` qu'on leur passe — le vrai modèle vient de `_run_dspy_node → model_lifecycle(spec)` qui spawn son propre llama-server. Les scripts d'isolation reproduisent donc fidèlement le comportement production (prompts F-44/F-56/F-65, DSPy, model_lifecycle), en sautant juste le reste du graphe.
+
+Voir [`debug/isolation/README.md`](./debug/isolation/README.md) pour la convention complète (méthodologies manuelles F-55 + scripts d'isolation LLM F-89 + golden files pour les nœuds déterministes).
