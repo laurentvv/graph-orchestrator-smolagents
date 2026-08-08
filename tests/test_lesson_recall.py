@@ -10,7 +10,6 @@ Couvre les critères de contract.md (recall-centric + global unique).
 
 import asyncio
 import os
-import tempfile
 from dataclasses import replace
 
 import pytest
@@ -465,11 +464,10 @@ class TestRecallWorkflow:
         assert captured["sub_dict"] is not None, "le Coder doit avoir été appelé"
         assert "lessons" in captured["sub_dict"], "la clé 'lessons' doit être dans sub_dict"
 
-    def test_recall_populates_lessons_from_prior_run(self, monkeypatch):
+    def test_recall_populates_lessons_from_prior_run(self, monkeypatch, tmp_path):
         """Une leçon durable d'un run antérieur est rappelée et injectée au Coder."""
         # Pré-peuple le KG sur disque avec une insight cross-run.
-        tmp = tempfile.mkdtemp()
-        db = os.path.join(tmp, "kg_recall_e2e.db")
+        db = str(tmp_path / "kg_recall_e2e.db")
         pre_kg = KnowledgeGraph(db)
         pre_kg.add_entity("file:prior", kind="file")
         prior_cid = pre_kg.add_claim(
@@ -488,10 +486,9 @@ class TestRecallWorkflow:
         assert "Une itération par requestAnimationFrame" in lessons
         assert "LEÇONS DE RUNS PRÉCÉDENTS" in lessons
 
-    def test_recall_disabled_empty_lessons(self, monkeypatch):
+    def test_recall_disabled_empty_lessons(self, monkeypatch, tmp_path):
         """memory_recall_enabled=False → clé 'lessons' présente mais vide."""
-        tmp = tempfile.mkdtemp()
-        db = os.path.join(tmp, "kg_recall_off.db")
+        db = str(tmp_path / "kg_recall_off.db")
         pre_kg = KnowledgeGraph(db)
         pre_kg.add_entity("file:prior", kind="file")
         pre_kg.add_claim(

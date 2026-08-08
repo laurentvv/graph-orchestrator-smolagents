@@ -4,7 +4,7 @@ def print_lessons():
     conn = duckdb.connect("data/graph_orchestrator.db", read_only=True)
     query = """
         SELECT content, kind, created_at, status
-        FROM claims
+        FROM claim
         WHERE kind IN ('insight', 'escalation')
           AND status = 'open'
         ORDER BY created_at DESC
