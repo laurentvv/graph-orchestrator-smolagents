@@ -36,6 +36,7 @@ from .skills_loader import (
 from .skill_loader_tool import load_skill
 from .skills_loader import load_skill_body
 from .loop_guard import LoopGuard, extract_tool_calls_from_step
+from .stall_detector import StallDetector, classify_turn, dominant_material_hash
 from .llama_server import model_lifecycle
 from .orphan_repair import repair_orphan_steps
 from .sanitizer import sanitize_tools
@@ -174,6 +175,7 @@ async def run_with_retry(
     api_base: Optional[str] = None,
     timeout_s: Optional[float] = None,
     idle_breaker_threshold: int = 3,
+    stall_detector: Optional["StallDetector"] = None,
 ) -> Tuple[Optional[object], Optional[NodeMetrics]]:
     """Exécute un agent avec retry. Retourne (données_validées, métriques).
 
@@ -263,13 +265,17 @@ async def run_with_retry(
             last_metrics = _metrics_from_run(agent, run_result)
 
             # P3 (Anti-Loop) : enregistre les tool calls de CETTE exécution dans
-            # le guard.
+            # le guard. On profite de la boucle sur les steps pour extraire les tool
+            # calls UNE fois (servira aussi au stall_detector ci-dessous).
             loop_msg = None
-            if loop_guard is not None:
-                steps = getattr(getattr(agent, "memory", None), "steps", None) or []
+            all_calls: list[tuple[str, object]] = []
+            steps = getattr(getattr(agent, "memory", None), "steps", None) or []
+            if loop_guard is not None or stall_detector is not None:
                 for step in steps:
-                    for tname, targs in extract_tool_calls_from_step(step):
-                        loop_guard.record(tname, targs)
+                    all_calls.extend(extract_tool_calls_from_step(step))
+            if loop_guard is not None:
+                for tname, targs in all_calls:
+                    loop_guard.record(tname, targs)
                 loop_msg = loop_guard.repeated_action()
                 if loop_msg:
                     print(
@@ -277,6 +283,27 @@ async def run_with_retry(
                         f"action répétée {loop_guard.threshold}+ fois → circuit-breaker."
                     )
                     prompt += f"\n\n{loop_msg}"
+
+            # P3-bis (Stall Detector, F-88) : classifie chaque STEP (un step = un
+            # turn loopx) + hashe le matériel produit pour détecter soit une
+            # reproduction (même contenu réécrit) soit une série de turns sans
+            # livrable nouveau. Complément de F-36 qui ne hashe que l'input. Le
+            # signal guide le retry UNIQUEMENT si validated est None.
+            stall_msg = None
+            if stall_detector is not None:
+                for step in steps:
+                    step_calls = extract_tool_calls_from_step(step)
+                    outcome = classify_turn(step_calls)
+                    material_hash = dominant_material_hash(step_calls)
+                    stall_detector.record(outcome, material_hash)
+                if stall_detector.is_stalled():
+                    stall_msg = stall_detector.signal()
+                    if stall_msg:
+                        print(
+                            f"[!] Stall Detector (Tentative {attempt + 1}/{max_retries}) : "
+                            f"{stall_detector.threshold}+ turns sans matériel nouveau → circuit-breaker."
+                        )
+                        prompt += f"\n\n{stall_msg}"
 
             if validated:
                 error_msg = None
@@ -311,6 +338,12 @@ async def run_with_retry(
                             f"[i] LoopGuard a signalé une répétition, mais le "
                             f"final_answer est valide → succès conservé (priorité au "
                             f"résultat sur le guard F-36)."
+                        )
+                    if stall_msg:
+                        print(
+                            f"[i] Stall Detector a signalé un stall, mais le "
+                            f"final_answer est valide → succès conservé (priorité au "
+                            f"résultat sur le stall detector F-88)."
                         )
                     return validated, last_metrics
 
@@ -413,6 +446,9 @@ async def run_with_retry(
         # (sinon un bug d'une tentative précédente fait déclencher la suivante).
         if loop_guard is not None:
             loop_guard.reset()
+        # P3-bis (F-88) : même alignement pour le stall detector.
+        if stall_detector is not None:
+            stall_detector.reset()
 
 
     print(f"[-] Échec définitif pour {model_class.__name__} après {max_retries} tentatives.")
@@ -645,7 +681,7 @@ async def execute_coder_node(
 - 'write_file' crée automatiquement les sous-répertoires manquants NÉCESSAIRES
   (ex: pour `landing_page/index.html`, le dossier `landing_page/` est créé) — mais
   ne préfixe JAMAIS par le dossier de run lui-même.
-- ⚠️ AVANT TOUTE CHOSE : Appelle l'outil `check_run_state()` pour vérifier si tu es dans une boucle de redémarrage. Si cet outil t'indique que tu as crashé lors de la tentative précédente (ex: erreur de JSON ou de syntaxe sur l'appel final), LES FICHIERS SONT SÛREMENT DÉJÀ LÀ. Ne les écrase pas aveuglément !
+- ⚠️ AVANT TOUTE CHOSE : Si tu as un BROUILLON DRAFTER (section '### BROUILLON DE L'ALGORITHM DRAFTER' ci-dessous), SAUTE check_run_state et va DIRECTEMENT lire le draft — c'est ton point de départ, pas la peine de vérifier l'état (tu es en iteration 1 propre). Sinon (pas de draft), appelle `check_run_state()` pour vérifier si tu es dans une boucle de redémarrage.
 - ⚠️ AVANT DE CRÉER UN FICHIER : Vérifie TOUJOURS s'il existe déjà en utilisant l'outil `list_directory(path=".")`. S'il est listé et semble complet, NE LE RÉÉCRIS PAS en entier (utilise search_replace/append_file).
 - Sinon, tu DOIS créer le fichier avant de passer au reste.
 - 🚀 AUTO-VALIDATION RAPIDE (JS) : Si tu génères ou modifies du JavaScript, vérifie instantanément sa syntaxe AVANT d'appeler final_answer. Fais-le en exécutant `import subprocess; print(subprocess.run(["node", "--check", "ton_script.js"], capture_output=True, text=True).stderr)` dans ton bloc Python. Cela te coûte 1 step et t'évite un rejet du Linter."""
@@ -774,6 +810,13 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
 9. ANIMATION PAS-À-PAS (Visualiseurs/Algos) : Pour les visualisations d'algorithmes (tri, pathfinding, etc.), utilise TOUJOURS `async`/`await` avec une fonction `sleep` (ex: `const sleep = ms => new Promise(r => setTimeout(r, ms));`). N'utilise JAMAIS de boucle `while` ou `for` classique contenant un simple `setTimeout` asynchrone, cela exécute tout instantanément.
    ❌ FAUX : function sort() {{ while(swapped) {{ setTimeout(() => swap(), delay); }} }}
    ✅ JUSTE : async function sort() {{ while(swapped) {{ await sleep(delay); swap(); }} }}
+10. VOIS LES RÉSULTATS DE TES OUTILS : une assignation `x = read_file(...)` retourne
+   `None` (tu ne vois PAS le contenu). Pour LIRE un résultat, tu DOIS soit faire
+   `print(read_file(path="..."))` soit appeler l'outil directement comme dernière
+   expression du bloc (`read_file(path="...")` sans assignation). SANS le print,
+   le contenu est INVISIBLE → tu boucleras en croyant que la lecture a échoué.
+   ❌ FAUX : contenu = read_file(path="draft.md")  → Out: None (aveugle)
+   ✅ JUSTE : print(read_file(path="draft.md"))    → Out: <le contenu>
 
 ### FORMAT DE SORTIE (obligatoire)
 Tu écris du code Python dans un bloc ````python ... ```` qui appelle tes outils. Exemple one-shot :
@@ -827,6 +870,14 @@ Code prêt pour la production, respectant les conventions du langage.
             threshold=settings.loop_guard_threshold,
             enabled=settings.loop_guard_enabled,
         )
+        # P3-bis (F-88) : Stall Detector — complément du LoopGuard pour détecter
+        # (a) un même contenu réécrit (hash d'output identique) et (b) une série de
+        # turns sans livrable matériel nouveau. Orthogonal à F-36 (niveau turn vs
+        # niveau tool call isolé). Reset entre retries (aligné sur loop_guard).
+        stall = StallDetector(
+            threshold=settings.stall_detector_threshold,
+            enabled=settings.stall_detector_enabled,
+        )
         # max_retries can be slightly higher for coding since it involves tool use steps
         # max_retries can be slightly higher for coding since it involves tool use steps
         with model_lifecycle(settings.fast_spec) as srv:
@@ -854,6 +905,7 @@ Code prêt pour la production, respectant les conventions du langage.
             return await run_with_retry(
                 local_coder, prompt, CoderOutput, settings.worker_max_retries, loop_guard=guard,
                 idle_breaker_threshold=settings.idle_breaker_threshold,
+                stall_detector=stall,
             )
 
 
