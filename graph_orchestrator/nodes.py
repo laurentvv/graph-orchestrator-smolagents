@@ -877,6 +877,7 @@ Code prêt pour la production, respectant les conventions du langage.
 
 ### Contenu de la tâche
 {task['content']}
+{task.get('draft_instruction', '')}
 """ + (f"\n### Contexte global (Rappel du cahier des charges initial)\n{task['original_content']}\n" if task.get("original_content") else "") + (
     f"\n{task['lessons']}\n" if task.get("lessons") else ""
 ) + """

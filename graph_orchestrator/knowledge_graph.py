@@ -447,6 +447,49 @@ class KnowledgeGraph:
         ).fetchall()
         return [r[0] for r in rows]
 
+    def recall_lessons(
+        self,
+        kinds: Optional[set] = None,
+        limit: int = 8,
+    ) -> List[dict]:
+        """Récupère les N leçons durables les plus récentes, TOUS runs confondus.
+
+        Cœur du recall cross-run (F-68 Phase 2) : le "notebook" global est l'ensemble
+        des claims ``insight`` + ``escalation`` — les kinds que ``prune_old_claims``
+        préserve explicitement (knowledge_graph.py preserve_kinds), donc les seules
+        qui survivent à l'oubli temporel. ``observation`` et ``refutation`` sont
+        éphémères (scratch) et ne sont JAMAIS rappelées ici.
+
+        0 LLM, déterministe. Pas de filtre entity_id ni run_id : le notebook est
+        GLOBAL (décision design — une leçon d'un run Bubble Sort peut aider une
+        autre app web). La pertinence est déléguée au note "ignore si non pertinent"
+        du bloc injecté (build_lessons_block).
+
+        Args:
+            kinds: ensemble de kinds à rappeler. Défaut ``{"insight", "escalation"}``
+                (les durables). Passer un set vide → retourne [].
+            limit: nombre maximum de leçons (top-N par récence, DESC).
+
+        Returns:
+            Liste de dicts ``{"content": str, "kind": str, "created_at": str}``,
+            la plus récente en premier. Vide si rien ou kinds vide.
+        """
+        if kinds is None:
+            kinds = {"insight", "escalation"}
+        if not kinds or limit <= 0:
+            return []
+        placeholders = ",".join(["?"] * len(kinds))
+        rows = self.conn.execute(
+            f"SELECT content, kind, created_at FROM claim "
+            f"WHERE kind IN ({placeholders}) AND status = 'open' "
+            f"ORDER BY created_at DESC LIMIT ?",
+            [*kinds, limit],
+        ).fetchall()
+        return [
+            {"content": r[0], "kind": r[1], "created_at": str(r[2])}
+            for r in rows
+        ]
+
     def get_provenance(self, claim_id: int) -> List[dict]:
         """Retourne la provenance d'une claim (qui l'a produite, avec quel modèle)."""
         rows = self.conn.execute(
