@@ -206,10 +206,19 @@ class WebTestRunner:
                 functionalities = extract_functionalities(full_requirements)
                 checklist_block = build_checklist_block(functionalities)
 
+                # F-82 : critères fonctionnels générés par l'Architecte (pilote unique).
+                # Priorité sur F-46 (regex spec) car plus précis — produits par compréhension
+                # du cahier des charges, pas par pattern matching. Ne s'applique PAS en mode
+                # ciblé F-47 (itération >1) qui reste orthogonal (re-test des bugs signalés).
+                from ..validation_criteria import build_functional_criteria_block
+                architect_criteria = task.get("functional_test_criteria") or []
+                if architect_criteria:
+                    checklist_block = build_functional_criteria_block(architect_criteria)
+
                 # F-47 : en mode ciblé (itération >1 + réfutations), on REMPLACE la
-                # checklist générique F-46 par un prompt ciblé sur les bugs signalés.
+                # checklist générique F-46/F-82 par un prompt ciblé sur les bugs signalés.
                 # Le Tester ne teste QUE ces bugs + un smoke-test (console + screenshot).
-                # Rationnel : en itération >1, 90% de la checklist F-46 re-vérifie des
+                # Rationnel : en itération >1, 90% de la checklist re-vérifie des
                 # choses qui marchaient déjà — gaspillage. Le re-test ciblé se concentre
                 # sur ce que le Coder est censé avoir corrigé.
                 if use_targeted:
@@ -220,7 +229,7 @@ class WebTestRunner:
                     targeted_block = build_targeted_retest_block(
                         bugs_feedback, iteration, git_diff
                     )
-                    # En mode ciblé, la checklist F-46 est remplacée (sinon on double le
+                    # En mode ciblé, la checklist F-46/F-82 est remplacée (sinon on double le
                     # travail : checklist complète + re-test ciblé = trop de steps pour 6).
                     checklist_block = targeted_block
 

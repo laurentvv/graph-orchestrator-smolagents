@@ -79,6 +79,19 @@ class ArchitectTask(BaseModel):
     skills: List[str] = []
     tester_skills: List[str] = []
     judge_skills: List[str] = []
+    # F-82 : critères de validation générés par l'Architecte (pilote unique). Remplacent
+    # les prompts fixes/génériques par des critères spécifiques au cahier des charges.
+    # Vides = repli sur le comportement historique (rétrocompat checkpoint + tests mockés).
+    #   - visual_success_criteria : assertions visuelles concrètes pour l'auto-validation
+    #     du Coder (ex: "barres visibles au chargement"). Anti-biais : force le Coder à
+    #     ANALYSER son screenshot au lieu d'excuser un visuel vide (bug canvas 2026-08-08).
+    #   - functional_test_criteria : assertions de comportement pour le Tester (remplace
+    #     la checklist F-46 regex quand non vide). Plus précis car produit par compréhension.
+    #   - acceptance_rubric : critères d'acceptation pondérés pour le Judge (concaténé au
+    #     task_requirements global). Évite que le Judge devine l'importance relative.
+    visual_success_criteria: List[str] = []
+    functional_test_criteria: List[str] = []
+    acceptance_rubric: str = ""
 
 
 class RouterOutput(BaseModel):

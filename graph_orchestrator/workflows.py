@@ -565,6 +565,14 @@ async def run_coding_workflow(
                     # F-57 : skills sélectionnés par l'Architect pour cette sous-tâche.
                     # Le Coder reçoit le corps complet de ces skills. Si vide, socle défaut.
                     "skills": getattr(subtask, "skills", []),
+                    # F-82 : critères de validation générés par l'Architect (pilote unique).
+                    # OBLIGATOIRE de propager ici — sans ça le champ est silencieusement perdu
+                    # en route (cas actuel de tester_skills/judge_skills qui sont des champs
+                    # morts). Les 3 consommateurs (Coder/Tester/Judge) lisent via task.get().
+                    # Vides = repli sur le comportement historique (rétrocompat stricte).
+                    "visual_success_criteria": getattr(subtask, "visual_success_criteria", []),
+                    "functional_test_criteria": getattr(subtask, "functional_test_criteria", []),
+                    "acceptance_rubric": getattr(subtask, "acceptance_rubric", ""),
                     # Numéro d'itération (1=création initiale, 2+=correction). Le prompt
                     # Coder s'adapte : itération 1 = write_file (création), itération 2+ =
                     # read_file + search_replace (correction chirurgicale, JAMAIS rewrite).

@@ -555,6 +555,11 @@ def _build_devtools_blocks(task: dict, cdt_tools: list) -> tuple[str, str]:
       - Si web + outils dispos → preview block (workflow de validation visuelle) +
         doc des outils clés (navigate_page, take_screenshot, list_console_messages).
 
+    F-82 : si l'Architecte a produit des ``visual_success_criteria``, ils sont intégrés
+    au preview_block sous forme de checklist anti-biais (force le Coder à ANALYSER son
+    screenshot au lieu d'excuser un visuel vide — bug canvas 2026-08-08). Rétrocompat :
+    liste vide = workflow DevTools historique (pas de checklist forcée).
+
     Le screenshot pris est vu par le modèle (gemma-4-E4B est multimodal, validé runtime).
     """
     if not cdt_tools:
@@ -569,6 +574,19 @@ def _build_devtools_blocks(task: dict, cdt_tools: list) -> tuple[str, str]:
         # Pas web : on liste les outils mais sans workflow de preview poussé.
         return "", _DEVTOOLS_TOOLS_DOC
 
+    # F-82 : critères visuels générés par l'Architecte (anti-biais de confirmation).
+    from .validation_criteria import build_visual_criteria_block
+    visual_block = build_visual_criteria_block(task.get("visual_success_criteria") or [])
+    # Si critères présents, l'étape 5 du workflow devient une checklist concrète au
+    # lieu du "rendu conforme" flou. Sinon, on garde le workflow historique.
+    if visual_block:
+        criteria_note = (
+            "\n5. VALIDATION CRITÈRES VISUELS : confirme OUI/NON chaque critère ci-dessous"
+            " sur ta capture. UN seul NON = failure → corrige."
+        )
+    else:
+        criteria_note = "\n5. final_answer uniquement quand : 1) le rendu est conforme, 2) 0 erreur console."
+
     preview_block = f"""### 🖥️ VALIDATION VISUELLE (Chrome DevTools — F-45)
 Tu disposes d'un navigateur Chrome pilotable pour VÉRIFIER ta page AVANT final_answer.
 
@@ -581,11 +599,11 @@ Workflow de validation (À FAIRE après avoir créé les fichiers, AVANT final_a
 3. `list_console_messages()` — OBLIGATOIRE EN DEUXIÈME. Vérifie 0 erreur JS (SyntaxError,
    Unexpected token, Uncaught = bug critique → corrige AVANT de continuer).
 4. Si erreur (visuelle ou console) : CORRIGE via search_replace, puis re-`navigate_page` + re-`take_screenshot` + re-`list_console_messages`.
-5. final_answer uniquement quand : 1) le rendu est conforme, 2) 0 erreur console.
+{criteria_note}
 
 URL exacte de ta page (primary target) : {primary_url}
 ATTENTION : si ta page n'est pas à la racine du run, navigate_page DOIT pointer sur le
-vrai fichier (ex: landing_page/index.html), pas sur la racine du workspace."""
+vrai fichier (ex: landing_page/index.html), pas sur la racine du workspace.{visual_block}"""
     return preview_block, _DEVTOOLS_TOOLS_DOC
 
 

@@ -190,10 +190,43 @@ class ArchitectSignature(dspy.Signature):
         enjeu design (ex: script CLI pur), 'skills' peut rester vide (le socle file-creation +
         coding + context7-research est toujours injecté automatiquement par défaut).
 
-        Le Coder suivra ta stratégie à la lettre. 
-        RÈGLE SUR LES TESTS (CRITIQUE) :
-        Chaque sous-tâche DOIT inclure dans sa `description` la liste explicite des tests et critères d'acceptation (comportements attendus testables).
-        C'est indispensable pour que le Coder puisse vérifier l'application avant de rendre la main. N'oublie pas de copier-coller les tests depuis le prompt d'origine s'il y en a.
+        RÈGLE DE CRITÈRES DE VALIDATION (F-90 — l'Architecte est le PILOTE des validations) :
+        Tu produis les ordres de validation que les autres nœuds (Coder, Tester, Judge) vont
+        exécuter. Ils doivent être SPÉCIFIQUES au cahier des charges, pas génériques. Sans
+        critères explicites, le Coder valide à l'aveugle (biais observé en prod : canvas vide
+        excusé comme "normal avant interaction" alors que generateArray() est appelé à l'init).
+
+        Pour CHAQUE sous-tâche, remplis 3 champs :
+
+        1. 'visual_success_criteria' (LISTE d'assertions visuelles concrètes, pour le Coder) :
+           Ce que le Coder DOIT voir sur son screenshot avant de valider. Sois précis et
+           anti-biais — un visuel VIDE est un BUG, pas "normal avant interaction" :
+           - ✅ "Au chargement de la page, ≥1 barre colorée VISIBLE dans le canvas (un canvas
+             vide au chargement = BUG critique, pas 'normal')"
+           - ✅ "Le compteur affiche '0' au chargement"
+           - ✅ "Les boutons Démarrer/Réinitialiser sont visibles et cliquables"
+           - ❌ VAGUE : "le rendu est correct" (le modèle excusera un canvas vide)
+           - ❌ ABSENT : si tu ne mets rien, le Coder validera à l'aveugle.
+           Ne mets RIEN ici si la tâche n'est PAS visuelle (script CLI, API backend pur).
+
+        2. 'functional_test_criteria' (LISTE d'assertions de comportement, pour le Tester) :
+           Ce que le Tester DOIT vérifier via evaluate_script (pas seulement absence de crash) :
+           - ✅ "Après clic sur Démarrer puis await sleep(400ms), le compteur > 0"
+           - ✅ "Après fin du tri, le tableau est trié par ordre croissant (vérifier heights)"
+           - ✅ "Déplacer le slider de vitesse change la valeur affichée à l'écran"
+           Ces critères REMPLACENT la checklist générique quand non vide — plus précis car
+           produits par ta compréhension du cahier des charges.
+
+        3. 'acceptance_rubric' (TEXTE court, pour le Judge) :
+           Les critères d'acceptation PONDÉRÉS spécifiques à cette sous-tâche :
+           - ✅ "CRITICAL: barres visibles au chargement + tri correct. HIGH: code couleur
+                3 états distincts. MEDIUM: responsive mobile. LOW: animations fluides."
+           Ce champ est concaténé au cahier des charges global du Judge. Laisse vide si la
+           spec suffit (tâche triviale).
+
+        Le Coder suivra ta stratégie à la lettre. Chaque sous-tâche DOIT inclure dans sa
+        `description` la liste explicite des tests et critères d'acceptation (comportements
+        attendus testables). N'oublie pas de copier-coller les tests depuis le prompt d'origine.
 
         RÈGLE DE PRÉSERVATION DES DONNÉES (CRITIQUE) :
         Ne résume JAMAIS le cahier des charges de manière abstraite. Tu dois IMPÉRATIVEMENT copier-coller dans la `description` de la sous-tâche toutes les valeurs techniques explicites du prompt d'origine :
@@ -204,7 +237,7 @@ class ArchitectSignature(dspy.Signature):
         """,
     )
     task_content: str = dspy.InputField(desc="Le cahier des charges global de la fonctionnalité ou du projet à développer")
-    output: ArchitectOutput = dspy.OutputField(desc="Plan : liste de sous-tâches (2-4 max). Chaque ArchitectTask a target_files + strategy + sections (si incremental). Définis aussi 'skills' (pour le Coder, ex: ['tdd']), 'tester_skills' (pour le Tester, ex: ['webapp-testing']), 'judge_skills' (ex: ['code-review']).")
+    output: ArchitectOutput = dspy.OutputField(desc="Plan : liste de sous-tâches (2-4 max). Chaque ArchitectTask a target_files + strategy + sections (si incremental). Définis aussi 'skills' (pour le Coder, ex: ['tdd']), 'tester_skills' (pour le Tester, ex: ['webapp-testing']), 'judge_skills' (ex: ['code-review']), et les critères de validation F-82 : 'visual_success_criteria' (assertions visuelles pour le Coder, ex: ['barres visibles au chargement']), 'functional_test_criteria' (assertions comportementales pour le Tester), 'acceptance_rubric' (critères pondérés pour le Judge).")
 
 
 class DrafterSignature(dspy.Signature):
@@ -922,6 +955,19 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
             tail_lines=10,
             max_chars=1500,
         )
+        # F-82 : rubric d'acceptation pondérée générée par l'Architecte (spécifique à la
+        # sous-tâche, contrairement à la spec globale tronquée ci-dessus). Concaténée AVANT
+        # la spec pour que le Judge voie d'abord les critères pondérés (CRITICAL/HIGH/...)
+        # puis le détail du cahier des charges. Vide = comportement historique.
+        from .validation_criteria import build_judge_rubric_block
+        rubric_block = build_judge_rubric_block(subtask.get("acceptance_rubric", ""))
+        if rubric_block:
+            task_requirements = truncate_output(
+                f"{rubric_block}\n### Cahier des charges global\n{subtask.get('original_content', '') or ''}",
+                head_lines=45,
+                tail_lines=10,
+                max_chars=2000,
+            )
         result = await _run_dspy_node(
             signature=CodeJudgeSignature,
             predictor_kwargs={
