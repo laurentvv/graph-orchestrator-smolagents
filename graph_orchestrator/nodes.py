@@ -73,6 +73,15 @@ def query_duckdb_knowledge_graph(sql_query: str) -> str:
 # Modèles (construits une fois depuis la config)
 # ==========================================
 
+class LoggedOpenAIServerModel(OpenAIServerModel):
+    def __call__(self, *args, **kwargs):
+        res = super().__call__(*args, **kwargs)
+        if hasattr(res, "token_usage") and res.token_usage:
+            # Affichage clair du VRAI contexte envoyé au LLM
+            logger.info(f"[LLM Local] Contexte réel de ce step : {res.token_usage.input_tokens} tokens")
+            print(f"\033[96m[LLM Local] Contexte réel de ce step : {res.token_usage.input_tokens} tokens\033[0m")
+        return res
+
 def build_fast_model(settings: Settings) -> OpenAIServerModel:
     # max_tokens généreux OBLIGATOIRE pour le Coder : un fichier HTML/CSS/JS complet
     # dépasse facilement 2000-4000 tokens. Sans budget suffisant, Ollama coupe la
@@ -86,7 +95,7 @@ def build_fast_model(settings: Settings) -> OpenAIServerModel:
     # qwen3.5:4b est temperature=1.0 (chat créatif) → choix de tokens aléatoires
     # qui corrompent la syntaxe HTML/JSON. Une température basse rend le Coder
     # quasi-déterministe : code cohérent, moins d'hallucinations de format.
-    return OpenAIServerModel(
+    return LoggedOpenAIServerModel(
         model_id=settings.fast_model_id,
         api_base=settings.local_api_base,
         api_key=settings.local_api_key,
@@ -99,7 +108,7 @@ def build_fast_model(settings: Settings) -> OpenAIServerModel:
 def build_reasoning_model(settings: Settings) -> OpenAIServerModel:
     # max_tokens généreux obligatoire pour Gemma : sans ça, Ollama renvoie
     # finish_reason=length sans tool_calls (le raisonnement interne consomme tout).
-    return OpenAIServerModel(
+    return LoggedOpenAIServerModel(
         model_id=settings.reasoning_model_id,
         api_base=settings.local_reasoning_api_base,
         api_key=settings.local_api_key,
@@ -625,8 +634,7 @@ async def execute_coder_node(
         coder_tools = [list_directory, read_file, read_python_skeleton, write_file, append_file, edit_file, search_replace, multi_replace, check_run_state, log_event, DuckDuckGoSearchTool()]
         coder_tools.extend(c7_tools)
         # On redonne tous les outils web au coder, incluant vision
-        coder_cdt_tools = [t for t in cdt_tools if t.name in ["navigate_page", "list_console_messages", "evaluate_script", "take_screenshot"]]
-        coder_tools.extend(coder_cdt_tools)
+        coder_tools.extend(cdt_tools)
         # F-57 (Priorité 10) : tool load_skill pour la flexibilité. Les skills
         # sélectionnés par l'Architect sont déjà injectés en corps complet dans le
         # system prompt (voir skills_block ci-dessous), mais le Coder peut appeler
@@ -927,6 +935,7 @@ Code prêt pour la production, respectant les conventions du langage.
                 code_block_tags="markdown",
                 step_callbacks=[make_screenshot_callback(screenshot_capture)],
                 additional_authorized_imports=["os", "subprocess"],
+                executor_kwargs={"timeout_seconds": settings.tester_timeout_s},
             )
             return await run_with_retry(
                 local_coder, prompt, CoderOutput, settings.worker_max_retries, loop_guard=guard,

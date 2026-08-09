@@ -62,8 +62,9 @@ def test_execute_router_node(mock_cot, mock_configure, mock_settings):
 
 
 @patch("graph_orchestrator.dspy_nodes._configure_dspy")
+@patch("graph_orchestrator.dspy_nodes.dspy.ReAct")
 @patch("graph_orchestrator.dspy_nodes.dspy.ChainOfThought")
-def test_execute_architect_node(mock_cot, mock_configure, mock_settings):
+def test_execute_architect_node(mock_cot, mock_react, mock_configure, mock_settings):
     """
     Test le nœud DSPy Architecte.
     Vérifie qu'il décompose bien la tâche en utilisant le modèle lourd.
@@ -81,6 +82,12 @@ def test_execute_architect_node(mock_cot, mock_configure, mock_settings):
     )
     mock_instance.return_value = mock_prediction
     mock_cot.return_value = mock_instance
+
+    mock_react_instance = MagicMock()
+    mock_react_prediction = MagicMock()
+    mock_react_prediction.research_summary = "Aucun skill ajouté"
+    mock_react_instance.return_value = mock_react_prediction
+    mock_react.return_value = mock_react_instance
 
     task_dict = {"id": "tetris", "content": "Jeu Tetris Complet"}
     output, metrics = asyncio.run(execute_architect_node(task_dict, mock_settings.reasoning_model_id, mock_settings))

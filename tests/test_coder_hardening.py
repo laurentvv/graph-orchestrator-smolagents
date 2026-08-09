@@ -56,12 +56,12 @@ def _make_idle_agent(name="CodeAgent"):
 # ==========================================
 
 class TestCoderMaxStepsConfig:
-    def test_default_is_18(self, monkeypatch):
-        """Le défaut de la dataclass est 18 (avant 25 hardcoded)."""
+    def test_default_is_30(self, monkeypatch):
+        """Le défaut de la dataclass est 30."""
         # Nettoie l'env pour tester le défaut réel.
         monkeypatch.delenv("CODER_MAX_STEPS", raising=False)
         s = load_settings()
-        assert s.coder_max_steps == 18
+        assert s.coder_max_steps == 30
 
     def test_env_override(self, monkeypatch):
         """CODER_MAX_STEPS=25 dans l'env → valeur lue appliquée."""

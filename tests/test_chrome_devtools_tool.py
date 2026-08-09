@@ -120,13 +120,11 @@ class TestChromeDevtoolsToolsMocked:
             assert len(tools) == 2
             assert {t.name for t in tools} == {"navigate_page", "take_screenshot"}
 
-    def test_click_et_fill_autorises(self, monkeypatch):
-        """click/fill ne doivent PAS être filtrés (post-mortem run 123955).
-
-        La doc/skills recommandent click(uid=...) pour tester les interactions, mais
-        ces outils étaient exclus par l'allowlist → le Coder/Tester générait click(...)
-        que smolagents rejetait ("Forbidden function") 6 fois par run. Ils doivent
-        maintenant passer le filtre."""
+    def test_all_tools_authorized(self, monkeypatch):
+        """Tous les outils MCP Chrome DevTools sont désormais autorisés sans restriction.
+        
+        À la demande expresse de l'utilisateur, l'allowlist a été supprimée pour permettre
+        à l'agent de tout faire avec Chrome DevTools MCP sans restriction (ex: take_snapshot)."""
         monkeypatch.setattr(chrome_devtools_tool, "_build_params", lambda: {"fake": True})
 
         fake_click = MagicMock()
@@ -135,7 +133,6 @@ class TestChromeDevtoolsToolsMocked:
         fake_fill.name = "fill"
         fake_nav = MagicMock()
         fake_nav.name = "navigate_page"
-        # Outil volontairement hors allowlist : doit rester filtré
         fake_perf = MagicMock()
         fake_perf.name = "performance_start_trace"
         fake_collection = MagicMock()
@@ -149,11 +146,10 @@ class TestChromeDevtoolsToolsMocked:
 
         with chrome_devtools_tool.chrome_devtools_tools() as tools:
             names = {t.name for t in tools}
-            assert "click" in names, "click doit être autorisé (tests d'interaction)"
-            assert "fill" in names, "fill doit être autorisé (tests d'interaction)"
+            assert "click" in names
+            assert "fill" in names
             assert "navigate_page" in names
-            # Le filtrage strict reste actif sur les autres outils (anti context-overflow)
-            assert "performance_start_trace" not in names
+            assert "performance_start_trace" in names, "L'allowlist est supprimée, cet outil doit passer"
 
 
 

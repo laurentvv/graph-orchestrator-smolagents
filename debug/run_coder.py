@@ -120,10 +120,12 @@ async def main():
         task_desc += (
             "\n\n### BROUILLON DE L'ALGORITHM DRAFTER\n"
             "L'Algorithm Drafter (Architecte Logiciel) a conçu la logique parfaite pour toi. "
-            f"Il a écrit tout le code brut dans le fichier `{draft_filename}` (à la racine du projet).\n\n"
-            "⚠️ INSTRUCTION CRITIQUE : Ton PREMIER appel d'outil DOIT ÊTRE "
-            f"`read_file(path=\"{draft_filename}\")` pour récupérer ce code. Ensuite, utilise tes "
-            "outils `write_file` ou `append_file` pour l'injecter proprement dans les vrais fichiers cibles."
+            f"L'Algorithm Drafter (Architecte Logiciel) a conçu la logique parfaite pour toi. Il a écrit tout le code brut dans le fichier `{draft_filename}` (à la racine du projet).\n\n"
+            "⚠️ INSTRUCTION CRITIQUE : Ne recopie SURTOUT PAS le code manuellement (outil write_file) car tu es un modèle rapide et tu risques de tronquer ou d'halluciner des lignes ! "
+            f"Puisque tu es un agent Python, ton PREMIER réflexe DOIT ÊTRE d'écrire et d'exécuter un court script Python pour lire le fichier `{draft_filename}`, "
+            "extraire automatiquement les blocs de code (avec des regex ou des splits) et les sauvegarder directement dans les fichiers cibles.\n\n"
+            "⚠️ ATTENTION : Ne fais JAMAIS de `print()` du contenu lu dans ton script Python. Cela saturerait instantanément ta mémoire (context size). Lis et parse le fichier en silence.\n\n"
+            "👉 UNE FOIS les fichiers extraits, tu DOIS les relire avec tes outils, puis appliquer tes SKILLS (design, bonnes pratiques) en utilisant `search_replace` ou en exécutant un nouveau script Python pour enrichir le code brut du brouillon."
         )
 
     print(f"[*] Coder isolation — PRODUCTION (execute_coder_node)")

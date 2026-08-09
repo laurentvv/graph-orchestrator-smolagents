@@ -10,16 +10,16 @@ $ModelsDir = Join-Path $ProjectDir "models"
 # Configuration des modèles
 $Models = @(
     @{
-        Name = "Qwen 3.5 4B (Coder, Router)"
-        Folder = "qwen35-4b"
+        Name = "Qwen 3.5 4B MTP (Coder, Router)"
+        Folder = "qwen35-4b-mtp"
         File = "Qwen3.5-4B-Q4_K_M.gguf"
-        Url = "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf"
+        Url = "https://huggingface.co/unsloth/Qwen3.5-4B-MTP-GGUF/resolve/main/Qwen3.5-4B-Q4_K_M.gguf"
     },
     @{
-        Name = "Qwen 3.5 4B - Vision Projector (mmproj)"
-        Folder = "qwen35-4b"
+        Name = "Qwen 3.5 4B MTP - Vision Projector (mmproj)"
+        Folder = "qwen35-4b-mtp"
         File = "mmproj-F16.gguf"
-        Url = "https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/main/mmproj-F16.gguf"
+        Url = "https://huggingface.co/unsloth/Qwen3.5-4B-MTP-GGUF/resolve/main/mmproj-F16.gguf"
     },
     @{
         Name = "Ornith 1.0 9B (Architect, Tester, Judge, Security)"

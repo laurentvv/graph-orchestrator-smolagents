@@ -223,7 +223,7 @@ class Settings:
     # brider les cas nominaux ni laisser diverger un modèle qui boucle. Opt-out :
     # CODER_MAX_STEPS plus haut pour une tâche complexe nécessitant plus d'allers-
     # retours outils. Valeur par défaut dans la dataclass (convention tester_max_steps).
-    coder_max_steps: int = 18
+    coder_max_steps: int = 30
     # Circuit-breaker sur tours idle consécutifs (post-mortem idem). _detect_idle_step
     # (F-33) réinjecte un message à chaque tour "sans appel d'outil" mais ne coupe
     # JAMAIS → le Coder peut enchaîner N tours idle jusqu'à épuisement des steps
@@ -321,9 +321,9 @@ class Settings:
     # L'Architect sélectionne les skills pertinents dans son plan (subtask.skills),
     # et le Coder reçoit leur corps complet. Ce budget plafonne la sélection pour
     # éviter la saturation du contexte (32k sur Qwen 9B). Défaut 8000 tokens (~24%).
-    # Le socle ALWAYS (file-creation+coding+context7-research ≈ 2967 tok) est toujours
-    # conservé ; les skills conditionnels sont rognés « petits d'abord » si dépassement.
-    skill_budget_tokens: int = 8000
+    # Conservé pour la rétro-compatibilité (désormais piloté par ALWAYS_SKILLS_CODER).
+    # budget_tokens = 16000 pour allouer jusqu'à ~50% du contexte de Qwen (32k) aux skills.
+    skill_budget_tokens: int = 16000
 
     # --- Guard bash denylist (Priorité 8-bis : robustesse runtime) ---
     # `bash_command` exécute des commandes issues du LLM via shell=True. Un guard
@@ -432,7 +432,7 @@ def load_settings() -> Settings:
         stderr_tail_lines=_get_int("STDERR_TAIL_LINES", 20),
         feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),
         tester_max_steps=_get_int("TESTER_MAX_STEPS", 25),
-        coder_max_steps=_get_int("CODER_MAX_STEPS", 18),
+        coder_max_steps=_get_int("CODER_MAX_STEPS", 30),
         idle_breaker_threshold=_get_int("IDLE_BREAKER_THRESHOLD", 3),
         escalation_enabled=_get_bool("ESCALATION_ENABLED", True),
         auto_install_deps=_get_bool("AUTO_INSTALL_DEPS", True),

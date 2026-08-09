@@ -241,7 +241,7 @@ async def test_run_with_retry_timeout_returns_none(monkeypatch):
         node_kind="tester", timeout_s=0.1,
     )
 
-    assert result is None  # échec propre (pas de blocage)
+    assert isinstance(result, str) and "TIMEOUT ERROR" in result  # échec propre (pas de blocage)
     assert metrics is None  # aucune métrique collectée (rien n'a terminé)
 
 

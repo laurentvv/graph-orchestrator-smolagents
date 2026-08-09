@@ -67,14 +67,9 @@ def chrome_devtools_tools():
 
     try:
         with ToolCollection.from_mcp(params, trust_remote_code=True) as tool_collection:
-            # Filtrage strict (anti context-overflow) : on ne garde que l'essentiel.
-            # click/fill ajoutés (post-mortem run 123955) : la doc/skills recommandent
-            # click(uid=...) pour tester les interactions, mais ces outils étaient filtrés
-            # → le Coder/Tester générait click(...) que smolagents rejetait ("Forbidden
-            # function") 6 fois par run. Ils sont indispensables aux tests d'interaction.
-            allowed = {"navigate_page", "take_screenshot", "take_snapshot", "list_console_messages", "evaluate_script", "click", "fill"}
-            tools = [t for t in tool_collection.tools if t.name in allowed]
-            logger.debug("Chrome DevTools connecté : %d outil(s) (filtrés sur %d).", len(tools), len(list(tool_collection.tools)))
+            # Plus de filtrage strict : on garde tous les outils DevTools
+            tools = list(tool_collection.tools)
+            logger.debug("Chrome DevTools connecté : %d outil(s) (non filtrés).", len(tools))
             yield tools
     except Exception as e:
         # Connexion échouée (npx absent, Chrome non trouvé, port occupé...). On
