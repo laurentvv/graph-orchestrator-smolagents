@@ -147,7 +147,8 @@ def test_ts_as_cast_in_script(tmp_path):
 def test_unclosed_brace_in_script():
     """Accolade non fermée → SyntaxError (le Coder coupe parfois la génération)."""
     html = "<script>function foo() { return 1; </script>"
-    errs = _check_js_syntax(html)
+    js = extract_all_js(html)
+    errs = _check_js_syntax(js)
     assert len(errs) >= 1
     assert "SyntaxError" in errs[0]
 
@@ -155,12 +156,14 @@ def test_unclosed_brace_in_script():
 def test_valid_js_syntax_passes():
     """JS vanilla valide → 0 erreur."""
     html = "<script>function foo() { return 1; } foo();</script>"
-    assert _check_js_syntax(html) == []
+    js = extract_all_js(html)
+    assert _check_js_syntax(js) == []
 
 
 def test_no_script_no_error():
     """HTML sans JS → rien à valider."""
-    assert _check_js_syntax("<html><body><h1>Hello</h1></body></html>") == []
+    js = extract_all_js("<html><body><h1>Hello</h1></body></html>")
+    assert _check_js_syntax(js) == []
 
 
 # ==========================================
@@ -168,14 +171,15 @@ def test_no_script_no_error():
 # ==========================================
 def test_slider_not_wired():
     """Le piège n°1 : <input id='speedSlider'> existe mais AUCUN handler.
-    Slider visible mais inactif — indétectable par screenshot."""
+    Slider visible mais inactif = indétectable par screenshot."""
     html = """<html><body>
 <input id="speedSlider" type="range" min="1" max="100">
 <script>function init() { console.log("ready"); } init();</script>
 </body></html>"""
-    errs = _check_event_wiring(html)
-    assert any("speedSlider" in e and "wiring" in e for e in errs), \
-        f"Devrait détecter speedSlider non-wiré, got: {errs}"
+    js = extract_all_js(html)
+    errs = _check_event_wiring(html, js)
+    assert len(errs) == 1
+    assert "input" in errs[0].lower() and "speedSlider" in errs[0]
 
 
 def test_button_not_wired():
@@ -184,8 +188,10 @@ def test_button_not_wired():
 <button id="startBtn">Start</button>
 <script>console.log("page loaded");</script>
 </body></html>"""
-    errs = _check_event_wiring(html)
-    assert any("startBtn" in e for e in errs)
+    js = extract_all_js(html)
+    errs = _check_event_wiring(html, js)
+    assert len(errs) == 1
+    assert "button" in errs[0].lower() and "startBtn" in errs[0]
 
 
 def test_slider_wired_via_getElementById():
@@ -196,13 +202,15 @@ def test_slider_wired_via_getElementById():
 const s = document.getElementById("speedSlider");
 s.addEventListener("input", () => {});
 </script></body></html>"""
-    assert _check_event_wiring(html) == []
+    js = extract_all_js(html)
+    assert _check_event_wiring(html, js) == []
 
 
 def test_button_wired_inline_onclick():
     """onclick inline = branchement légitime → toléré."""
     html = '<html><body><button id="b" onclick="doThing()">Go</button></body></html>'
-    assert _check_event_wiring(html) == []
+    js = extract_all_js(html)
+    assert _check_event_wiring(html, js) == []
 
 
 def test_submit_button_in_form_not_flagged():
@@ -212,19 +220,22 @@ def test_submit_button_in_form_not_flagged():
   <input name="q" type="text">
   <button type="submit">Envoyer</button>
 </form></body></html>"""
-    assert _check_event_wiring(html) == []
+    js = extract_all_js(html)
+    assert _check_event_wiring(html, js) == []
 
 
 def test_link_with_href_not_flagged():
     """<a href='...'> = navigation native → pas besoin de JS."""
     html = '<html><body><a href="https://example.com">Lien</a></body></html>'
-    assert _check_event_wiring(html) == []
+    js = extract_all_js(html)
+    assert _check_event_wiring(html, js) == []
 
 
 def test_hidden_input_not_flagged():
     """<input type='hidden'> = pas interactif → ignoré."""
     html = '<html><body><input id="csrf" type="hidden" value="x"></body></html>'
-    assert _check_event_wiring(html) == []
+    js = extract_all_js(html)
+    assert _check_event_wiring(html, js) == []
 
 
 # ==========================================

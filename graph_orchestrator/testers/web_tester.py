@@ -188,7 +188,8 @@ class WebTestRunner:
                     "- `navigate_page(url=..., type='url')` : ouvre la page (OBLIGATOIRE pour la navigation initiale, cf. ci-dessus).\n"
                     "- `list_console_messages()` : erreurs JS avec source maps (plus précis que puppeteer_evaluate pour la console).\n"
                     "- `take_snapshot(verbose: true)` : arbre a11y complet (structure, IDs). Avec `verbose: true`, tu obtiendras tout le DOM ultra-détaillé.\n"
-                    "- `evaluate_script(function)` : JS dans la page — utilise-le pour tes ASSERTIONS fonctionnelles (au lieu de puppeteer_evaluate). Fournis une déclaration `async () => { ... }` NON invoquée, sans `await` au niveau zéro.\n"
+                    "- `evaluate_script(function)` : JS dans la page — utilise-le pour tes ASSERTIONS fonctionnelles.\n"
+                    "  [ERREUR FATALE FRÉQUENTE AWAIT] : Tu DOIS fournir une déclaration de fonction NON invoquée exacte : `async () => { ... }`. Ne JAMAIS utiliser une IIFE comme `(() => { await ... })()` ni un await au top-level, sinon le CDP crashera avec l'erreur 'await is only valid in async functions'.\n"
                     "- `click(uid=...)` / `fill(uid=..., value=...)` : interactions (uids vus dans take_snapshot).\n"
                     "- `take_screenshot(fullPage: true)` : capture visuelle. Avec `fullPage: true`, capture toute la hauteur. L'image TE REVIENT.\n"
                     "  [VISUAL BUG ALERT CRITIQUE] : Tu dois impérativement t'assurer qu'AUCUN élément clé ne disparaît ou ne devient invisible pendant l'interaction (ex: des barres qui s'effacent car elles perdent leur classe couleur sur un fond sombre). Si tu vois des éléments s'évaporer, c'est un FAILURE immédiat ! Tu peux utiliser `evaluate_script` pour inspecter les styles calculés (ex: getComputedStyle) et vérifier que les éléments ont bien une couleur.\n"
@@ -236,6 +237,8 @@ Voici tes instructions obligatoires (Skill) :
 
 ATTENTION - Le dossier de travail absolu est : {workspace_url}
 {target_files_urls}
+
+[WINDOWS PATH WARNING] : Ne traduis JAMAIS les chemins Windows en chemins Unix (ex: `/d/GIT/...` au lieu de `D:/GIT/...` ou `D:\\GIT\\...`). Utilise EXACTEMENT le chemin fourni sans le modifier, sinon tes appels à `list_directory` ou `read_file` échoueront avec [WinError 3] Chemin introuvable.
 
 ### ⚠️ NAVIGATION OBLIGATOIRE avec DevTools `navigate_page` (PAS puppeteer_navigate)
 [BUG CONNU CRITIQUE] Le serveur `puppeteer_navigate` répond "Navigated to ..." mais ne

@@ -5,17 +5,16 @@ description: Skill pour créer/écrire des fichiers correctement avec write_file
 
 # Skill : Création de fichiers (write_file)
 
-## ⚠️ RÈGLE CRITIQUE N°1 — Le contenu va DANS l'argument, pas dans ta réflexion
+## ⚠️ RÈGLE CRITIQUE N°1 — N'utilise `write_file` que pour les PETITS fichiers !
 
-Quand tu crées un fichier, le **contenu complet et réel** du fichier DOIT être passé dans
-l'argument `content` de l'appel à `write_file`. **JAMAIS** dans ta prose/raisonnement.
+Pour les fichiers massifs (comme le code généré par l'Architecte dans le brouillon), **NE RECOPIE JAMAIS LE CODE AVEC WRITE_FILE**. Tu dois utiliser le script Python fourni dans le skill `draft-extraction`.
 
-- ❌ MAUVAIS : tu expliques le HTML dans ton texte, puis appelles `write_file(path="x.html", content="")`
-  → le fichier créé est VIDE. C'est un échec.
-- ✅ BON : tu appelles `write_file(path="x.html", content="<!DOCTYPE html>...TOUT le code...")`
+L'outil `write_file` est réservé pour :
+- Créer des petits scripts de test (< 50 lignes)
+- Créer des fichiers de config (package.json, tsconfig)
+- Écrire des correctifs mineurs
 
-**La concision s'applique à ta PROSE uniquement, PAS au contenu des fichiers.**
-Un fichier `index.html` de 200 lignes → l'argument `content` doit faire 200 lignes. C'est attendu et normal.
+Quand tu utilises `write_file`, le **contenu complet et réel** du fichier DOIT être passé dans l'argument `content`. **JAMAIS** dans ta prose/raisonnement.
 
 ## Comment appeler write_file
 

@@ -7,129 +7,16 @@ description: Patterns de codage et bonnes pratiques pour un agent développeur
 
 Tu es un agent développeur expert. Tu écris, lis et exécute du code pour aider l'utilisateur.
 
-## Quand utiliser quels outils
 
-- **`python_interpreter`** : pour tester du Python rapidement, parser du JSON, faire des calculs, valider une logique. Préfère toujours TESTER ton code avant de le livrer.
-- **`node_exec`** : pour tester du JavaScript/Node.js, vérifier la syntaxe d'un fichier `.js`/`.ts`, parser du JSON côté JS.
-- **`read_file`** / **`write_file`** / **`list_dir`** : pour explorer et modifier un projet. TOUJOURS lire un fichier avant de le modifier.
-- **`web_search`** : quand tu ne connais pas une API, une syntaxe, ou pour chercher la doc à jour d'une librairie.
+## Dynamic Resources (Progressive Disclosure)
 
-## Règles d'or
+This skill is large. To save context, its detailed instructions are split into separate files in the `resources/` directory.
+**You MUST use your `view_file` tool to read the relevant file when you reach that stage of the process.**
 
-1. **Toujours tester** : ne livre jamais du code que tu n'as pas exécuté (via `python_interpreter` ou `node_exec`).
-2. **Lire avant d'écrire** : utilise `read_file` pour comprendre le code existant avant de le modifier avec `write_file`.
-3. **Messages d'erreur** : quand tu obtiens une erreur d'exécution, ANALYSE-LA, corrige, et RETESTE. Ne donne pas une réponse tant que le code ne tourne pas.
-4. **Code idiomatique** : respecte les conventions du language (PEP 8 pour Python, Standard JS pour Node).
-5. **JAMAIS DE FAUX CODE (NO MOCKING)** : Tu dois écrire une implémentation TOTALE et FONCTIONNELLE. Interdiction absolue d'utiliser des placeholders (ex: "Logique à implémenter ici"), des fonctions vides, ou des "Mocks" simplistes pour tricher et aller plus vite. Le code doit être prêt pour la production.
-6. **Concis** : ne surcharge pas le contexte. Sois direct dans tes final_answer.
-
-## ⚠️ RÈGLE CRITIQUE — JavaScript VANILA PUR dans `<script>` (failure mode n°1)
-
-Quand tu écris du JS dans une balise `<script>` HTML (sans `type="module"` avec build step),
-c'est du **JAVASCRIPT PUR** — PAS du TypeScript. Les navigateurs ne comprennent PAS les
-annotations de type. Une seule annotation TS → **erreur de syntaxe au parsing → TOUT le
-script échoue silencieusement** (la page rend mais aucune interaction ne marche).
-
-**SYNTAXES INTERDITES** dans un `<script>` vanilla :
-
-| ❌ Interdit (TypeScript) | ✅ Correct (JavaScript) |
-|---|---|
-| `let x: number = 0` | `let x = 0` |
-| `function f(a: string): void` | `function f(a) {` |
-| `async function g(): Promise<void>` | `async function g() {` |
-| `arr.map((x: number) => x * 2)` | `arr.map((x) => x * 2)` |
-| `(e.target as HTMLInputElement).value` | `e.target.value` |
-| `interface Foo { ... }` | (supprimer — n'existe pas en JS) |
-| `type Bar = string \| number` | (supprimer) |
-| `<script lang="ts">` | `<script>` |
-
-**RÈGLE** : si tu hésites entre TS et JS, c'est JS. Le JS vanilla n'a AUCUNE annotation
-de type. Vérifie ton code : aucun `: type` après une variable, aucun `as Cast`, aucun
-`interface`/`type` hors d'un commentaire. Si tu écris `function foo(x: number)`, le
-navigateur lèvera `SyntaxError: Unexpected token ':'` et RIEN ne s'exécutera.
-
-## ⚠️ RÈGLE CRITIQUE — Fermeture d'appel Python `)` pas `}` (failure mode parsing n°1)
-
-Quand tu passes du JS/HTML à `write_file`/`search_replace`/`append_file` (via l'argument
-`content`/`new_string`), le CONTENU contient des accolades `{ ... }` (blocs JS, objets,
-CSS). Ces accolades appartiennent au CONTENU, pas à l'appel Python. L'appel se ferme
-TOUJOURS par `)`. Confondre les deux provoque `SyntaxError: closing parenthesis '}' does
-not match` → l'appel d'outil entier est rejeté, le fichier n'est pas écrit.
-
-| ❌ Faux (SyntaxError fatal) | ✅ Correct |
-|---|---|
-| `write_file(path="a.html", content="function() { return 1; }"}` | `write_file(path="a.html", content="function() { return 1; }")` |
-| `search_replace(path="x", old="f() {}", new="f() { return 2; }"}` | `search_replace(path="x", old="f() {}", new="f() { return 2; }")` |
-
-**RÈGLE** : compte les `(` ouvrants et ferme-les tous par `)`. Les `{}` du JS/HTML sont
-à l'INTÉRIEUR de la string Python (entre guillemets) — ils ne ferment jamais l'appel.
-
-## ⚠️ RÈGLE CRITIQUE — Hauteurs CSS en pourcentage (failure mode visuel n°1)
-
-Quand tu crées des éléments dynamiques (barres, colonnes, graphiques) dont la hauteur
-est proportionnelle à une valeur, NE JAMAIS utiliser `height: X%` SI le container
-parent n'a pas de `height` EXPLICITE (pas juste `min-height`).
-
-**Pourquoi** : en CSS, `height: 50%` se calcule par rapport à la hauteur du parent.
-Si le parent n'a que `min-height` (ou aucune hauteur), le `%` se résout à `auto` →
-**hauteur effective = 0** → élément **invisible**. La page semble vide alors que le JS
-a bien créé les éléments.
-
-| ❌ Buggé (invisible) | ✅ Correct (visible) |
-|---|---|
-| `#viz { min-height: 300px; }` | `#viz { height: 300px; }` |
-| `.bar { height: 80%; }` | `.bar { height: 80%; }` (parent a `height`) |
-| OU sans % : `.bar { height: calc(...) }` en px | OU `.bar { height: 240px }` (absolu) |
-
-**RÈGLE** : si tu utilises `height: X%` sur un élément, le parent DIRECT doit avoir une
-hauteur fixée en `px`, `vh`, ou `%` (avec son propre parent heighté). En cas de doute,
-utilise des **px absolus** (`height: ${value * 3}px`) plutôt que des `%`.
-
-**VÉRIFICATION OBLIGATOIRE** : après rendu, vérifie via DevTools
-(`evaluate_script`) que `document.querySelectorAll('.bar').length > 0` ET que les
-barres ont une hauteur visible (`getBoundingClientRect().height > 0`).
-
-## ⚠️ RÈGLE CRITIQUE — Animations JS et Boucles bloquantes (failure mode timeout n°1)
-
-Quand tu crées un visualiseur d'algorithme (comme un tri) ou toute animation en JS, **NE JAMAIS UTILISER DE BOUCLE `while` OU `for` CONTINUE/BLOQUANTE**.
-Le navigateur n'a qu'un seul thread. Une boucle `while (swapped)` ou un `for` lourd bloque l'Event Loop. Le DOM ne se mettra jamais à jour visuellement, la page gèlera, et le Tester (Puppeteer) plantera sur un timeout de 120 secondes.
-
-**RÈGLE OBLIGATOIRE** : Pour toute animation, ton algorithme DOIT libérer le Main Thread à chaque étape. Utilise une fonction asynchrone avec un délai manuel :
-`const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));`
-Puis dans tes boucles : `await sleep(vitesse);`. Sans ça, l'agent de test échouera à voir la moindre animation.
-
-### Granularité de la fonction de step (complément indispensable)
-
-La règle ci-dessus porte sur le **threading** (libérer le Main Thread). Il en manque une
-seconde, sur la **structure** : la fonction appelée à chaque étape (`step`, `tick`,
-`performStep`, le callback de `requestAnimationFrame`) ne doit avancer que d'**UNE SEULE**
-étape de l'algorithme par appel — **JAMAIS** contenir les boucles `for`/`while` complètes
-de l'algorithme.
-
-Pourquoi : si tu mets la totalité de l'algorithme dans la fonction de step, tout
-s'exécute en un seul tick JS. Le navigateur ne repeint qu'après → l'utilisateur ne voit que
-l'état final, le `delay`/slider de vitesse ne contrôle plus rien, et le Static Tester Tier 3
-détectera une animation « instantanée » (bug).
-
-**Pattern correct (abstrait)** : conserve l'état de progression (indices, données) dans des
-variables persistantes hors de la fonction. À chaque appel, avance d'**un seul pas** de
-l'algorithme, mets à jour le rendu, puis re-programme la frame suivante :
-```js
-// état persistant hors de la fonction (adapte à TON algorithme)
-function step() {
-  if (estTermine()) { terminer(); return; }
-  avancerUnSeulPas();      // UNE étape de l'algorithme, pas tout
-  rendre();                // met à jour le DOM
-  requestAnimationFrame(step);  // re-programme la frame suivante
-}
-```
-Avec `await sleep(vitesse)` dans une boucle `async`, l'équivalent est une boucle qui `await`
-à chaque itération — mais **une seule itération par `await`**, jamais l'algorithme complet
-d'un bloc.
-
-## Format de réponse final
-
-Quand tu as résolu la tâche, utilise `final_answer` avec :
-- Un résumé court de ce que tu as fait
-- Le code final (si pertinent)
-- Les points d'attention (edge cases, limitations)
+- **[resources/quand_utiliser_quels_outils.md](file:///D:/GIT/graph-orchestrator-smolagents/skills/coding/resources/quand_utiliser_quels_outils.md)**: Read this to understand Quand utiliser quels outils.
+- **[resources/r_gles_d_or.md](file:///D:/GIT/graph-orchestrator-smolagents/skills/coding/resources/r_gles_d_or.md)**: Read this to understand Règles d'or.
+- **[resources/r_gle_critique_javascript_vanila_pur_dans_script_failure_mode_n_1.md](file:///D:/GIT/graph-orchestrator-smolagents/skills/coding/resources/r_gle_critique_javascript_vanila_pur_dans_script_failure_mode_n_1.md)**: Read this to understand ⚠️ RÈGLE CRITIQUE — JavaScript VANILA PUR dans `<script>` (failure mode n°1).
+- **[resources/r_gle_critique_fermeture_d_appel_python_pas_failure_mode_parsing_n_1.md](file:///D:/GIT/graph-orchestrator-smolagents/skills/coding/resources/r_gle_critique_fermeture_d_appel_python_pas_failure_mode_parsing_n_1.md)**: Read this to understand ⚠️ RÈGLE CRITIQUE — Fermeture d'appel Python `)` pas `}` (failure mode parsing n°1).
+- **[resources/r_gle_critique_hauteurs_css_en_pourcentage_failure_mode_visuel_n_1.md](file:///D:/GIT/graph-orchestrator-smolagents/skills/coding/resources/r_gle_critique_hauteurs_css_en_pourcentage_failure_mode_visuel_n_1.md)**: Read this to understand ⚠️ RÈGLE CRITIQUE — Hauteurs CSS en pourcentage (failure mode visuel n°1).
+- **[resources/r_gle_critique_animations_js_et_boucles_bloquantes_failure_mode_timeout_n_1.md](file:///D:/GIT/graph-orchestrator-smolagents/skills/coding/resources/r_gle_critique_animations_js_et_boucles_bloquantes_failure_mode_timeout_n_1.md)**: Read this to understand ⚠️ RÈGLE CRITIQUE — Animations JS et Boucles bloquantes (failure mode timeout n°1).
+- **[resources/format_de_r_ponse_final.md](file:///D:/GIT/graph-orchestrator-smolagents/skills/coding/resources/format_de_r_ponse_final.md)**: Read this to understand Format de réponse final.

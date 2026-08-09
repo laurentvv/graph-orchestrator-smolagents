@@ -95,6 +95,7 @@ Chaque `.md` est un cahier des charges structuré (souvent "1 fichier `index.htm
 
 **Cartographie Nœuds & Skills** : [`docs/NODES_AND_SKILLS.md`](./docs/NODES_AND_SKILLS.md) — inventaire complet des system prompts forcés par nœud (rôles, invariants, docstrings DSPy), des 11 skills et de leur mode de chargement (eager vs lazy F-57). À consulter pour savoir ce que voit chaque agent LLM à l'exécution, ou pour ajouter/modifier un skill.
 
+**Refactoring Automatique des Skills (Progressive Disclosure - F-92)** : Le script `scripts/refactor_skills.py` permet de restructurer automatiquement les compétences complexes. Il découpe les longs fichiers `SKILL.md` (plus de 80 lignes) en extrayant les sections secondaires vers un sous-dossier `resources/`, et met à jour le `SKILL.md` original pour forcer l'agent à les lire à la demande (lazy loading) via l'outil `view_file`. À exécuter dès qu'un nouveau skill ajouté au dossier `skills/` devient trop volumineux.
 ## 6. Git & GitHub
 - **Règle d'or Git** : Ne JAMAIS travailler ou pousser directement sur `main`. Avant toute modification, tu DOIS créer une nouvelle branche (ex: `feat/...` ou `fix/...`).
 - **Kilo Code Review** : L'agent GitHub doit approuver la PR avant le merge. *(Note pour l'agent IA : une fois la PR soumise, arrête-toi. Ne reste pas en boucle d'attente. Tu seras réveillé une fois la review validée pour supprimer la branche et retourner sur `main`).*

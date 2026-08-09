@@ -190,8 +190,10 @@ class ArchitectSignature(dspy.Signature):
         enjeu design (ex: script CLI pur), 'skills' peut rester vide (le socle file-creation +
         coding + context7-research est toujours injecté automatiquement par défaut).
 
-        Le Coder suivra ta stratégie à la lettre. Chaque sous-tâche doit avoir des critères
-        d'acceptation vérifiables (comportements attendus testables, pas juste un nom de fichier).
+        Le Coder suivra ta stratégie à la lettre. 
+        RÈGLE SUR LES TESTS (CRITIQUE) :
+        Chaque sous-tâche DOIT inclure dans sa `description` la liste explicite des tests et critères d'acceptation (comportements attendus testables).
+        C'est indispensable pour que le Coder puisse vérifier l'application avant de rendre la main. N'oublie pas de copier-coller les tests depuis le prompt d'origine s'il y en a.
 
         RÈGLE DE PRÉSERVATION DES DONNÉES (CRITIQUE) :
         Ne résume JAMAIS le cahier des charges de manière abstraite. Tu dois IMPÉRATIVEMENT copier-coller dans la `description` de la sous-tâche toutes les valeurs techniques explicites du prompt d'origine :
@@ -616,8 +618,8 @@ async def execute_prompt_refiner_node(
                 "available_capabilities": capabilities,
             },
             settings=settings,
-            spec=settings.no_think_spec,
-            think=False,
+            spec=settings.reasoning_spec,
+            think=True,
             model_override=settings.prompt_refiner_model_id,
         )
         refined = result.output
