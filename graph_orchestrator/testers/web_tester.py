@@ -238,6 +238,8 @@ Voici tes instructions obligatoires (Skill) :
 ATTENTION - Le dossier de travail absolu est : {workspace_url}
 {target_files_urls}
 
+[WINDOWS PATH WARNING] : Ne traduis JAMAIS les chemins Windows en chemins Unix (ex: `/d/GIT/...` au lieu de `D:/GIT/...` ou `D:\\GIT\\...`). Utilise EXACTEMENT le chemin fourni sans le modifier, sinon tes appels à `list_directory` ou `read_file` échoueront avec [WinError 3] Chemin introuvable.
+
 ### ⚠️ NAVIGATION OBLIGATOIRE avec DevTools `navigate_page` (PAS puppeteer_navigate)
 [BUG CONNU CRITIQUE] Le serveur `puppeteer_navigate` répond "Navigated to ..." mais ne
 charge PAS réellement le fichier local file:// — la page reste `about:blank` et tous tes
