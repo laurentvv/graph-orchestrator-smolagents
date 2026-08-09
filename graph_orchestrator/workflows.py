@@ -603,17 +603,41 @@ async def run_coding_workflow(
                         # le fix LoopGuard qui a débloqué le chemin jusqu'aux audits.
                         draft_filename = f"draft_{subtask.task_id.replace('-', '_')}.md"
                         draft_path = os.path.join(run_output_dir, draft_filename)
-                        with open(draft_path, "w", encoding="utf-8") as f:
-                            f.write(draft_res.draft_markdown)
-                        sub_dict["draft_instruction"] = (
-                            f"\n\n### BROUILLON DE L'ALGORITHM DRAFTER\n"
-                            f"L'Algorithm Drafter (Architecte Logiciel) a conçu la logique parfaite pour toi. Il a écrit tout le code brut dans le fichier `{draft_filename}` (à la racine du projet).\n\n"
-                            f"⚠️ INSTRUCTION CRITIQUE : Ne recopie SURTOUT PAS le code manuellement (outil write_file) car tu es un modèle rapide et tu risques de tronquer ou d'halluciner des lignes ! "
-                            f"Puisque tu es un agent Python, ton PREMIER réflexe DOIT ÊTRE d'écrire et d'exécuter un court script Python pour lire le fichier `{draft_filename}`, "
-                            f"extraire automatiquement les blocs de code (avec des regex ou des splits) et les sauvegarder directement dans les fichiers cibles.\n\n"
-                            f"⚠️ ATTENTION : Ne fais JAMAIS de `print()` du contenu lu dans ton script Python. Cela saturerait instantanément ta mémoire (context size). Lis et parse le fichier en silence.\n\n"
-                            f"👉 UNE FOIS les fichiers extraits, tu DOIS les relire avec tes outils, puis appliquer tes SKILLS (design, bonnes pratiques) en utilisant `search_replace` ou en exécutant un nouveau script Python pour enrichir le code brut du brouillon."
+                        # F-91 : Drafter Gate — vérifie le draft pour les bugs connus
+                        # (animation instantanée, doublons, placeholders, blocs malformés)
+                        # AVANT de l'écrire sur disque et de l'injecter au Coder. Si un
+                        # bug critique est détecté (should_reject), le draft est jeté et
+                        # le Coder part de zéro. Sinon, avertissements ajoutés à
+                        # draft_instruction pour que le Coder soit vigilant. 0 LLM,
+                        # déterministe — miroir de static_tester.py / linter.py.
+                        from .draft_gate import check_draft
+                        gate = check_draft(
+                            draft_res.draft_markdown,
+                            spec_hint=sub_dict.get("original_content", ""),
                         )
+                        if gate.should_reject:
+                            print(f"    [!] F-91 Drafter Gate : draft REJETÉ "
+                                  f"({len(gate.issues)} bug(s) critique(s)). "
+                                  f"Coder part de zéro (sans draft).")
+                            draft_res = None
+                        else:
+                            if gate.issues:
+                                kinds = ", ".join(i.kind for i in gate.issues)
+                                print(f"    [~] F-91 Drafter Gate : {len(gate.issues)} "
+                                      f"avertissement(s) ({kinds}) — draft conservé, "
+                                      f"Coder vigilant.")
+                            with open(draft_path, "w", encoding="utf-8") as f:
+                                f.write(gate.corrected_markdown)
+                            sub_dict["draft_instruction"] = (
+                                f"\n\n### BROUILLON DE L'ALGORITHM DRAFTER\n"
+                                f"L'Algorithm Drafter (Architecte Logiciel) a conçu la logique parfaite pour toi. Il a écrit tout le code brut dans le fichier `{draft_filename}` (à la racine du projet).\n\n"
+                                f"⚠️ INSTRUCTION CRITIQUE : Ne recopie SURTOUT PAS le code manuellement (outil write_file) car tu es un modèle rapide et tu risques de tronquer ou d'halluciner des lignes ! "
+                                f"Puisque tu es un agent Python, ton PREMIER réflexe DOIT ÊTRE d'écrire et d'exécuter un court script Python pour lire le fichier `{draft_filename}`, "
+                                f"extraire automatiquement les blocs de code (avec des regex ou des splits) et les sauvegarder directement dans les fichiers cibles.\n\n"
+                                f"⚠️ ATTENTION : Ne fais JAMAIS de `print()` du contenu lu dans ton script Python. Cela saturerait instantanément ta mémoire (context size). Lis et parse le fichier en silence.\n\n"
+                                f"👉 UNE FOIS les fichiers extraits, tu DOIS les relire avec tes outils, puis appliquer tes SKILLS (design, bonnes pratiques) en utilisant `search_replace` ou en exécutant un nouveau script Python pour enrichir le code brut du brouillon."
+                                + gate.warnings_block
+                            )
 
                 # 1. Coder (smolagents, modèle FAST)
                 coder_res, m1 = await execute_coder_node(sub_dict, fast_model, settings)

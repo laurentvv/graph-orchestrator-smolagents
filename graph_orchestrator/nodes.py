@@ -651,8 +651,12 @@ async def execute_coder_node(
         )
         coder_tools = [list_directory, read_file, read_python_skeleton, write_file, append_file, edit_file, search_replace, multi_replace, check_run_state, log_event, DuckDuckGoSearchTool()]
         coder_tools.extend(c7_tools)
-        # On redonne tous les outils web au coder, incluant vision
+        # On redonne tous les outils web au coder, incluant vision (DevTools ON par
+        # défaut — le feedback console est critique pour que le Coder corrige ses
+        # bugs de structure HTML/CSS). Le screenshot coûteux est géré par le
+        # step_callback vision (F-45), pas désactivable ici.
         coder_tools.extend(cdt_tools)
+        effective_cdt_tools = cdt_tools  # DevTools ON → preview_block actif
         # F-57 (Priorité 10) : tool load_skill pour la flexibilité. Les skills
         # sélectionnés par l'Architect sont déjà injectés en corps complet dans le
         # system prompt (voir skills_block ci-dessous), mais le Coder peut appeler
@@ -832,7 +836,7 @@ Le modèle plantera (troncature) si tu sors trop de lignes. Tu ES OBLIGÉ d'util
         # DevTools ne sont pas pertinents (pas de page à ouvrir dans un navigateur).
         # On détecte le web via router_lang OU extensions des target_files (défense en
         # profondeur : le routeur peut se tromper, les extensions non).
-        devtools_preview_block, devtools_tools_doc = _build_devtools_blocks(task, cdt_tools)
+        devtools_preview_block, devtools_tools_doc = _build_devtools_blocks(task, effective_cdt_tools)
 
         prompt = f"""{build_role_header("coder")}
 Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JAMAIS expliquer sans agir.

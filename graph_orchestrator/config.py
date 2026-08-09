@@ -334,6 +334,15 @@ class Settings:
     # Valeur par défaut True : on sécurise par défaut (fail-safe).
     bash_guard_enabled: bool = True
 
+    # --- DevTools Coder (F-90, séparation Coder/Test) ---
+    # Le Coder dispose par défaut de Chrome DevTools pour son auto-validation
+    # (F-45) : navigate_page + list_console_messages lui donnent un feedback
+    # critique pour corriger ses bugs de structure HTML/CSS (CSS fusionné,
+    # balise non fermée...). Désactivé (false) = Coder générateur pur, mais
+    # régression qualité observée (bug CSS fusionné 2026-08-09). On garde ON.
+    # Opt-out possible pour debug : CODER_DEVTOOLS_ENABLED=false.
+    coder_devtools_enabled: bool = True
+
     # --- Nœud PromptRefiner (meta-prompt avant l'Architect) ---
     # Un nœud DSPy (gemma REASONING) reformule le prompt utilisateur brut en spec structurée
     # AVANT l'Architect, inspiré du pattern "Enhance Prompt" (Kilo Code / Cline / Roo Code).
@@ -450,6 +459,7 @@ def load_settings() -> Settings:
         read_before_write_enabled=_get_bool("READ_BEFORE_WRITE_ENABLED", True),
         skill_budget_tokens=_get_int("SKILL_BUDGET_TOKENS", 8000),
         bash_guard_enabled=_get_bool("BASH_GUARD_ENABLED", True),
+        coder_devtools_enabled=_get_bool("CODER_DEVTOOLS_ENABLED", True),
         prompt_refiner_enabled=_get_bool("PROMPT_REFINER_ENABLED", True),
         prompt_refiner_model_id=_get_str("PROMPT_REFINER_MODEL_ID", ""),
         reasoning_no_think_model_id=_get_str("REASONING_NO_THINK_MODEL_ID", ""),
