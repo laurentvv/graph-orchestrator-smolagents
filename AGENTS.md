@@ -162,3 +162,21 @@ Pour assurer l'amélioration continue de l'usine logicielle (Feature F-61), nous
 Tous les nœuds DSPy (Router/PromptRefiner/Architect/Drafter/Security/Judge) **ignorent** le paramètre `*_model` qu'on leur passe — le vrai modèle vient de `_run_dspy_node → model_lifecycle(spec)` qui spawn son propre llama-server. Les scripts d'isolation reproduisent donc fidèlement le comportement production (prompts F-44/F-56/F-65, DSPy, model_lifecycle), en sautant juste le reste du graphe.
 
 Voir [`debug/isolation/README.md`](./debug/isolation/README.md) pour la convention complète (méthodologies manuelles F-55 + scripts d'isolation LLM F-89 + golden files pour les nœuds déterministes).
+
+## 10. Run de Référence (Golden Run)
+
+Pour toute vérification, un "Golden Run" (run E2E parfait ayant généré le code et passé tous les tests visuels, linting et validations du Juge) a été sauvegardé définitivement.
+
+**Emplacement :** `debug/reference_run_qwen4b_bubble_sort/`
+**Contenu :**
+- Fichiers générés complets (`index.html`, `styles.css`, `script.js`)
+- Le brouillon de l'Architecte (`draft_bubble_sort_viz_001.md`)
+- Le journal d'exécution E2E (`run_full.log`) avec le tableau d'observabilité.
+
+**Métriques clés de ce run de référence (Bubble Sort) :**
+- **Durée Totale :** 1768.1 secondes (environ 29.5 minutes) sur GPU local.
+- **Jetons (Tokens) :** 648 748 tokens traités au total.
+- **Itérations du Coder :** Le Coder a généré le code 2 fois. La première itération comportait une erreur interceptée par les gardiens (Static Tester / Juge). La boucle d'auto-correction (F-45) l'a relancé avec le bon contexte, et la 2ème passe a été validée avec succès.
+- **Modèles :** Qwen-4B (Coder) et Ornith-9B (Architect/Judge).
+
+Ce run sert d'étalon-or pour prouver que l'orchestrateur, le *Monkey Testing* (Fuzzing UI) et les *Guardrails* syntaxiques (triples quotes) permettent à des petits modèles (4B) de réaliser des applications Vanilla JS complexes de manière fiable.
