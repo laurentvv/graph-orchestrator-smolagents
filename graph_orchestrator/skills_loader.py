@@ -183,7 +183,7 @@ def build_skills_block(task_content: str) -> str:
 # matche — sur une tâche web, frontend-design est légitime à chaque step).
 
 # Skills TOUJOURS injectés (socle critique). Failure mode fatal si oublié.
-ALWAYS_SKILLS_CODER: set = {"file-creation", "coding", "context7-research", "web-animation"}
+ALWAYS_SKILLS_CODER: set = {"file-creation", "coding", "context7-research"}
 
 
 def _parse_frontmatter_yaml(text: str) -> dict:

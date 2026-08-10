@@ -595,10 +595,10 @@ silencieusement (boutons morts, éléments non générés). Seule la console le 
 
 Workflow de validation (À FAIRE après avoir créé les fichiers, AVANT final_answer) :
 1. `navigate_page(url="{primary_url}")` — ouvre ta page dans Chrome (URL absolue ci-dessous).
-2. `take_screenshot()` — OBLIGATOIRE EN PREMIER.
-3. `list_console_messages()` — OBLIGATOIRE EN DEUXIÈME. Vérifie 0 erreur JS (SyntaxError,
-   Unexpected token, Uncaught = bug critique → corrige AVANT de continuer).
-4. Si erreur (visuelle ou console) : CORRIGE via search_replace, puis re-`navigate_page` + re-`take_screenshot` + re-`list_console_messages`.
+2. `take_screenshot()` — OBLIGATOIRE EN PREMIER pour voir l'état initial.
+3. FUZZING UI OBLIGATOIRE : Exécute `evaluate_script(function="() => document.querySelectorAll('button').forEach(b => b.click())")` pour cliquer sur tous les boutons et réveiller les bugs JS cachés.
+4. `list_console_messages()` — OBLIGATOIRE EN DERNIER. Vérifie 0 erreur JS (SyntaxError, undefined, Uncaught). Sans l'étape 3, tu rateras 80% des erreurs !
+5. Si erreur : CORRIGE via `search_replace` (jamais de rewrite total), puis recommence le cycle (navigate, screenshot, fuzzing, console).
 {criteria_note}
 
 URL exacte de ta page (primary target) : {primary_url}
@@ -863,11 +863,9 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
    ❌ FAUX : write_file("index.html") puis append_file("index.html") → 2 pages collées !
    ✅ JUSTE : write_file("index.html") une fois, puis search_replace pour les modifs.
 7. PYTHON BUILT-INS : Si tu utilises `time.sleep()` ou d'autres modules standards dans ton code Python, n'oublie pas de les importer (ex: `import time` au début du bloc).
-8. FERMETURE D'APPEL = `)` JAMAIS `}}` : quand `content`/`new_string` contient du JS/HTML
-   avec des `{{...}}`, l'appel Python se termine TOUJOURS par `)`. Le `}}` appartient au
-   CONTENU, pas à l'appel. Mélanger les deux provoque un SyntaxError de parsing fatal.
-   ❌ FAUX : search_replace(path="x", old_string="...", new_string="function() {{ ... }}"}}
-   ✅ JUSTE : search_replace(path="x", old_string="...", new_string="function() {{ ... }}")
+8. FORMATAGE DES STRINGS (TRIPLE QUOTES) : Pour éviter les erreurs de parsing Python liées aux quotes (`'`) et accolades (`{{`) du code source (JS/CSS/HTML), tu DOIS TOUJOURS encadrer tes arguments `content`, `old_string`, et `new_string` par des triples guillemets : `r\"\"\"...\"\"\"` ou `'''...'''`. N'utilise JAMAIS de simples guillemets pour encadrer du code.
+   ❌ FAUX : search_replace(path="x", old_string="function() {{ ... }}")
+   ✅ JUSTE : search_replace(path="x", old_string=r\"\"\"function() {{ ... }}\"\"\", new_string=r\"\"\"function() {{ startSort(); }}\"\"\")
 9. ANIMATION PAS-À-PAS (Visualiseurs/Algos) : Pour les visualisations d'algorithmes (tri, pathfinding, etc.), utilise TOUJOURS `async`/`await` avec une fonction `sleep` (ex: `const sleep = ms => new Promise(r => setTimeout(r, ms));`). N'utilise JAMAIS de boucle `while` ou `for` classique contenant un simple `setTimeout` asynchrone, cela exécute tout instantanément.
    ❌ FAUX : function sort() {{ while(swapped) {{ setTimeout(() => swap(), delay); }} }}
    ✅ JUSTE : async function sort() {{ while(swapped) {{ await sleep(delay); swap(); }} }}
@@ -883,10 +881,10 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
 Tu écris du code Python dans un bloc ````python ... ```` qui appelle tes outils. Exemple one-shot :
 ```python
 # Thought courte (1 phrase) PUIS appel immédiat — pas de longue réflexion
-resultat = write_file(path="index.html", content="<!DOCTYPE html>\\n<html>...</html>")
+resultat = write_file(path="index.html", content=r\"\"\"<!DOCTYPE html>\\n<html>...</html>\"\"\")
 print(resultat)
-# Exemple search_replace avec du JS (accolades) : ferme l'appel par ')' JAMAIS '}}'
-fix = search_replace(path="index.html", old_string="function() {{}}", new_string="function() {{ startSort(); }}")
+# Exemple search_replace avec code JS : utilise toujours des triples guillemets
+fix = search_replace(path="index.html", old_string=r\"\"\"function() {{}}\"\"\", new_string=r\"\"\"function() {{ startSort(); }}\"\"\")
 print(fix)
 # ... autres appels ...
 final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Fichiers créés.", "linter_ok": True, "vision_ok": True}})

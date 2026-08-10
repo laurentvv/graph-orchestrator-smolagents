@@ -22,7 +22,8 @@ We delegate the heavy thinking to deep reasoning models (Chain of Thought, 32k t
 The **Architect**, the **Judge**, and the **Security Expert** never write a single line of code. They mathematically break down the requirements, generate ultra-strict Pydantic JSON schemas (preventing hallucinations), and ruthlessly evaluate the deliverables.
 
 ### 2. 🛠️ The Hands (smolagents) Execute in the Field
-For each subtask, a **Coder** node (fast model) wakes up. It receives a clear order and a powerful toolkit. It writes files, navigates the terminal, uses Git, and even has... eyes!
+For each subtask, a **Coder** node (fast model, e.g. Qwen 4B) wakes up. It receives a clear order and a powerful toolkit. It writes files, navigates the terminal, uses Git, and even has... eyes! 
+To ensure extreme stability even on small 4B models, strict guardrails are applied to tool calls (enforcing `r"""..."""` triple quotes) and the Coder mandates automatic UI fuzzing ("Monkey Testing") by programmatically clicking all buttons before evaluating its work.
 
 ### 3. 👀 Multimodal Visual Self-Correction
 Say goodbye to web interfaces with invisible buttons or overlapping divs. Our agents use the **MCP (Model Context Protocol)** to drive Chrome in the background. The agent takes a screenshot of its own code, analyzes it using its vision models, and fixes visual bugs on its own *before* you even see them.

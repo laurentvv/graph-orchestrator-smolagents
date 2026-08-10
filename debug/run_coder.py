@@ -118,14 +118,14 @@ async def main():
         with open(draft_path, "w", encoding="utf-8") as f:
             f.write(draft_content)
         task_desc += (
-            "\n\n### BROUILLON DE L'ALGORITHM DRAFTER\n"
-            "L'Algorithm Drafter (Architecte Logiciel) a conçu la logique parfaite pour toi. "
-            f"L'Algorithm Drafter (Architecte Logiciel) a conçu la logique parfaite pour toi. Il a écrit tout le code brut dans le fichier `{draft_filename}` (à la racine du projet).\n\n"
-            "⚠️ INSTRUCTION CRITIQUE : Ne recopie SURTOUT PAS le code manuellement (outil write_file) car tu es un modèle rapide et tu risques de tronquer ou d'halluciner des lignes ! "
-            f"Puisque tu es un agent Python, ton PREMIER réflexe DOIT ÊTRE d'écrire et d'exécuter un court script Python pour lire le fichier `{draft_filename}`, "
-            "extraire automatiquement les blocs de code (avec des regex ou des splits) et les sauvegarder directement dans les fichiers cibles.\n\n"
-            "⚠️ ATTENTION : Ne fais JAMAIS de `print()` du contenu lu dans ton script Python. Cela saturerait instantanément ta mémoire (context size). Lis et parse le fichier en silence.\n\n"
-            "👉 UNE FOIS les fichiers extraits, tu DOIS les relire avec tes outils, puis appliquer tes SKILLS (design, bonnes pratiques) en utilisant `search_replace` ou en exécutant un nouveau script Python pour enrichir le code brut du brouillon."
+            f"\n\n### PLAN D'IMPLÉMENTATION DE L'ARCHITECTE LOGICIEL\n"
+            f"L'Architecte Logiciel a conçu un plan d'implémentation détaillé dans `{draft_filename}`.\n"
+            f"⚠️ CE N'EST PAS DU CODE À RECOPIER — c'est un plan d'intention (structure, logique, edge cases).\n\n"
+            f"INSTRUCTION : Lis ce plan avec `read_file(path=\"{draft_filename}\")`, puis IMPLÉMENTE-LE en codant "
+            f"from-scratch avec tes outils (write_file pour chaque fichier, contenu COMPLET).\n"
+            f"Applique tes SKILLS (frontend-design, coding) pendant l'implémentation pour enrichir le code.\n"
+            f"Respecte scrupuleusement la logique décrite dans le plan (algorithmes, sync DOM, init).\n\n"
+            f"🚫 NE recopie PAS le plan — IMPLÉMENTE-LE. Chaque fichier écrit UNE SEULE FOIS via write_file."
         )
 
     print(f"[*] Coder isolation — PRODUCTION (execute_coder_node)")

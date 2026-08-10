@@ -122,7 +122,8 @@ Pour assurer l'amélioration continue de l'usine logicielle (Feature F-61), nous
 3. **Validation Humaine** : Tu ne dois **jamais** modifier les règles à l'aveugle. Tu dois faire un résumé clair à l'utilisateur des problèmes trouvés, lui proposer une solution (ex: "Je propose d'ajouter cette règle stricte dans `nodes.py`"), et attendre son feu vert ("Go").
 4. **Application** : Une fois la validation obtenue, interviens directement dans le code source pour durcir les prompts ou les skills.
 
-*Exemple réel : L'interdiction du top-level await dans Puppeteer et l'obligation d'utiliser des déclarations de fonction pour `evaluate_script` ont été diagnostiquées via l'analyse des crashes et fixées en direct dans les prompts des nœuds.*
+*Exemple réel 1 : L'interdiction du top-level await dans Puppeteer et l'obligation d'utiliser des déclarations de fonction pour `evaluate_script` ont été diagnostiquées via l'analyse des crashes et fixées en direct dans les prompts des nœuds.*
+*Exemple réel 2 : Pour stabiliser le petit modèle 4B, l'obligation d'utiliser des triples quotes `r\"\"\"...\"\"\"` dans les appels d'outils et l'intégration du "Monkey Testing" (clic automatique des boutons dans `evaluate_script`) ont été ajoutées dans `nodes.py`.*
 
 ## 9. Tests Rapides par Nœud (Isolation LLM — F-89)
 

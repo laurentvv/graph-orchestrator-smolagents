@@ -180,6 +180,10 @@ class ArchitectSignature(dspy.Signature):
           dashboard, visualizer). Design pro concret : palettes, typo, layout APP vs LANDING.
         - 'devtools-preview' : pour les tâches web avec interface interactive (boutons,
           animations) — le Coder auto-validera sa page via Chrome DevTools (screenshot+console).
+        - 'web-animation' : OBLIGATOIRE pour tout visualiseur d'algorithme (tri, pathfinding,
+          simulation) ou toute animation JS. Documente le pattern async/await avec sleep()
+          (JAMAIS setTimeout dans une boucle = animation instantanée invisible) + sync DOM
+          après swap + init au chargement. Sans ce skill, le Coder produit des animations cassées.
         - 'python-testing-patterns' : pour les projets Python où le Coder doit produire des
           tests pytest (fixtures, mocking, TDD). Donne la doctrine du code testable.
         - 'code-review' : pour les sous-tâches complexes où le Coder doit s'auto-réviser
