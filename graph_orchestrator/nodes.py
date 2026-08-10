@@ -555,6 +555,11 @@ def _build_devtools_blocks(task: dict, cdt_tools: list) -> tuple[str, str]:
       - Si web + outils dispos → preview block (workflow de validation visuelle) +
         doc des outils clés (navigate_page, take_screenshot, list_console_messages).
 
+    F-82 : si l'Architecte a produit des ``visual_success_criteria``, ils sont intégrés
+    au preview_block sous forme de checklist anti-biais (force le Coder à ANALYSER son
+    screenshot au lieu d'excuser un visuel vide — bug canvas 2026-08-08). Rétrocompat :
+    liste vide = workflow DevTools historique (pas de checklist forcée).
+
     Le screenshot pris est vu par le modèle (gemma-4-E4B est multimodal, validé runtime).
     """
     if not cdt_tools:
@@ -569,6 +574,19 @@ def _build_devtools_blocks(task: dict, cdt_tools: list) -> tuple[str, str]:
         # Pas web : on liste les outils mais sans workflow de preview poussé.
         return "", _DEVTOOLS_TOOLS_DOC
 
+    # F-82 : critères visuels générés par l'Architecte (anti-biais de confirmation).
+    from .validation_criteria import build_visual_criteria_block
+    visual_block = build_visual_criteria_block(task.get("visual_success_criteria") or [])
+    # Si critères présents, l'étape 5 du workflow devient une checklist concrète au
+    # lieu du "rendu conforme" flou. Sinon, on garde le workflow historique.
+    if visual_block:
+        criteria_note = (
+            "\n5. VALIDATION CRITÈRES VISUELS : confirme OUI/NON chaque critère ci-dessous"
+            " sur ta capture. UN seul NON = failure → corrige."
+        )
+    else:
+        criteria_note = "\n5. final_answer uniquement quand : 1) le rendu est conforme, 2) 0 erreur console."
+
     preview_block = f"""### 🖥️ VALIDATION VISUELLE (Chrome DevTools — F-45)
 Tu disposes d'un navigateur Chrome pilotable pour VÉRIFIER ta page AVANT final_answer.
 
@@ -577,15 +595,15 @@ silencieusement (boutons morts, éléments non générés). Seule la console le 
 
 Workflow de validation (À FAIRE après avoir créé les fichiers, AVANT final_answer) :
 1. `navigate_page(url="{primary_url}")` — ouvre ta page dans Chrome (URL absolue ci-dessous).
-2. `take_screenshot()` — OBLIGATOIRE EN PREMIER.
-3. `list_console_messages()` — OBLIGATOIRE EN DEUXIÈME. Vérifie 0 erreur JS (SyntaxError,
-   Unexpected token, Uncaught = bug critique → corrige AVANT de continuer).
-4. Si erreur (visuelle ou console) : CORRIGE via search_replace, puis re-`navigate_page` + re-`take_screenshot` + re-`list_console_messages`.
-5. final_answer uniquement quand : 1) le rendu est conforme, 2) 0 erreur console.
+2. `take_screenshot()` — OBLIGATOIRE EN PREMIER pour voir l'état initial.
+3. FUZZING UI OBLIGATOIRE : Exécute `evaluate_script(function="() => document.querySelectorAll('button').forEach(b => b.click())")` pour cliquer sur tous les boutons et réveiller les bugs JS cachés.
+4. `list_console_messages()` — OBLIGATOIRE EN DERNIER. Vérifie 0 erreur JS (SyntaxError, undefined, Uncaught). Sans l'étape 3, tu rateras 80% des erreurs !
+5. Si erreur : CORRIGE via `search_replace` (jamais de rewrite total), puis recommence le cycle (navigate, screenshot, fuzzing, console).
+{criteria_note}
 
 URL exacte de ta page (primary target) : {primary_url}
 ATTENTION : si ta page n'est pas à la racine du run, navigate_page DOIT pointer sur le
-vrai fichier (ex: landing_page/index.html), pas sur la racine du workspace."""
+vrai fichier (ex: landing_page/index.html), pas sur la racine du workspace.{visual_block}"""
     return preview_block, _DEVTOOLS_TOOLS_DOC
 
 
@@ -633,8 +651,12 @@ async def execute_coder_node(
         )
         coder_tools = [list_directory, read_file, read_python_skeleton, write_file, append_file, edit_file, search_replace, multi_replace, check_run_state, log_event, DuckDuckGoSearchTool()]
         coder_tools.extend(c7_tools)
-        # On redonne tous les outils web au coder, incluant vision
+        # On redonne tous les outils web au coder, incluant vision (DevTools ON par
+        # défaut — le feedback console est critique pour que le Coder corrige ses
+        # bugs de structure HTML/CSS). Le screenshot coûteux est géré par le
+        # step_callback vision (F-45), pas désactivable ici.
         coder_tools.extend(cdt_tools)
+        effective_cdt_tools = cdt_tools  # DevTools ON → preview_block actif
         # F-57 (Priorité 10) : tool load_skill pour la flexibilité. Les skills
         # sélectionnés par l'Architect sont déjà injectés en corps complet dans le
         # system prompt (voir skills_block ci-dessous), mais le Coder peut appeler
@@ -796,25 +818,30 @@ write_file massif (ça s'essouffle/tronque). Procède ainsi :
         elif strategy == "multifile":
             strategy_block = """### WORKFLOW (stratégie MULTIFILE imposée par l'Architect)
 Construis chaque fichier cible de façon autonome (1 module logique = 1 fichier).
-⚠️ CRITIQUE ET OBLIGATOIRE : TU NE DOIS JAMAIS ÉCRIRE UN FICHIER COMPLET D'UN COUP AVEC write_file.
-Le modèle plantera (troncature) si tu sors trop de lignes. Tu ES OBLIGÉ d'utiliser l'édition par bloc :
-1. Étape 1 : Fais un `write_file` UNIQUEMENT pour le squelette vide ou basique du premier fichier. Laisse le tour s'arrêter.
-2. Étape 2 : Au tour suivant, utilise OBLIGATOIREMENT `append_file` ou `multi_replace` pour injecter le vrai code.
-3. Répète ce processus (squelette puis append/replace) pour chaque fichier, UN PAR UN. Ne traite JAMAIS deux fichiers dans le même tour.
-4. Teste l'interface visuellement. final_answer quand tout marche."""
+⚠️ CRITIQUE ET OBLIGATOIRE : Chaque fichier est écrit UNE SEULE FOIS via write_file avec son contenu COMPLET.
+Si un draft Drafter est fourni, extrais son code via le script du skill `draft-extraction`, puis AMÉLIORE-le.
+1. Étape 1 : Extrait le code du draft (skill draft-extraction) → write_file pour chaque fichier (contenu complet).
+2. Étape 2 : RELIS chaque fichier (read_file) et AMÉLIORE-le en appliquant tes skills (frontend-design pour le
+   design, coding pour les bonnes pratiques). Utilise search_replace/multi_replace pour les améliorations.
+   Points d'amélioration OBLIGATOIRES pour un visualiseur : sync DOM après swap (bar.style.height), init du
+   tableau au chargement (pas de barres vides), animation avec await sleep (pas setTimeout en rafale).
+3. Teste l'interface visuellement (navigate_page + take_screenshot + list_console_messages).
+4. final_answer quand tout marche (0 console error + barres visibles + tri fonctionnel).
+🚫 JAMAIS append_file sur un fichier créé avec write_file → doublerait le contenu."""
         else:  # simple (défaut, rétro-compat)
             strategy_block = """### WORKFLOW (stratégie SIMPLE)
-⚠️ CRITIQUE ET OBLIGATOIRE : TU NE DOIS JAMAIS ÉCRIRE UN FICHIER COMPLET D'UN COUP AVEC write_file.
-1. Utilise `write_file(path=..., content=...)` UNIQUEMENT pour créer le squelette du fichier. Laisse ton tour s'arrêter.
-2. Au tour suivant, utilise OBLIGATOIREMENT `append_file` ou `multi_replace` pour injecter le code.
-3. final_answer quand c'est terminé."""
+1. `write_file(path=..., content=...)` avec le contenu COMPLET du fichier. Un seul write_file par fichier.
+2. Si un draft Drafter est fourni : extrais son code (skill draft-extraction), puis AMÉLIORE-le avec tes skills
+   (frontend-design, coding) via search_replace/multi_replace. Points clés : sync DOM, init au chargement, animation await.
+3. Teste visuellement (navigate_page + take_screenshot + list_console_messages). final_answer quand tout marche.
+🚫 JAMAIS append_file sur un fichier créé avec write_file."""
 
         # F-45 : section preview visuelle (Chrome DevTools) — ACTIVE uniquement pour
         # les tâches web (HTML/CSS/JS). Pour les autres technos (Python), les outils
         # DevTools ne sont pas pertinents (pas de page à ouvrir dans un navigateur).
         # On détecte le web via router_lang OU extensions des target_files (défense en
         # profondeur : le routeur peut se tromper, les extensions non).
-        devtools_preview_block, devtools_tools_doc = _build_devtools_blocks(task, cdt_tools)
+        devtools_preview_block, devtools_tools_doc = _build_devtools_blocks(task, effective_cdt_tools)
 
         prompt = f"""{build_role_header("coder")}
 Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JAMAIS expliquer sans agir.
@@ -830,14 +857,15 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
    ouverte entre 2 appels. Si le contenu dépasse ~60 lignes, DÉCOUPE en plusieurs append_file.
 5. PAS DE PLACEHOLDER : interdiction absolue de "TODO", "...", "Logique ici", fonctions vides
    ou mocks. Implémentation COMPLÈTE, RÉELLE et FONCTIONNELLE.
-6. ANTI-BOUCLE : NE RE-ÉCRIS JAMAIS avec write_file un fichier déjà créé (ça l'écrase).
-   Pour AJOUTER du contenu → append_file. Pour MODIFIER un fragment → search_replace.
+6. ANTI-DOUBLON : Chaque fichier cible ne doit être écrit qu'UNE SEULE FOIS via write_file.
+   Pour MODIFIER un fichier existant → search_replace/multi_replace (JAMAIS write_file ni append_file).
+   append_file UNIQUEMENT pour compléter un fichier incomplet (ex: squelette sans </html>).
+   ❌ FAUX : write_file("index.html") puis append_file("index.html") → 2 pages collées !
+   ✅ JUSTE : write_file("index.html") une fois, puis search_replace pour les modifs.
 7. PYTHON BUILT-INS : Si tu utilises `time.sleep()` ou d'autres modules standards dans ton code Python, n'oublie pas de les importer (ex: `import time` au début du bloc).
-8. FERMETURE D'APPEL = `)` JAMAIS `}}` : quand `content`/`new_string` contient du JS/HTML
-   avec des `{{...}}`, l'appel Python se termine TOUJOURS par `)`. Le `}}` appartient au
-   CONTENU, pas à l'appel. Mélanger les deux provoque un SyntaxError de parsing fatal.
-   ❌ FAUX : search_replace(path="x", old_string="...", new_string="function() {{ ... }}"}}
-   ✅ JUSTE : search_replace(path="x", old_string="...", new_string="function() {{ ... }}")
+8. FORMATAGE DES STRINGS (TRIPLE QUOTES) : Pour éviter les erreurs de parsing Python liées aux quotes (`'`) et accolades (`{{`) du code source (JS/CSS/HTML), tu DOIS TOUJOURS encadrer tes arguments `content`, `old_string`, et `new_string` par des triples guillemets : `r\"\"\"...\"\"\"` ou `'''...'''`. N'utilise JAMAIS de simples guillemets pour encadrer du code.
+   ❌ FAUX : search_replace(path="x", old_string="function() {{ ... }}")
+   ✅ JUSTE : search_replace(path="x", old_string=r\"\"\"function() {{ ... }}\"\"\", new_string=r\"\"\"function() {{ startSort(); }}\"\"\")
 9. ANIMATION PAS-À-PAS (Visualiseurs/Algos) : Pour les visualisations d'algorithmes (tri, pathfinding, etc.), utilise TOUJOURS `async`/`await` avec une fonction `sleep` (ex: `const sleep = ms => new Promise(r => setTimeout(r, ms));`). N'utilise JAMAIS de boucle `while` ou `for` classique contenant un simple `setTimeout` asynchrone, cela exécute tout instantanément.
    ❌ FAUX : function sort() {{ while(swapped) {{ setTimeout(() => swap(), delay); }} }}
    ✅ JUSTE : async function sort() {{ while(swapped) {{ await sleep(delay); swap(); }} }}
@@ -853,10 +881,10 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
 Tu écris du code Python dans un bloc ````python ... ```` qui appelle tes outils. Exemple one-shot :
 ```python
 # Thought courte (1 phrase) PUIS appel immédiat — pas de longue réflexion
-resultat = write_file(path="index.html", content="<!DOCTYPE html>\\n<html>...</html>")
+resultat = write_file(path="index.html", content=r\"\"\"<!DOCTYPE html>\\n<html>...</html>\"\"\")
 print(resultat)
-# Exemple search_replace avec du JS (accolades) : ferme l'appel par ')' JAMAIS '}}'
-fix = search_replace(path="index.html", old_string="function() {{}}", new_string="function() {{ startSort(); }}")
+# Exemple search_replace avec code JS : utilise toujours des triples guillemets
+fix = search_replace(path="index.html", old_string=r\"\"\"function() {{}}\"\"\", new_string=r\"\"\"function() {{ startSort(); }}\"\"\")
 print(fix)
 # ... autres appels ...
 final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Fichiers créés.", "linter_ok": True, "vision_ok": True}})

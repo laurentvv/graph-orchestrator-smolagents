@@ -21,6 +21,11 @@ def refactor_skill(skill_dir):
         print(f"Skipping {skill_dir} - already refactored")
         return
         
+    # Check if explicitly opted out
+    if 'keep_inline: true' in content:
+        print(f"Skipping {skill_dir} - keep_inline flag set")
+        return
+        
     # If the file is relatively short, don't refactor
     if len(content.splitlines()) < 80:
         print(f"Skipping {skill_dir} - too short ({len(content.splitlines())} lines)")

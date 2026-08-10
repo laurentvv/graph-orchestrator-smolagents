@@ -180,6 +180,10 @@ class ArchitectSignature(dspy.Signature):
           dashboard, visualizer). Design pro concret : palettes, typo, layout APP vs LANDING.
         - 'devtools-preview' : pour les tâches web avec interface interactive (boutons,
           animations) — le Coder auto-validera sa page via Chrome DevTools (screenshot+console).
+        - 'web-animation' : OBLIGATOIRE pour tout visualiseur d'algorithme (tri, pathfinding,
+          simulation) ou toute animation JS. Documente le pattern async/await avec sleep()
+          (JAMAIS setTimeout dans une boucle = animation instantanée invisible) + sync DOM
+          après swap + init au chargement. Sans ce skill, le Coder produit des animations cassées.
         - 'python-testing-patterns' : pour les projets Python où le Coder doit produire des
           tests pytest (fixtures, mocking, TDD). Donne la doctrine du code testable.
         - 'code-review' : pour les sous-tâches complexes où le Coder doit s'auto-réviser
@@ -190,10 +194,43 @@ class ArchitectSignature(dspy.Signature):
         enjeu design (ex: script CLI pur), 'skills' peut rester vide (le socle file-creation +
         coding + context7-research est toujours injecté automatiquement par défaut).
 
-        Le Coder suivra ta stratégie à la lettre. 
-        RÈGLE SUR LES TESTS (CRITIQUE) :
-        Chaque sous-tâche DOIT inclure dans sa `description` la liste explicite des tests et critères d'acceptation (comportements attendus testables).
-        C'est indispensable pour que le Coder puisse vérifier l'application avant de rendre la main. N'oublie pas de copier-coller les tests depuis le prompt d'origine s'il y en a.
+        RÈGLE DE CRITÈRES DE VALIDATION (F-90 — l'Architecte est le PILOTE des validations) :
+        Tu produis les ordres de validation que les autres nœuds (Coder, Tester, Judge) vont
+        exécuter. Ils doivent être SPÉCIFIQUES au cahier des charges, pas génériques. Sans
+        critères explicites, le Coder valide à l'aveugle (biais observé en prod : canvas vide
+        excusé comme "normal avant interaction" alors que generateArray() est appelé à l'init).
+
+        Pour CHAQUE sous-tâche, remplis 3 champs :
+
+        1. 'visual_success_criteria' (LISTE d'assertions visuelles concrètes, pour le Coder) :
+           Ce que le Coder DOIT voir sur son screenshot avant de valider. Sois précis et
+           anti-biais — un visuel VIDE est un BUG, pas "normal avant interaction" :
+           - ✅ "Au chargement de la page, ≥1 barre colorée VISIBLE dans le canvas (un canvas
+             vide au chargement = BUG critique, pas 'normal')"
+           - ✅ "Le compteur affiche '0' au chargement"
+           - ✅ "Les boutons Démarrer/Réinitialiser sont visibles et cliquables"
+           - ❌ VAGUE : "le rendu est correct" (le modèle excusera un canvas vide)
+           - ❌ ABSENT : si tu ne mets rien, le Coder validera à l'aveugle.
+           Ne mets RIEN ici si la tâche n'est PAS visuelle (script CLI, API backend pur).
+
+        2. 'functional_test_criteria' (LISTE d'assertions de comportement, pour le Tester) :
+           Ce que le Tester DOIT vérifier via evaluate_script (pas seulement absence de crash) :
+           - ✅ "Après clic sur Démarrer puis await sleep(400ms), le compteur > 0"
+           - ✅ "Après fin du tri, le tableau est trié par ordre croissant (vérifier heights)"
+           - ✅ "Déplacer le slider de vitesse change la valeur affichée à l'écran"
+           Ces critères REMPLACENT la checklist générique quand non vide — plus précis car
+           produits par ta compréhension du cahier des charges.
+
+        3. 'acceptance_rubric' (TEXTE court, pour le Judge) :
+           Les critères d'acceptation PONDÉRÉS spécifiques à cette sous-tâche :
+           - ✅ "CRITICAL: barres visibles au chargement + tri correct. HIGH: code couleur
+                3 états distincts. MEDIUM: responsive mobile. LOW: animations fluides."
+           Ce champ est concaténé au cahier des charges global du Judge. Laisse vide si la
+           spec suffit (tâche triviale).
+
+        Le Coder suivra ta stratégie à la lettre. Chaque sous-tâche DOIT inclure dans sa
+        `description` la liste explicite des tests et critères d'acceptation (comportements
+        attendus testables). N'oublie pas de copier-coller les tests depuis le prompt d'origine.
 
         RÈGLE DE PRÉSERVATION DES DONNÉES (CRITIQUE) :
         Ne résume JAMAIS le cahier des charges de manière abstraite. Tu dois IMPÉRATIVEMENT copier-coller dans la `description` de la sous-tâche toutes les valeurs techniques explicites du prompt d'origine :
@@ -204,46 +241,64 @@ class ArchitectSignature(dspy.Signature):
         """,
     )
     task_content: str = dspy.InputField(desc="Le cahier des charges global de la fonctionnalité ou du projet à développer")
-    output: ArchitectOutput = dspy.OutputField(desc="Plan : liste de sous-tâches (2-4 max). Chaque ArchitectTask a target_files + strategy + sections (si incremental). Définis aussi 'skills' (pour le Coder, ex: ['tdd']), 'tester_skills' (pour le Tester, ex: ['webapp-testing']), 'judge_skills' (ex: ['code-review']).")
+    output: ArchitectOutput = dspy.OutputField(desc="Plan : liste de sous-tâches (2-4 max). Chaque ArchitectTask a target_files + strategy + sections (si incremental). Définis aussi 'skills' (pour le Coder, ex: ['tdd']), 'tester_skills' (pour le Tester, ex: ['webapp-testing']), 'judge_skills' (ex: ['code-review']), et les critères de validation F-82 : 'visual_success_criteria' (assertions visuelles pour le Coder, ex: ['barres visibles au chargement']), 'functional_test_criteria' (assertions comportementales pour le Tester), 'acceptance_rubric' (critères pondérés pour le Judge).")
 
 
 class DrafterSignature(dspy.Signature):
     __doc__ = with_invariants(
         "drafter",
-        """Agit comme le 'Cerveau' de l'ingénierie logicielle.
-        Reçoit la description de la sous-tâche et conçoit l'algorithme complet en Markdown brut.
+        """Agit comme l'Architecte Logiciel : conçoit un PLAN D'IMPLÉMENTATION précis
+        (intention + structure + logique), PAS du code brut. Le Coder implémentera ce plan.
+
+        RÔLE : Tu produis un plan d'implémentation que le Coder suivra. Ce plan décrit
+        COMMENT construire la solution (structure, logique, edge cases), pas le code exact.
+        Le Coder code from-scratch en suivant ton plan → pas de copier-coller → pas de doublon.
 
         RÈGLES CRITIQUES :
-        1. Ne génère QUE du code et de la logique pure. N'utilise aucun outil.
-        2. TU DOIS GÉNÉRER LE CODE POUR **TOUS** LES FICHIERS CIBLES MENTIONNÉS DANS `target_files`.
-        3. Chaque fichier doit être dans son propre bloc Markdown (ex: ```html ... ```, ```css ... ```, ```javascript ... ```).
-        4. N'omets AUCUN fichier. Si la cible demande HTML, CSS et JS, tu dois fournir les 3 blocs complets l'un à la suite de l'autre.
-        5. L'implémentation doit être fonctionnelle de bout en bout.
+        1. Produis un PLAN D'IMPLÉMENTATION en Markdown, structuré par fichier cible.
+        2. Pour chaque fichier, décris : sa structure (IDs/classes DOM), sa logique
+           (fonctions, algorithmes), et les edge cases à gérer.
+        3. Sois PRÉCIS sur la logique algorithmique : étapes exactes, variables clés,
+           conditions, boucles. Le Coder doit pouvoir implémenter sans ambiguïté.
+        4. Pour les visualiseurs/animations : précise le mécanisme de timing (await sleep,
+           requestAnimationFrame avec 1 itération/frame), la sync DOM après chaque opération
+           (mettre à jour les hauteurs/couleurs des éléments après swap).
+        5. N'écris PAS de code complet — décris l'intention et la logique. Des snippets
+           courts (signature de fonction, structure HTML) sont OK, mais pas de fichiers entiers.
 
-        ANTI-PLACEHOLDERS (interdiction absolue — la cause n°1 de rejet par le Judge) :
-        - JAMAIS de « TODO », « ... », « Logique ici », « // implémenter », fonctions vides,
-          mocks, ou commentaires à la place du code.
-        - JAMAIS d'ellipsis pour « raccourcir » : si un bloc dépasse ~60 lignes, fournis-le
-          ENTIÈREMÊME (le découpage est le job du Coder via append_file, pas le tien).
-        - Si tu ne sais pas implémenter une partie, écris la MEILLEURE implémentation réelle
-          que tu peux, ne laisse pas de trou.
+        ANTI-PIÈGES (leçons de prod — PRÉCISES dans ton plan) :
+        - Canvas : fillRect(x, y, w, h) dessine depuis le coin HAUT-GAUCHE. y = canvas.height
+          dessine hors champ. Le Coder doit utiliser y = canvas.height - barHeight.
+        - Animation : JAMAIS de boucle for complète dans un setTimeout (instantané).
+          Utiliser await sleep(ms) avec UNE itération par appel asynchrone.
+        - Sync DOM : après un swap de valeurs, TOUJOURS mettre à jour l'affichage
+          (bar.style.height = newValue) avant de continuer.
+        - Init : le tableau doit être généré ET affiché au chargement (pas de barres vides).
 
-        FORMAT DE SORTIE (exemple canonique) :
-        ```html
-        <!DOCTYPE html>...code HTML complet, réel, fonctionnel...
-        ```
-        ```css
-        body { ... } ...code CSS complet...
-        ```
-        ```javascript
-        function init() { ... } ...code JS complet...
-        ```
+        FORMAT DE SORTIE :
+        ## Fichier : index.html
+        - Structure : container, h1, div#chart (ou canvas), boutons (ids), slider, compteur
+        - IDs DOM exacts : startBtn, resetBtn, speedRange, counter, chart
+        - <link> vers styles.css, <script src="script.js">
+
+        ## Fichier : styles.css
+        - Thème sombre, layout flex, .bar avec transition height
+        - 3 classes d'état : .comparing, .sorted, .default
+
+        ## Fichier : script.js
+        - Variables : arr[], isSorting, speed, comparisons
+        - generateArray() : crée N valeurs aléatoires, appelle draw()
+        - draw() : pour chaque valeur, crée/met à jour un div.bar avec height proportionnelle
+        - bubbleSort() : async, boucle while(swapped) avec await sleep(speed) à chaque comparaison,
+          swap = échange valeurs + MAJ height du DOM (bar.style.height)
+        - Event listeners : startBtn → bubbleSort, resetBtn → generateArray, speedRange → speed
+        - Init : generateArray() au chargement (barres visibles immédiatement)
         """,
     )
     subtask_description: str = dspy.InputField(desc="Description de la sous-tâche")
     strategy: str = dspy.InputField(desc="Stratégie choisie par l'architecte")
-    target_files: str = dspy.InputField(desc="Liste stricte des fichiers que tu DOIS générer")
-    draft_markdown: str = dspy.OutputField(desc="Le brouillon contenant tous les blocs de code en Markdown.")
+    target_files: str = dspy.InputField(desc="Liste stricte des fichiers à implémenter")
+    draft_markdown: str = dspy.OutputField(desc="Plan d'implémentation structuré par fichier (intention + logique, PAS de code brut complet).")
 
 
 class SecuritySignature(dspy.Signature):
@@ -922,6 +977,19 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
             tail_lines=10,
             max_chars=1500,
         )
+        # F-82 : rubric d'acceptation pondérée générée par l'Architecte (spécifique à la
+        # sous-tâche, contrairement à la spec globale tronquée ci-dessus). Concaténée AVANT
+        # la spec pour que le Judge voie d'abord les critères pondérés (CRITICAL/HIGH/...)
+        # puis le détail du cahier des charges. Vide = comportement historique.
+        from .validation_criteria import build_judge_rubric_block
+        rubric_block = build_judge_rubric_block(subtask.get("acceptance_rubric", ""))
+        if rubric_block:
+            task_requirements = truncate_output(
+                f"{rubric_block}\n### Cahier des charges global\n{subtask.get('original_content', '') or ''}",
+                head_lines=45,
+                tail_lines=10,
+                max_chars=2000,
+            )
         result = await _run_dspy_node(
             signature=CodeJudgeSignature,
             predictor_kwargs={

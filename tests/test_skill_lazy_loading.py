@@ -40,6 +40,9 @@ class TestAlwaysSkillsCoder:
     """Le socle ALWAYS est un contrat critique (failure modes fatals si oubli)."""
 
     def test_contient_les_3_skills_critiques(self):
+        # file-creation + coding + context7-research = socle universel ALWAYS.
+        # web-animation est sélectionné DYNAMIQUEMENT par l'Architect (catalogue F-57)
+        # quand la tâche est un visualiseur/animation, pas en ALWAYS.
         assert ALWAYS_SKILLS_CODER == {"file-creation", "coding", "context7-research"}
 
     def test_est_un_set(self):

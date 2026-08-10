@@ -79,6 +79,19 @@ class ArchitectTask(BaseModel):
     skills: List[str] = []
     tester_skills: List[str] = []
     judge_skills: List[str] = []
+    # F-82 : critères de validation générés par l'Architecte (pilote unique). Remplacent
+    # les prompts fixes/génériques par des critères spécifiques au cahier des charges.
+    # Vides = repli sur le comportement historique (rétrocompat checkpoint + tests mockés).
+    #   - visual_success_criteria : assertions visuelles concrètes pour l'auto-validation
+    #     du Coder (ex: "barres visibles au chargement"). Anti-biais : force le Coder à
+    #     ANALYSER son screenshot au lieu d'excuser un visuel vide (bug canvas 2026-08-08).
+    #   - functional_test_criteria : assertions de comportement pour le Tester (remplace
+    #     la checklist F-46 regex quand non vide). Plus précis car produit par compréhension.
+    #   - acceptance_rubric : critères d'acceptation pondérés pour le Judge (concaténé au
+    #     task_requirements global). Évite que le Judge devine l'importance relative.
+    visual_success_criteria: List[str] = []
+    functional_test_criteria: List[str] = []
+    acceptance_rubric: str = ""
 
 
 class RouterOutput(BaseModel):
@@ -118,9 +131,9 @@ class CoderOutput(BaseModel):
     vision_ok: bool = Field(default=False, description="Pour une tâche Frontend, as-tu navigué sur la page ET vérifié la console (screenshot n'est plus requis) ?")
 
 class DrafterOutput(BaseModel):
-    """Résultat du nœud Algorithm Drafter (brouillon de code pur)."""
+    """Résultat du nœud Algorithm Drafter (plan d'implémentation, pas du code brut)."""
     task_id: str
-    draft_markdown: str = Field(description="Brouillon complet du code source en Markdown (avec blocs ```langage). Logique pure uniquement.")
+    draft_markdown: str = Field(description="Plan d'implémentation structuré par fichier (intention + logique + edge cases). PAS de code brut complet.")
 
 class SecurityOutput(BaseModel):
     """Verdict du noeud d'audit de sécurité sur le code généré."""
