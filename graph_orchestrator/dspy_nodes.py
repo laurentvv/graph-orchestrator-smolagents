@@ -243,40 +243,58 @@ class ArchitectSignature(dspy.Signature):
 class DrafterSignature(dspy.Signature):
     __doc__ = with_invariants(
         "drafter",
-        """Agit comme le 'Cerveau' de l'ingénierie logicielle.
-        Reçoit la description de la sous-tâche et conçoit l'algorithme complet en Markdown brut.
+        """Agit comme l'Architecte Logiciel : conçoit un PLAN D'IMPLÉMENTATION précis
+        (intention + structure + logique), PAS du code brut. Le Coder implémentera ce plan.
+
+        RÔLE : Tu produis un plan d'implémentation que le Coder suivra. Ce plan décrit
+        COMMENT construire la solution (structure, logique, edge cases), pas le code exact.
+        Le Coder code from-scratch en suivant ton plan → pas de copier-coller → pas de doublon.
 
         RÈGLES CRITIQUES :
-        1. Ne génère QUE du code et de la logique pure. N'utilise aucun outil.
-        2. TU DOIS GÉNÉRER LE CODE POUR **TOUS** LES FICHIERS CIBLES MENTIONNÉS DANS `target_files`.
-        3. Chaque fichier doit être dans son propre bloc Markdown (ex: ```html ... ```, ```css ... ```, ```javascript ... ```).
-        4. N'omets AUCUN fichier. Si la cible demande HTML, CSS et JS, tu dois fournir les 3 blocs complets l'un à la suite de l'autre.
-        5. L'implémentation doit être fonctionnelle de bout en bout.
+        1. Produis un PLAN D'IMPLÉMENTATION en Markdown, structuré par fichier cible.
+        2. Pour chaque fichier, décris : sa structure (IDs/classes DOM), sa logique
+           (fonctions, algorithmes), et les edge cases à gérer.
+        3. Sois PRÉCIS sur la logique algorithmique : étapes exactes, variables clés,
+           conditions, boucles. Le Coder doit pouvoir implémenter sans ambiguïté.
+        4. Pour les visualiseurs/animations : précise le mécanisme de timing (await sleep,
+           requestAnimationFrame avec 1 itération/frame), la sync DOM après chaque opération
+           (mettre à jour les hauteurs/couleurs des éléments après swap).
+        5. N'écris PAS de code complet — décris l'intention et la logique. Des snippets
+           courts (signature de fonction, structure HTML) sont OK, mais pas de fichiers entiers.
 
-        ANTI-PLACEHOLDERS (interdiction absolue — la cause n°1 de rejet par le Judge) :
-        - JAMAIS de « TODO », « ... », « Logique ici », « // implémenter », fonctions vides,
-          mocks, ou commentaires à la place du code.
-        - JAMAIS d'ellipsis pour « raccourcir » : si un bloc dépasse ~60 lignes, fournis-le
-          ENTIÈREMÊME (le découpage est le job du Coder via append_file, pas le tien).
-        - Si tu ne sais pas implémenter une partie, écris la MEILLEURE implémentation réelle
-          que tu peux, ne laisse pas de trou.
+        ANTI-PIÈGES (leçons de prod — PRÉCISES dans ton plan) :
+        - Canvas : fillRect(x, y, w, h) dessine depuis le coin HAUT-GAUCHE. y = canvas.height
+          dessine hors champ. Le Coder doit utiliser y = canvas.height - barHeight.
+        - Animation : JAMAIS de boucle for complète dans un setTimeout (instantané).
+          Utiliser await sleep(ms) avec UNE itération par appel asynchrone.
+        - Sync DOM : après un swap de valeurs, TOUJOURS mettre à jour l'affichage
+          (bar.style.height = newValue) avant de continuer.
+        - Init : le tableau doit être généré ET affiché au chargement (pas de barres vides).
 
-        FORMAT DE SORTIE (exemple canonique) :
-        ```html
-        <!DOCTYPE html>...code HTML complet, réel, fonctionnel...
-        ```
-        ```css
-        body { ... } ...code CSS complet...
-        ```
-        ```javascript
-        function init() { ... } ...code JS complet...
-        ```
+        FORMAT DE SORTIE :
+        ## Fichier : index.html
+        - Structure : container, h1, div#chart (ou canvas), boutons (ids), slider, compteur
+        - IDs DOM exacts : startBtn, resetBtn, speedRange, counter, chart
+        - <link> vers styles.css, <script src="script.js">
+
+        ## Fichier : styles.css
+        - Thème sombre, layout flex, .bar avec transition height
+        - 3 classes d'état : .comparing, .sorted, .default
+
+        ## Fichier : script.js
+        - Variables : arr[], isSorting, speed, comparisons
+        - generateArray() : crée N valeurs aléatoires, appelle draw()
+        - draw() : pour chaque valeur, crée/met à jour un div.bar avec height proportionnelle
+        - bubbleSort() : async, boucle while(swapped) avec await sleep(speed) à chaque comparaison,
+          swap = échange valeurs + MAJ height du DOM (bar.style.height)
+        - Event listeners : startBtn → bubbleSort, resetBtn → generateArray, speedRange → speed
+        - Init : generateArray() au chargement (barres visibles immédiatement)
         """,
     )
     subtask_description: str = dspy.InputField(desc="Description de la sous-tâche")
     strategy: str = dspy.InputField(desc="Stratégie choisie par l'architecte")
-    target_files: str = dspy.InputField(desc="Liste stricte des fichiers que tu DOIS générer")
-    draft_markdown: str = dspy.OutputField(desc="Le brouillon contenant tous les blocs de code en Markdown.")
+    target_files: str = dspy.InputField(desc="Liste stricte des fichiers à implémenter")
+    draft_markdown: str = dspy.OutputField(desc="Plan d'implémentation structuré par fichier (intention + logique, PAS de code brut complet).")
 
 
 class SecuritySignature(dspy.Signature):

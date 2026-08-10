@@ -131,9 +131,9 @@ class CoderOutput(BaseModel):
     vision_ok: bool = Field(default=False, description="Pour une tâche Frontend, as-tu navigué sur la page ET vérifié la console (screenshot n'est plus requis) ?")
 
 class DrafterOutput(BaseModel):
-    """Résultat du nœud Algorithm Drafter (brouillon de code pur)."""
+    """Résultat du nœud Algorithm Drafter (plan d'implémentation, pas du code brut)."""
     task_id: str
-    draft_markdown: str = Field(description="Brouillon complet du code source en Markdown (avec blocs ```langage). Logique pure uniquement.")
+    draft_markdown: str = Field(description="Plan d'implémentation structuré par fichier (intention + logique + edge cases). PAS de code brut complet.")
 
 class SecurityOutput(BaseModel):
     """Verdict du noeud d'audit de sécurité sur le code généré."""
