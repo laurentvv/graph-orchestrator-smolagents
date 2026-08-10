@@ -8,6 +8,8 @@ Le mode est piloté par WORKFLOW_MODE (.env / env système) :
   - "coding"            : Architect → Coder → Tester → Judge (multi-agent)
 """
 from graph_orchestrator.workflows import main
+import os
 
 if __name__ == "__main__":
     main()
+    os._exit(0)
