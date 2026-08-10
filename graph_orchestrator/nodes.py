@@ -818,18 +818,23 @@ write_file massif (ça s'essouffle/tronque). Procède ainsi :
         elif strategy == "multifile":
             strategy_block = """### WORKFLOW (stratégie MULTIFILE imposée par l'Architect)
 Construis chaque fichier cible de façon autonome (1 module logique = 1 fichier).
-⚠️ CRITIQUE ET OBLIGATOIRE : TU NE DOIS JAMAIS ÉCRIRE UN FICHIER COMPLET D'UN COUP AVEC write_file.
-Le modèle plantera (troncature) si tu sors trop de lignes. Tu ES OBLIGÉ d'utiliser l'édition par bloc :
-1. Étape 1 : Fais un `write_file` UNIQUEMENT pour le squelette vide ou basique du premier fichier. Laisse le tour s'arrêter.
-2. Étape 2 : Au tour suivant, utilise OBLIGATOIREMENT `append_file` ou `multi_replace` pour injecter le vrai code.
-3. Répète ce processus (squelette puis append/replace) pour chaque fichier, UN PAR UN. Ne traite JAMAIS deux fichiers dans le même tour.
-4. Teste l'interface visuellement. final_answer quand tout marche."""
+⚠️ CRITIQUE ET OBLIGATOIRE : Chaque fichier est écrit UNE SEULE FOIS via write_file avec son contenu COMPLET.
+Si un draft Drafter est fourni, extrais son code via le script du skill `draft-extraction`, puis AMÉLIORE-le.
+1. Étape 1 : Extrait le code du draft (skill draft-extraction) → write_file pour chaque fichier (contenu complet).
+2. Étape 2 : RELIS chaque fichier (read_file) et AMÉLIORE-le en appliquant tes skills (frontend-design pour le
+   design, coding pour les bonnes pratiques). Utilise search_replace/multi_replace pour les améliorations.
+   Points d'amélioration OBLIGATOIRES pour un visualiseur : sync DOM après swap (bar.style.height), init du
+   tableau au chargement (pas de barres vides), animation avec await sleep (pas setTimeout en rafale).
+3. Teste l'interface visuellement (navigate_page + take_screenshot + list_console_messages).
+4. final_answer quand tout marche (0 console error + barres visibles + tri fonctionnel).
+🚫 JAMAIS append_file sur un fichier créé avec write_file → doublerait le contenu."""
         else:  # simple (défaut, rétro-compat)
             strategy_block = """### WORKFLOW (stratégie SIMPLE)
-⚠️ CRITIQUE ET OBLIGATOIRE : TU NE DOIS JAMAIS ÉCRIRE UN FICHIER COMPLET D'UN COUP AVEC write_file.
-1. Utilise `write_file(path=..., content=...)` UNIQUEMENT pour créer le squelette du fichier. Laisse ton tour s'arrêter.
-2. Au tour suivant, utilise OBLIGATOIREMENT `append_file` ou `multi_replace` pour injecter le code.
-3. final_answer quand c'est terminé."""
+1. `write_file(path=..., content=...)` avec le contenu COMPLET du fichier. Un seul write_file par fichier.
+2. Si un draft Drafter est fourni : extrais son code (skill draft-extraction), puis AMÉLIORE-le avec tes skills
+   (frontend-design, coding) via search_replace/multi_replace. Points clés : sync DOM, init au chargement, animation await.
+3. Teste visuellement (navigate_page + take_screenshot + list_console_messages). final_answer quand tout marche.
+🚫 JAMAIS append_file sur un fichier créé avec write_file."""
 
         # F-45 : section preview visuelle (Chrome DevTools) — ACTIVE uniquement pour
         # les tâches web (HTML/CSS/JS). Pour les autres technos (Python), les outils
