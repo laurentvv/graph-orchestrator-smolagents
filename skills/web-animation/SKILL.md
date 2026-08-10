@@ -1,6 +1,7 @@
 ---
 name: web-animation
 description: "Patterns et bonnes pratiques pour les animations JS (async/await pour algorithmes pas-à-pas, requestAnimationFrame pour mouvement continu)."
+keep_inline: true
 ---
 
 # Skill : Web Animation & Visualizers (JS Vanilla)
