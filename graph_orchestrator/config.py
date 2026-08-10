@@ -352,16 +352,17 @@ class Settings:
     prompt_refiner_enabled: bool = True
 
     # --- Modèle dédié pour le PromptRefiner (optionnel) ---
-    # Si vide (défaut), le PromptRefiner utilise reasoning_model_id (gemma-12B). Test réel :
-    # le 12B met ~5min/prompt (overkill pour de la reformulation). Sur GPU 6 Go, le gemma-4-E4B
-    # (5.2 Go, ~8× plus rapide pour qualité équivalente — voir log.md test comparatif) est un
-    # bien meilleur choix. Setter PROMPT_REFINER_MODEL_ID dans .env pour cibler un modèle dédié.
+    # DORMANT depuis la migration 2026-08-10 (fix/prompt-refiner-fast-spec). PromptRefiner
+    # utilise désormais settings.fast_spec (Qwen3.5-4B, comme le Coder) — la reformulation
+    # d'un prompt est une tâche légère qui ne justifie pas un 9B raisonneur ni un serveur
+    # gemma séparé. Ce champ reste lu par load_settings (rétro-compat .env) mais n'est plus
+    # consommé par execute_prompt_refiner_node. Conservation = ne pas casser les .env existants.
     prompt_refiner_model_id: str = ""
 
     # --- Modèle reasoning SANS thinking (F-58, migration llama-server) ---
-    # Pour les nœuds think=False (Judge/Security/PromptRefiner/Escalation) : même modèle
-    # costaud que l'Architect MAIS sans le thinking (plus rapide, pas de budget gaspillé en
-    # raisonnement sur des tâches de verdict/classification). En production llama-server,
+    # Pour les nœuds think=False (Judge/Security/Escalation/WebTester/Consolidation) : même
+    # modèle costaud que l'Architect MAIS sans le thinking (plus rapide, pas de budget gaspillé
+    # en raisonnement sur des tâches de verdict/classification). En production llama-server,
     # pointe vers la section models.ini `reasoning = off` (ex: "gemma-4-12b-nothink").
     # Si vide (défaut), fallback sur reasoning_model_id (rétro-compatibilité et tests
     # qui construisent Settings() à la main — ne pas casser).

@@ -76,7 +76,7 @@ def test_execute_prompt_refiner_node(mock_cot, mock_configure):
     assert output.ambiguities_detected == ["beau", "rapide"]
     assert metrics is not None
     assert metrics.node == "prompt_refiner_dspy"
-    assert metrics.model == "mock-reasoning-model"
+    assert metrics.model == "mock-fast-model"
     # Le predictor a été instancié avec NOTRE signature.
     mock_cot.assert_called_once_with(PromptRefinerSignature)
     # L'appel au predictor a bien reçu les 2 inputs (raw_prompt + available_capabilities).
@@ -102,14 +102,17 @@ def test_execute_prompt_refiner_node_graceful_failure(mock_cot, mock_configure):
     assert metrics is None
 
 
+@patch("graph_orchestrator.dspy_nodes.model_lifecycle")
 @patch("graph_orchestrator.dspy_nodes._configure_dspy")
 @patch("graph_orchestrator.dspy_nodes.dspy.ChainOfThought")
-def test_prompt_refiner_uses_dedicated_model_when_set(mock_cot, mock_configure):
-    """Si prompt_refiner_model_id est setté → _configure_dspy reçoit CE modèle (pas reasoning).
+def test_prompt_refiner_uses_fast_spec_no_override(mock_cot, mock_configure, mock_lifecycle):
+    """PromptRefiner utilise fast_spec (Qwen3.5-4B, comme le Coder), think=False, sans override.
 
-    Levier de perf (test réel log.md) : E4B ~8× plus rapide que le 12B pour qualité équivalente.
-    On vérifie que le setting est bien câblé : le modèle passé à _configure_dspy + dans les
-    métriques est le modèle dédié, pas le reasoning par défaut.
+    Migration 2026-08-10 : ce nœud était avant sur reasoning_spec + override gemma-4-E4B
+    (PROMPT_REFINER_MODEL_ID). C'était incohérent (un spawn 9B + un serveur séparé pour
+    une simple reformulation). Désormais fast_spec uniquement — le modèle rapide suffit
+    largement pour reformatter un prompt. Le champ prompt_refiner_model_id est DORMANT :
+    même s'il est setté, il ne doit plus être lu.
     """
     mock_instance = MagicMock()
     mock_prediction = MagicMock()
@@ -117,36 +120,31 @@ def test_prompt_refiner_uses_dedicated_model_when_set(mock_cot, mock_configure):
     mock_instance.return_value = mock_prediction
     mock_cot.return_value = mock_instance
 
+    # Simule un model_lifecycle context manager qui yield un serveur fast.
+    fake_srv = SimpleNamespace(model_id="mock-fast-model", api_base="http://localhost:11434/v1", api_key="sk-mock")
+    mock_ctx = MagicMock()
+    mock_ctx.__enter__ = MagicMock(return_value=fake_srv)
+    mock_ctx.__exit__ = MagicMock(return_value=False)
+    mock_lifecycle.return_value = mock_ctx
+
     settings = _mock_settings()
-    settings.prompt_refiner_model_id = "dedicated-e4b-model"
+    # Même si l'override dormant est setté, il ne doit PAS être utilisé.
+    settings.prompt_refiner_model_id = "dormant-should-be-ignored"
     output, metrics = asyncio.run(
         execute_prompt_refiner_node("prompt", "FAKE_REASON", settings)
     )
 
-    # _configure_dspy reçoit le modèle dédié, pas reasoning_model_id. think=True :
-    # depuis le switch vers Ornith-9B (rapide), le thinking est activé sur TOUS les
-    # nœuds de raisonnement (Architect/Refiner/Judge/Security/Escalation) — fin du
-    # compromis think=False hérité du 12B lent. Le Refiner reformule mieux avec thinking.
-    mock_configure.assert_called_once_with(settings, "dedicated-e4b-model", think=True, api_base="http://localhost:11434/v1", api_key="sk-mock")
-    # La métrique reflète aussi le modèle réellement utilisé (pas le défaut).
-    assert metrics.model == "dedicated-e4b-model"
-
-
-@patch("graph_orchestrator.dspy_nodes._configure_dspy")
-@patch("graph_orchestrator.dspy_nodes.dspy.ChainOfThought")
-def test_prompt_refiner_falls_back_to_reasoning_model_when_unset(mock_cot, mock_configure):
-    """prompt_refiner_model_id vide → fallback sur reasoning_model_id (rétro-compat)."""
-    mock_instance = MagicMock()
-    mock_prediction = MagicMock()
-    mock_prediction.output = PromptRefinerOutput(refined_prompt="spec")
-    mock_instance.return_value = mock_prediction
-    mock_cot.return_value = mock_instance
-
-    settings = _mock_settings()
-    settings.prompt_refiner_model_id = ""  # vide = fallback
-    asyncio.run(execute_prompt_refiner_node("prompt", "FAKE_REASON", settings))
-
-    mock_configure.assert_called_once_with(settings, "mock-reasoning-model", think=True, api_base="http://localhost:11434/v1", api_key="sk-mock")
+    # model_lifecycle a été appelé avec fast_spec (pas reasoning_spec).
+    mock_lifecycle.assert_called_once()
+    spec_arg = mock_lifecycle.call_args[0][0]
+    assert spec_arg is settings.fast_spec
+    # _configure_dspy reçoit le modèle fast (mock-fast-model), think=False.
+    mock_configure.assert_called_once_with(
+        settings, "mock-fast-model", think=False,
+        api_base="http://localhost:11434/v1", api_key="sk-mock",
+    )
+    # La métrique reflète le modèle fast réellement utilisé.
+    assert metrics.model == "mock-fast-model"
 
 
 # ==========================================
