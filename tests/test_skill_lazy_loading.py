@@ -39,8 +39,11 @@ from graph_orchestrator.skills_loader import (
 class TestAlwaysSkillsCoder:
     """Le socle ALWAYS est un contrat critique (failure modes fatals si oubli)."""
 
-    def test_contient_les_3_skills_critiques(self):
-        assert ALWAYS_SKILLS_CODER == {"file-creation", "coding", "context7-research"}
+    def test_contient_les_4_skills_critiques(self):
+        # file-creation + coding + context7-research = socle universel.
+        # web-animation = ajouté car l'Architect ne le sélectionnait pas systématiquement
+        # alors qu'il documente async/await vs setTimeout (failure mode n°1 des visualiseurs).
+        assert ALWAYS_SKILLS_CODER == {"file-creation", "coding", "context7-research", "web-animation"}
 
     def test_est_un_set(self):
         assert isinstance(ALWAYS_SKILLS_CODER, set)
