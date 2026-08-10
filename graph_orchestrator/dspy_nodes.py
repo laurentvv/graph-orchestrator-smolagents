@@ -645,17 +645,25 @@ async def execute_prompt_refiner_node(
     reasoning_model,
     settings: Settings,
 ) -> Tuple[Optional[PromptRefinerOutput], Optional[NodeMetrics]]:
-    """Exécute le nœud PromptRefiner (modèle de raisonnement).
+    """Exécute le nœud PromptRefiner (modèle rapide, comme le Coder/Router).
 
-    Reformule le prompt brut en spec structurée AVANT l'Architect. Clone du pattern
+    Reformule le prompt brut en spec structurée AVANT l'Architect. Tâche légère de
+    reformatage/classification (pas de raisonnement profond) → utilise le FAST spec
+    (Qwen3.5-4B, même modèle que le Coder et le Router). Clone exact du pattern
     execute_router_node (dspy.ChainOfThought + asyncio.to_thread + dégradation gracieuse),
-    mais sur le modèle REASONING (gemma, plus coûteux mais meilleur pour la reformulation)
-    et avec 2 inputs (raw_prompt + available_capabilities).
+    avec 2 inputs (raw_prompt + available_capabilities).
+
+    Historique : ce nœud a d'abord tourné sur reasoning_spec + override gemma-4-E4B
+    (PROMPT_REFINER_MODEL_ID), puis a été migré vers fast_spec (2026-08-10) — la
+    reformulation d'un prompt n'a pas besoin d'un 9B raisonneur, et le fast_spec évite
+    de spawner un serveur lourd supplémentaire. Le champ ``prompt_refiner_model_id``
+    reste lu par config.py (rétro-compat .env) mais est désormais DORMANT (ignoré ici).
 
     Args:
         raw_prompt: Le prompt utilisateur brut (souvent vague).
-        reasoning_model: Le modèle de raisonnement (non utilisé directement — on lit
-            settings.reasoning_model_id via _configure_dspy, comme les autres nœuds DSPy).
+        reasoning_model: Paramètre conservé pour rétro-compat de signature (non utilisé
+            — le vrai modèle vient de ``settings.fast_spec`` via ``_run_dspy_node``,
+            comme pour les autres nœuds DSPy).
         settings: Configuration globale.
 
     Returns:
@@ -673,9 +681,8 @@ async def execute_prompt_refiner_node(
                 "available_capabilities": capabilities,
             },
             settings=settings,
-            spec=settings.reasoning_spec,
-            think=True,
-            model_override=settings.prompt_refiner_model_id,
+            spec=settings.fast_spec,
+            think=False,
         )
         refined = result.output
         n_amb = len(refined.ambiguities_detected) if refined.ambiguities_detected else 0
@@ -684,7 +691,7 @@ async def execute_prompt_refiner_node(
 
         metrics = NodeMetrics(
             node="prompt_refiner_dspy",
-            model=settings.prompt_refiner_model_id or settings.no_think_spec.model,
+            model=settings.fast_spec.model,
             duration_s=time.time() - start_time,
             input_tokens=0,
             output_tokens=0,
