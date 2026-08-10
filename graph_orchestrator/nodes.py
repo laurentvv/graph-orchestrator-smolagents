@@ -852,8 +852,11 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
    ouverte entre 2 appels. Si le contenu dépasse ~60 lignes, DÉCOUPE en plusieurs append_file.
 5. PAS DE PLACEHOLDER : interdiction absolue de "TODO", "...", "Logique ici", fonctions vides
    ou mocks. Implémentation COMPLÈTE, RÉELLE et FONCTIONNELLE.
-6. ANTI-BOUCLE : NE RE-ÉCRIS JAMAIS avec write_file un fichier déjà créé (ça l'écrase).
-   Pour AJOUTER du contenu → append_file. Pour MODIFIER un fragment → search_replace.
+6. ANTI-DOUBLON : Chaque fichier cible ne doit être écrit qu'UNE SEULE FOIS via write_file.
+   Pour MODIFIER un fichier existant → search_replace/multi_replace (JAMAIS write_file ni append_file).
+   append_file UNIQUEMENT pour compléter un fichier incomplet (ex: squelette sans </html>).
+   ❌ FAUX : write_file("index.html") puis append_file("index.html") → 2 pages collées !
+   ✅ JUSTE : write_file("index.html") une fois, puis search_replace pour les modifs.
 7. PYTHON BUILT-INS : Si tu utilises `time.sleep()` ou d'autres modules standards dans ton code Python, n'oublie pas de les importer (ex: `import time` au début du bloc).
 8. FERMETURE D'APPEL = `)` JAMAIS `}}` : quand `content`/`new_string` contient du JS/HTML
    avec des `{{...}}`, l'appel Python se termine TOUJOURS par `)`. Le `}}` appartient au
