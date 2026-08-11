@@ -1140,7 +1140,20 @@ Coder est appliquée correctement par Qwen3.5-9B.
   parse frontmatter id/target_files/expected_skill_finder). Le Prompt-Vault
   (references/, gitignoré) reste la banque externe ; prompts/validation/ est l'instantané
   minimal versionné. Loader smoke-testé (round-trip OK, cible temp, 0 modif tasks.json).
-- [ ] Étape F82-10 : Validation run live — `scripts/load_prompt.py prompts/validation/skill_finder_ai_sdk.md`
-  puis `debug/run_architect.py` (isolation Architect, ~minutes) : observer log
-  « Skill installé » + skills/installed-skills.json. Témoin négatif bubble_sort.md →
-  « Aucun skill ajouté ». Échéance future (réseau/npx).
+- [x] Étape F82-10 : Validation live (pipeline direct `search_and_install("react")`) —
+  RÉUSSIE. `vercel-labs/agent-skills@vercel-react-best-practices` (auteur de confiance)
+  installé dans `skills/`, manifeste `skills/installed-skills.json` écrit avec **regex
+  dédiée** `\b(react|next|performance|optimization|...)\b`, `select_skills_for_coder`
+  l'inclut (`[file-creation, coding, context7-research, vercel-react-best-practices]`).
+  ⚠️ Bug trouvé + corrigé en live : `install_skill` n'injectait pas `-y --copy` → la CLI
+  skills demandait une confirmation en subprocess non-tty (hang/timeout). Fix appliqué
+  + test `assert "-y" in cmd and "--copy" in cmd`. Stopwords enrichis (should/shall/must).
+  ⚠️ Finding production (suivi requis) : `npx skills add --copy` reproduit le skill dans
+  ~27 dossiers d'agents (`.augment/`, `.codebuddy/`, `.continue/`...) — seul `skills/`
+  nous intéresse. Nettoyage post-install (parse sortie CLI → rm agent dirs ≠ skills/) ou
+  gitignore des patterns d'agents à ajouter dans un cycle futur. Working tree nettoyé
+  post-démo (skill non bundlé — réinstallable en 1 commande).
+- [ ] Étape F82-11 (échéance future, GPU) : validation via le **ReAct Architect LLM**
+  (`debug/run_architect.py` + prompt `skill_finder_ai_sdk.md`) — confirme que le ReAct
+  sur Ornith-9B appelle bien l'outil (vs le pipeline direct déjà prouvé). + témoin négatif
+  `bubble_sort.md` → « Aucun skill ajouté ».

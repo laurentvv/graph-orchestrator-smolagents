@@ -186,6 +186,9 @@ class TestInstallSkill:
         assert kwargs.get("shell", False) is False
         # la cible validée passe comme UN seul élément (pas découpé par un shell)
         assert "vercel-labs/skills@my-skill" in cmd
+        # non-interactif (découvert en validation live F82-10) : -y skip prompts,
+        # --copy écrit de vrais fichiers (sinso hang/timeout en subprocess sans tty).
+        assert "-y" in cmd and "--copy" in cmd
 
     def test_bad_component_refused_without_subprocess(self, monkeypatch):
         called = {"n": 0}

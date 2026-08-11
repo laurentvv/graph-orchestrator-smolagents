@@ -78,6 +78,7 @@ _STOPWORDS = {
     "those", "your", "you", "are", "not", "but", "all", "any", "use", "using",
     "used", "when", "will", "can", "may", "has", "have", "been", "into", "their",
     "skill", "agent", "agents", "description", "tool", "tools", "also",
+    "should", "shall", "must",  # verbules fréquents dans les descriptions skills.sh
 }
 
 
@@ -186,7 +187,11 @@ def install_skill(hit: SkillHit, timeout_s: float = ADD_TIMEOUT_S) -> Optional[I
         if not _COMPONENT_RE.match(comp):
             return None
     target = f"{hit.owner}/{hit.repo}@{hit.skill}"
-    result, err = _run_skills_cli(["add", target], timeout_s=timeout_s)
+    # `-y` (skills-level) skip les prompts de confirmation (non-interactif subprocess —
+    # sans ça la CLI hang en attendant un tty). `--copy` copie de vrais fichiers au lieu
+    # de symlink (le graphe lit skills/<name>/SKILL.md ; un symlink cassé = skill vide).
+    # Découvert en validation live F82-10 : sans ces flags, l'install hang/timeout.
+    result, err = _run_skills_cli(["add", target, "-y", "--copy"], timeout_s=timeout_s)
     if err is not None or result is None or result.returncode != 0:
         return None
     return InstalledSkill(name=hit.skill, source=target)
