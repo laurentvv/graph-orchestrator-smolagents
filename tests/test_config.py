@@ -75,13 +75,16 @@ def test_settings_is_frozen():
 
 
 def test_tester_max_steps_default_and_override(monkeypatch):
-    """TESTER_MAX_STEPS borne la durée du Web Tester (fix TIMINGS_ANALYSE). Défaut 25."""
-    # Défaut = 25 (relevé depuis 12 : les assertions fonctionnelles + console
-    # multi-étapes du Web Tester nécessitent plus de marge ; le timeout 600s
-    # reste le garde-fou dur contre les boucles).
+    """TESTER_MAX_STEPS borne la durée du Web Tester (fix TIMINGS_ANALYSE + over-exploration).
+
+    Défaut = 8 (run 2026-08-11 : à 12 puis 25 steps le Web Tester ne convergeait pas —
+    le wall-clock (360s puis 600s) gagnait la course contre max_steps → timeout systématique
+    sans verdict. 8 steps × ~55s pire cas (9B+DevTools) = 440s < timeout 480s, donc max_steps
+    gagne : le Tester auto-final-answer au lieu de timeout. Combiné à la règle 6 « budget
+    steps » du prompt web_tester.py qui force le regroupement des assertions)."""
     monkeypatch.delenv("TESTER_MAX_STEPS", raising=False)
     s = load_settings()
-    assert s.tester_max_steps == 25
+    assert s.tester_max_steps == 8
     # Override via env.
     monkeypatch.setenv("TESTER_MAX_STEPS", "20")
     s2 = load_settings()

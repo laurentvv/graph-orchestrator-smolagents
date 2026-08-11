@@ -109,6 +109,24 @@ async def main():
             print(f"      sections      : {st.sections}")
         if st.skills:
             print(f"      skills        : {st.skills}")
+        # F-90 : critères de validation générés par l'Architect (pilote unique des validations).
+        vsc = getattr(st, "visual_success_criteria", []) or []
+        ftc = getattr(st, "functional_test_criteria", []) or []
+        rub = getattr(st, "acceptance_rubric", "") or ""
+        if vsc or ftc or rub:
+            print(f"      --- F-90 critères de validation ---")
+            if vsc:
+                print(f"      visual_success_criteria ({len(vsc)}):")
+                for c in vsc:
+                    print(f"          - {c}")
+            if ftc:
+                print(f"      functional_test_criteria ({len(ftc)}):")
+                for c in ftc:
+                    print(f"          - {c}")
+            if rub:
+                print(f"      acceptance_rubric : {rub[:200]}{'...' if len(rub) > 200 else ''}")
+        else:
+            print(f"      ⚠️ F-90 : AUCUN critère de validation produit (champs vides).")
     if metrics:
         print(f"\nMODÈLE : {metrics.model} ({metrics.duration_s:.1f}s)")
     print(f"{'=' * 70}")

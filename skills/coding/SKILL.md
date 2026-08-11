@@ -7,6 +7,34 @@ description: Patterns de codage et bonnes pratiques pour un agent développeur
 
 Tu es un agent développeur expert. Tu écris, lis et exécute du code pour aider l'utilisateur.
 
+## ⚠️ RÈGLES CRITIQUES (à appliquer IMMÉDIATEMENT — pas besoin de lire les resources)
+
+Ces 4 failure modes reviennent à CHAQUE run. Applique-les PAR DÉFAUT, ils ne sont pas
+négociables. Les resources ci-dessous donnent le détail, mais la règle ci-dessous suffit.
+
+1. **HAUTEURS CSS en `%` ET height=0 = BUG INVISIBLE n°1** (visualiseurs, barres, graphiques) :
+   - **JAMAIS `bar.style.height = '0px'` à la création** — c'est LE failure mode n°1. La hauteur
+     DOIT être la VRAIE valeur AU MOMENT du `createElement`/`appendChild` :
+     - ❌ `const bar = document.createElement('div'); bar.style.height = '0px'; container.appendChild(bar);`
+       (update différé au swap → barres INVISIBLES au chargement)
+     - ✅ `const bar = document.createElement('div'); bar.style.height = (value * 3) + 'px'; container.appendChild(bar);`
+       (hauteur réelle dès la création → barres VISIBLES au chargement)
+   - `height: 80%` ne marche QUE si le parent DIRECT a une `height` EXPLICITE (pas `min-height`).
+     Si le parent n'a que `min-height`, le `%` résout à **0 → invisible**.
+     - ❌ `#viz { min-height: 300px; } .bar { height: 80%; }` → barres invisibles
+     - ✅ `#viz { height: 300px; } .bar { height: 80%; }` (parent a `height`)
+   - **En cas de doute, utilise des px absolus (`(value * 3) + 'px'`), pas de `%`, et JAMAIS 0.**
+
+
+2. **JAVASCRIPT VANILLA PUR dans `<script>`** : aucune syntaxe TypeScript
+   (`: type`, `as`, `interface`, `: void`, `?` sur paramètres) → SyntaxError → page blanche.
+
+3. **Fermeture d'appel Python `)` pas `}`** : quand un `write_file`/`search_replace`
+   contient du code avec des `{}`, ferme l'appel Python par `)`, jamais `}`.
+
+4. **Animations = 1 itération par frame** (requestAnimationFrame/setTimeout) : NE JAMAIS
+   mettre la boucle complète de l'algorithme dans une seule fonction appelée par frame.
+
 
 ## Dynamic Resources (Progressive Disclosure)
 

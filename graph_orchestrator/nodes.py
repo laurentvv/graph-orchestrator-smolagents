@@ -173,6 +173,97 @@ def _detect_idle_step(agent, node_kind: str = "coder") -> Optional[str]:
     return None
 
 
+# Marqueurs de FAIL dans les observations du Tester (retours evaluate_script).
+# Indicateurs qu'une assertion fonctionnelle a ÉCHOUÉ (pas juste une exception MCP).
+_TESTER_FAIL_MARKERS = (
+    ": fail", "fail:", "failed", '"fail"', "'fail'",
+    "est faux", "incorrect", "non passé", "pas trié",
+)
+# Marqueurs de succès implicite (assertion passée). Présence = le test a tourné.
+_TESTER_PASS_MARKERS = ('"pass"', "'pass'", ": pass", "pass:", "true", "vrai")
+
+
+def _tester_max_steps_fallback(steps, prompt: str):
+    """Verdict de secours quand le Tester atteint max_steps sans final_answer propre.
+
+    Le Web Tester (9B + Chrome DevTools) over-explore : à max_steps, smolagents
+    auto-génère un final_answer depuis le dernier step, mais c'est du PROSE (pas un
+    dict {task_id, status, details}) → extract_and_validate échoue → 3 retries gaspillés
+    (~15 min) → None → Judge sans signal test. Runs 2026-08-11.
+
+    Ce fallback scanne le step history (observations des evaluate_script) et construit
+    un verdict COMPORTEMENTAL :
+    - si une observation contient un marqueur de FAIL → status="failure" + feedback
+      (le Coder reçoit l'échec et peut corriger).
+    - sinon (assertions ont tourné sans FAIL observé) → status="success" + détails
+      "max_steps atteint, N observations sans échec explicite".
+
+    CONSERVATIF vs OPTIMISTE : on ne dit success QUE si des assertions ont tourné
+    (≥1 observation avec marqueur PASS) sans aucun FAIL. Si 0 observation (le Tester
+    n'a même pas testé), on reste sur failure (ne valide pas à l'aveugle).
+
+    Args:
+        steps: agent.memory.steps (liste d'ActionStep smolagents).
+        prompt: le prompt du Tester (pour extraire le task_id).
+
+    Returns:
+        CoderOutput ou None (si pas de signal exploitable).
+    """
+    import re as _re
+    from .models import CoderOutput
+
+    # task_id : extrait du prompt (la template contient final_answer({"task_id": "X"}...).
+    task_id = "unknown"
+    m = _re.search(r'"task_id"\s*:\s*"([^"]+)"', prompt)
+    if m:
+        task_id = m.group(1)
+
+    # Collecte toutes les observations textuelles des steps.
+    obs_blob = ""
+    n_obs = 0
+    for step in steps or []:
+        obs = getattr(step, "observations", None) or ""
+        if obs:
+            obs_blob += "\n" + str(obs)
+            n_obs += 1
+        # Les erreurs d'outil (error) sont aussi du signal.
+        err = getattr(step, "error", None)
+        if err:
+            obs_blob += "\n" + str(err)
+
+    obs_lower = obs_blob.lower()
+    has_fail = any(marker in obs_lower for marker in _TESTER_FAIL_MARKERS)
+    has_pass = any(marker in obs_lower for marker in _TESTER_PASS_MARKERS)
+
+    if has_fail:
+        # Un échec explicite a été observé → verdict failure + feedback.
+        # Extrait un extrait de l'observation contenant le FAIL (pour guider le Coder).
+        snippet = ""
+        for line in obs_blob.splitlines():
+            ll = line.lower()
+            if any(marker in ll for marker in _TESTER_FAIL_MARKERS):
+                snippet = line.strip()[:300]
+                break
+        return CoderOutput(
+            task_id=task_id,
+            status="failure",
+            details=f"Tester (max_steps fallback) : assertion en échec — {snippet}" if snippet
+            else "Tester (max_steps fallback) : assertion en échec observée.",
+        )
+
+    if has_pass and n_obs > 0:
+        # Des assertions ont tourné sans FAIL observé → succès partiel.
+        return CoderOutput(
+            task_id=task_id,
+            status="success",
+            details=f"Tester (max_steps fallback) : {n_obs} observation(s), aucune en échec explicite. "
+            "Le Tester a atteint max_steps sans final_answer structuré — verdict dérivé du step history.",
+        )
+
+    # Pas de signal (le Tester n'a quasi rien testé) → on ne valide pas à l'aveugle.
+    return None
+
+
 async def run_with_retry(
     agent: ToolCallingAgent,
     prompt: str,
@@ -269,6 +360,21 @@ async def run_with_retry(
             model_id_val = getattr(agent_model, "model_id", None)
             
             validated = extract_and_validate(raw_output, model_class, api_base=api_base_val, model_id=model_id_val)
+
+            # Fallback max_steps (Tester) : si le LLM Tester atteint max_steps sans
+            # final_answer structuré (over-exploration du 9B), extract_and_validate rend
+            # None → retries gaspillés. On scanne le step history pour dériver un verdict
+            # comportemental (FAIL observé → failure, assertions PASS sans FAIL → success).
+            # Évite la boucle de 3 retries (~15 min) puis None sans signal pour le Judge.
+            if validated is None and node_kind == "tester":
+                _fb_steps = getattr(getattr(agent, "memory", None), "steps", None) or []
+                _fallback = _tester_max_steps_fallback(_fb_steps, prompt)
+                if _fallback is not None:
+                    print(
+                        f"[i] Tester max_steps fallback activé : verdict dérivé du step "
+                        f"history (status={_fallback.status})."
+                    )
+                    validated = _fallback
 
             # Collecte métriques depuis le RunResult
             last_metrics = _metrics_from_run(agent, run_result)

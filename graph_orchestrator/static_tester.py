@@ -452,9 +452,16 @@ def _evaluate_visibility(
             click_clause = (
                 f" const _b = document.getElementById('{primary_action_id}');"
                 f" if (_b) {{ _b.click(); }}"
+                # Settle wait (fix faux-positif run 2026-08-11) : le handler du bouton
+                # primaire peut être async ou déclencher un re-render. Sans ce wait, le
+                # probe getBoundingClientRect s'exécute AVANT la mise à jour du DOM →
+                # height=0 transitoire → faux "INVISIBLE". 150ms laisse le DOM se stabiliser
+                # (un élément VRAIMENT invisible reste invisible après 150ms, donc pas de
+                # faux négatif). Pattern async vérifié sur le Tier 3 temporal ci-dessous.
+                f" await new Promise(r => setTimeout(r, 150));"
             )
         js_probe = (
-            "() => {" + click_clause +
+            "async () => {" + click_clause +
             "  const sels = [" + sel_list + "];"
             "  const out = [];"
             "  for (const sel of sels) {"
