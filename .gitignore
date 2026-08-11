@@ -51,6 +51,11 @@ web/dist/
 runs/
 logs/
 
+# F-82 — Skill Finder : manifeste des skills installés dynamiquement via skills.sh.
+# Artefact runtime par environnement (régénérable) — relu au démarrage par
+# skills_loader pour étendre DYNAMIC_SKILL_RULES. Pas de mutation de source.
+skills/installed-skills.json
+
 # debug/ : scripts d'isolation + méthodologies VERSIONNÉS (F-55, F-89).
 # On ignore uniquement les artefacts régénérables (output, snapshots, caches), PAS les
 # scripts .py ni les .md de méthodologie/convention — ils font partie de l'usine de debug.

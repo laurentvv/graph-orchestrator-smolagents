@@ -583,74 +583,30 @@ def log_event(event_type: str, details: str) -> str:
         return f"Error logging event: {str(e)}"
 
 @tool
-def search_and_install_skill(query: str, author: str = None) -> str:
-    """Searches the skills.sh registry for a skill matching the query and installs it if the author is trusted.
-    
+def search_and_install_skill(query: str, author: str = None, triggers: str = None) -> str:
+    """Recherche et installe un skill depuis le registre skills.sh (skills.sh by Vercel Labs).
+
+    Usage typique : quand le cahier des charges nécessite une compétence spécialisée
+    absente du catalogue local (ex: 'react', 'tailwind', 'seo', 'gsap'), cherche un
+    skill pertinent, vérifie qu'il vient d'un auteur de confiance + présente un
+    signal de sécurité skills.sh (safe/verified), l'installe dans skills/, puis
+    enregistre une ligne regex dédiée (mots-clés déclencheurs) pour que le Coder le
+    reconnaisse comme les autres skills. Fail-open : ne lève jamais.
+
     Args:
-        query: The skill keyword to search for (e.g. 'react', 'tailwind').
-        author: Optional. The trusted author to filter by (e.g. 'vercel-labs').
+        query: Le mot-clé de recherche (ex: 'react', 'tailwind', 'seo').
+        author: Optionnel. Auteur/owner à filtrer (ex: 'vercel-labs'). Doit être dans
+            l'allowlist de confiance (SKILL_FINDER_TRUSTED_AUTHORS).
+        triggers: Optionnel. Mots-clés déclencheurs séparés par virgule (ex:
+            'react,jsx,hooks') proposés pour la ligne regex. Complété automatiquement
+            par extraction depuis la description du skill si non fourni.
     """
-    import subprocess
-    import re
-    import os
-    
-    TRUSTED_AUTHORS = ["vercel-labs", "microsoft", "google-labs-code", "clerk", "greensock"]
-    if author and author not in TRUSTED_AUTHORS:
-        return f"Error: Author {author} is not in the trusted list: {TRUSTED_AUTHORS}"
-        
-    cmd = ["npx", "-y", "skills", "find", query]
-    if author:
-        cmd.extend(["--owner", author])
-        
+    from .skill_finder import search_and_install
+
+    hints = [t.strip() for t in triggers.split(",")] if triggers else None
+    # Settings récupéré au plus tard (import différé pour éviter cycle au chargement).
     try:
-        # Use shell=True for npx on Windows
-        result = subprocess.run(" ".join(cmd), shell=True, capture_output=True, text=True)
-        
-        # Strip ANSI color codes
-        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
-        output = ansi_escape.sub('', result.stdout)
-        
-        # Regex to match owner/repo@skill
-        matches = re.findall(r'([a-zA-Z0-9_-]+)/([a-zA-Z0-9_-]+)@([a-zA-Z0-9_:-]+)', output)
-        
-        installed_skills = []
-        for match in matches:
-            owner, repo, skill = match
-            if owner in TRUSTED_AUTHORS:
-                install_target = f"{owner}/{repo}@{skill}"
-                install_cmd = f"npx -y skills add {install_target}"
-                install_res = subprocess.run(install_cmd, shell=True, capture_output=True, text=True)
-                
-                if install_res.returncode == 0:
-                    installed_skills.append(install_target)
-                    
-                    # (4) Mettre à jour dynamiquement skills_loader.py
-                    # On injecte une règle basique : le mot-clé 'query' déclenchera ce skill 'skill'
-                    loader_path = os.path.join(os.path.dirname(__file__), "skills_loader.py")
-                    if os.path.exists(loader_path):
-                        with open(loader_path, "r", encoding="utf-8") as f:
-                            loader_content = f.read()
-                            
-                        # Trouve le bloc DYNAMIC_SKILL_RULES et ajoute la règle à la fin
-                        new_rule = f'    (r"\\\\b({query})\\\\b", "{skill}"),'
-                        if new_rule not in loader_content:
-                            # On insère juste avant la fin de la liste DYNAMIC_SKILL_RULES
-                            # On cherche la fin de la liste définie par "]" après DYNAMIC_SKILL_RULES
-                            pattern = r'(DYNAMIC_SKILL_RULES\s*:\s*List\[tuple\]\s*=\s*\[.*?)(])'
-                            
-                            def replacer(m):
-                                return f"{m.group(1)}{new_rule}\n{m.group(2)}"
-                                
-                            updated_content = re.sub(pattern, replacer, loader_content, flags=re.DOTALL)
-                            with open(loader_path, "w", encoding="utf-8") as f:
-                                f.write(updated_content)
-                    
-                    # Just install the first matched skill from a trusted author to avoid spam
-                    break
-                    
-        if installed_skills:
-            return f"Successfully installed skill(s): {', '.join(installed_skills)} from trusted author(s). They are now available for the Orchestrator and Coder."
-        else:
-            return "No skills found from trusted authors matching the query. Check the author or try a different query."
-    except Exception as e:
-        return f"Error executing search: {str(e)}"
+        from .config import settings
+    except Exception:
+        settings = None
+    return search_and_install(query, author=author, triggers=hints, settings=settings)

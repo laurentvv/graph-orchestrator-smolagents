@@ -325,6 +325,18 @@ class Settings:
     # budget_tokens = 16000 pour allouer jusqu'à ~50% du contexte de Qwen (32k) aux skills.
     skill_budget_tokens: int = 16000
 
+    # --- Skill Finder (F-82) : recherche/install auto de skills depuis skills.sh ---
+    # Active l'étape ReAct de l'Architect qui interroge skills.sh (CLI `npx skills`)
+    # pour combler une lacune de compétence. Défaut True (toujours ON) — opt-out
+    # SKILL_FINDER_ENABLED=false pour A/B/debug (skip le coût LLM+npx+réseau).
+    skill_finder_enabled: bool = True
+    # Allowlist d'auteurs de confiance (CSV) — hard gate du téléchargement (spec
+    # F-82 « n'autoriser que les auteurs de confiance »). Complétée par les
+    # marqueurs skills.sh (safe/verified → info ; unsafe/malicious → blocage).
+    # Miroir de skill_finder.DEFAULT_TRUSTED_AUTHORS (duplication assumée pour
+    # éviter un import croisé config↔skill_finder).
+    skill_finder_trusted_authors: str = "vercel-labs,microsoft,google-labs-code,clerk,greensock"
+
     # --- Guard bash denylist (Priorité 8-bis : robustesse runtime) ---
     # `bash_command` exécute des commandes issues du LLM via shell=True. Un guard
     # denylist bloque les commandes destructrices (rm -rf /, format, mkfs, dd vers
@@ -459,6 +471,11 @@ def load_settings() -> Settings:
         sanitizer_enabled=_get_bool("SANITIZER_ENABLED", True),
         read_before_write_enabled=_get_bool("READ_BEFORE_WRITE_ENABLED", True),
         skill_budget_tokens=_get_int("SKILL_BUDGET_TOKENS", 8000),
+        skill_finder_enabled=_get_bool("SKILL_FINDER_ENABLED", True),
+        skill_finder_trusted_authors=_get_str(
+            "SKILL_FINDER_TRUSTED_AUTHORS",
+            "vercel-labs,microsoft,google-labs-code,clerk,greensock",
+        ),
         bash_guard_enabled=_get_bool("BASH_GUARD_ENABLED", True),
         coder_devtools_enabled=_get_bool("CODER_DEVTOOLS_ENABLED", True),
         prompt_refiner_enabled=_get_bool("PROMPT_REFINER_ENABLED", True),

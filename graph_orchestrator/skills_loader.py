@@ -83,6 +83,37 @@ DYNAMIC_SKILL_RULES: List[tuple] = [
     (EXTERNAL_LIB_PATTERN, "context7-research"),
 ]
 
+# F-82 — Skill Finder : extension par manifeste durable (skills/installed-skills.json).
+# Les skills installés à la volée via skills.sh sont réenregistrés comme règles
+# (regex dédiée multi-mots-clés, cf. skill_finder.extract_trigger_keywords) au
+# démarrage → visibles des 3 chemins (select_skills_for_coder /
+# build_conditional_skills_block / build_skills_catalog). No-op si manifeste
+# absent (fresh checkout → load_dynamic_manifest renvoie []). Pas de mutation de
+# source (fini la réécriture de ce fichier par l'ancien scaffold — git propre).
+try:
+    from .skill_finder import load_dynamic_manifest
+    DYNAMIC_SKILL_RULES.extend(load_dynamic_manifest())
+except Exception:  # noqa: BLE001 — ne jamais casser l'import skills_loader
+    pass
+
+
+def register_dynamic_rule(pattern: str, skill_name: str) -> bool:
+    """Ajoute une règle (regex, skill) en mémoire (dédoublonne). Utilitaire same-run.
+
+    Retourne True si la règle a été ajoutée, False si déjà présente ou invalide.
+    Ne lève jamais (appelé par skill_finder.refresh_dynamic_rules_in_memory).
+    """
+    try:
+        if not pattern or not skill_name:
+            return False
+        for existing_pattern, existing_name in DYNAMIC_SKILL_RULES:
+            if existing_pattern == pattern and existing_name == skill_name:
+                return False
+        DYNAMIC_SKILL_RULES.append((pattern, skill_name))
+        return True
+    except Exception:
+        return False
+
 
 def _strip_frontmatter(md: str) -> str:
     """Retire le frontmatter YAML (--- ... ---) d'un SKILL.md pour alléger le contexte."""

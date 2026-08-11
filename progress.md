@@ -1096,3 +1096,78 @@ Coder est appliquée correctement par Qwen3.5-9B.
   + WARNING path traversal F-76.
 - [x] Validation main final : py_compile OK, 785 passed / 11 pré-existants (0 régression),
   smoke recall OK, branches nettoyées.
+
+## Jalons de l'Itération (cycle F-82 — Skill Finder, durcissement du scaffold)
+> Constat initial : F-82 était **déjà scaffoldé et commité sur main** (`tools.py:586`
+> + ReAct Architect `dspy_nodes.py:759`) mais marqué `pending` — sans tests, sans flag
+> config, avec `shell=True` interpolé (injection), une regex dégénérée `\b(query)\b`,
+> et une **réécriture du fichier source skills_loader.py** à l'exécution (salissait
+> git, fragile). Décisions utilisateur : (1) durcir le scaffold ; (2) sécurité par
+> **marqueurs skills.sh** (safe/verified) + allowlist configurable (pas d'API Socket) ;
+> (3) **persistance durable** par manifeste (pas de mutation de source) ; (4) **toujours
+> ON** + flag ; (5) **ligne regex dédiée multi-mots-clés** par skill installé.
+- [x] Étape F82-1 : Branche `feat/f-82-skill-finder` + exploration (3 agents parallèles)
+  cartographiant Architect/ReAct, skills_loader API, skills/ + config + patterns HTTP.
+- [x] Étape F82-2 : `graph_orchestrator/skill_finder.py` (logique pure, standalone à
+  l'import) — parse_skills_find_output (ANSI + marqueurs safe/unsafe), is_trusted
+  (allowlist + blocage marqueur négatif), extract_trigger_keywords + build_trigger_regex
+  (regex dédiée multi-mots-clés), install_skill (subprocess shell=False + validation
+  regex composants + cmd.exe /c npx cross-plateforme), manifeste durable (register/
+  load/refresh), search_and_install (orchestrateur fail-open).
+- [x] Étape F82-3 : `tools.py` — `search_and_install_skill` devient wrapper mince (+
+  param `triggers` hints). **Suppression** de `shell=True` et de la réécriture de
+  `skills_loader.py` (→ manifeste).
+- [x] Étape F82-4 : `skills_loader.py` — `DYNAMIC_SKILL_RULES.extend(load_dynamic_manifest())`
+  au démarrage + helper `register_dynamic_rule` (no-op en fresh checkout → 0 régression).
+- [x] Étape F82-5 : `dspy_nodes.py` — bloc ReAct F-82 gate par `if settings.skill_finder_enabled:`
+  + wrapper propage `triggers`. ReAct + injection `research_summary` conservés.
+- [x] Étape F82-6 : `config.py` — `skill_finder_enabled` (défaut True) +
+  `skill_finder_trusted_authors` (CSV) + `.env.example` + `.env` local + `.gitignore`
+  (`skills/installed-skills.json`).
+- [x] Étape F82-7 : `tests/test_skill_finder.py` — 37 tests (parsing, trust, keywords/regex,
+  install shell=False, manifeste, search_and_install E2E mocké, intégration skills_loader,
+  @tool wrapper, config+gate source guard). 37/37 PASS.
+- [x] Étape F82-8 : Validation — py_compile OK (6 fichiers) + suite complète 883 passed /
+  7 failed / 1 skipped / 11 deselected. **0 régression confirmée** : les 7 échecs
+  (test_read_gate ×4 + test_skill_lazy_loading ×3) sont pré-existants, strictement
+  identiques au baseline via `git stash` (AUCUN lié au Skill Finder).
+- [x] Étape F82-9 : État disque synchronisé (feature_list F-82 completed, contract
+  critères 315-326, progress, README section 6). Branche `feat/f-82-skill-finder`. Commit + PR.
+- [x] Étape F82-9b : Persistance des prompts de validation (retour user « ne pas perdre
+  les prompts des bulles ») — `prompts/validation/` versionné (bubble_sort.md snapshot
+  du prompt canonique + skill_finder_ai_sdk.md + skill_finder_react.md forceurs F-82) +
+  README de convention + `scripts/load_prompt.py` (charge un .md → tasks.json coding[0],
+  parse frontmatter id/target_files/expected_skill_finder). Le Prompt-Vault
+  (references/, gitignoré) reste la banque externe ; prompts/validation/ est l'instantané
+  minimal versionné. Loader smoke-testé (round-trip OK, cible temp, 0 modif tasks.json).
+- [x] Étape F82-10 : Validation live (pipeline direct `search_and_install("react")`) —
+  RÉUSSIE. `vercel-labs/agent-skills@vercel-react-best-practices` (auteur de confiance)
+  installé dans `skills/`, manifeste `skills/installed-skills.json` écrit avec **regex
+  dédiée** `\b(react|next|performance|optimization|...)\b`, `select_skills_for_coder`
+  l'inclut (`[file-creation, coding, context7-research, vercel-react-best-practices]`).
+  ⚠️ Bug trouvé + corrigé en live : `install_skill` n'injectait pas `-y --copy` → la CLI
+  skills demandait une confirmation en subprocess non-tty (hang/timeout). Fix appliqué
+  + test `assert "-y" in cmd and "--copy" in cmd`. Stopwords enrichis (should/shall/must).
+  ⚠️ Finding production (suivi requis) : `npx skills add --copy` reproduit le skill dans
+  ~27 dossiers d'agents (`.augment/`, `.codebuddy/`, `.continue/`...) — seul `skills/`
+  nous intéresse. Nettoyage post-install (parse sortie CLI → rm agent dirs ≠ skills/) ou
+  gitignore des patterns d'agents à ajouter dans un cycle futur. Working tree nettoyé
+  post-démo (skill non bundlé — réinstallable en 1 commande).
+- [x] Étape F82-11 : Validation **ReAct Architect LLM** — RÉUSSIE (Ornith-9B, GPU).
+  `debug/run_architect.py @prompts/validation/skill_finder_ai_sdk.md` (corps seul) → le
+  ReAct `SkillResearchSignature` a **appelé `search_and_install_skill`** et installé
+  `vercel-labs/ai@ai-sdk` (auteur de confiance). Manifeste écrit avec **regex dédiée**
+  `\b(ai-sdk|ai|streamtext|usechat|...)\b` (mots-clés extraits de la vraie description),
+  `skills/ai-sdk/` créé, refresh_dynamic_rules in-memory, Architect terminé (exit 0,
+  177.9s, plan 2 sous-tâches multifile). Le 9B décide donc bien d'invoquer l'outil.
+  2 corrections appliquées lors de la validation :
+  (1) ReAct `think=False` (avant `think=True` → hang 580s en thinking sur 9B, miroir F-47) ;
+  (2) prompt `SkillResearchSignature` directif (« tu DOIS appeler l'outil si une techno est
+  nommée ») — avant, le 9B répondait « Aucun » par défaut (décision paresseuse).
+  ⚠️ Trouvaille wiring (suivi) : si le résumé ReAct finit en « Aucun » malgré l'install
+  (incohérence petit modèle), l'Architect ne sélectionne pas le skill dans `subtask.skills`
+  → le Coder (voie F-57 prioritaire sur subtask.skills) ne le voit pas au run courant ;
+  en revanche les runs futurs le voient via le manifeste (catalogue Architect). À durcir si
+  besoin (propager le nom installé au-delà du seul résumé LLM). Working tree nettoyé
+  post-démo (skill non bundlé). Témoin négatif `bubble_sort.md` → « Aucun skill ajouté »
+  (vanilla, pas de techno nommée) reste à confirmer en run.
