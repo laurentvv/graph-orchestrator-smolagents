@@ -1096,3 +1096,51 @@ Coder est appliquée correctement par Qwen3.5-9B.
   + WARNING path traversal F-76.
 - [x] Validation main final : py_compile OK, 785 passed / 11 pré-existants (0 régression),
   smoke recall OK, branches nettoyées.
+
+## Jalons de l'Itération (cycle F-82 — Skill Finder, durcissement du scaffold)
+> Constat initial : F-82 était **déjà scaffoldé et commité sur main** (`tools.py:586`
+> + ReAct Architect `dspy_nodes.py:759`) mais marqué `pending` — sans tests, sans flag
+> config, avec `shell=True` interpolé (injection), une regex dégénérée `\b(query)\b`,
+> et une **réécriture du fichier source skills_loader.py** à l'exécution (salissait
+> git, fragile). Décisions utilisateur : (1) durcir le scaffold ; (2) sécurité par
+> **marqueurs skills.sh** (safe/verified) + allowlist configurable (pas d'API Socket) ;
+> (3) **persistance durable** par manifeste (pas de mutation de source) ; (4) **toujours
+> ON** + flag ; (5) **ligne regex dédiée multi-mots-clés** par skill installé.
+- [x] Étape F82-1 : Branche `feat/f-82-skill-finder` + exploration (3 agents parallèles)
+  cartographiant Architect/ReAct, skills_loader API, skills/ + config + patterns HTTP.
+- [x] Étape F82-2 : `graph_orchestrator/skill_finder.py` (logique pure, standalone à
+  l'import) — parse_skills_find_output (ANSI + marqueurs safe/unsafe), is_trusted
+  (allowlist + blocage marqueur négatif), extract_trigger_keywords + build_trigger_regex
+  (regex dédiée multi-mots-clés), install_skill (subprocess shell=False + validation
+  regex composants + cmd.exe /c npx cross-plateforme), manifeste durable (register/
+  load/refresh), search_and_install (orchestrateur fail-open).
+- [x] Étape F82-3 : `tools.py` — `search_and_install_skill` devient wrapper mince (+
+  param `triggers` hints). **Suppression** de `shell=True` et de la réécriture de
+  `skills_loader.py` (→ manifeste).
+- [x] Étape F82-4 : `skills_loader.py` — `DYNAMIC_SKILL_RULES.extend(load_dynamic_manifest())`
+  au démarrage + helper `register_dynamic_rule` (no-op en fresh checkout → 0 régression).
+- [x] Étape F82-5 : `dspy_nodes.py` — bloc ReAct F-82 gate par `if settings.skill_finder_enabled:`
+  + wrapper propage `triggers`. ReAct + injection `research_summary` conservés.
+- [x] Étape F82-6 : `config.py` — `skill_finder_enabled` (défaut True) +
+  `skill_finder_trusted_authors` (CSV) + `.env.example` + `.env` local + `.gitignore`
+  (`skills/installed-skills.json`).
+- [x] Étape F82-7 : `tests/test_skill_finder.py` — 37 tests (parsing, trust, keywords/regex,
+  install shell=False, manifeste, search_and_install E2E mocké, intégration skills_loader,
+  @tool wrapper, config+gate source guard). 37/37 PASS.
+- [x] Étape F82-8 : Validation — py_compile OK (6 fichiers) + suite complète 883 passed /
+  7 failed / 1 skipped / 11 deselected. **0 régression confirmée** : les 7 échecs
+  (test_read_gate ×4 + test_skill_lazy_loading ×3) sont pré-existants, strictement
+  identiques au baseline via `git stash` (AUCUN lié au Skill Finder).
+- [x] Étape F82-9 : État disque synchronisé (feature_list F-82 completed, contract
+  critères 315-326, progress, README section 6). Branche `feat/f-82-skill-finder`. Commit + PR.
+- [x] Étape F82-9b : Persistance des prompts de validation (retour user « ne pas perdre
+  les prompts des bulles ») — `prompts/validation/` versionné (bubble_sort.md snapshot
+  du prompt canonique + skill_finder_ai_sdk.md + skill_finder_react.md forceurs F-82) +
+  README de convention + `scripts/load_prompt.py` (charge un .md → tasks.json coding[0],
+  parse frontmatter id/target_files/expected_skill_finder). Le Prompt-Vault
+  (references/, gitignoré) reste la banque externe ; prompts/validation/ est l'instantané
+  minimal versionné. Loader smoke-testé (round-trip OK, cible temp, 0 modif tasks.json).
+- [ ] Étape F82-10 : Validation run live — `scripts/load_prompt.py prompts/validation/skill_finder_ai_sdk.md`
+  puis `debug/run_architect.py` (isolation Architect, ~minutes) : observer log
+  « Skill installé » + skills/installed-skills.json. Témoin négatif bubble_sort.md →
+  « Aucun skill ajouté ». Échéance future (réseau/npx).

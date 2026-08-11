@@ -40,6 +40,9 @@ We don't waste expensive AI cycles verifying simple typos. Before any file is va
 - **The Read-Before-Write Gate** strictly forbids an agent from editing a file it hasn't read first.
 - **Context Compaction & Branch Summarization**: Dynamically compresses Python code via AST (Abstract Syntax Trees). But we go further: if an agent fails 10 times in a row, the engine summarizes the failed branch into a single learning insight. If it reads a file and then modifies it later, the obsolete reads are purged (File-State Compaction). This guarantees the agent never suffers from "Context Overflow".
 
+### 6. 🧩 Self-Installing Skills (F-82 — Skill Finder)
+When a task needs expertise the local catalog lacks (e.g. the **Vercel AI SDK**, **React best-practices**), the Architect notices the gap *before* planning and reaches out to the open **[skills.sh](https://www.skills.sh/)** registry (`npx skills`). It searches, **trust-gates** the result (configurable author allowlist **+** skills.sh safety markers — unsafe/malicious is blocked even for a trusted author), installs the skill into `skills/`, then registers a **dedicated keyword regex** for it — so the Coder picks it up exactly like the built-in skills, flowing through the same lazy/budget pipeline (catalog metadata, token budget, on-demand `load_skill`). Persistence is a versioned manifest (`skills/installed-skills.json`), never a source-file mutation. Opt-out: `SKILL_FINDER_ENABLED=false`. **Validation prompts** for this feature live in [`prompts/validation/`](./prompts/validation/README.md) (loaded into `tasks.json` via `scripts/load_prompt.py`).
+
 ---
 
 ## 🗄️ Ironclad Memory: The Knowledge Graph
