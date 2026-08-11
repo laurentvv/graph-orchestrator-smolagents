@@ -1153,7 +1153,21 @@ Coder est appliquée correctement par Qwen3.5-9B.
   nous intéresse. Nettoyage post-install (parse sortie CLI → rm agent dirs ≠ skills/) ou
   gitignore des patterns d'agents à ajouter dans un cycle futur. Working tree nettoyé
   post-démo (skill non bundlé — réinstallable en 1 commande).
-- [ ] Étape F82-11 (échéance future, GPU) : validation via le **ReAct Architect LLM**
-  (`debug/run_architect.py` + prompt `skill_finder_ai_sdk.md`) — confirme que le ReAct
-  sur Ornith-9B appelle bien l'outil (vs le pipeline direct déjà prouvé). + témoin négatif
-  `bubble_sort.md` → « Aucun skill ajouté ».
+- [x] Étape F82-11 : Validation **ReAct Architect LLM** — RÉUSSIE (Ornith-9B, GPU).
+  `debug/run_architect.py @prompts/validation/skill_finder_ai_sdk.md` (corps seul) → le
+  ReAct `SkillResearchSignature` a **appelé `search_and_install_skill`** et installé
+  `vercel-labs/ai@ai-sdk` (auteur de confiance). Manifeste écrit avec **regex dédiée**
+  `\b(ai-sdk|ai|streamtext|usechat|...)\b` (mots-clés extraits de la vraie description),
+  `skills/ai-sdk/` créé, refresh_dynamic_rules in-memory, Architect terminé (exit 0,
+  177.9s, plan 2 sous-tâches multifile). Le 9B décide donc bien d'invoquer l'outil.
+  2 corrections appliquées lors de la validation :
+  (1) ReAct `think=False` (avant `think=True` → hang 580s en thinking sur 9B, miroir F-47) ;
+  (2) prompt `SkillResearchSignature` directif (« tu DOIS appeler l'outil si une techno est
+  nommée ») — avant, le 9B répondait « Aucun » par défaut (décision paresseuse).
+  ⚠️ Trouvaille wiring (suivi) : si le résumé ReAct finit en « Aucun » malgré l'install
+  (incohérence petit modèle), l'Architect ne sélectionne pas le skill dans `subtask.skills`
+  → le Coder (voie F-57 prioritaire sur subtask.skills) ne le voit pas au run courant ;
+  en revanche les runs futurs le voient via le manifeste (catalogue Architect). À durcir si
+  besoin (propager le nom installé au-delà du seul résumé LLM). Working tree nettoyé
+  post-démo (skill non bundlé). Témoin négatif `bubble_sort.md` → « Aucun skill ajouté »
+  (vanilla, pas de techno nommée) reste à confirmer en run.
