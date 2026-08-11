@@ -343,3 +343,92 @@ async def test_valid_final_answer_wins_over_loop_guard():
     assert call_count["n"] == 1, "succès au 1er attempt, aucun retry ne doit être consommé"
     # Le LoopGuard a bien détecté la répétition (confirme qu'on teste le bon chemin) :
     assert guard.repeated_action() is not None
+
+
+# ==========================================
+# Tests du fallback verdict Tester (max_steps, F-90 run 2026-08-11)
+# ==========================================
+
+class TestTesterMaxStepsFallback:
+    """Le Web Tester (9B) over-exlore → max_steps → auto-final-answer en prose non
+    parseable → extract_and_validate None → 3 retries gaspillés. Le fallback scanne
+    le step history et dérive un verdict comportemental."""
+
+    def test_fallback_succes_si_assertions_pass_sans_fail(self):
+        """Des assertions ont tourné (PASS observé), aucun FAIL → success."""
+        from graph_orchestrator.nodes import _tester_max_steps_fallback
+        step = SimpleNamespace(
+            observations='Script ran: {"counter": 5, "sorted": true}', error=None
+        )
+        r = _tester_max_steps_fallback([step], 'final_answer({"task_id": "ts-1"})')
+        assert r is not None
+        assert r.status == "success"
+        assert r.task_id == "ts-1"
+
+    def test_fallback_failure_si_fail_observe(self):
+        """Une assertion en échec observée → failure + snippet."""
+        from graph_orchestrator.nodes import _tester_max_steps_fallback
+        step = SimpleNamespace(
+            observations='check: fail — array not sorted', error=None
+        )
+        r = _tester_max_steps_fallback([step], 'final_answer({"task_id": "ts-2"})')
+        assert r is not None
+        assert r.status == "failure"
+        assert "not sorted" in r.details
+        assert r.task_id == "ts-2"
+
+    def test_fallback_none_si_aucun_signal(self):
+        """Ni PASS ni FAIL (le Tester n'a quasi rien testé) → None (ne valide pas à l'aveugle)."""
+        from graph_orchestrator.nodes import _tester_max_steps_fallback
+        step = SimpleNamespace(observations="", error=None)
+        r = _tester_max_steps_fallback([step], 'final_answer({"task_id": "ts-3"})')
+        assert r is None
+
+    def test_fallback_task_id_unknown_si_absent_du_prompt(self):
+        """task_id non trouvable dans le prompt → 'unknown' (ne crash pas)."""
+        from graph_orchestrator.nodes import _tester_max_steps_fallback
+        step = SimpleNamespace(observations='{"ok": true}', error=None)
+        r = _tester_max_steps_fallback([step], "prompt sans task_id")
+        assert r is not None
+        assert r.task_id == "unknown"
+
+    @pytest.mark.anyio
+    async def test_fallback_active_dans_run_with_retry_node_tester(self):
+        """run_with_retry(node_kind='tester') utilise le fallback quand extract_and_validate
+        rend None → verdict dérivé au 1er attempt (0 retry consommé)."""
+        from graph_orchestrator.models import CoderOutput
+        from graph_orchestrator.nodes import run_with_retry
+
+        # Agent dont memory.steps contient une observation PASS.
+        step = SimpleNamespace(
+            observations='result: {"sorted": true, "counter": 10}',
+            error=None,
+            model_output="",
+            code_action="",
+            tool_calls=None,
+            is_final_answer=False,
+        )
+        agent = MagicMock()
+        agent.memory.steps = [step]
+        agent.model = None
+        agent.tools = {}
+        run_result = SimpleNamespace(output="prose non parseable", tokens=[])
+        call_count = {"n": 0}
+
+        async def counting_to_thread(fn, *args, **kwargs):
+            call_count["n"] += 1
+            return run_result
+
+        with patch("graph_orchestrator.nodes.asyncio.to_thread", new=counting_to_thread):
+            with patch("graph_orchestrator.nodes.extract_and_validate", return_value=None):
+                result, metrics = await run_with_retry(
+                    agent, 'final_answer({"task_id": "ts-e2e"})', CoderOutput,
+                    max_retries=3, node_kind="tester",
+                )
+
+        # Le fallback a produit un verdict (pas None).
+        assert result is not None
+        assert result.status == "success"
+        assert result.task_id == "ts-e2e"
+        # 1er attempt seulement (le fallback évite les retries).
+        assert call_count["n"] == 1

@@ -82,6 +82,20 @@ class _ScreenshotCapturingTool(Tool):
         _patch_forward_for_image(wrapped)
 
     def forward(self, *args, **kwargs):
+        # F-50/F-90 fix : strip filePath des screenshots. chrome-devtools-mcp --isolated
+        # rejette toute écriture disque (pas de workspace root configuré) → l'outil
+        # échoue AVANT de retourner l'image → la callback vision ne capture rien → le
+        # Coder boucle sur l'erreur (run 2026-08-11 : 36 erreurs, 25 steps / 510k tokens).
+        # Or l'image revient DE TOUTE FAÇON via observations_images
+        # (make_screenshot_callback) : le filePath est donc à la fois inutile ET cassant.
+        # On le retire silencieusement (best-effort, jamais d'exception). Le wrapper voit
+        # kwargs déjà typés car le sanitizer (F-42) tourne avant/après ce proxy.
+        if "filePath" in kwargs:
+            kwargs.pop("filePath", None)
+            logger.debug(
+                "vision_callback: filePath strippé (fix screenshot loop) — "
+                "capture via observations_images, pas d'écriture disque."
+            )
         result = self.wrapped.forward(*args, **kwargs)
         # Capture si c'est une image (PIL.Image.Image). On importe PIL ici (pas au
         # niveau module) car PIL est une dépendance optionnelle via smolagents.

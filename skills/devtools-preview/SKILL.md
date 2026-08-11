@@ -28,6 +28,11 @@ Tester, qui échouera → cycle de correction long. Le preview court-circuite ç
    - Si tu vois `SyntaxError`, `Unexpected token`, `Uncaught` → c'est un bug CRITIQUE.
      Corrige-le AVANT de continuer. Ne fais JAMAIS `final_answer` avec une erreur console.
 3. **Capture** : `take_screenshot()` → l'image te revient. **Analyse-la de façon CRITIQUE** :
+   - ⚠️ **JAMAIS de paramètre `filePath`**. Appelle `take_screenshot()` SANS arguments.
+     L'image te revient automatiquement en contexte (tu la vois). Ajouter
+     `filePath="..."` provoque une erreur `Access denied` (workspace root non configuré)
+     → aucun screenshot ne revient → tu boucles sur l'erreur. **Ne passe JAMAIS filePath,
+     format, quality, fullPage ni aucun argument** : juste `take_screenshot()`.
    - La page est-elle vide/blanche ? → erreur JS (vérifié étape 2 normalement).
    - Le layout est-il cassé (éléments superposés, débordement, texte coupé) ?
    - **L'occupation de l'espace est-elle harmonieuse ?** (Traque les énormes zones de vide injustifiées. Si un graphique, un canevas ou une grille n'occupe que la moitié de son conteneur, c'est un BUG visuel à corriger).
@@ -51,6 +56,10 @@ Tester, qui échouera → cycle de correction long. Le preview court-circuite ç
   `file:///.../landing_page/index.html`, PAS `file:///.../index.html` (sinon 404 / page racine).
 - **Boucle de screenshots** : max 1 screenshot par étape de correction. Si tu ne vois pas
   le bug après 2 screenshots, lis le DOM via `evaluate_script` au lieu de re-capturer.
+- **`filePath` INTERDIT** (cause n°1 de boucle de screenshots) : `take_screenshot` s'appelle
+  SANS arguments. Ne passe **JAMAIS** `filePath`, `format`, `quality`, `fullPage` ni
+  aucun kwarg — l'image revient automatiquement. Si tu vois `Access denied: path ... is not
+  within configured workspace roots`, c'est que tu as passé `filePath` : recommence sans.
 - **Interactions** : pour tester un bouton (ex: "Démarrer le tri"), `click(uid=...)` après
   avoir identifié l'élément via `take_snapshot()`. Mais pour un simple check visuel,
   screenshot + console suffisent dans 90% des cas.

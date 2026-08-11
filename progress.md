@@ -1171,3 +1171,42 @@ Coder est appliquée correctement par Qwen3.5-9B.
   besoin (propager le nom installé au-delà du seul résumé LLM). Working tree nettoyé
   post-démo (skill non bundlé). Témoin négatif `bubble_sort.md` → « Aucun skill ajouté »
   (vanilla, pas de techno nommée) reste à confirmer en run.
+
+## Jalons de l'Itération (cycle F-90 validation run + 7 hardening fixes, 2026-08-11)
+> Objectif utilisateur : « faire un run complet sans erreur, si erreur corriger puis
+> relancer jusqu'à un run réussi ». 9 runs E2E Bubble Sort pour diagnostiquer et fixer
+> toute la chaîne. SUCCÈS au run #9 : sous-tâche 1 APPROUVÉE par le Judge au 1er cycle
+> (1ère approbation en 9 runs). F-90 marquée completed.
+
+- [x] F-90 : Architecte produit les 3 champs (visual/functional/rubric), injectés aux 3
+  nœuds. Validé en isolation (debug/run_architect.py affiche les critères) + E2E (run #9).
+- [x] Fix screenshot `filePath` : `_ScreenshotCapturingTool.forward()` (vision_callback.py)
+  strippe le kwarg `filePath` avant délégation. Le mode `--isolated` de chrome-devtools-mcp
+  rejette toute écriture disque → l'outil échouait AVANT de retourner l'image → la callback
+  vision ne capturait rien → boucle de 25 steps (run #1). Règle anti-filePath dans
+  devtools-preview/SKILL.md. Test test_strip_filepath_avant_delegation. Documenté AGENTS.md §7.
+- [x] Fix Tester convergence : tester_max_steps 25→8, tester_timeout_s 600→480, règle 6
+  « budget steps » (web_tester.py). 8 steps × ~55s pire cas = 440s < 480s → le Tester
+  converge (max_steps gagne la course contre le wall-clock) au lieu de timeout.
+- [x] Fix Tester fallback verdict : `_tester_max_steps_fallback` (nodes.py) scanne le step
+  history et dérive un verdict comportemental (FAIL observé → failure, assertions PASS sans
+  FAIL → success) quand l'auto-final-answer à max_steps ne parse pas. Évite la boucle de
+  3 retries (~15 min) puis None. 6 tests (test_coder_hardening.py). Validé E2E run #5/#9.
+- [x] Fix Judge vue deliverable complet : `_judge_deliverable_files` (dspy_nodes.py) UNION de
+  target_files avec TOUS les fichiers source du run dir. Cause racine escalade run #5 :
+  l'Architect split un app 3-fichiers en 3 sous-tâches → le Judge ne voyait qu'1 fichier
+  → « css/js manquants » → rejet systématique ×3. 3 tests (test_judge_diff.py).
+- [x] Fix règle CSS height inline : `coding/SKILL.md` section « RÈGLES CRITIQUES » eager-loaded
+  (pas derrière une resource lazy). Pattern EXACT : ❌ `bar.style.height='0px'` à la création
+  = BUG n°1 (barres invisibles au load), ✅ `(value*SCALE)+'px'` dès le createElement. Le 4B
+  l'applique dès le run #9 (`Math.max(10, value*2)px`). C'était LE failure mode persistant
+  (Static Tester catchait « height=0 » à chaque run).
+- [x] Fix Static Tester settle wait : `_evaluate_visibility` (static_tester.py) probe maintenant
+  `async () => { click; await setTimeout(150); probe; }` au lieu de `() => { click; probe; }`
+  synchrone. Laisse les handlers async/re-render se stabiliser (réduit faux-positifs).
+- [x] debug/run_architect.py : affiche les 3 champs F-90 (visual/functional/rubric) dans la
+  sortie isolation (était manquant).
+- [x] Validation run #9 : sous-tâche ts-html-structure APPROUVÉE par le Judge au 1er cycle.
+  Tous les fixes actifs simultanément : barres visibles (height rule) → Static Tester PASS →
+  Tester fallback=success → Judge deliverable view (3 fichiers) → APPROUVÉ. 52+ tests unitaires
+  PASS (chrome_devtools + coder_hardening + config + judge_diff), 0 régression confirmée.

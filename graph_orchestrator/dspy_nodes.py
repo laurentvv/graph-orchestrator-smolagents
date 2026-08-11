@@ -916,6 +916,41 @@ async def execute_security_reviewer_node(subtask: dict, reasoning_model, setting
         return None, None
 
 
+def _judge_deliverable_files(subtask: dict) -> list:
+    """Calcule la liste de fichiers à montrer au Judge = le DELIVERABLE COMPLET.
+
+    Fix run 2026-08-11 : quand l'Architect split un app cohésive multi-fichiers en
+    N sous-tâches (1 fichier chacune), ``subtask.target_files`` ne contient qu'1
+    fichier. Le Judge ne voyait QUE index.html → « styles.css et script.js manquants »
+    → rejet systématique ×3 itérations → escalade, bien que le Coder ait écrit les 3
+    fichiers.
+
+    Solution : UNION de ``target_files`` (la sous-tâche) avec TOUS les fichiers source
+    présents dans le run dir (cwd). Le Judge évalue ainsi le deliverable complet, pas
+    un sous-ensemble. Fail-open : si listdir échoue, on garde target_files seul.
+    """
+    import os as _os
+    files = list(subtask.get("target_files", []))
+    try:
+        _src_exts = (
+            ".html", ".htm", ".css", ".js", ".mjs", ".py",
+            ".ts", ".tsx", ".jsx", ".vue", ".svelte",
+        )
+        cwd_files = sorted(
+            f for f in _os.listdir(".")
+            if _os.path.isfile(f) and f.lower().endswith(_src_exts)
+        )
+        merged = sorted(set(files) | set(cwd_files))
+        if len(merged) > len(files):
+            print(
+                f"[i] Judge : vue deliverable complet ({len(merged)} fichiers source "
+                f"au lieu de {len(files)} pour la sous-tâche)."
+            )
+        return merged
+    except Exception:
+        return files
+
+
 async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Optional[SecurityOutput], reasoning_model, settings: Settings) -> Tuple[Optional[CodeJudgeOutput], Optional[NodeMetrics]]:
     """Exécute le Juge final qui décide si la boucle de développement s'arrête.
 
@@ -943,7 +978,7 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
     # pour la vérification des exigences. En iter 1 (diff vide) = full-file pur,
     # rétrocompat strict. Voir judge_diff.build_judge_code_block.
     code_content = build_judge_code_block(
-        subtask.get("target_files", []),
+        _judge_deliverable_files(subtask),
         subtask.get("git_diff", ""),
     )
 

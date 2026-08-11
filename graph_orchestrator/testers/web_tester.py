@@ -298,6 +298,15 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
    (~400ms), et vérifier que la progression est PARTIELLE (ni 0 ni terminale, si
    l'animation doit durer > 400ms). Une animation qui termine en < 50ms est un BUG
    (instantanée), pas un succès. Voir la recette temporelle dans le skill.
+6. 🛑 BUDGET STEPS — CONVERGE RAPIDEMENT (anti over-exploration) : tu as un budget limité
+   de steps. Suite type : 1 `navigate_page` + 1 `list_console_messages` + 1 assertion par
+   critère fonctionnel + 1 `final_answer`. Soit ~{settings.tester_max_steps} steps pour TOUT. RÈGLES :
+   - UNE SEULE assertion par `evaluate_script` (regroupe plusieurs checks dans le même
+     script async plutôt que d'émettre 5 appels séparés sur la même page).
+   - Ne JAMAIS re-vérifier un critère déjà PASS. PASS = acquis, on passe au suivant.
+   - Si un critère FAIL après 2 tentatives → note FAIL et passe au suivant (ne boucle pas).
+   - `final_answer` OBLIGATOIRE dès que tous les critères ont un verdict (PASS/FAIL/N-A).
+   - Atteindre max_steps sans `final_answer` = ÉCHEC automatique du nœud (timeout).
 
 ### FORMAT DE SORTIE (obligatoire)
 Tu écris du code Python dans un bloc ````python ... ```` qui appelle tes outils.

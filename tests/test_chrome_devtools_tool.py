@@ -223,6 +223,42 @@ class TestWrapScreenshotTools:
         tools = vision_callback.wrap_screenshot_tools([FakePuppet()], holder)
         assert isinstance(tools[0], vision_callback._ScreenshotCapturingTool)
 
+    def test_strip_filepath_avant_delegation(self):
+        """F-50/F-90 fix : filePath est strippé avant l'outil sous-jacent.
+
+        Reproduit le bug du run 2026-08-11 : le Coder passait filePath="screenshot.png"
+        → chrome-devtools-mcp --isolated rejetait l'écriture (Access denied) → aucun
+        screenshot ne revenait → boucle de 25 steps / 510k tokens. Le wrapper strippe
+        filePath silencieusement : l'image revient via observations_images.
+        """
+        from smolagents import Tool
+
+        class FakeShotRecord(Tool):
+            name = "take_screenshot"
+            description = "shot"
+            inputs = {}
+            output_type = "object"
+            is_initialized = True
+            skip_forward_signature_validation = True  # mimic MCP tool (signature générique)
+            def __init__(self):
+                self.received_kwargs = None
+            def forward(self, **kwargs):
+                self.received_kwargs = dict(kwargs)
+                return Image.new("RGB", (2, 2))
+
+        fake = FakeShotRecord()
+        holder = []
+        wrapped = vision_callback._ScreenshotCapturingTool(fake, holder)
+        # Le Coder passe filePath (+ autres kwargs) — doivent être strippés.
+        wrapped.forward(filePath="screenshot.png", format="jpeg")
+        assert "filePath" not in fake.received_kwargs, (
+            "filePath doit être strippé avant délégation (cause boucle screenshot)"
+        )
+        # Les autres kwargs sont préservés (on ne strippe QUE filePath).
+        assert fake.received_kwargs.get("format") == "jpeg"
+        # L'image est bien capturée dans le holder (la pipeline vision fonctionne).
+        assert len(holder) == 1
+
     def test_capture_holder_none_pas_de_wrap(self):
         """capture_holder=None → outils intacts (capture désactivée)."""
         from smolagents import Tool

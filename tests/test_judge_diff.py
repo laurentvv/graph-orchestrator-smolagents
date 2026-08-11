@@ -120,3 +120,41 @@ class TestTruncationFullFile:
         # Pas de marqueur de troncature en iter 1 (comportement historique préservé).
         assert "lignes tronquées" not in result
         assert "l0" in result and "l199" in result
+
+
+# ==========================================
+# Tests _judge_deliverable_files (fix run 2026-08-11 : vue deliverable complet)
+# ==========================================
+
+class TestJudgeDeliverableFiles:
+    """Le Judge doit voir TOUS les fichiers source du run, pas seulement le subset
+    de la sous-tâche. Sinon, un app 3-fichiers splitée en 3 sous-tâches fait rejeter
+    systématiquement (« css/js manquants »)."""
+
+    def test_union_avec_tous_les_fichiers_source_du_cwd(self, tmp_path, monkeypatch):
+        """subtask=[index.html] + run dir a 3 fichiers → Judge voit les 3."""
+        from graph_orchestrator.dspy_nodes import _judge_deliverable_files
+        (tmp_path / "index.html").write_text("x")
+        (tmp_path / "styles.css").write_text("x")
+        (tmp_path / "script.js").write_text("x")
+        (tmp_path / "README.md").write_text("x")  # non-source, ignoré
+        monkeypatch.chdir(tmp_path)
+        r = _judge_deliverable_files({"target_files": ["index.html"]})
+        assert set(r) == {"index.html", "styles.css", "script.js"}
+
+    def test_preserve_target_files_si_run_dir_vide(self, tmp_path, monkeypatch):
+        """Run dir sans fichiers source → garde target_files seul (fail-open)."""
+        from graph_orchestrator.dspy_nodes import _judge_deliverable_files
+        monkeypatch.chdir(tmp_path)
+        r = _judge_deliverable_files({"target_files": ["app.py"]})
+        assert r == ["app.py"]
+
+    def test_filtre_les_non_source(self, tmp_path, monkeypatch):
+        """Les fichiers non-source (.md, .json, .txt) sont exclus de la vue Judge."""
+        from graph_orchestrator.dspy_nodes import _judge_deliverable_files
+        (tmp_path / "index.html").write_text("x")
+        (tmp_path / "package.json").write_text("x")
+        (tmp_path / "notes.md").write_text("x")
+        monkeypatch.chdir(tmp_path)
+        r = _judge_deliverable_files({"target_files": []})
+        assert r == ["index.html"]
