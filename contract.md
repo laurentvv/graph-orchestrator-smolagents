@@ -199,7 +199,7 @@
 - [ ] Critère 156 : Le skill `frontend-design` commence par une ÉTAPE 0 obligatoire distinguant APP/TOOL (défaut : UI simple empilée centrée dans une card, titre 1.5-2rem) vs LANDING/PAGE (hero autorisé, 2.5-3rem max) — la consigne 'hero 3.5rem' littérale est remplacée par une fourchette conditionnelle.
 - [ ] Critère 157 : Garde anti-titre-géant explicite dans le skill — `h1 > 3rem` est interdit sauf hero unique d'une landing page ; directive layout APP : NE PAS faire de row à 1024px, rester une colonne (corrige le bug observé : titre 3.5rem/4rem + layout row cassé).
 - [ ] Critère 158 : `load_dotenv()` appelé sans `override=True` (override=False par défaut) — l'env shell prime sur .env ; `FRESH_START=1` au shell est respecté (testé) ; .env reste lu en l'absence d'override shell.
-- [ ] Critère 159 : La suite pytest complète passe (0 régression, 487 passed après F-46). Skill non re-validé par run complet ce cycle (laissé à F-48 qui donnera la vision au Coder pour auto-valider).
+- [ ] Critère 159 : La suite pytest complète passe (0 régression, 487 passed après F-46). Skill non re-validé par run complet ce cycle (la vision Coder livrée plus tard par F-50 + F-90 permettra l'auto-validation visuelle).
 
 ## Critères du Fix Judge hang — thinking sélectif (F-47)
 - [ ] Critère 160 : `_configure_dspy(settings, model_id, think=False)` utilise le provider litellm `ollama/` (parle `/api/chat` natif Ollama au lieu de `/v1`), retire le suffixe `/v1` de l'api_base, et passe le paramètre `think` au LM — validé : `think=False` répond en 5.8s sans thinking (vs ~23 min avec thinking forcé sur /v1).

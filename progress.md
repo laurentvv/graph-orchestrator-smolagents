@@ -408,16 +408,22 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape F4647-5 : debug/GAPS_TESTER_JUDGE.md — 2 gaps consignés avec DONNÉES RÉELLES
   (Gap 1 screenshot jetté par smolagents, Gap 2 thinking résolu par F-47).
 
-## Prochain cycle planifié — F-48 : Vision Coder (auto-validation visuelle)
-- [ ] Étape F48-1 : think=false Coder — smolagents OpenAIServerModel → /api/chat (prérequis :
-  débloque vision + gain budget code). Le Coder subit AUSSI le thinking forcé sur /v1.
-- [ ] Étape F48-2 : Outil screenshot pour le Coder — capture la page HTML générée après
-  write_file, l'expose au Coder comme image (Gemma 4 multimodal).
-- [ ] Étape F48-3 : Skill Coder verify-after visuel — après write_file UI, screenshot +
-  auto-éval (titre lisible, layout non cassé) + search_replace si fix nécessaire.
-- [ ] Étape F48-4 : Validation — comparatif qualité code avec/sans thinking + régression
-  Bubble Sort et Nimbus.
-- [ ] Étape VC-11 (cycle suivant) : Fix Tester querySelector (ACTION IMMÉDIATE documentée).
+## [ARCHIVE — F-48 fermée sans cycle dédié (2026-08-11)]
+> F-48 « Vision Coder » était planifiée quand le backend était Ollama /v1 et avant que
+> F-50/F-58/F-90 n'existent. Les 4 étapes ci-dessous sont devenues OBSOLÈTES ou furent
+> livrées autrement. La description de F-48 décrivait comme « à faire » ce qui était déjà
+> en prod. Feature marquée `completed` (livrée par étapes) lors du nettoyage de cohérence.
+> - F48-1 (think=false Coder) → résolu par **F-58** (migration llama-server spawn +
+>   `FAST_REASONING=off` au spawn via ModelSpec, `llama_server.py:198`). Le contournement
+>   litellm `/api/chat` de F-47 (spécifique Ollama /v1) n'a plus de raison d'être.
+> - F48-2 (screenshot tool) + F48-3 (verify-after skill) → livrés par **F-50** (ex-F-45) :
+>   `vision_callback.py` + `chrome_devtools_tool.py` + skill `devtools-preview` + bloc
+>   VALIDATION VISUELLE dans le prompt Coder + enforcement programmatique. **F-90** a
+>   ajouté `visual_success_criteria` générés par l'Architect (checklist OUI/NON vs screenshot).
+> - F48-4 (comparatif A/B) → non essentiel, non fait.
+>
+> Le Coder a DONC déjà la vision en prod. Cette section est conservée pour la traçabilité
+> historique mais ne décrit plus un « prochain cycle ».
 
 ## Jalons de l'Itération (cycle Chrome DevTools MCP + validation visuelle — F-45)
 - [x] Étape CD-0 : Vérification runtime fast_model (gemma-4-E4B) multimodal — VALIDÉ
