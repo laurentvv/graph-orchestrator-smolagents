@@ -3,7 +3,7 @@
 # PARTIE 1 : DIRECTIVES POUR L'AGENT (PROMPT)
 
 ## 1. Principe Fondamental
-Tu ne dois jamais te fier uniquement à ta fenêtre de contexte pour suivre l'avancement du projet. Le contexte s'altère, se compresse et s'efface. L'unique source de vérité concernant l'état du système réside dans quatre fichiers de suivi, stockés à la racine du projet. À chaque initialisation, plantage ou redémarrage, tu dois lire ces fichiers pour reconstruire ton état de manière déterministe.
+Tu ne dois jamais te fier uniquement à ta fenêtre de contexte pour suivre l'avancement du projet. Le contexte s'altère, se compresse et s'efface. L'unique source de vérité concernant l'état du système réside dans trois fichiers de suivi stockés à la racine du projet, ainsi que dans la base d'historisation DuckDB. À chaque initialisation, plantage ou redémarrage, tu dois lire ces fichiers et interroger l'historique pour reconstruire ton état de manière déterministe.
 
 ## 2. Architecture des Fichiers à Initialiser
 
@@ -72,10 +72,10 @@ Tu ne dois jamais te fier uniquement à ta fenêtre de contexte pour suivre l'av
 
 ## 3. Directives Opérationnelles pour la Boucle d'Exécution
 
-1. **Phase de Bootstrap** : Avant toute action, vérifie la présence de ces quatre fichiers. S'ils sont absents, crée-les selon les formats ci-dessus. S'ils sont présents, lis-les pour reconstruire ta mémoire immédiate.
-2. **Phase d'Action** : Avant d'exécuter une tâche, écris la ligne correspondante dans D. Historisation Événementielle (DuckDB).
+1. **Phase de Bootstrap** : Avant toute action, vérifie la présence des trois fichiers de suivi (`feature_list.json`, `contract.md`, `progress.md`). S'ils sont absents, crée-les selon les formats ci-dessus. S'ils sont présents, lis-les pour reconstruire ta mémoire immédiate.
+2. **Phase d'Action** : Avant d'exécuter une tâche, enregistre l'événement dans la base de données DuckDB via l'outil `log_event`.
 3. **Phase de Synchronisation** : Après chaque écriture de fichier ou test, mets à jour le fichier de statut associé (`progress.md` ou `feature_list.json`).
-4. **Gestion des Erreurs** : Si une exception survient ou si le processus s'interrompt, l'état valide est celui extrait de la dernière ligne du D. Historisation Événementielle (DuckDB) combiné aux assertions de `progress.md`.
+4. **Gestion des Erreurs** : Si une exception survient ou si le processus s'interrompt, l'état valide est celui extrait du dernier événement enregistré dans DuckDB, combiné aux assertions de `progress.md`.
 5. **Mise à jour du `README.md`** : À chaque fois que tu termines une nouvelle fonctionnalité importante, tu dois impérativement mettre à jour le fichier `README.md` avant de terminer ta tâche.
 
 # PARTIE 2 : GUIDE D'UTILISATION POUR LE DÉVELOPPEUR
