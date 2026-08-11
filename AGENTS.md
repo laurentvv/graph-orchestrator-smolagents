@@ -75,7 +75,7 @@ Tu ne dois jamais te fier uniquement à ta fenêtre de contexte pour suivre l'av
 1. **Phase de Bootstrap** : Avant toute action, vérifie la présence de ces quatre fichiers. S'ils sont absents, crée-les selon les formats ci-dessus. S'ils sont présents, lis-les pour reconstruire ta mémoire immédiate.
 2. **Phase d'Action** : Avant d'exécuter une tâche, écris la ligne correspondante dans D. Historisation Événementielle (DuckDB).
 3. **Phase de Synchronisation** : Après chaque écriture de fichier ou test, mets à jour le fichier de statut associé (`progress.md` ou `feature_list.json`).
-4. **Gestion des Erreurs** : Si une exception survient ou si le processus s'interrompt, l'état valide est celui extrait de la dernière ligne du `log.md` combiné aux assertions de `progress.md`.
+4. **Gestion des Erreurs** : Si une exception survient ou si le processus s'interrompt, l'état valide est celui extrait de la dernière ligne du D. Historisation Événementielle (DuckDB) combiné aux assertions de `progress.md`.
 5. **Mise à jour du `README.md`** : À chaque fois que tu termines une nouvelle fonctionnalité importante, tu dois impérativement mettre à jour le fichier `README.md` avant de terminer ta tâche.
 
 # PARTIE 2 : GUIDE D'UTILISATION POUR LE DÉVELOPPEUR
