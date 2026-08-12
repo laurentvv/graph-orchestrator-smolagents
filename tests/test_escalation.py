@@ -250,7 +250,8 @@ class TestEscalationWorkflow:
         """Le diagnostic est persisté dans le KG (kind='escalation') + arêtes ESCALATES.
 
         On intercepte le KG via kg_path sur disque pour relire les claims après run."""
-        import os, tempfile
+        import os
+        import tempfile
         from graph_orchestrator.knowledge_graph import KnowledgeGraph
 
         tmp = tempfile.mkdtemp()

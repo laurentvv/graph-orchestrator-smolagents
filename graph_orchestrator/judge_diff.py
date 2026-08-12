@@ -26,7 +26,7 @@ injecte le diff dans un bloc prompt plutôt qu'en nouveau champ DSPy → cohére
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List
 
 from .feedback_utils import truncate_output
 

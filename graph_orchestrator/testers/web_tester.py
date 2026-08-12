@@ -34,10 +34,10 @@ class WebTestRunner:
         # importable même si l'environnement web (Chrome/npx) n'est pas dispo
         # (ex: le runner Python n'en a pas besoin).
         from mcp import StdioServerParameters
-        from smolagents import ToolCollection, CodeAgent, OpenAIServerModel
+        from smolagents import ToolCollection, OpenAIServerModel
         from graph_orchestrator.compaction import CompactingCodeAgent
 
-        from ..nodes import run_with_retry, resolve_verbosity, _detect_idle_step
+        from ..nodes import run_with_retry, resolve_verbosity
         from ..skills_loader import load_skill_body
         from ..loop_guard import LoopGuard
 

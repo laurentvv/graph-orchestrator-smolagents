@@ -9,8 +9,8 @@ import json
 import os
 import requests
 import re
-from typing import List, Optional, Any, Literal, Dict, Union
-from pydantic import BaseModel, Field, ConfigDict, field_validator, ValidationError
+from typing import List, Optional, Any, Literal
+from pydantic import BaseModel, Field, ValidationError
 
 
 # ==========================================
@@ -272,7 +272,7 @@ def extract_and_validate(response: Any, model_class: type[BaseModel], api_base: 
                     raw_json = match.group(1).strip()
 
         return model_class.model_validate_json(raw_json)
-    except (ValidationError, json.JSONDecodeError) as e:
+    except (ValidationError, json.JSONDecodeError):
         # Garde anti-fuite d'abstraction : un test unitaire de parsing NE DOIT PAS
         # déclencher d'appel LLM (réseau, latence, hallucination). La variable
         # PYTEST_CURRENT_TEST est posée par pytest pendant l'exécution d'un test ;

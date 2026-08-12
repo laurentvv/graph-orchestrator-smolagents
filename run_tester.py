@@ -107,13 +107,13 @@ async def main():
     from graph_orchestrator.config import settings
     from graph_orchestrator.nodes import build_reasoning_model, execute_tester_node
 
-    print(f"[*] Tester standalone")
+    print("[*] Tester standalone")
     print(f"    Fichier testé     : {html_file} ({os.path.getsize(html_file)} octets)")
     print(f"    Modèle reasoning  : {settings.reasoning_model_id}")
     print(f"    Endpoint          : {settings.local_reasoning_api_base}")
     print(f"    DevTools activé   : {os.getenv('CHROME_DEVTOOLS_ENABLED', '1')}")
     print(f"    Audits parallèles : {os.getenv('AUDIT_PARALLEL', 'false')} (séquentiel GPU-local)")
-    print(f"    max_steps tester  : 12 (GPU-local)")
+    print("    max_steps tester  : 12 (GPU-local)")
     print()
     print(f"[*] Checklist F-46 extraite : {len(functionalities)} fonctionnalité(s) à tester")
     for i, f in enumerate(functionalities, 1):
@@ -157,7 +157,7 @@ async def main():
     else:
         status_icon = "✅" if result.status == "success" else "❌"
         print(f"Statut  : {status_icon} {result.status}")
-        print(f"Détails :")
+        print("Détails :")
         print(result.details or "(vide)")
     print("=" * 60)
 

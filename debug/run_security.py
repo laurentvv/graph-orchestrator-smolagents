@@ -20,7 +20,6 @@ propre — sans relancer le workflow complet de 30-40 min.
 import argparse
 import asyncio
 import os
-import shutil
 import sys
 import tempfile
 

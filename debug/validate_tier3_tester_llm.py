@@ -87,7 +87,7 @@ async def run_tester(target_file: str, label: str):
     finally:
         os.chdir(old_cwd)
 
-    print(f"\n--- Résultat Tester LLM ---")
+    print("\n--- Résultat Tester LLM ---")
     if test_output is None:
         print("[!] Tester n'a pas retourné de résultat (timeout/crash).")
         return None
@@ -121,7 +121,7 @@ async def main():
 
     print(f"\n{'='*70}")
     if status is None:
-        print(f"  BILAN V3 : ⚠️  Tester n'a pas conclu (timeout/crash).")
+        print("  BILAN V3 : ⚠️  Tester n'a pas conclu (timeout/crash).")
     elif "BUGGÉ" in label:
         verdict = "✅ OK" if status == "failure" else "❌ Le Tester devrait FAIL"
         print(f"  BILAN V3 (buggé → FAIL attendu) : {verdict} (status={status})")

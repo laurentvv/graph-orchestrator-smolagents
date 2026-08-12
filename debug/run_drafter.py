@@ -100,7 +100,7 @@ async def main():
     draft_size = len(result.draft_markdown or "")
     print(f"Draft {draft_size} octets / {draft_lines} lignes")
     print(f"Sauvegardé : {os.path.abspath(draft_path)}")
-    print(f"\n--- APERÇU (20 premières lignes) ---")
+    print("\n--- APERÇU (20 premières lignes) ---")
     for line in (result.draft_markdown or "(vide)").splitlines()[:20]:
         print(f"  {line}")
     if draft_lines > 20:
@@ -108,7 +108,7 @@ async def main():
     if metrics:
         print(f"\nMODÈLE : {metrics.model} ({metrics.duration_s:.1f}s)")
     print(f"{'=' * 70}")
-    print(f"[*] Pour réinjecter ce draft dans le Coder :")
+    print("[*] Pour réinjecter ce draft dans le Coder :")
     print(f"    uv run python debug/run_coder.py --draft {draft_path}")
     print(f"{'=' * 70}")
 

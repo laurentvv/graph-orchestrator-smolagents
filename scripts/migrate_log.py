@@ -21,7 +21,6 @@ def migrate_log_md():
         
     pattern = re.compile(r'^## \[([^\]]+)\]\s*(\w+)\s*\|\s*(.*)')
     
-    current_date = None
     current_event_type = None
     current_message = []
     
@@ -37,7 +36,7 @@ def migrate_log_md():
                 db.log_event("legacy", "system", current_event_type, msg)
                 count += 1
                 
-            current_date = match.group(1)
+            match.group(1)
             current_event_type = match.group(2)
             current_message = [match.group(3)]
         elif current_event_type is not None:

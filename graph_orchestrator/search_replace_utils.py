@@ -165,7 +165,7 @@ def find_similar_lines(part: str, whole: str, threshold: float = 0.6) -> Optiona
     """Feedback didactique : quand le remplacement échoue, cherche les lignes du
     fichier les plus proches du bloc SEARCH pour aider le LLM à s'ajuster.
     Renvoie un extrait indicatif, ou None si rien de suffisamment proche."""
-    part_lines = [l.strip() for l in part.splitlines() if l.strip()]
+    part_lines = [line.strip() for line in part.splitlines() if line.strip()]
     whole_lines = whole.splitlines()
     if not part_lines or not whole_lines:
         return None
@@ -174,7 +174,7 @@ def find_similar_lines(part: str, whole: str, threshold: float = 0.6) -> Optiona
     best_score = 0.0
     n = len(part_lines)
     for i in range(len(whole_lines) - n + 1):
-        window = [l.strip() for l in whole_lines[i : i + n]]
+        window = [line.strip() for line in whole_lines[i : i + n]]
         matches = sum(1 for a, b in zip(window, part_lines) if a == b)
         score = matches / n
         if score > best_score:

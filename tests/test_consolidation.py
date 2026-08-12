@@ -12,7 +12,6 @@ import tempfile
 from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from graph_orchestrator.knowledge_graph import (
     KnowledgeGraph,
@@ -292,7 +291,7 @@ class TestKGConsolidationMethods:
         kg = _make_kg(tmp_path)
         try:
             kg.add_entity("file:t1", kind="file")
-            cid_recent = kg.add_claim("file:t1", "récent", "observation", 0.5, "test", run_id="r1")
+            kg.add_claim("file:t1", "récent", "observation", 0.5, "test", run_id="r1")
             # Insère un claim ancien en bidouillant created_at via SQL direct.
             cid_old = kg.add_claim("file:t1", "ancien", "observation", 0.5, "test", run_id="r1")
             kg.conn.execute(
@@ -600,7 +599,7 @@ class TestConsolidationWorkflow:
         """Le prune_old_claims tourne toujours (même si consolidation désactivée).
 
         Vérifie qu'une claim ancienne est prunée après le run."""
-        calls = _setup_workflow_mocks_consolidation(monkeypatch, approve=True)
+        _setup_workflow_mocks_consolidation(monkeypatch, approve=True)
 
         tmp = tempfile.mkdtemp()
         db = os.path.join(tmp, "kg_prune.db")

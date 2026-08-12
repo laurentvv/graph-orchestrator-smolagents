@@ -179,7 +179,7 @@ async def main():
     from graph_orchestrator.context7_tool import context7_tools
     from graph_orchestrator.skills_loader import build_skills_block
 
-    print(f"[*] Coder standalone — MODE CodeAgent (EXPÉRIMENTAL)")
+    print("[*] Coder standalone — MODE CodeAgent (EXPÉRIMENTAL)")
     print(f"    Dossier sortie  : {os.path.abspath(OUT_DIR)} (isolé, nettoyé)")
     print(f"    Fichier cible   : {TARGET_FILE}")
     print(f"    Modèle FAST     : {settings.fast_model_id}")
@@ -269,7 +269,7 @@ AUCUN MOCK OU PLACEHOLDER : implémentation COMPLÈTE, RÉELLE et FONCTIONNELLE.
     print("RÉSULTAT DU CODER — CodeAgent (expérimental)")
     print("=" * 60)
     print(f"Statut  : {result.status}")
-    print(f"Détails :")
+    print("Détails :")
     print(result.details or "(vide)")
     print("-" * 60)
 

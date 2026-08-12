@@ -85,7 +85,7 @@ async def main():
     from graph_orchestrator.config import settings
     from graph_orchestrator.nodes import build_fast_model, execute_coder_node
 
-    print(f"[*] Coder standalone — MODE ToolCallingAgent (PRODUCTION)")
+    print("[*] Coder standalone — MODE ToolCallingAgent (PRODUCTION)")
     print(f"    Dossier sortie  : {os.path.abspath(OUT_DIR)} (isolé, nettoyé)")
     print(f"    Fichier cible   : {TARGET_FILE}")
     print(f"    Modèle FAST     : {settings.fast_model_id}")
@@ -114,7 +114,7 @@ async def main():
         print("[!] Le Coder n'a pas retourné de résultat (crash ou timeout).")
     else:
         print(f"Statut  : {result.status}")
-        print(f"Détails :")
+        print("Détails :")
         print(result.details or "(vide)")
     print("-" * 60)
 

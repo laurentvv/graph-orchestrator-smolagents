@@ -21,8 +21,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-from smolagents import BaseTool
 
 from graph_orchestrator.read_gate import (
     ReadGate,

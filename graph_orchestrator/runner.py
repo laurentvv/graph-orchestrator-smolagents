@@ -61,7 +61,7 @@ def _record_adversary_in_kg(
 ) -> None:
     """Marque le statut des claims selon le vote, et trace les rejets comme réfutations."""
     # Map task_id -> claim_id de l'observation (la dernière claim ouverte de l'entité)
-    summary_by_id = {w.task_id: w.summary for w in worker_results}
+    {w.task_id: w.summary for w in worker_results}
     for w in worker_results:
         entity_id = f"task:{w.task_id}"
         claims = kg.get_claims(entity_id, status="open")

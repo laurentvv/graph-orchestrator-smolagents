@@ -9,10 +9,8 @@ Couvre les critères de contract.md (recall-centric + global unique).
 """
 
 import asyncio
-import os
 from dataclasses import replace
 
-import pytest
 
 from graph_orchestrator.knowledge_graph import KnowledgeGraph
 from graph_orchestrator.lesson_recall import (
@@ -133,7 +131,7 @@ class TestRecallLessonsKG:
         """Le recall ne récupère que les claims status='open' (pas closed/resolved)."""
         kg = _make_kg(tmp_path)
         try:
-            cid = _add_lesson(kg, "file:a", "leçon ouverte", kind="insight", run_id="run1")
+            _add_lesson(kg, "file:a", "leçon ouverte", kind="insight", run_id="run1")
             _add_lesson(kg, "file:b", "leçon fermée", kind="insight", run_id="run2")
             # Ferme la 2e claim manuellement.
             kg.conn.execute("UPDATE claim SET status='closed' WHERE content='leçon fermée'")
@@ -470,7 +468,7 @@ class TestRecallWorkflow:
         db = str(tmp_path / "kg_recall_e2e.db")
         pre_kg = KnowledgeGraph(db)
         pre_kg.add_entity("file:prior", kind="file")
-        prior_cid = pre_kg.add_claim(
+        pre_kg.add_claim(
             "file:prior", "Une itération par requestAnimationFrame évite l'animation instantanée",
             "insight", 0.9, "consolidation", run_id="prior_run_abc",
         )

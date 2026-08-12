@@ -6,9 +6,7 @@ Valide que ``build_judge_code_block`` :
 - est tolérant (fichier absent/illisible, diff whitespace, target_files vide).
 """
 
-import os
 
-import pytest
 
 from graph_orchestrator.judge_diff import build_judge_code_block
 

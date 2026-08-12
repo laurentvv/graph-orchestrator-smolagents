@@ -96,7 +96,7 @@ async def main():
         return
 
     print(f"Plan ID            : {result.plan_id}")
-    print(f"Architecture globale :")
+    print("Architecture globale :")
     for line in (result.global_architecture or "(vide)").splitlines():
         print(f"  {line}")
     print(f"\nSous-tâches ({len(result.subtasks)}) :")
@@ -114,7 +114,7 @@ async def main():
         ftc = getattr(st, "functional_test_criteria", []) or []
         rub = getattr(st, "acceptance_rubric", "") or ""
         if vsc or ftc or rub:
-            print(f"      --- F-90 critères de validation ---")
+            print("      --- F-90 critères de validation ---")
             if vsc:
                 print(f"      visual_success_criteria ({len(vsc)}):")
                 for c in vsc:
@@ -126,7 +126,7 @@ async def main():
             if rub:
                 print(f"      acceptance_rubric : {rub[:200]}{'...' if len(rub) > 200 else ''}")
         else:
-            print(f"      ⚠️ F-90 : AUCUN critère de validation produit (champs vides).")
+            print("      ⚠️ F-90 : AUCUN critère de validation produit (champs vides).")
     if metrics:
         print(f"\nMODÈLE : {metrics.model} ({metrics.duration_s:.1f}s)")
     print(f"{'=' * 70}")

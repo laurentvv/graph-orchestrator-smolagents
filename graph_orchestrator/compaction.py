@@ -1,10 +1,7 @@
-import os
 import time as _time
-from pathlib import Path
-from typing import Any
 
 from smolagents import CodeAgent, AgentMemory
-from smolagents.agents import ActionStep, TaskStep
+from smolagents.agents import ActionStep
 from smolagents.monitoring import Timing
 
 

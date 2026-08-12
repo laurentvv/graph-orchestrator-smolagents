@@ -11,7 +11,6 @@ import os
 import sys
 import time
 
-import pytest
 
 # scripts/ n'est pas un package importable par défaut (pas de __init__.py) :
 # on ajoute le répertoire racine du projet au path pour importer run_analyzer.

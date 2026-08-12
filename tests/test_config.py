@@ -1,9 +1,8 @@
 """Tests du chargement de configuration (defaults + override par env)."""
 
-import importlib
 import os
 
-from graph_orchestrator.config import Settings, _normalize_api_base, load_settings
+from graph_orchestrator.config import _normalize_api_base, load_settings
 
 
 class TestNormalizeApiBase:

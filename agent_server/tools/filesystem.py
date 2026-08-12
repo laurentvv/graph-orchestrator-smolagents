@@ -6,7 +6,6 @@ sauvage pour limiter les dégâts accidentels).
 """
 
 import os
-from typing import Optional
 
 from smolagents import Tool
 

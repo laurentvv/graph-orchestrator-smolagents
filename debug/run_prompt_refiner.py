@@ -83,7 +83,7 @@ async def run_one(label: str, prompt: str, settings) -> None:
         print("  ⚠️  Le PromptRefiner n'a pas retourné de résultat (LLM down → repli brut en prod).")
         return
     print(f"  AMBIGUITÉS : {result.ambiguities_detected or '(aucune)'}")
-    print(f"  SPEC REFINÉE :")
+    print("  SPEC REFINÉE :")
     # Indentation pour la lisibilité.
     for line in (result.refined_prompt or "(vide)").splitlines():
         print(f"    {line}")

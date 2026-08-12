@@ -26,7 +26,7 @@ ne serait jamais obtenu (paraphrase systématique).
 
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Sequence, Set, Union
+from typing import Any, Dict, Iterable, Sequence, Set, Union
 
 from .models import Finding
 

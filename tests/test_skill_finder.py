@@ -9,10 +9,8 @@ fail-open, intégration skills_loader (DYNAMIC_SKILL_RULES), @tool wrapper, conf
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 
-import pytest
 
 from graph_orchestrator import skill_finder
 from graph_orchestrator.skill_finder import (

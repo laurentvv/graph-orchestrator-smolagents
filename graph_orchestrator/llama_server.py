@@ -214,7 +214,7 @@ def _spawn(spec: ModelSpec) -> Optional[_SpawnedServer]:
     model_id = "default"
 
     ngl_desc = f"ngl={spec.gpu_layers}" if spec.gpu_layers > 0 else "ngl=auto-fit"
-    bin_short = os.path.basename(_LLAMA_SERVER_BIN) if os.path.sep in _LLAMA_SERVER_BIN else _LLAMA_SERVER_BIN
+    os.path.basename(_LLAMA_SERVER_BIN) if os.path.sep in _LLAMA_SERVER_BIN else _LLAMA_SERVER_BIN
     logger.info("[llama-server] spawn blob %s (backend=%s, reasoning=%s, port %d, %s, flash=%s)",
                 os.path.basename(blob)[:20], _LLAMA_BACKEND, spec.reasoning, port, ngl_desc, spec.flash_attn)
     print(f"[*] llama-server : chargement {os.path.basename(blob)[:25]} (backend={_LLAMA_BACKEND}, "
@@ -248,7 +248,7 @@ def _spawn(spec: ModelSpec) -> Optional[_SpawnedServer]:
         )
     except FileNotFoundError:
         logger.warning("[llama-server] binaire '%s' absent du PATH — no-op", _LLAMA_SERVER_BIN)
-        print(f"[!] llama-server introuvable dans le PATH — no-op")
+        print("[!] llama-server introuvable dans le PATH — no-op")
         return None
     except Exception as e:
         logger.warning("[llama-server] spawn échec : %s — no-op", str(e)[:120])
@@ -257,7 +257,7 @@ def _spawn(spec: ModelSpec) -> Optional[_SpawnedServer]:
     if not _wait_for_health(port, timeout=300):
         logger.warning("[llama-server] /health timeout après 300s — kill + no-op")
         _SpawnedServer(port, proc, model_id).stop()
-        print(f"[!] llama-server : timeout de chargement — no-op")
+        print("[!] llama-server : timeout de chargement — no-op")
         return None
 
     print(f"[*] llama-server : prêt (port {port})")

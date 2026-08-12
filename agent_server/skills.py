@@ -15,7 +15,6 @@ Format attendu (inspiré de skills.sh) :
 Les skills sont chargés depuis le dossier `skills/` à la racine du projet.
 """
 
-import os
 import re
 from pathlib import Path
 from typing import Dict, List, Optional

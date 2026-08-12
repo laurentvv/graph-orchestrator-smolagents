@@ -9,7 +9,6 @@ Pas de LLM, déterministes. Couvre le contrat complet :
 - Mutex (2 appends concurrents ne se corrompent pas).
 """
 import threading
-from pathlib import Path
 
 from graph_orchestrator.tools import append_file
 
@@ -126,5 +125,5 @@ def test_append_concurrent_does_not_corrupt(tmp_path):
     lines = content.splitlines()
     # 40 lignes au total (20 A + 20 B), aucune perdue par race condition.
     assert len(lines) == 40
-    assert sum(1 for l in lines if l.startswith("A-")) == 20
-    assert sum(1 for l in lines if l.startswith("B-")) == 20
+    assert sum(1 for line in lines if line.startswith("A-")) == 20
+    assert sum(1 for line in lines if line.startswith("B-")) == 20

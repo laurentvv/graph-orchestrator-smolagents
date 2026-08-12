@@ -8,7 +8,6 @@ et permet à des scripts d'analyse externes ou au terminal UI de lire les logs s
 
 import os
 import duckdb
-from typing import Optional
 
 DEFAULT_EVENT_DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "event_stream.duckdb")
 

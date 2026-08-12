@@ -6,7 +6,6 @@ Logique pure, sans LLM.
 """
 
 from graph_orchestrator.testers import detect_tech, get_runner, DEFAULT_TECH
-from graph_orchestrator.testers.base import detect_tech as _detect
 
 
 # ==========================================

@@ -4,9 +4,7 @@ Tous sans appel LLM : on teste forward() des outils directement.
 """
 
 import os
-import tempfile
 
-import pytest
 
 from agent_server.tools import TOOLS, TOOLS_BY_NAME, get_tools, list_tool_names
 

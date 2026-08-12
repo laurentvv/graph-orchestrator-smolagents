@@ -599,7 +599,7 @@ def _build_capabilities_summary(settings: Settings) -> str:
     except Exception:
         # Repli : lecture directe du dossier skills/ (même logique, indépendante de agent_server).
         try:
-            from .skills_loader import SKILLS_DIR, _strip_frontmatter
+            from .skills_loader import SKILLS_DIR
             import os as _os
             if SKILLS_DIR and _os.path.isdir(SKILLS_DIR):
                 for d in sorted(_os.listdir(SKILLS_DIR)):

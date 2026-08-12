@@ -224,7 +224,7 @@ class KnowledgeGraph:
         comme doublon à la prochaine itération.
         """
         key = dedup_key(content)
-        cur = self.conn.execute(
+        self.conn.execute(
             "UPDATE claim SET content = ?, dedup_key = ? WHERE id = ?",
             [content, key, claim_id],
         )
