@@ -324,7 +324,16 @@ def extract_and_validate(response: Any, model_class: type[BaseModel], api_base: 
                     fixed_data: model_class = dspy.OutputField(desc="L'objet typé reconstruit fidèlement, null sur les champs absents")
                 
                 predictor = dspy.Predict(JSONFixSignature)
-                result = predictor(broken_text=str(response))
+                # F-61 (post-mortem run partiel 1h30) : tronquer le payload envoyé au
+                # sauvetage LLM. Le sauvetage ne répare que la STRUCTURE (quotes/braces
+                # manquants), pas le sens — les 1ers caractères contiennent le JSON
+                # produit par final_answer. Sur un payload énorme (Tester rendant tout
+                # son historique d'observations dans final_answer), le sauvetage lui-même
+                # crashait en Connection error (serveur LLM surchargé) → feedback loop
+                # (Pydantic fail → sauvetage fail → None → retry → plus de contexte →
+                # Pydantic fail…). Limiter à 6000 chars casse la boucle.
+                _rescue_text = str(response)[:6000]
+                result = predictor(broken_text=_rescue_text)
                 return result.fixed_data
         except Exception as dspy_e:
             print(f"[-] Le sauvetage DSPy a échoué : {dspy_e}")

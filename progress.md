@@ -38,6 +38,30 @@
       web-tester). Implémentation TERMINÉE (42 tests sur les 3 zones, 692 passed / 7
       pré-existants non liés).
 
+## Jalons de l'Itération (cycle F-61 Meta-Analyste — post-mortem run partiel 1h30)
+> Rôle Meta-Analyste (AGENTS.md §8). Run E2E `bubble-sort-multifile-v6` lancé puis interrompu
+> après 1h30 (trop long). `run_analyzer.py` sur le log partiel → diagnostic confirmé par lecture code.
+
+- [x] F61-1 : Run E2E + `run_analyzer.py` → métriques brutes : **17,4M tokens input** (vs 7,5M
+  pour run9 *complet*), 111 steps, 4 restarts Tester, 6 crashes « Pydantic→sauvetage DSPy→Connection error ».
+- [x] F61-2 : **Diagnostic corrigé** (1ère hypothèse partiellement fausse). (a) P2 « compaction
+  screenshots » était **DÉJÀ implémenté** (`apply_image_purge` compaction.py:22, appelé inconditionnellement
+  dans `write_memory_to_messages`) — mon grep initial l'avait manqué. (b) Vraie cause des 5 retries :
+  `_tester_max_steps_fallback` (nodes.py:189) **retournait `None` en l'absence de signal PASS/FAIL** →
+  retry complet du Tester → qui re-thrash (`import os`, navigation sans assertion) → pas de signal →
+  `None` → retry ×5. Le sauvetage DSPy crash en Connection error est un symptôme secondaire (payload
+  énorme renvoyé au serveur surchargé), il rend `None` proprement et passe la main au fallback.
+- [x] F61-3 : **Correctif P1 appliqué** (scope approuvé : « robustesse extraction verdict Tester ») :
+  (1) `_tester_max_steps_fallback` ne retourne **PLUS None** — verdict `failure` « Tester n'a pas convergé »
+  par défaut (tue la boucle de retries : un run max_steps sans conclusion est lui-même un signal).
+  (2) `extract_and_validate` (models.py) tronque le `broken_text` du sauvetage à 6000 chars (défensif,
+  anti Connection error sur payload énorme). P2 : rien (déjà fait). P3 droppé (snip threshold irrelevant
+  à max_steps=8).
+- [x] F61-4 : **Validation** : 5 tests `TestTesterMaxStepsFallback` PASS (dont 1 mis à jour
+  `test_fallback_failure_si_aucun_signal`). Suite complète **902 passed / 8 failed** — les 8 échecs
+  (test_read_gate ×4 + test_skill_lazy_loading ×3-4) sont **pré-existants**, confirmés strictement
+  identiques via `git stash` (documentés F-82). **0 régression**. py_compile OK.
+
 ## Jalons de l'Itération (cycle Intégration formelle des fiches 30-44 — doc/cohérence)
 > Fait suite au commit `dfcea24` (ajout brut des 15 dépôts fiches 30-44). Périmètre = travail
 > documentaire uniquement (AUCUN code de production modifié, AUCUN test impacté). Miroir de F-66
