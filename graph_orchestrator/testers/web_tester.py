@@ -283,12 +283,16 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
 1. AGIS, ne raconte pas : quand tu dis "je vais faire X", tu DOIS faire X dans la foulée.
 2. ARGUMENTS NOMMÉS OBLIGATOIRES : Pour TOUS tes appels d'outils, tu DOIS utiliser des arguments nommés (ex: evaluate_script(function="...")). Les arguments positionnels feront crasher l'exécution.
 3. PYTHON BUILT-INS : Si tu utilises `time.sleep()` ou d'autres modules standards dans ton code Python, n'oublie pas de les importer (ex: `import time` au début du bloc).
-4. LECTURE DE FICHIERS — JAMAIS de `open()`/`read()` Python : la sandbox CodeAgent
+4. LECTURE DE FICHIERS — UTILISE LES OUTILS, PAS DU PYTHON : la sandbox CodeAgent
    INTERDIT les built-ins `open()`, `read()`, etc. (erreur fatale `InterpreterError:
-   Forbidden function evaluation`). Pour lire le code source (HTML/JS/CSS) AVANT de
-   tester, utilise l'outil `read_file(path="...")` (ex: `read_file(path="index.html")`).
-   Pour lister les fichiers du run : `list_directory()`. Diagnostiqué sur run 1507
-   où le Tester gaspillait 6 steps en `open()` puis `read_file()` interdits → timeout 600s.
+   Forbidden function evaluation`). N'écris JAMAIS `import os`/`import sys`/`open()`/`read()`
+   pour lire un fichier — utilise les OUTILS fournis : `read_file(path="index.html")` pour
+   lire le code source (HTML/JS/CSS) AVANT de tester, `list_directory()` pour lister les
+   fichiers du run. (Imports Python autorisés par défaut : unicodedata, collections, re,
+   math, time, random, statistics, itertools, queue, datetime, stat.) Diagnostiqué sur
+   run 1507 (`open()` interdit → 6 steps gaspillés → timeout 600s) et run9 F-90 (`import os`
+   pour lire des ressources de skill → `InterpreterError: Import of os is not allowed` +
+   code fragmenté sur la variable `resource_files`).
 5. ANIMATION = TEST TEMPOREL, PAS ÉTAT FINAL : pour un visualiseur/animation, NE JAMAIS
    te contenter d'attendre un délai fixe (ex: `setTimeout(r, 2000)`) puis vérifier l'état
    final — une animation **instantanée** (exécutée en 1 frame au lieu de progresser) passe
@@ -345,6 +349,14 @@ final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Un r�
                         verbosity_level=resolve_verbosity("HIGH"),
                         max_steps=tester_max_steps,
                         step_callbacks=[make_screenshot_callback(screenshot_capture)],
+                        # Safety net anti `InterpreterError: Import of os is not allowed`
+                        # (run9 F-90) : miroir du Coder (nodes.py additional_authorized_imports).
+                        # La règle n°4 du prompt steered le modèle vers read_file/list_directory,
+                        # mais un prompt seul ne suffit jamais (doctrine F-33) — si le modèle
+                        # glisse à `import os` (ex: os.path/os.listdir pour lire des ressources),
+                        # on ne crash plus. `os` seul (PAS subprocess) : le Tester n'a pas à
+                        # lancer de shell (frontière de périmètre vs Coder).
+                        additional_authorized_imports=["os"],
                     )
                     return await run_with_retry(
                         local_tester, prompt, CoderOutput, settings.worker_max_retries,

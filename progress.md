@@ -1210,3 +1210,32 @@ Coder est appliquée correctement par Qwen3.5-9B.
   Tous les fixes actifs simultanément : barres visibles (height rule) → Static Tester PASS →
   Tester fallback=success → Judge deliverable view (3 fichiers) → APPROUVÉ. 52+ tests unitaires
   PASS (chrome_devtools + coder_hardening + config + judge_diff), 0 régression confirmée.
+
+## Jalons de l'Itération (Meta-Analyste — post-mortem run9 F-90, 2026-08-12)
+> Rôle Meta-Analyste (AGENTS.md §8) : `uv run python scripts/run_analyzer.py --log
+> logs/e2e_f90_validation_run9.log`. Run9 = SUCCÈS (2 Judge APPROUVED) mais coûteux
+> (7.59M tokens input, ~41 min). 3 problèmes récurrents identifiés, 1 traité ce cycle.
+
+- [x] **MA-1 Diagnostic** : 3 signaux — (1) explosion contexte Coder (6.39M tokens / 43 steps,
+  ~84% du budget, chantier lourd Context Epochs laissé hors périmètre) ; (2) `InterpreterError:
+  Import of os is not allowed` côté Tester (log lignes 2771/2789) — le Tester (CodeAgent) a
+  généré `import os` pour lire ses ressources de skill, la sandbox n'autorise que
+  ['unicodedata','collections','re','math','time','random','statistics','itertools','queue',
+  'datetime','stat'] → crash + code fragmenté (variable `resource_files` perdue entre steps) ;
+  (3) saturation llama-server (2× Pydantic→DSPy rescue→Connection error, déjà atténué par
+  AUDIT_PARALLEL=false, infra).
+- [x] **MA-2 Fix `import os` Tester** (jumeau du fix `import time` F-61/RAA-2, même failure
+  mode) : (a) règle n°4 `web_tester.py` étendue — OUTILS `read_file`/`list_directory` obligatoires,
+  JAMAIS `import os`/`import sys`/`open()`/`read()` en Python + liste des imports autorisés ;
+  (b) safety net `additional_authorized_imports=["os"]` sur le `CompactingCodeAgent` du Tester
+  (miroir du Coder `nodes.py:1071`). Doctrine F-33 « un prompt seul ne suffit jamais » :
+  la règle steer vers les outils, le safety net rattrape le slip sans crash. `os` seul (PAS
+  `subprocess` — frontière de périmètre vs Coder). Validation : py_compile OK + sous-ensemble
+  pytest (test_tester_dispatch + test_config + test_static_tester) 47 passed / 1 skipped /
+  0 failed. Branche `fix/tester-import-os-guard`.
+- [ ] **MA-3 (à évaluer, hors petite tâche)** : explosion contexte Coder (compaction L4
+  existante via CompactingCodeAgent mais insuffisante — envisager Context Epochs / budget
+  par step plus strict). Cycle lourd, reporté.
+- [ ] **MA-4 (validation live recommandée)** : `debug/run_web_tester_standalone.py` sur un
+  HTML Bubble Sort pour confirmer en run GPU que le Tester n'émet plus `import os` (et que le
+  safety net le rattrape s'il glisse). ~3-5 min GPU, optionnel ce cycle.
