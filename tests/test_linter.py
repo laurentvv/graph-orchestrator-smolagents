@@ -7,12 +7,10 @@ Déterministes, 0 LLM, 0 réseau. Couvre le contrat complet :
 - Dégradation gracieuse (extension inconnue, fichier absent, fichier illisible).
 - Le nœud execute_linter_node (verdict binaire + détails exploitables).
 """
-import os
 
 from graph_orchestrator.linter import (
     execute_linter_node,
     lint_file,
-    lint_subtask,
     _detect_language,
 )
 

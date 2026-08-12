@@ -22,7 +22,6 @@ import pytest
 from graph_orchestrator.models import CoderOutput
 from graph_orchestrator.stall_detector import (
     ACCOUNTABLE_OUTCOMES,
-    WRITE_TOOLS,
     DeliveryOutcome,
     StallDetector,
     dominant_material_hash,

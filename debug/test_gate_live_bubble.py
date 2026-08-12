@@ -57,7 +57,7 @@ async def _run_coder_pass(task: dict, label: str) -> None:
         # Détecter un blocage du gate dans les détails/observations.
         gate_blocked = "read_file" in details.lower() and "gate" in details.lower()
         if gate_blocked:
-            print(f"🛑 GATE A BLOQUÉ (détecté dans les détails)")
+            print("🛑 GATE A BLOQUÉ (détecté dans les détails)")
         print(f"Détails : {details[:800]}")
     print(f"Fichier après : {'OUI' if os.path.exists(TARGET_FILE) else 'NON'}"
           f" ({os.path.getsize(TARGET_FILE) if os.path.exists(TARGET_FILE) else 0} octets)")

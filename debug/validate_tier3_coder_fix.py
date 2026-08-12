@@ -94,7 +94,7 @@ async def run_coder_fix():
     fast_model = build_fast_model(settings)
     result, metrics = await execute_coder_node(task, fast_model, settings)
 
-    print(f"\n--- Résultat Coder ---")
+    print("\n--- Résultat Coder ---")
     if result is None:
         print("[!] Coder n'a pas retourné de résultat (crash/timeout).")
         return False
@@ -120,7 +120,7 @@ async def main():
     ok = await run_coder_fix()
 
     # Vérification structurelle : performStep ne doit plus contenir de double boucle.
-    print(f"\n--- Vérification structurelle du fichier corrigé ---")
+    print("\n--- Vérification structurelle du fichier corrigé ---")
     if os.path.exists(TARGET_FILE):
         with open(TARGET_FILE, "r", encoding="utf-8") as f:
             content = f.read()
@@ -163,9 +163,9 @@ async def main():
     print(f"{'='*70}")
     print("Prochaine étape : re-run V1 (Static Tester) sur le fichier corrigé pour confirmer.")
     print("Commande : uv run python -c \"")
-    print(f"  from graph_orchestrator.static_tester import execute_static_tester_node")
+    print("  from graph_orchestrator.static_tester import execute_static_tester_node")
     print(f"  r,_ = execute_static_tester_node({{'id':'t','target_files':['{TARGET_FILE}']}}, None)")
-    print(f"  print(r.status, r.details[:200])")
+    print("  print(r.status, r.details[:200])")
 
 
 if __name__ == "__main__":

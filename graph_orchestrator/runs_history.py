@@ -10,7 +10,6 @@ Cette base séparée stocke :
 import os
 import duckdb
 from typing import Optional, Dict, Any
-import time
 from datetime import datetime, timedelta
 
 DEFAULT_HISTORY_DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "runs_history.duckdb")
@@ -105,7 +104,7 @@ class RunsHistoryDB:
                     VALUES (?, 'running', ?, now())
                     ON CONFLICT (run_id) DO UPDATE SET status='running', start_time=now()
                 """, [run_id, model_id])
-        except Exception as e:
+        except Exception:
             pass
 
     def end_run(self, run_id: str, status: str, input_tokens: int = 0, output_tokens: int = 0) -> None:
@@ -117,7 +116,7 @@ class RunsHistoryDB:
                     SET status = ?, end_time = now(), input_tokens = input_tokens + ?, output_tokens = output_tokens + ?
                     WHERE run_id = ?
                 """, [status, input_tokens, output_tokens, run_id])
-        except Exception as e:
+        except Exception:
             pass
 
 # Instance globale (lazily instanciated)

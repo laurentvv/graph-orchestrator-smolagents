@@ -196,7 +196,6 @@ def _setup_workflow_mocks(monkeypatch, kg_path=":memory:", approve=True,
 
 def _settings(kg_path=":memory:", fresh_start=False):
     from graph_orchestrator.config import Settings
-    from dataclasses import replace
     # Construit des settings avec un KG en mémoire + fresh_start pilotable.
     s = Settings(
         local_api_base="http://x/v1",
@@ -231,7 +230,8 @@ class TestRepriseWorkflow:
         completed), puis on relance le workflow : l'Architect ne doit PAS être
         rappelé et la ST1 doit être skippée (résultat replayed=True).
         """
-        import os, tempfile
+        import os
+        import tempfile
         tmp = tempfile.mkdtemp()
         db = os.path.join(tmp, "test_kg.db")
 
@@ -255,7 +255,7 @@ class TestRepriseWorkflow:
 
         # 2) Relance le workflow : l'Architect doit être skippé (mock jamais appelé
         #    au-delà de l'import) et ST1 doit apparaître comme replayed.
-        arch_calls = _setup_workflow_mocks(monkeypatch, approve=True)
+        _setup_workflow_mocks(monkeypatch, approve=True)
         out, _ = asyncio.run(run_coding_workflow(_seed_tasks(), _settings(kg_path=db)))
 
         results = {r["task_id"]: r for r in out["final_results"]}
@@ -266,7 +266,8 @@ class TestRepriseWorkflow:
 
     def test_checkpoint_efface_en_fin_de_run(self, monkeypatch):
         """Un run qui va au bout efface son checkpoint (run "terminé")."""
-        import os, tempfile
+        import os
+        import tempfile
         tmp = tempfile.mkdtemp()
         db = os.path.join(tmp, "test_kg.db")
         _setup_workflow_mocks(monkeypatch, approve=True)
@@ -286,7 +287,8 @@ class TestRepriseWorkflow:
         On simule un crash du Coder sur la ST1 itération 1 : un checkpoint doit
         avoir été écrit AVANT le crash (début d'itération), pointant sur (0, 1).
         """
-        import os, tempfile
+        import os
+        import tempfile
         tmp = tempfile.mkdtemp()
         db = os.path.join(tmp, "test_kg.db")
         _setup_workflow_mocks(monkeypatch, approve=True, crash_after_checkpoint=True)

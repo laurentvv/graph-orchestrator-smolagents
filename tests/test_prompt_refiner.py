@@ -10,11 +10,9 @@ Couvre :
 - E2E checkpoint skip : refined_prompt en checkpoint → nœud jamais appelé, prompt hydraté.
 """
 import asyncio
-import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-import pytest
 
 from graph_orchestrator.dspy_nodes import (
     PromptRefinerSignature,
@@ -334,7 +332,6 @@ def test_e2e_checkpoint_skip_refiner(monkeypatch, tmp_path):
     """refined_prompt présent en checkpoint → le nœud n'est PAS rappelé (économie)."""
     import graph_orchestrator.dspy_nodes as dspy_mod
     from graph_orchestrator.workflows import run_coding_workflow
-    from graph_orchestrator.config import Settings
     from dataclasses import replace
 
     # Pré-remplit un checkpoint avec un refined_prompt (simule une reprise).

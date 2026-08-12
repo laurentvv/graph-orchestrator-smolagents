@@ -10,10 +10,8 @@ On crée des mini-projets Python factices dans tmp_path (fixtures pytest).
 """
 
 import asyncio
-import os
 import subprocess
 
-import pytest
 
 from graph_orchestrator.models import CoderOutput
 from graph_orchestrator.testers.python_tester import PythonTestRunner

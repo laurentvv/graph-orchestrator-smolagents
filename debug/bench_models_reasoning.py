@@ -228,7 +228,6 @@ async def _bench_security(model_bench: ModelBench, settings, html_path: str) -> 
 
 async def run_model(model_id: str, html_path: str) -> ModelBench:
     """Surcharge settings.reasoning_model_id en RAM et fait passer les 4 nœuds."""
-    from dataclasses import replace
     from graph_orchestrator.config import settings
 
     # Surcharge : on crée une copie des settings avec le model_id qu'on veut tester.
@@ -244,25 +243,25 @@ async def run_model(model_id: str, html_path: str) -> ModelBench:
         object.__setattr__(settings, "reasoning_model_id", model_id)
         print(f"\n{'='*70}\n🤖 MODÈLE : {bench.label} ({model_id})\n{'='*70}")
 
-        print(f"  [0/4] Warmup (chargement VRAM)...")
+        print("  [0/4] Warmup (chargement VRAM)...")
         w_dur = await _warmup_model(model_id, settings.ollama_reasoning_api_base)
         print(f"        → {w_dur:.1f}s (non compté)")
 
-        print(f"  [1/4] Router (fast, sanity)...")
+        print("  [1/4] Router (fast, sanity)...")
         await _bench_router(bench, settings)
         print(f"        → {bench.results[-1].raw_output} ({bench.results[-1].duration_s:.1f}s)")
 
-        print(f"  [2/4] Architect (think=True, le discriminant)...")
+        print("  [2/4] Architect (think=True, le discriminant)...")
         await _bench_architect(bench, settings)
         r = bench.results[-1]
         print(f"        → {r.raw_output} ({r.duration_s:.1f}s) {'✅' if r.ok else '❌'}")
 
-        print(f"  [3/4] Judge (verdict sur HTML correct)...")
+        print("  [3/4] Judge (verdict sur HTML correct)...")
         await _bench_judge(bench, settings, html_path)
         r = bench.results[-1]
         print(f"        → {r.raw_output} ({r.duration_s:.1f}s) {'✅' if r.ok else '❌'}")
 
-        print(f"  [4/4] Security (audit HTML sain)...")
+        print("  [4/4] Security (audit HTML sain)...")
         await _bench_security(bench, settings, html_path)
         r = bench.results[-1]
         print(f"        → {r.raw_output} ({r.duration_s:.1f}s) {'✅' if r.ok else '❌'}")
@@ -297,11 +296,11 @@ def _print_verdict(a: ModelBench, b: ModelBench) -> None:
     dur_a = sum(r.duration_s for r in a.results if r.duration_s)
     dur_b = sum(r.duration_s for r in b.results if r.duration_s)
 
-    print(f"\n📊 SCORE (1 pt/nœud réussi + 1 bonus Architect) :")
+    print("\n📊 SCORE (1 pt/nœud réussi + 1 bonus Architect) :")
     print(f"   {a.label}: {score_a}/5 | durée totale {dur_a:.1f}s")
     print(f"   {b.label}: {score_b}/5 | durée totale {dur_b:.1f}s")
 
-    print(f"\n🎯 VERDICT :")
+    print("\n🎯 VERDICT :")
     if score_a > score_b:
         winner = a.label
     elif score_b > score_a:
@@ -311,11 +310,11 @@ def _print_verdict(a: ModelBench, b: ModelBench) -> None:
         winner = a.label if dur_a <= dur_b else b.label
         print(f"   Égalité au score ({score_a}-{score_b}) → départage à la durée.")
     print(f"   🥇 Vainqueur : {winner}")
-    print(f"\n   Interprétation :")
-    print(f"   - Architect (think=True) est le test clé : c'est lui qui crashe sur le QAT,")
-    print(f"     donc le modèle qui réussit l'Architect SUPPORT le thinking (critère n°1).")
-    print(f"   - Judge/Security : un échec = verdict incohérent (trop sévère ou faux positif).")
-    print(f"   - La durée importe moins que la justesse (tu as dit 'durée n'a pas d'importance').")
+    print("\n   Interprétation :")
+    print("   - Architect (think=True) est le test clé : c'est lui qui crashe sur le QAT,")
+    print("     donc le modèle qui réussit l'Architect SUPPORT le thinking (critère n°1).")
+    print("   - Judge/Security : un échec = verdict incohérent (trop sévère ou faux positif).")
+    print("   - La durée importe moins que la justesse (tu as dit 'durée n'a pas d'importance').")
 
 
 async def main():
@@ -336,11 +335,11 @@ async def main():
     f.close()
     html_path = f.name
 
-    print(f"⚔️  BATAILLE DE MODÈLES REASONING")
+    print("⚔️  BATAILLE DE MODÈLES REASONING")
     print(f"   A : {model_a}")
     print(f"   B : {model_b}")
-    print(f"   Terrain : Bubble Sort (cahier des charges + HTML correct identiques)")
-    print(f"   Nœuds testés : Router (sanity) → Architect (think=True, clé) → Judge → Security")
+    print("   Terrain : Bubble Sort (cahier des charges + HTML correct identiques)")
+    print("   Nœuds testés : Router (sanity) → Architect (think=True, clé) → Judge → Security")
 
     try:
         bench_a = await run_model(model_a, html_path)

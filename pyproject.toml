@@ -41,3 +41,6 @@ packages = ["graph_orchestrator", "agent_server"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff.lint]
+extend-ignore = ['E402']

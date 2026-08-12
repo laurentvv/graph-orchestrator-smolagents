@@ -11,10 +11,8 @@ Couvre :
 Miroir de test_requirements_checklist.py (F-46) — fonctions pures, 0 LLM, 0 réseau.
 """
 
-import pytest
-from pydantic import ValidationError
 
-from graph_orchestrator.models import ArchitectTask, ArchitectOutput
+from graph_orchestrator.models import ArchitectTask
 from graph_orchestrator.validation_criteria import (
     build_visual_criteria_block,
     build_functional_criteria_block,
@@ -223,7 +221,7 @@ class TestTesterHierarchy:
     def test_f82_remplace_f46_quand_non_vide(self):
         """Quand l'Architecte produit des critères, ils priment sur F-46 (regex)."""
         f46_block = "CHECKLIST F-46"
-        f82_block = build_functional_criteria_block(["critère architecte"])
+        build_functional_criteria_block(["critère architecte"])
         # Simule la logique web_tester.py : si architect_criteria non vide → F-82.
         architect_criteria = ["critère architecte"]
         if architect_criteria:

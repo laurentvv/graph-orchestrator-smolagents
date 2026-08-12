@@ -1,6 +1,6 @@
 """Schémas Pydantic pour l'API web (requêtes/réponses + événements de streaming)."""
 
-from typing import Any, List, Literal, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 

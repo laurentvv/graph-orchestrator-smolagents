@@ -3,10 +3,7 @@
 Sans LLM et sans connexion MCP réelle — on teste le parsing et la construction de config.
 """
 
-import os
-from pathlib import Path
 
-import pytest
 
 from agent_server.skills import parse_skill_md, load_skills, get_skill_instructions, list_skills
 from agent_server import mcp as mcp_mod

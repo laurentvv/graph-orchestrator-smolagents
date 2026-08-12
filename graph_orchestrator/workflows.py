@@ -49,7 +49,6 @@ from .nodes import (
     execute_reduce_node,
     execute_synth_node,
     execute_worker_node,
-    execute_coder_node,
 )
 
 console = Console()
@@ -332,7 +331,7 @@ async def run_coding_workflow(
     if settings.fresh_start:
         kg.clear_checkpoint(run_id)
         kg.clear_idempotency(run_id)
-        print(f"[*] FRESH_START=1 : checkpoint existant effacé, exécution fraîche.")
+        print("[*] FRESH_START=1 : checkpoint existant effacé, exécution fraîche.")
     else:
         checkpoint = kg.load_checkpoint(run_id)
         if checkpoint:
@@ -428,9 +427,10 @@ async def run_coding_workflow(
                 seed_tasks[0]['content'] = task_content
             # Si refined est None (LLM down), on garde task_content brut (dégradation gracieuse).
 
-        print(f"[*] Analyse de la requête par le routeur ultra-rapide...")
+        print("[*] Analyse de la requête par le routeur ultra-rapide...")
         router_res, m0 = await execute_router_node(task_content, fast_model, settings)
-        if m0: all_metrics.append(m0)
+        if m0:
+            all_metrics.append(m0)
 
         if router_res:
             print(f"[*] Le routeur a classifié la technologie principale : {router_res.language.upper()}")
@@ -594,7 +594,8 @@ async def run_coding_workflow(
                 # 0. Drafter (iteration 1 uniquement)
                 if iteration == 1:
                     draft_res, m_draft = await execute_drafter_node(sub_dict, reasoning_model, settings)
-                    if m_draft: sub_metrics.append(m_draft)
+                    if m_draft:
+                        sub_metrics.append(m_draft)
                     if draft_res:
                         # 'os' est importé en tête de module (ligne 16). Un import local
                         # ici ferait de 'os' une variable locale à toute la fonction
@@ -642,7 +643,8 @@ async def run_coding_workflow(
 
                 # 1. Coder (smolagents, modèle FAST)
                 coder_res, m1 = await execute_coder_node(sub_dict, fast_model, settings)
-                if m1: sub_metrics.append(m1)
+                if m1:
+                    sub_metrics.append(m1)
 
                 if not coder_res or coder_res.status == "failure":
                     print(f"    [-] Le Coder a échoué techniquement sur {subtask.task_id}.")
@@ -657,7 +659,7 @@ async def run_coding_workflow(
                     commit_iteration(iteration)
                     sub_dict["git_diff"] = get_last_diff()
 
-                print(f"    [>] Coder terminé. Déclenchement des Audits parallèles (Tester & Sécurité)...")
+                print("    [>] Coder terminé. Déclenchement des Audits parallèles (Tester & Sécurité)...")
 
                 # On enregistre l'observation du Coder dans DuckDB
                 obs_id = kg.add_claim(
@@ -678,12 +680,14 @@ async def run_coding_workflow(
                 # cycle LLM complet. Si invalide → on court-circuite le Tester, on écrit le
                 # bug en DuckDB (kind='refutation', source='linter') et on relance le Coder.
                 lint_res, m_lint = execute_linter_node(sub_dict, settings)
-                if m_lint: sub_metrics.append(m_lint)
+                if m_lint:
+                    sub_metrics.append(m_lint)
 
                 if lint_res and lint_res.status == "failure":
                     print(f"    [⚠] Linter a détecté des erreurs de syntaxe sur {subtask.task_id} — "
                           f"court-circuit du Tester (Shift Left).")
-                    if obs_id: kg.mark_status(obs_id, "rejected")
+                    if obs_id:
+                        kg.mark_status(obs_id, "rejected")
                     # Le feedback du Linter devient une réfutation (lu par le Coder à l'itération suivante
                     # via kg.get_claims, comme les réfutations du Judge — mécanisme existant réutilisé).
                     ref_id = kg.add_claim(
@@ -715,12 +719,14 @@ async def run_coding_workflow(
                 # le relais). STATIC_TESTER_ENABLED=0 désactive le nœud entièrement.
                 from .static_tester import execute_static_tester_node
                 static_res, m_st = execute_static_tester_node(sub_dict, settings)
-                if m_st: sub_metrics.append(m_st)
+                if m_st:
+                    sub_metrics.append(m_st)
 
                 if static_res and static_res.status == "failure":
                     print(f"    [⚠] Static Tester a détecté un bug web évident sur "
                           f"{subtask.task_id} — court-circuit du Tester LLM (économie cycle).")
-                    if obs_id: kg.mark_status(obs_id, "rejected")
+                    if obs_id:
+                        kg.mark_status(obs_id, "rejected")
                     # Le feedback devient une réfutation (lue par le Coder à l'itération
                     # suivante via kg.get_claims, comme Linter/Judge — mécanisme réutilisé).
                     ref_id = kg.add_claim(
@@ -753,17 +759,19 @@ async def run_coding_workflow(
                 audit_parallel = os.getenv("AUDIT_PARALLEL", "false").strip().lower() in {"1", "true", "yes", "on"}
 
                 if audit_parallel:
-                    print(f"    [>] Coder terminé. Déclenchement des Audits parallèles (Tester & Sécurité)...")
+                    print("    [>] Coder terminé. Déclenchement des Audits parallèles (Tester & Sécurité)...")
                     t_task = execute_tester_node(sub_dict, fast_model, settings)
                     s_task = execute_security_reviewer_node(sub_dict, reasoning_model, settings)
                     (test_res, m2), (sec_res, m3) = await asyncio.gather(t_task, s_task)
                 else:
-                    print(f"    [>] Coder terminé. Audit séquentiel (GPU-local) : Tester PUIS Sécurité...")
+                    print("    [>] Coder terminé. Audit séquentiel (GPU-local) : Tester PUIS Sécurité...")
                     test_res, m2 = await execute_tester_node(sub_dict, fast_model, settings)
-                    print(f"    [>] Tester terminé. Security Reviewer en cours...")
+                    print("    [>] Tester terminé. Security Reviewer en cours...")
                     sec_res, m3 = await execute_security_reviewer_node(sub_dict, reasoning_model, settings)
-                if m2: sub_metrics.append(m2)
-                if m3: sub_metrics.append(m3)
+                if m2:
+                    sub_metrics.append(m2)
+                if m3:
+                    sub_metrics.append(m3)
 
                 # Traçage KG d'un échec Security (post-mortem run 123955) : si le
                 # nœud Security n'a pas rendu de verdict (None), on persiste une
@@ -785,11 +793,13 @@ async def run_coding_workflow(
                 # 3. Judge Panel (Fan-in) — DSPy ChainOfThought (Pydantic force le JSON Mode)
                 print(f"    [>] Audits terminés. Juge ({settings.reasoning_model_id}) en cours d'évaluation...")
                 judge_res, m4 = await execute_code_judge_node(sub_dict, test_res, sec_res, fast_model, settings)
-                if m4: sub_metrics.append(m4)
+                if m4:
+                    sub_metrics.append(m4)
 
                 if judge_res and judge_res.is_approved:
                     print(f"    [+] {subtask.task_id} APPROUVÉ par le Juge ! 🚀")
-                    if obs_id: kg.mark_status(obs_id, "approved")
+                    if obs_id:
+                        kg.mark_status(obs_id, "approved")
                     # Sous-tâche validée → on la marque comme complétée pour le checkpoint
                     # (à la reprise, elle sera sautée sans ré-exécuter le Coder).
                     coding_state["completed_subtasks"].append(subtask.task_id)
@@ -798,7 +808,8 @@ async def run_coding_workflow(
                 else:
                     feedback = judge_res.final_feedback if judge_res else "Erreur système du juge."
                     print(f"    [-] {subtask.task_id} REJETÉ. Sauvegarde du bug dans DuckDB...")
-                    if obs_id: kg.mark_status(obs_id, "rejected")
+                    if obs_id:
+                        kg.mark_status(obs_id, "rejected")
 
                     # Le Juge écrit la faille ou le bug dans DuckDB (le Knowledge Graph)
                     ref_id = kg.add_claim(
@@ -839,7 +850,8 @@ async def run_coding_workflow(
                 print(f"    [↗] Activation du Nœud d'Escalade (post-mortem) pour {subtask.task_id}...")
                 try:
                     esc_res, m5 = await execute_escalation_node(escalation_sub, failure_history, reasoning_model, settings)
-                    if m5: sub_metrics.append(m5)
+                    if m5:
+                        sub_metrics.append(m5)
                 except Exception as esc_err:
                     # Défense en profondeur : le nœud attrape déjà ses erreurs LLM en
                     # interne (→ None), mais on protège aussi contre toute exception
@@ -886,7 +898,7 @@ async def run_coding_workflow(
             # rechargeant le plan sérialisé. Sinon, appel normal + persistance du plan.
             if checkpoint and checkpoint.get("architect_result"):
                 architect_result = ArchitectOutput(**checkpoint["architect_result"])
-                print(f"\n[*] 1. Plan de l'Architecte RECHARGÉ depuis le checkpoint (économise un appel LLM).")
+                print("\n[*] 1. Plan de l'Architecte RECHARGÉ depuis le checkpoint (économise un appel LLM).")
             else:
                 print(f"\n[*] 1. Exécution de l'Architecte pour la tâche globale : {task['id']}")
                 architect_result, arch_metrics = await execute_architect_node(task, reasoning_model, settings)

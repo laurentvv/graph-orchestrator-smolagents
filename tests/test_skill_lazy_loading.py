@@ -19,7 +19,6 @@ Couvre :
 Pattern du projet : SYNCHRONE, AUCUNE connexion réseau, AUCUN LLM.
 """
 
-import pytest
 
 from graph_orchestrator.skills_loader import (
     ALWAYS_SKILLS_CODER,

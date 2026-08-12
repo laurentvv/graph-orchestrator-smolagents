@@ -248,17 +248,17 @@ if __name__ == "__main__":
     optimal_ngl = 15
     _CURRENT = 15
 
-    for l in layers_to_test:
+    for layer in layers_to_test:
         port = get_free_port()
-        result = test_ngl(l, port)
+        result = test_ngl(layer, port)
         if result == "interrupt":
             sys.exit(0)
         if not result:
-            print(f"\n⚠️ Limite de VRAM atteinte à {l} couches.")
-            print(f"🏆 Le paramètre optimal recommandé est : -ngl {optimal_ngl}")
+            print(f"\n⚠️ Limite de VRAM atteinte à {layer} couches (crash serveur).")
+            print(f"🏆 Le paramètre optimal recommandé pour ta configuration est : -ngl {optimal_ngl}")
             break
-        optimal_ngl = l
-        _CURRENT = l
+        optimal_ngl = layer
+        _CURRENT = layer
 
     if optimal_ngl == layers_to_test[-1]:
         print(f"\n🏆 Tout est passé ! Le paramètre optimal recommandé est : -ngl {optimal_ngl}")

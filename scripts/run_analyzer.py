@@ -7,7 +7,6 @@ et générer un rapport post-mortem Markdown afin d'améliorer l'agent.
 import os
 import re
 import glob
-import json
 import argparse
 from datetime import datetime
 
@@ -45,7 +44,6 @@ def parse_log_file(log_path: str):
     }
 
     current_node = None
-    node_starts = {}
     
     # Regex pour les metrics de step
     # Ex: [Step 1: Duration 48.49 seconds| Input tokens: 15,513 | Output tokens: 2,580]
@@ -242,7 +240,7 @@ def parse_duckdb(db_path: str):
 
 def generate_markdown_report(metrics: dict, db_metrics: dict, log_path: str, output_path: str):
     with open(output_path, 'w', encoding='utf-8') as f:
-        f.write(f"# Rapport d'Analyse Post-Mortem\n")
+        f.write("# Rapport d'Analyse Post-Mortem\n")
         f.write(f"**Source** : `{log_path}`\n")
         f.write(f"**Date** : {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
         
@@ -336,7 +334,7 @@ def main():
         log_file = discover_latest_log(args.logs_dir)
         if not log_file:
             print(f"[-] Aucun log trouvé dans '{args.logs_dir}' (pattern {os.path.join(args.logs_dir, 'run-*.log')}).")
-            print(f"    Lancez d'abord un run (`uv run agent_graph.py`) ou précisez --log <chemin>.")
+            print("    Lancez d'abord un run (`uv run agent_graph.py`) ou précisez --log <chemin>.")
             return
         print(f"[*] Fichier log le plus récent trouvé : {log_file}")
         

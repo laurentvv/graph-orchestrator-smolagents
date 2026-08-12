@@ -73,7 +73,7 @@ class TestClaims:
         """Deux claims de kind différent ne sont pas dédoublonnées."""
         kg.add_entity("task:t1", "task")
         c1 = kg.add_claim("task:t1", "obs", "observation", 0.9, "w1")
-        c2 = kg.add_claim("task:t1", "obs", "refutation", None, "s1")
+        kg.add_claim("task:t1", "obs", "refutation", None, "s1")
         # Même contenu mais la dédup porte sur (entity, dedup_key, status=open)
         # Ici le contenu est identique => c2 est None (doublon sur la clé de hash)
         # Comportement attendu : la dédup est par contenu, pas par kind.
@@ -129,7 +129,7 @@ class TestSeen:
 class TestDump:
     def test_dump_structure_complete(self, kg):
         kg.add_entity("task:t1", "task", "nom")
-        cid = kg.add_claim("task:t1", "obs", "observation", 0.9, "w1", "qwen", "r1")
+        kg.add_claim("task:t1", "obs", "observation", 0.9, "w1", "qwen", "r1")
         d = kg.dump()
         assert set(d.keys()) == {"entities", "claims", "provenance", "edges"}
         assert len(d["entities"]) == 1

@@ -128,7 +128,7 @@ async def main():
             f"🚫 NE recopie PAS le plan — IMPLÉMENTE-LE. Chaque fichier écrit UNE SEULE FOIS via write_file."
         )
 
-    print(f"[*] Coder isolation — PRODUCTION (execute_coder_node)")
+    print("[*] Coder isolation — PRODUCTION (execute_coder_node)")
     print(f"    Dossier sortie  : {os.path.abspath(out_dir)} (isolé, nettoyé)")
     print(f"    Fichiers cibles : {DEFAULT_TARGET_FILES}")
     print(f"    Draft injecté   : {'OUI (' + draft_filename + ')' if draft_filename else 'NON'}")
@@ -168,7 +168,7 @@ async def main():
         print("[!] Le Coder n'a pas retourné de résultat (crash ou timeout).")
     else:
         print(f"Statut  : {result.status}")
-        print(f"Détails :")
+        print("Détails :")
         print(result.details or "(vide)")
     print("-" * 60)
 

@@ -23,9 +23,9 @@ Aucun nœud ne dépend de Context7 pour fonctionner (backward-compatible).
 import logging
 import re
 from contextlib import contextmanager
-from typing import List, Optional
+from typing import Optional
 
-from smolagents import Tool, ToolCollection
+from smolagents import ToolCollection
 
 # Réutilise la config MCP existante (URL, transport, header d'auth).
 # Import local pour éviter un cycle d'import au chargement du package.

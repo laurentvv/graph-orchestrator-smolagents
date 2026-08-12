@@ -34,7 +34,6 @@ from .schemas import (
     RunEvent,
     RunRequest,
     RunResponse,
-    StepData,
 )
 
 console = Console()
@@ -234,7 +233,7 @@ async def _execute_run(run_id: str, req: RunRequest, queue: asyncio.Queue) -> No
         elif req.mode in ("graph", "exploration"):
             await push("status", {"message": f"Mode {req.mode} : via graph_orchestrator..."})
             from graph_orchestrator.runner import run_graph_workflow
-            from graph_orchestrator.workflows import run_exploration_workflow, ONE_SHOT_TASKS, EXPLORATION_SEED_TASKS
+            from graph_orchestrator.workflows import run_exploration_workflow, EXPLORATION_SEED_TASKS
 
             # Construit les tâches à partir du prompt
             tasks = [{"id": "u1", "content": req.prompt}]

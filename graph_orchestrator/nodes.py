@@ -11,7 +11,7 @@ import json
 import os
 from typing import List, Optional, Tuple
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from smolagents import OpenAIServerModel, ToolCallingAgent, tool
 
 from .config import Settings
@@ -26,9 +26,8 @@ from .models import (
     CoderOutput,
     extract_and_validate,
 )
-from .tools import read_file, write_file, append_file, edit_file, bash_command, list_directory, search_replace, multi_replace, check_run_state, record_run_error, _RUN_ERRORS
+from .tools import record_run_error, _RUN_ERRORS
 from .skills_loader import (
-    build_skills_block,
     build_conditional_skills_block,
     enforce_skill_budget,
     ALWAYS_SKILLS_CODER,
@@ -78,7 +77,6 @@ class LoggedOpenAIServerModel(OpenAIServerModel):
         res = super().__call__(*args, **kwargs)
         if hasattr(res, "token_usage") and res.token_usage:
             # Affichage clair du VRAI contexte envoyé au LLM
-            logger.info(f"[LLM Local] Contexte réel de ce step : {res.token_usage.input_tokens} tokens")
             print(f"\033[96m[LLM Local] Contexte réel de ce step : {res.token_usage.input_tokens} tokens\033[0m")
         return res
 
@@ -450,15 +448,15 @@ async def run_with_retry(
                     # pour le cas où validated est None — il guide alors le retry suivant.
                     if loop_msg:
                         print(
-                            f"[i] LoopGuard a signalé une répétition, mais le "
-                            f"final_answer est valide → succès conservé (priorité au "
-                            f"résultat sur le guard F-36)."
+                            "[i] LoopGuard a signalé une répétition, mais le "
+                            "final_answer est valide → succès conservé (priorité au "
+                            "résultat sur le guard F-36)."
                         )
                     if stall_msg:
                         print(
-                            f"[i] Stall Detector a signalé un stall, mais le "
-                            f"final_answer est valide → succès conservé (priorité au "
-                            f"résultat sur le stall detector F-88)."
+                            "[i] Stall Detector a signalé un stall, mais le "
+                            "final_answer est valide → succès conservé (priorité au "
+                            "résultat sur le stall detector F-88)."
                         )
                     return validated, last_metrics
 
@@ -729,7 +727,7 @@ async def execute_coder_node(
     settings: Settings,
 ) -> Tuple[Optional[CoderOutput], Optional[NodeMetrics]]:
     """Nœud Coder : utilise des outils pour créer/éditer des fichiers et exécuter des commandes bash."""
-    from smolagents import DuckDuckGoSearchTool, CodeAgent
+    from smolagents import DuckDuckGoSearchTool
     from .context7_tool import context7_tools
     from .chrome_devtools_tool import chrome_devtools_tools
     from .vision_callback import wrap_screenshot_tools, make_screenshot_callback
@@ -752,7 +750,7 @@ async def execute_coder_node(
         # Outils fichiers + recherche. Context7 (doc de libs à jour) est ajouté si
         from .tools import (
             read_file, write_file, append_file, list_directory,
-            bash_command, search_replace, multi_replace, edit_file,
+            search_replace, multi_replace, edit_file,
             read_python_skeleton, check_run_state, log_event
         )
         coder_tools = [list_directory, read_file, read_python_skeleton, write_file, append_file, edit_file, search_replace, multi_replace, check_run_state, log_event, DuckDuckGoSearchTool()]

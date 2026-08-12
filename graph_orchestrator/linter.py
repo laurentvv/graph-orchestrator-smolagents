@@ -28,7 +28,6 @@ from __future__ import annotations
 import os
 import py_compile
 import re
-import tempfile
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
 
@@ -124,7 +123,7 @@ def _lint_python_py_compile(path: str) -> List[str]:
         # Extraction de la première ligne significative (file "path", line N)
         first_line = msg.strip().splitlines()[0] if msg.strip() else str(e)
         errors.append(f"[py_compile] {first_line}")
-    except Exception as e:
+    except Exception:
         # Fichier non lisible, encoding, etc. — pas une erreur de syntaxe, on ignore
         # (le Linter ne doit pas planter sur un fichier qu'il ne sait pas lire).
         pass

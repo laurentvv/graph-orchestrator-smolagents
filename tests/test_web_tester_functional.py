@@ -21,11 +21,23 @@ from graph_orchestrator.testers.web_tester import WebTestRunner
 # 1. Skill web-tester : noms d'outils + assertions fonctionnelles
 # ==========================================
 
+import os
+
+def load_full_skill_body(skill_name: str) -> str:
+    body = skills_loader.load_skill_body(skill_name)
+    resources_dir = os.path.join(skills_loader.SKILLS_DIR, skill_name, "resources")
+    if os.path.isdir(resources_dir):
+        for f in os.listdir(resources_dir):
+            if f.endswith(".md"):
+                with open(os.path.join(resources_dir, f), "r", encoding="utf-8") as file:
+                    body += "\n" + file.read()
+    return body
+
 class TestSkillWebTester:
     def test_skill_utilise_noms_puppeteer(self):
         """Le skill doit référencer les VRAIS noms d'outils Puppeteer (puppeteer_*),
         pas les noms Chrome DevTools MCP inexistants (new_page, take_snapshot...)."""
-        body = skills_loader.load_skill_body("web-tester")
+        body = load_full_skill_body("web-tester")
         assert "puppeteer_navigate" in body
         assert "puppeteer_screenshot" in body
         assert "puppeteer_evaluate" in body
@@ -34,7 +46,7 @@ class TestSkillWebTester:
     def test_skill_nutilise_pas_les_faux_noms(self):
         """Les noms d'outils inexistants doivent être absents (ou explicitement
         marqués comme n'existant pas) du skill."""
-        body = skills_loader.load_skill_body("web-tester")
+        body = load_full_skill_body("web-tester")
         # Le skill doit AVERTIR que ces noms n'existent pas, pas les recommander.
         # On vérifie qu'aucune instruction active ne dit "use new_page" sans contexte.
         assert "do NOT use" in body.lower() or "ne pas en inventer" in body.lower() or "n'existent pas" in body.lower()
@@ -42,7 +54,7 @@ class TestSkillWebTester:
     def test_skill_mentionne_assertions_fonctionnelles(self):
         """Le skill doit exiger des tests fonctionnels (assertions sur le comportement),
         pas seulement un smoke-test console/visuel."""
-        body = skills_loader.load_skill_body("web-tester")
+        body = load_full_skill_body("web-tester")
         body_lower = body.lower()
         assert "functional logic testing" in body_lower or "assertion" in body_lower
         # Doit donner au moins un exemple de script d'assertion (puppeteer_evaluate).
@@ -51,7 +63,7 @@ class TestSkillWebTester:
 
     def test_skill_exige_assertions_pour_success(self):
         """Le verdict success doit exiger que les assertions fonctionnelles passent."""
-        body = skills_loader.load_skill_body("web-tester")
+        body = load_full_skill_body("web-tester")
         body_lower = body.lower()
         # "success requires ... assertion pass"
         assert "success" in body_lower and ("assertion" in body_lower or "all" in body_lower)

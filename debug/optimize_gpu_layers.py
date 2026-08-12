@@ -64,7 +64,7 @@ def test_ngl(ngl):
             print(f"✅ Succès ! Vitesse d'inférence : {tps:.2f} tokens/seconde (Temps total: {duration:.1f}s)")
             return True
         else:
-            print(f"✅ Succès (mais format de log non reconnu).")
+            print("✅ Succès (mais format de log non reconnu).")
             # En cas de doute, on affiche la fin du log
             lines = output.split('\n')
             for line in lines[-10:]:
@@ -73,7 +73,7 @@ def test_ngl(ngl):
             return True
             
     except subprocess.TimeoutExpired:
-        print(f"❌ Timeout : la commande a pris trop de temps (inhabituel pour 50 tokens).")
+        print("❌ Timeout : la commande a pris trop de temps (inhabituel pour 50 tokens).")
         _kill_proc(proc)
         return False
     except KeyboardInterrupt:
@@ -123,15 +123,15 @@ if __name__ == "__main__":
     max_tps = 0
     _CURRENT = 15  # dernier -ngl validé (utilisé par le handler KeyboardInterrupt)
     
-    for l in layers_to_test:
-        success = test_ngl(l)
+    for layer in layers_to_test:
+        success = test_ngl(layer)
         if not success:
-            print(f"\n⚠️ Limite de VRAM atteinte à {l} couches.")
+            print(f"\n⚠️ Limite de VRAM atteinte à {layer} couches.")
             print(f"🏆 Le paramètre optimal recommandé pour ta configuration est : -ngl {optimal_ngl}")
             break
         
-        optimal_ngl = l
-        _CURRENT = l
+        optimal_ngl = layer
+        _CURRENT = layer
         time.sleep(2) # Laisse quelques secondes au GPU pour vider son cache entre deux runs
 
     if optimal_ngl == layers_to_test[-1]:

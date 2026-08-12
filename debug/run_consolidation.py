@@ -117,10 +117,10 @@ async def main():
     )
     args = parser.parse_args()
 
-    print(f"╔══════════════════════════════════════════════════════════╗")
-    print(f"║  NŒUD DE CONSOLIDATION MÉMOIRE (F-68 Phase 1, P6-ter)   ║")
+    print("╔══════════════════════════════════════════════════════════╗")
+    print("║  NŒUD DE CONSOLIDATION MÉMOIRE (F-68 Phase 1, P6-ter)   ║")
     print(f"║  Scénario : {args.scenario:<44s}║")
-    print(f"╚══════════════════════════════════════════════════════════╝")
+    print("╚══════════════════════════════════════════════════════════╝")
 
     settings = load_settings()
     print(f"\n⚙️  Config : seuil={settings.memory_consolidation_after} claims, "
@@ -133,10 +133,10 @@ async def main():
     kg = KnowledgeGraph(db_path)
 
     try:
-        n = _populate_kg(kg, args.scenario)
+        _populate_kg(kg, args.scenario)
         _print_claims(kg, "AVANT consolidation")
 
-        print(f"\n🚀 Appel à execute_consolidation_node (vrai nœud de production)...")
+        print("\n🚀 Appel à execute_consolidation_node (vrai nœud de production)...")
         from graph_orchestrator.dspy_nodes import execute_consolidation_node
 
         summary, metrics = await execute_consolidation_node(kg, RUN_ID, settings)
@@ -180,7 +180,7 @@ async def main():
         except OSError:
             pass
 
-    print(f"\n✅ Isolation terminée.")
+    print("\n✅ Isolation terminée.")
 
 
 if __name__ == "__main__":

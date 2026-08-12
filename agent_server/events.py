@@ -4,7 +4,6 @@ Utilisé par step_callbacks pour pousser des événements vers la WebSocket.
 Extrait de chaque ActionStep : step_number, tool_calls, observations, tokens, durée, erreurs.
 """
 
-from typing import Optional
 
 
 def action_step_to_event(step) -> dict:

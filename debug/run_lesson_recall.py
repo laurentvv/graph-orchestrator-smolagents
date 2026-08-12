@@ -120,7 +120,7 @@ def main() -> None:
     print(f"  Scénario      : {args.scenario}")
     print(f"  recall_limit  : {settings.memory_recall_limit}")
     print(f"  recall_max    : {settings.memory_recall_max_chars} chars")
-    print(f"  kinds durables: insight, escalation (préservés par prune_old_claims)")
+    print("  kinds durables: insight, escalation (préservés par prune_old_claims)")
 
     # KG temporaire isolé — ne pollue JAMAIS data/graph_orchestrator.db.
     tmp_dir = tempfile.mkdtemp(prefix="lesson_recall_iso_")
@@ -146,7 +146,7 @@ def main() -> None:
             print(f"{'─' * 70}")
             print(f"  Taille: {len(block)} chars")
         else:
-            print(f"\n  ⚠️  Bloc vide (aucune leçon durable à rappeler).")
+            print("\n  ⚠️  Bloc vide (aucune leçon durable à rappeler).")
 
         # ─── VÉRIFICATION D'INVARIANCE ─────────────────────────────────────
         print(f"\n{'─' * 70}\n  VÉRIFICATION D'INVARIANCE")
@@ -168,7 +168,7 @@ def main() -> None:
         except OSError:
             pass
 
-    print(f"\n[*] Isolation terminée — KG temporaire nettoyé.")
+    print("\n[*] Isolation terminée — KG temporaire nettoyé.")
 
 
 if __name__ == "__main__":

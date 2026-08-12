@@ -8,7 +8,6 @@ de dégradation gracieuse (la spec centrale de ce module).
 
 from unittest.mock import MagicMock
 
-import pytest
 
 from graph_orchestrator import context7_tool
 from graph_orchestrator import skills_loader

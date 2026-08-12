@@ -185,7 +185,6 @@ def _mock_nodes_for_output_test(monkeypatch, coder_writes_file):
 def test_e2e_coder_writes_in_run_dir(monkeypatch, tmp_path):
     """Le fichier généré par le Coder atterrit dans runs/.../, PAS à la racine du projet."""
     from dataclasses import replace
-    from graph_orchestrator.config import Settings
 
     written = {}
     def coder_writes(sub):
@@ -216,8 +215,6 @@ def test_e2e_coder_writes_in_run_dir(monkeypatch, tmp_path):
 def test_e2e_resume_reuses_same_run_dir(monkeypatch, tmp_path):
     """Reprise après crash : le 2e run REPRED le même dossier (fichiers préservés)."""
     from dataclasses import replace
-    from graph_orchestrator.config import Settings
-    from graph_orchestrator.knowledge_graph import KnowledgeGraph
 
     db = str(tmp_path / "kg_resume.db")
     runs_root = str(tmp_path / "runs")
@@ -248,7 +245,6 @@ def test_e2e_resume_reuses_same_run_dir(monkeypatch, tmp_path):
 def test_e2e_kg_path_stable_after_chdir(monkeypatch, tmp_path):
     """Le chdir ne déplace PAS la DB DuckDB : elle reste à kg_path (racine projet/tmp)."""
     from dataclasses import replace
-    from graph_orchestrator.knowledge_graph import KnowledgeGraph
 
     db = str(tmp_path / "kg_stable.db")
     runs_root = str(tmp_path / "runs")
