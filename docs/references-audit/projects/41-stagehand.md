@@ -1,4 +1,4 @@
-# Audit Fiche : stagehand (21)
+# 41 — stagehand
 
 ## 1. Description Générale
 **Stagehand** est un SDK conçu spécifiquement pour les agents navigateurs (browser agents). Contrairement à Playwright orienté vers les tests, Stagehand est optimisé pour les LLM avec des actions auto-réparatrices (self-healing) et un parsing optimisé du DOM (hybrid accessibility tree trimming) pour l'efficacité des tokens. Il interagit avec le navigateur en injectant une extension et communique avec elle via le protocole Chrome DevTools (CDP).

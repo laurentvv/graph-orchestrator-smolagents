@@ -14,7 +14,7 @@ Une base de connaissances structurée regroupant l'audit profond de **44 projets
 docs/references-audit/
 ├── README.md              ← Ce document
 ├── INDEX.md               ← Point d'entrée principal
-├── inventory.json         ← Inventaire JSON des 494 briques réutilisables
+├── inventory.json         ← Inventaire JSON des 569 briques réutilisables
 └── projects/              ← 44 fiches d'audit
     ├── 01-prompt-vault.md  …  13-deer-flow-analysis.md
     ├── 14-qm.md  …  18-awesome-claude-skills.md

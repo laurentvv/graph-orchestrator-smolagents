@@ -38,6 +38,31 @@
       web-tester). Implémentation TERMINÉE (42 tests sur les 3 zones, 692 passed / 7
       pré-existants non liés).
 
+## Jalons de l'Itération (cycle Intégration formelle des fiches 30-44 — doc/cohérence)
+> Fait suite au commit `dfcea24` (ajout brut des 15 dépôts fiches 30-44). Périmètre = travail
+> documentaire uniquement (AUCUN code de production modifié, AUCUN test impacté). Miroir de F-66
+> (qui avait intégré les fiches 19-23).
+
+- [x] Étape IF30-1 : Lecture des 15 fiches 30-44 (en-têtes, notes globales, composants) + diagnostic
+  — les bullets « Nouvelles Références d'Audit (Batch Août 2026) » en bas du plan étaient un DUMP
+  BROUILLON avec numérotation incohérente (`fiche **19-Understand-Anything**`, `**XX-prime-agent**`,
+  `**40-skills**`...) non distribué dans les priorités.
+- [x] Étape IF30-2 : Distribution des bullets dans les sections de priorité cibles (P0-bis, P2, P3,
+  P4, P6, P6-bis, P6-ter, P8, P8-bis, P9, P10, P11) en cases `[ ]` propres — numérotation corrigée
+  (30-44 canonique), références `file:symbol` préservées, 12 nouvelles cases datées 2026-08-12.
+- [x] Étape IF30-3 : Suppression du dump brut (120 lignes, anciennes lignes 427-548). Plan passé de
+  549 à 468 lignes (vérifié : 0 marqueur `Nouvelles Références`, 0 numéro de fiche stale).
+- [x] Étape IF30-4 : Création de 4 features formelles F-93..F-96 dans `feature_list.json` pour les
+  workstreams les plus substantiels — F-93 grounding findings Judge (langextract, P6), F-94 capteur
+  santé structurelle (sentrux, P6/P15), F-95 robustesse FS transactions/locks/IO allowlist (OpenKB,
+  P8-bis), F-96 harnais évaluation skills (Anthropic skills, P10). **95 features total, JSON valide.**
+- [x] Étape IF30-5 : Correction des en-têtes internes de 12 fiches sur 15 (mauvais numéros 19/XX/40/21
+  → 30-44 canonique ; 3 fiches déjà correctes 30-Ix/31-Scrapling/34-brooklyn laissées intactes).
+- [x] Étape IF30-6 : `INDEX.md` rendu cohérent — compteurs (29→44 projets, 494→569 entrées, date
+  2026-08-12), tableau de navigation complété (15 lignes, 44 fiches), arbre du dossier complété
+  (29-44). `references-audit/README.md` : 494→569.
+- [x] Étape IF30-7 : Branche `docs/integration-fiches-30-44` + commit.
+
 ## Jalons de l'Itération (cycle Tester fonctionnel — F-20)
 - [x] Étape TF-1 : Diagnostic (4 causes racines : skill aveugle logique, noms MCP faux, spec non propagée, Judge sans requirements).
 - [x] Étape TF-2 : Skill web-tester réécrit (noms puppeteer_* + étape "Functional Logic Testing" via puppeteer_evaluate).

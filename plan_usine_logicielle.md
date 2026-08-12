@@ -72,6 +72,8 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
   10. **Parallel tool calls par défaut** — batch les reads/recherches indépendantes (« 3-5x faster, expected behavior »).
 - *Bonus (base de rôles spécifiques)* : **Professional objectivity** (truth > validation = base du Judge, Claude Code 2.0) ; **Defensive security only** (jamais logger/exposer secrets = base du Security Reviewer).*
 
+- [ ] *(audit fiches 34 + 35, 2026-08-12)* **Enrichissement de la section `UNIVERSAL_INVARIANTS`** (prompts.py) : (a) fiche **34-brooklyn-skills** → `defaults.md` (UI first, pas de code sans confirmation, clean avant PR) + skill `no-tropes` (liste de tics d'écriture LLM à prohiber dans les sorties — "prompt the positive", rejoint l'invariant n°8 concision) ; (b) fiche **35-Understand-Anything** → `packages/core/src/schema.ts` (`EdgeTypeSchema`, modèle invariant de nœuds/arêtes génériques — utile si on modélise un jour des graphes métiers). — *Références : fiche **34-brooklyn-skills** → `references/brooklyn-skills/defaults.md` + `no-tropes` ; fiche **35-Understand-Anything** → `references/Understand-Anything/understand-anything-plugin/packages/core/src/schema.ts`.*
+
 ## 🔴 Priorité 1 : L'Édition Sécurisée des Fichiers (Le socle critique) ✅ TERMINÉE
 *Si l'agent corrompt les fichiers, tout le reste de la boucle plantera. C'est l'urgence absolue pour les petits modèles locaux.*
 
@@ -96,6 +98,8 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 - [x] *(bonus hors-plan, décision utilisateur)* **Tester polyvalent multi-techno** : le nœud Tester n'est plus cloisonné au web. `execute_tester_node` est un dispatcher qui route selon la techno détectée (redondance Router + extensions) vers N runners dédiés (web, python, rust/ts futurs). Architecture extensible : ajouter une techno = 1 module + 1 skill + 1 ligne registre.
 - [ ] *(audit fiches 07-llamabot + 18-awesome-claude, 2026-08-04)* **Capture web + cycle de vie serveur** : La capture Playwright (`capture_page_and_img_src` + `trim_html_for_llm`, source non créditée de `dom_filter.py` F-37) et le cycle de vie serveur (`wait_for_port` pour démarrer/arrêter un serveur local autour des tests) sont des compléments au Web Tester actuel (Puppeteer + `file:///`). À évaluer si le passage à un serveur HTTP local devient nécessaire (tests fetch/CORS/EHP). — *Références : fiche **07-llamabot** → `app/agents/utils/playwright_screenshot.py` ; fiche **18-awesome-claude-skills** → `webapp-testing/scripts/with_server.py`.*
 
+- [ ] *(audit fiches 31 + 41, 2026-08-12)* **Outils web d'automatisation/navigation pour le Tester** : Évaluer en complément de Puppeteer + Chrome DevTools (pas en remplacement). (a) fiche **31-Scrapling** → `scrapling/core/ai.py` (serveur MCP Scrapling pilotant navigateurs/extraction furtive) + `scrapling/parser.py` (parseur lxml adaptatif, retrouve les éléments après restructuration du DOM) + `fetchers/stealth_chrome.py` (`StealthyFetcher`, contournement anti-bot type Cloudflare Turnstile) + `spiders/throttle.py` (`AutoThrottle`, ajustement dynamique des délais sur 429). (b) fiche **41-stagehand** → SDK browser-agent LLM avec primitives `act`/`observe`/`extract` (actions self-healing + DOM tronqué optimisé tokens). À réserver au cas où le Web Tester actuel bute sur de l'anti-bot ou des sélecteurs fragiles. — *Références : fiche **31-Scrapling** ; fiche **41-stagehand**.*
+
 ## 🟡 Priorité 3 : Le Graphe Autonome et ses Sécurités (L'Orchestration)
 *Sans limites, un agent bloqué bouclera à l'infini et videra vos ressources.*
 
@@ -106,6 +110,8 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 - [x] **Anti-Loop Cryptographique (Inspiré de Crush)** : Ajouter un anti-loop déterministe qui hache en SHA256 les interactions d'outils (ToolName + Input + Output). Si un Coder répète exactement la même action X fois, le circuit-breaker s'active immédiatement pour stopper l'hémorragie financière et computationnelle. — *FAIT (F-36) : `loop_guard.py` — `compute_tool_call_fingerprint` (SHA256 de ToolName + Input normalisé via `sort_keys` + strip whitespace) ; `LoopGuard.record/repeated_action/reset` ; `extract_tool_calls_from_step` (ToolCallingAgent `tool_calls` + CodeAgent `code_action`). Branché dans `run_with_retry` (param optionnel `loop_guard=None`, non-cassant) via `execute_coder_node` (seul nœud d'écriture). Reset aligné sur purge `agent.memory.steps`. Config `LOOP_GUARD_ENABLED`/`LOOP_GUARD_THRESHOLD` (défaut 3). 16 tests PASS. Nuance : on hashe `ToolName + Input` (pas l'Output — l'Output varie même en bouclant sur la même action fausse).*
 - [x] **Nœud d'Escalade (Judge/Summarizer)** : Si le Coupe-Circuit s'active au bout de 3 essais, router vers un nouveau nœud qui résume les échecs ou fait appel à une API distante (modèle lourd) pour corriger l'erreur vicieuse. — *FAIT (F-23) : nœud DSPy `execute_escalation_node` qui synthétise les réfutations accumulées dans le KG en un diagnostic post-mortem structuré (cause racine + leçon + severity), le persiste (kind="escalation" + arêtes ESCALATES vers les réfutations), marque la sous-tâche "escalated". Stratégie "diagnostic seul" (pas de retry/modèle distant — réutilise le modèle de raisonnement local). Dégradation gracieuse (repli "max_iterations_reached" si désactivé ou LLM down). 8 tests PASS.*
 - [x] **Persistance d'État (Checkpoints)** : Connecter la base `DuckDB` existante au cycle de vie du graphe pour écrire l'état d'exécution à chaque changement de nœud (Reprise sur erreur). — *FAIT : table `checkpoint` dans knowledge_graph.py (save/load/clear) + run_id stable (hash du contenu de tâche) + branchement dans run_coding_workflow (skip Architect + skip sous-tâches completed + reprise à l'itération). Granularité "début d'itération" (sûre/idempotente). Config FRESH_START. 12 tests PASS.* **Besoin critique résolu** : avec ~10-15 min/fichier en CPU-only, une coupure ne perd plus 40 min — la reprise est automatique.
+
+- [ ] *(audit fiche 40-waku-agent, 2026-08-12)* **Boucle & DAG déterministes en Python pur** : S'inspirer de `waku/loop/agent.py` (`run_loop`, boucle pure Python avec guardrails intégrés) et `waku/graph/engine.py` (`run_graph`, DAG déterministe par vagues avec détection `GraphStateCollision` et exécution ordonnée). Résonance directe avec notre boucle Coder→Tester et la gestion d'état — patterns Python natifs adaptables (contrairement aux références TS qm/pi). — *Référence : fiche **40-waku-agent** → `references/waku-agent/waku/loop/agent.py` + `waku/graph/engine.py`.*
 
 ### P3-bis : Anti-loop déterministe — stall detector + hash d'output matériel + vocabulaire de turn
 > 📈 **Évolution** (audit référence 19-loopx, 2026-08-03). Notre F-36 ne hashe que `ToolName + Input` (pas l'Output). loopx apporte la **matière déterministe qui manquait** pour distinguer un turn productif d'un turn gratuit, et détecter le stall au-delà de la simple répétition.
@@ -137,6 +143,8 @@ Ce document traduit l'audit des références (`references_audit.md`) en une feui
 - [ ] *(palliatif, court terme)* **Tags de confiance + provenance sur les claims** : ajouter un tag `EXTRACTED`/`INFERRED`/`AMBIGUOUS` + `confidence_score` + provenance au niveau de l'edge (`via_file`/`via_location`) sur les claims/refutations DuckDB existants. Effort moyen (~2-4 jours), pas de réécriture de persistance.
 - [ ] *(réévaluation, moyen terme)* **Repo Map + KG structural** : à réévaluer si l'usage évolue vers la maintenance/évolution de gros dépôts existants. Blueprints prêts (fiches **05-axon**, **06-graphify**, **04-repograph**).
 
+- [ ] *(audit fiches 30 + 35 + 44, 2026-08-12)* **Réévaluation du KG structural** : Trois nouvelles références renforcent les blueprints SI l'usage évolue vers la maintenance de gros dépôts existants. Fiche **30-Ix** → `core-ingestion/src/queries.ts` (requêtes tree-sitter natives réutilisables en Python) + `ix-cli/src/client/types.ts` (schéma de graphe relationnel) + `skills/ix/SKILL.md`. Fiche **35-Understand-Anything** → `agents/tour-builder.md` (topologie Fan-In/Fan-Out + BFS) + scripts Python `merge-batch-graphs.py` (`merge_graphs`, fusion de batchs). Fiche **44-sentrux** → `analysis/lang_registry.rs` + `analysis/parser/` (pipeline tree-sitter multi-langage, registre dynamique 50+ langages sans logique compilée en dur). **Statut inchangé : HORS-SCOPE** tant que l'usage reste la création de code de zéro. — *Références : fiches **30-Ix**, **35-Understand-Anything**, **44-sentrux**.*
+
 ## 🔵 Priorité 5 : L'Automatisation de l'Environnement
 - [x] **Auto-Résolution des Dépendances** : Si le nœud `Tester` détecte un `ModuleNotFoundError`, lancer automatiquement un `uv add <package>` ou `pip install` avant de relancer les tests, évitant de gâcher un cycle LLM pour ça. — *FAIT (F-26) : `extract_missing_module` (regex + validation identifiant anti-injection) + `_install_module` (`pip install` non-persistant, jamais d'exception) branchés dans `PythonTestRunner.run()`. Au 1er échec `ModuleNotFoundError`, installe le module puis relance (cap 1 retry). Opt-out `AUTO_INSTALL_DEPS=false`. 12 tests PASS.*
 
@@ -154,6 +162,13 @@ Plus d'information : `system_prompts_analysis.md`
 - [ ] **Cycle de vie du Plan (Inspiré d'Open-SWE + learn-claude-code)** : Structurer l'étape de l'Architecte avec des statuts clairs (planning, ready, revising, approved). Le passage au Coder ne doit se faire que sur un statut "approved" (gate explicite). — *Référence production : fiche **09-open-swe** → `references/open-swe/agent/dashboard/plan_store.py` (`PLAN_STATUS_*`, 6 statuts, `save_plan_content`, cycle approve/reject complet).* — *Mini-orchestrateur DAG (Python natif) : fiche **16-learn-claude-code** → `s12_task_system/code.py` (`Task` dataclass avec `blockedBy`, `can_start`/`claim_task`/`complete_task` avec reportage du débloquage aval) + `s05_todo_write/code.py` (`nag reminder` qui réinjecte la liste si stale, `_normalize_todos` validation défensive car les LLM envoient souvent des strings au lieu de lists).*
 - [x] **System Prompts Spécialisés (Inspiré de claude-code-unified-agents)** : Enrichir les prompts système des nœuds existants à partir des 8 prompts « purs » alignés avec les rôles du graphe — `code-reviewer` (Judge), `security-auditor` (Security), `test-engineer` (Tester : pyramide 70/20/10 + pattern AAA), `python-pro` (Coder : type hints + PEP 8), `frontend-specialist` (Coder web : a11y), `backend-architect` (Architect : 5 axes). — *Référence : fiche **15-claude-code-unified-agents** (53 agents, valeur concentrée dans ~8 prompts purs). Attention : les prompts restent souples (best practices), il faut les durcir en gates bloquants pour les rôles Judge/Security. Le schéma `AgentCapabilitySchema` de `agent-generator.md` fournit un modèle pour déclarer formellement un rôle.* — *FAIT (F-44) : cf. ROLE_BLOCKS dans prompts.py (couvre les 8 prompts purs alignés). Coder type hints + verify-after, WebTester pyramide+AAA, Judge/Security durcis en gates (rubric + in-diff + anti-nits + OWASP/CVSS), Architect read-only + 5 axes. Les marqueurs doctrinaux vérifiés par `test_role_contains_doctrinal_marker` (17 cas paramétrés).*
 
+- [ ] *(audit fiches 39 + 42 + 43 + 44, 2026-08-12)* **Enrichissement du Judge** (4 angles complémentaires au Judge F-44/F-65) :
+  - **Grounding des findings par alignement** (fiche **39-langextract**) : ancrer chaque finding LLM dans le code source via `WordAligner` (alignement difflib/LCS) → rejeter les findings hallucinés (localisation inexistante dans le fichier). Élimine le failure mode "finding sur une ligne qui n'existe pas". (F-93)
+  - **Judge pairwise anti-biais** (fiche **42-anydoc**) : évaluation pairwise A/B avec inversion de position pour annuler le biais de position (`bench/judge.py` + `PROMPT`). Complément orthogonal au council llm-council (fiche 22).
+  - **Revue 3-axes + debug par hypothèses** (fiche **43-framework**) : `plugins/aidd-dev/skills/05-review/SKILL.md` (axes code/functional/relevancy + rubric de verdict stricte) + `08-debug/SKILL.md` (procédure prescriptive 11 étapes par validation d'hypothèses, empêche les drive-by refactors).
+  - **Capteur de santé structurelle** (fiche **44-sentrux**) : 5 métriques racines (modularité/acyclicité/profondeur/égalité/redondance) snapshot avant (`session_start`) / après (`session_end`) l'intervention de l'agent → bloquer ou corriger si le score architectural global se dégrade. Boucle de feedback sur la qualité, au-delà du verdict binaire. (F-94)
+  — *Références : fiche **39-langextract** → `langextract/resolver.py` (`WordAligner`) ; fiche **42-anydoc** → `bench/judge.py` ; fiche **43-framework** → `plugins/aidd-dev/skills/05-review/SKILL.md` + `08-debug/SKILL.md` ; fiche **44-sentrux** → `sentrux-core/src/metrics/root_causes.rs`.*
+
 ### P6-bis : Enrichissement du Judge — signaux quantitatifs + council + deux axes
 > 📈 **Évolution** (audit références 20/22/23, 2026-08-03). Le Judge actuel (F-44) ne s'appuie que sur du **qualitatif LLM**. Trois nouvelles références apportent des enrichissements complémentaires (signaux quantitatifs, arbitrage multi-juges, format deux-axes).
 
@@ -164,6 +179,8 @@ Plus d'information : `system_prompts_analysis.md`
 - [x] **Métriques de benchmark du Judge (P/R/F1, MRR)** *(audit fiche 20-code-review-graph, 2026-08-04)* : Aujourd'hui le Judge est évalué qualitativement (lecture de logs). Pour la P15 (Meta-Analyste) et toute regression-test du Judge, il faut des métriques quantitatives : `compute_precision_recall` (sur un jeu de findings attendus) et `compute_mrr` (mean reciprocal rank sur l'ordonnancement des findings). — *Référence : fiche **20-code-review-graph** → `code_review_graph/eval/scorer.py` (`compute_precision_recall`, `compute_mrr`).* — *FAIT (F-70) : module `graph_orchestrator/judge_metrics.py` (offline, 0 LLM). `canonicalize_finding` → ID stable `location|category|severity` (insensible à la paraphrase, extension consciente vs le scorer de référence identity-based) + `compute_precision_recall` + `compute_mrr` (ports typés de la réf) + `judge_verdict_accuracy` (TP/FP/FN sur `is_approved`). Évaluations OFFLINE (P15 Meta-Analyste + regression tests), pas dans la boucle chaude.*
 - [ ] **Mécanisme d'évaluation LLM Juge avec Vision** : Utiliser un prompt structuré qui combine la tâche, les étapes de l'agent, et les captures d'écran pour qu'un Judge puisse statuer sur la réussite d'une exécution UI/Web. — *Référence : fiche **27-browser-use** → `references/browser-use/browser_use/agent/judge.py` (`construct_judge_messages`).*
 
+- [ ] *(audit fiche 40-waku-agent, 2026-08-12)* **Isolation stricte du Judge (LLM-as-judge reproductible)** : S'inspirer de `evals/judge/test_response_quality.py` (isolation stricte d'un LLM-as-judge via DeepEval). Complément méthodologique aux métriques offline de F-70 (`judge_metrics.py`) — objectiver la reproductibilité du verdict Judge au-delà du calcul P/R/F1 post-mortem. — *Référence : fiche **40-waku-agent** → `references/waku-agent/evals/judge/test_response_quality.py`.*
+
 ### P6-ter : Mémoire durable du Knowledge Graph (consolidation + scratch/notebook)
 > 🧠 **Nouvelle sous-section** (audit fiche **14-qm**, 2026-08-04 ; enrichi fiche **28-TencentDB-Agent-Memory**, 2026-08-07). Le gisement d'écarts le plus massif de l'audit de cohérence est **qm** : sur les 9 briques 🟢 Haute du Hall of Fame qm, le plan n'en exploitait que 3 (compaction P9, idempotence F-43, sandbox P8-bis). Les briques **mémoire** sont oubliées — or le projet a un KG DuckDB de claims/refutations qui **grossit indéfiniment sans dédup ni consolidation** (le nœud d'escalade F-23 ne fait que synthétiser, pas consolider). L'INDEX (l.100) prévient explicitement que c'est « la plus grande valeur de qm — ignorée par l'ancienne fiche ». **Enrichissement TencentDB (2026-08-07)** : qm couvrait le contrat de persistance scratch/notebook, mais **pas** l'extraction sémantique des atomes, ni la dédup cross-type, ni l'oubli par chaleur. TencentDB comble ces 3 maillons manquants (pipeline L0→L3 complet, dédup `store/skip/update/merge` supérieure, recall hybride + split stable/dynamic) — les 2 références sont complémentaires et **nécessaires ensemble** pour F-68.
 
@@ -173,6 +190,8 @@ Plus d'information : `system_prompts_analysis.md`
 - [ ] **Pipeline mémoire L0→L3 (extraction + dédup + consolidation + oubli)** *(audit fiche **28-TencentDB-Agent-Memory**, 2026-08-07)* : Au-delà de la consolidation qm (ligne `Consolidation des claims` ci-dessus), TencentDB fournit un pipeline complet et **supérieur** sur 2 des 3 maillons. **(a) Extraction L1** : adopter les 3 principes 宁缺毋滥 (qualité>quantité, filtrer le trivial), 独立完整 (chaque atome reste valide **hors de son contexte d'extraction**), 归纳合并 (fusion causale des messages liés) + dualité chat/code (persona/episodic/instruction vs work_fact/work_task/work_method/work_artifact). **(b) Dédup L1** : remplacer/étendre le contrat `UPDATE/DELETE/ADD` de qm par `store/skip/update/merge` qui gère en plus le **merge cross-type** + **many-to-many** (`target_ids`) + **bump de priorité sur merge** (2× prio 70 → 80). **(c) Consolidation L2 par chaleur** : le mécanisme d'oubli qui manque totalement à notre KG (qui grossit indéfiniment) — `maxScenes` cap + warnings red/orange/yellow + MERGE-before-CREATE + **heat** (new=1, update=old+1, merge=sum+1) + soft-delete `[DELETED]`. — *Référence : fiche **28-TencentDB-Agent-Memory** → `MemoryCore/src/core/prompts/l1-extraction.ts` (`EXTRACT_MEMORIES_SYSTEM_PROMPT`/`EXTRACT_WORK_MEMORIES_SYSTEM_PROMPT`, principes 独立完整/归纳合并), `l1-dedup.ts` (`CONFLICT_DETECTION_SYSTEM_PROMPT`, actions store/skip/update/merge, `formatBatchConflictPrompt`), `scene-extraction.ts` (`buildSceneSystemPrompt`, heat + `[DELETED]` + maxScenes).* — *Compléter F-68 : qm couvrait le contrat `recall`/scratch, TencentDB couvre l'extraction+dédup+oubli. Les deux sont nécessaires.*
 - [ ] **Recall hybride + split stable/dynamic** *(audit fiche **28-TencentDB-Agent-Memory**, 2026-08-07)* : Au moment d'implémenter le `recall` du notebook F-68, adopter la stratégie de retrieval de TencentDB : fusion BM25 + vecteur + RRF, **caps** (item count / char budget / timeout) pour ne pas saturer la fenêtre, et surtout le **split stable (persona + index scène, cacheable) / dynamic (L1 per-turn)** qui préserve le **prompt caching** (subtilité absente du scratch/notebook qm). Ajouter les **4 trigger conditions "must-search-before-answering"** et la règle anti-hallucination « je n'ai pas trouvé en mémoire » plutôt qu'inventer. — *Référence : fiche **28-TencentDB-Agent-Memory** → `MemoryCore/src/core/hooks/auto-recall.ts` (`appendSystemContext` stable vs `prependContext` dynamic) + `MemoryProxy/src/injection/injectors/tdai-profile-memory-injector.ts` (`MEMORY_TOOLS_GUIDE`, 4 trigger conditions).*
 
+
+- [ ] *(audit fiche 40-waku-agent, 2026-08-12)* **Decisioning d'injection mémoire + distillation périodique** : Compléter le recall F-68 (Phase 2) par un gate de décision `should_retrieve` (évite l'injection systématique des leçons quand non pertinent) et une distillation périodique `consolidate_if_due` (déclenche la consolidation sur critère temporel plutôt qu'en fin de run seulement). — *Référence : fiche **40-waku-agent** → `references/waku-agent/waku/memory/retrieval_gate.py` (`should_retrieve`) + `waku/memory/consolidation.py` (`consolidate_if_due`).*
 
 ## 🟤 Priorité 7 : Le "Shift Left" (Linter-as-a-Reviewer) ✅ TERMINÉ
 *Suite à l'analyse croisée des références (Aider, OpenCode), filtrer les erreurs de syntaxe de base avant d'engager l'orchestrateur lourd permet des économies massives.*
@@ -199,6 +218,8 @@ Plus d'information : `system_prompts_analysis.md`
 
 > **📦 Contrat middleware 4 kinds + bibliothèque sécurité Python pur (audit fiche 25-hermes-agent, 2026-08-05)** : hermes-agent apporte DEUX briques complémentaires. **(1) Contrat middleware formel** : fiche **25-hermes-agent** → `references/hermes-agent/docs/middleware/README.md` (4 kinds `llm_request`/`tool_request`/`llm_execution`/`tool_execution` avec `next_call` chain of responsibility, **fail-open** explicite, traçabilité via `middleware_trace`, versions de schema `hermes.middleware.v1`). Le design `tool_request` avant guardrails/approvals puis `tool_execution` après est le modèle à transposer pour P8 — plus riche que le patron hooks learn-claude-code (4 points d'extension typés vs events génériques). **(2) Bibliothèque sécurité multi-couches copiable quasi telle quelles** : `references/hermes-agent/tools/threat_patterns.py` (`scan_for_threats(content, scope)` scope-aware all/context/strict, `MAX_SCAN_CHARS`, couvre prompt injection/C2/frameworks offensifs/exfiltration) + `tools/approval.py` (`DANGEROUS_PATTERNS` ~260 regex, `detect_dangerous_command`) + `tools/path_security.py` (`validate_within_dir`, `has_traversal_component`) + `tools/url_safety.py` (guards **SSRF** : `is_safe_url`, `_is_blocked_ip`, `create_ssrf_safe_client` intercepte `connect_tcp` pour bloquer IPs privées/métadonnées cloud). Enrichit davidondrej (21, 27 regex) et notre `bash_guard.py` (F-38), et couvre l'angle SSRF/ traversal qui n'est nulle part ailleurs dans les références.
 
+- [ ] *(audit fiches 33 + 39, 2026-08-12)* **Middlewares complémentaires** : (a) fiche **33-room** → `src/shared/rate-limit.ts` (`RATE_LIMIT_PATTERNS`, détection des rate limits 429 sur logs texte + sleep automatique — utile si l'orchestrateur consomme un jour une API distante payante) ; (b) fiche **39-langextract** → `langextract/core/format_handler.py` (`FormatHandler._parse_with_fallback`, parsing robuste gérant les balises `<think>` et fallback multi-formats — durcir la robustesse du parseur de sortie des nœuds DSPy). — *Références : fiche **33-room** → `src/shared/rate-limit.ts` ; fiche **39-langextract** → `langextract/core/format_handler.py`.*
+
 ## 🔧 Priorité 8-bis : Robustesse Runtime (Isolation & Idempotence)
 *qm est une plateforme agent production-éprouvée (Slack/Web) ; ses primitives d'isolation et d'idempotence comblent les angles morts de l'orchestrateur actuel.*
 
@@ -209,6 +230,14 @@ Plus d'information : `system_prompts_analysis.md`
 - [ ] **Sandbox bash / pytest** : Cloisonner `bash_command` et le `PythonTestRunner` dans un environnement isolé (Docker exec ou process cloisonné avec fs/cwd restreint), au lieu du `shell=True` actuel. — *Référence production : fiche **14-qm** → `references/qm/src/sandbox/docker-exec.ts` + `local-sandbox.ts` (layers RO/RW, routing multi-backend) ; `references/aider/aider/commands.py` (`cmd_run` subprocess isolé). Débloque directement la Priorité 0 (CodeAgent). Le guard denylist (F-38) est une première couche, mais ne remplace pas l'isolation processus/fs complète.* — ***ABC de sandbox (audit fiche 25-hermes-agent, 2026-08-05)** : fiche **25-hermes-agent** → `references/hermes-agent/tools/environments/base.py` (`BaseEnvironment` ABC au contrat propre `execute(command)→{stdout,returncode,cwd}`, `_BoundedOutputCollector` cap la taille stdout head+tail+notice avec spill disque, `touch_activity_if_due` heartbeat 10s, `_pipe_stdin` gère Windows `\n`→`\r\n`). 7 backends concrets (Docker/SSH/Modal/Daytona/Vercel/Singularity/local) dont `local.py` et `docker.py` pertinents pour llama.cpp local. L'ABC + output collector borné + heartbeat sont 🟢 Python pur portable.*
 - [x] **Idempotence des effets de bord (replays/retries)** : Wrapper les opérations non-idempotentes (écritures fichiers, installs pip) via un guard `once(key, fn)` indexé par `run_id`+hash, pour qu'un replay de checkpoint n'applique pas deux fois le même effet. — *FAIT (F-43) : `idempotency.py` (port Python fidèle de `references/qm/src/idempotency/idempotency-store.ts`, 100% natif, 0 LLM). `IdempotencyStore.once(key, fn)` : inflight set + done map (RAM) + backing DuckDB durable (survit à un nouveau process). Marque done SEULEMENT si fn retourne sans lever (échec = retryable). Rétention 14j (pruning lazy). Contexte module-level (`_scoped_idempotency` → `get_current_store()`). Extension `knowledge_graph.py` : table `idempotency_record` + save/is_committed/prune/clear. `clear_idempotency(run_id)` aux MÊMES sites que `clear_checkpoint` (FRESH_START + fin de run). Branchement : `append_file` wrappé (write_file NON wrappé = idempotent par écrasement par design ; bash_command NON wrappé = couvert par bash_guard + loop_guard) ; `_install_module` wrappé via `_install_module_or_raise` (échec non marqué done → retryable). Opt-out `IDEMPOTENCE_ENABLED`. 25 tests PASS.*
 - [ ] **Modèle de Gatekeepers (Capability-based Security)** *(audit fiche 26-cloudflare-os, 2026-08-06)* : Adopter une approche de sécurité basée sur les capacités (Capability-based access control). Plutôt que de donner tous les droits globaux, chaque agent reçoit des `bindings` granulaires (ex: accès réseau, accès fs partiel) via un `Overseer` central. — *Référence : fiche **26-cloudflare-os** → `packages/workshop-backend/src/overseer.ts` et `user.ts`. Les Gatekeepers valident l'activation des modules de sécurité avant de distribuer une capacité.*
+
+- [ ] *(audit fiches 32 + 33 + 36, 2026-08-12)* **Robustesse FS & runtime** (5 briques complémentaires à F-38/F-43/F-67) :
+  - **Transactions & Rollbacks par hardlinks** (fiche **32-OpenKB**) : journaliser les mutations du graphe/fichiers avec snapshot O(touched) via hardlinks + rollback déterministe au crash. Complémente l'idempotence F-43 (replays) par l'annulation des effets partiellement appliqués. (F-95)
+  - **Verrous FS coopératifs** (fiche **32-OpenKB**) : read/write locks advisory cross-platform + atomicité stricte des remplacements de fichiers (`atomic_write_bytes`). Durcit notre Mutex F-20 (intra-process) vers du cross-process.
+  - **Cloisonnement des outils IO** (fiche **32-OpenKB**) : allowlist stricte de chemins (`wiki/`, `output/`, `skills/`) appliquée avant exécution — renforce la ReadGate F-67 et le bash_guard F-38 avec une allowlist chemin (plutôt qu'une denylist commande).
+  - **Contournement limite Windows 8191 chars** (fiche **33-room**) : `resolveNodeScript` extrait le script Node sous Windows pour contourner la limite de ligne de commande — utile si on génère des scripts JS longs pour DevTools/Puppeteer.
+  - **Gates anti-emballement + OutputAccumulator** (fiche **36-prime-agent**) : `AgentAutonomousConfig` (limites de continuations, gates de validation) + `OutputAccumulator` (troncature stream-safe avec spill disque temporaire — miroir du `feedback_utils.truncate_output` mais streamé).
+  — *Références : fiche **32-OpenKB** → `openkb/mutation.py` (`MutationSnapshot`, `snapshot_paths`, `_restore_hardlinked_dir`) + `openkb/locks.py` (`kb_lock`, `_LocalRwLock`, `atomic_write_bytes`) + `openkb/agent/tools.py` (`read_kb_file`, `write_kb_file`) ; fiche **33-room** → `src/shared/claude-code.ts` (`resolveNodeScript`) ; fiche **36-prime-agent** → `core/autonomous.ts` (`AgentAutonomousConfig`) + `core/tools/output-accumulator.ts` (`OutputAccumulator`).*
 
 ## 🟢 Priorité 9 : Optimisation de l'État du Graphe (Event-Sourcing & Reducers)
 *Le maintien d'un contexte propre sur plusieurs itérations est vital pour les LLMs locaux.*
@@ -223,6 +252,8 @@ Plus d'information : `system_prompts_analysis.md`
 - [ ] **Règles de Frontière de Phase (Phase Boundaries)** : Définir des règles d'arbitrage claires sur *quand* compacter le contexte vs continuer vs fork vs clear. La compaction ne doit intervenir qu'aux frontières de phase (ex: après une étape de design, avant l'implémentation) pour éviter que l'agent ne perde le fil de son raisonnement. (F-79) — *Référence : fiche **mattpocock-skills** → `skills/engineering/ask-matt/PHASE-BOUNDARIES.md`.*
 - [ ] **Compaction du DOM (HTML → Markdown)** : Réduire l'empreinte contextuelle des pages web (pour le Web Tester ou un agent web) en extrayant le DOM sous forme de Markdown épuré. — *Référence : fiche **27-browser-use** → `references/browser-use/browser_use/dom/markdown_extractor.py` (`extract_clean_markdown`).*
 - [ ] **Context-offload LLM (résumé scoré + cognitive tombstones)** *(audit fiche **28-TencentDB-Agent-Memory**, 2026-08-07)* : Notre `compaction.py` est **déterministe et 0 LLM** (snip/micro/budget) — c'est sa force (coût nul) mais sa limite (pas de sémantique). TencentDB propose un **complément sémantique** en 3 prompts pour les runs longs où la troncature déterministe perd de l'information : **(1) L1 summarization** : chaque paire tool-call + tool-result → résumé JSON **scoré 0-10** (3-step : 任务对齐/价值过滤/影响评估) qui décide si le résumé peut remplacer l'original ; **(2) L1.5 gatekeeper** : détecte la fin/continuation de cycle de tâche (`taskCompleted`/`isLongTask`/`continuationMmdFile`) ; **(3) L2 graphe Mermaid** : machine à états cognitive ≤4000 chars avec **"cognitive tombstones"** (`status: blocked` pour les culs-de-sac, au lieu de les tronquer silencieusement) + `node_mapping` exhaustif (1 tool_call = 1 nœud). Hypothèse d'intégration : **opt-in** sur runs longs (fan-out multi-sous-tâches) seulement, là où la compaction déterministe sature ; garder la compaction 0-LLM par défaut. — *Référence : fiche **28-TencentDB-Agent-Memory** → `MemoryCore/src/offload/local-llm/prompts/l1-prompt.ts` (`L1_SYSTEM_PROMPT`, scoring 0-10), `l15-prompt.ts` (gatekeeper), `l2-prompt.ts` (`L2_SYSTEM_PROMPT`, cognitive tombstones). `offload_server/prompts/` contient un jumeau quasi-identique.*
+
+- [ ] *(audit fiches 35 + 36 + 39 + 42, 2026-08-12)* **Compaction complémentaire** (au P9 déjà livré : `compaction.py` 3 couches + skeleton libcst F-71) : (a) fiche **35-Understand-Anything** → `merge-batch-graphs.py` (`merge_graphs`, fusion Python de résultats de batchs pour construire un graphe global — pattern de réduction parallèle) ; (b) fiche **36-prime-agent** → `core/compaction/compaction.ts` (`createCompactionSummaryMessage`, réduction basée sur les opérations fichier accomplies — miroir du branch-summarization pi F-24, already-cité) ; (c) fiche **39-langextract** → `prompting.py` (`ContextAwarePromptBuilder`, conservation de la fin du chunk précédent dans le chunk suivant — pattern crucial pour l'analyse de gros fichiers découpés) ; (d) fiche **42-anydoc** → `_anydoc.pyi` (`Document`, typage AST clair pour ingérer/manipuler des documents bureautiques — élargit le périmètre d'ingestion au-delà du code). — *Références : fiches **35-Understand-Anything**, **36-prime-agent**, **39-langextract**, **42-anydoc**.*
 
 ## 🔵 Priorité 10 : Contexte à la Demande (Prompt-Vault / Skills)
 *Le LLM n'a pas besoin de connaître toutes les documentations d'outils dès la première seconde.*
@@ -246,6 +277,17 @@ Plus d'information : `system_prompts_analysis.md`
 - [ ] **Extraction de Skills avec Isolation de Rôle (Anti-Hallucination)** *(audit fiche 28-TencentDB-Agent-Memory, 2026-08-07)* : Lors de la génération et l'extraction de skills à partir d'historiques, isoler strictement les instructions système des conversations passées à l'aide de balises non-standards (ex: `<<past-user>>`) pour empêcher l'agent de confondre le contexte historique avec ses propres directives. — *Référence : fiche **28-TencentDB-Agent-Memory** → `MemoryCore/src/core/skill/skill-extractor.ts`.*
 - [ ] **Skill Review Gate (classification 5-critères + acceptation 4-dim/100pts)** *(audit fiche **28-TencentDB-Agent-Memory**, 2026-08-07)* : Va **au-delà** de l'isolation `<<past-user>>` ci-dessus. Quand on générera/validera des skills (F-65 ingestion pépites, F-80 sélection Architect), objectiver l'acceptation via une gate formelle en 2 étages : **(1) classification 5-critères** — l'artefact est-il une Skill, une Memory, une page Wiki, un nœud CodeGraph, ou du contexte temporaire ? (évite de stocker comme skill ce qui devrait être un fait mémoire) ; **(2) gate d'acceptation 4-dimensions / 100 points** avec seuils **≥72 total ET ≥12 par dimension** (empêche une dimension faible compensée par les autres). Le prompt impose aussi un template SKILL.md canonique (When to use / When not / Required inputs / Workflow / Decision rules / Output format / Validation / Pitfalls). — *Référence : fiche **28-TencentDB-Agent-Memory** → `MemoryCore/src/core/skill/prompts/skill-review-prompt.ts` (`SKILL_REVIEW_PROMPT`, gate 5-critères, gate 4-dim/100pts, role-isolation `<<past-*>>`, contrat `Nothing to save.` si rien à faire).*
 
+- [ ] *(audit fiches 30 + 32 + 33 + 34 + 37 + 38 + 42 + 43, 2026-08-12)* **Doctrine & tooling des skills** (8 références convergentes, complémentaires au lazy-loading F-57/F-80 et à la Progressive Disclosure F-92) :
+  - **Harnais d'évaluation des skills** (fiche **38-skills**) : `skill-creator/scripts/run_loop.py` (`split_eval_set`, split train/test pour skills agentiques) + `mcp-builder/scripts/evaluation.py` (harnais de robustesse des serveurs MCP). Objectiver l'itération des skills au lieu de les juger au petit bonheur. (F-96)
+  - **Navigation sémantique** (fiche **30-Ix**) : `skills/ix/SKILL.md` (template de skill de navigation dans un graphe de contexte persistant).
+  - **Doctrine de skill + Skill Factory** (fiche **32-OpenKB**) : `skills/openkb/SKILL.md` (trust boundary explicite, « MUST NOT modify the KB ») + `openkb/skill/creator.py` (`build_skill_create_agent`, `run_skill_create` — nœud de génération dynamique de skills).
+  - **Skills portables** (fiche **34-brooklyn-skills**) : `SKILL.md` autonome par dossier + patterns (`cpr` cycle clean+PR, `ui-only`).
+  - **Architecture modulaire déclarative** (fiche **37-obsidian-skills**) : séparation stricte `SKILL.md` (prompt de comportement) / `references/` (doc injectable) — valide rétroactivement notre Progressive Disclosure F-92.
+  - **Skill déclaratif canonique** (fiche **42-anydoc**) : `skills/convert-documents-to-markdown/SKILL.md` (modèle propre de définition déclarative).
+  - **Skills à graphes d'état Mermaid** (fiche **43-framework**) : modélisation `Actions`/`Assets`/`References` + machine à états Mermaid dans le `SKILL.md` (blueprint pour nos skills de workflow).
+  - **Singleton navigateur** (fiche **33-room**) : `src/shared/web-tools.ts` (`_browser`, instance Playwright active en singleton — évite 2s de boot à chaque appel navigateur).
+  — *Références : fiches **30-Ix**, **32-OpenKB**, **33-room**, **34-brooklyn-skills**, **37-obsidian-skills**, **38-skills**, **42-anydoc**, **43-framework**.*
+
 ## 🟠 Priorité 11 : Observabilité et Protocole d'Événements
 *Un système opaque est impossible à déboguer.*
 
@@ -258,6 +300,8 @@ Plus d'information : `system_prompts_analysis.md`
 - [ ] **Validation de l'Event Sourcing (Reducer JSONL)** : Ajouter un validateur structurel pour l'Event Stream (Single-Writer Record Protocol) pour détecter les corruptions logiques dans le journal d'événements (ex: `multiple_open_operations`, `record_after_finish`). Permet de rejeter un état corrompu à la restauration plutôt que de le réparer à l'aveugle. (F-78) — *Référence production : fiche **pi** → `packages/agent/src/harness/reducer.ts`.*
 - [ ] **Store Multi-Versionné pour Skills/Mémoires (is_head)** *(audit fiche 28-TencentDB-Agent-Memory, 2026-08-07)* : Étendre la base DuckDB pour gérer le multi-versioning des skills et mémoires consolidées sans écrasement, en utilisant un flag `is_head=1` pour pointer vers la version active. Permet l'auditabilité et le rollback des skills générées. — *Référence : fiche **28-TencentDB-Agent-Memory** → `MemoryCore/src/core/skill/skill-store.ts`.*
 
+
+- [ ] *(audit fiches 33 + 40, 2026-08-12)* **Observabilité** : (a) fiche **33-room** → `src/server/event-bus.ts` (`EventBus`, bus mémoire Map/Set minimaliste pour le fan-out d'événements — blueprint d'implémentation de l'event stream plus simple que les middlewares) ; (b) fiche **40-waku-agent** → `waku/ops/tracing.py` (`Tracer`, pattern d'observateur pour event stream en JSONL/OpenTelemetry). Compléments au contrat deer-flow + hookpoint learn-claude-code + idempotence/ledger loopx déjà cités (P11 cases existantes). — *Références : fiches **33-room**, **40-waku-agent**.*
 
 ## ✨ Priorité 12 : Meta-prompt (PromptRefiner avant l'Architect)
 *L'Architect planifie mieux sur une spec bien structurée que sur un prompt utilisateur vague.*
@@ -422,127 +466,3 @@ Plus d'information : `system_prompts_analysis.md`
 - **Vérification** : La fiche 29 (audit F-84) n'avait produit qu'une fiche de 27 lignes — pas d'extraction de contenu. Le corpus (~300 prompts : Claude Code/Cowork/Design, Codex GPT-5.x, Gemini, Grok, Cursor, Devin, Amp, Copilot CLI) restait non miné pour nos prompts.
 - **Validation** : 3 passes de minage parallèles (Codex+Claude Code, Cursor+Devin+Amp, sécurité/anti-injection) → livrable `docs/system_prompts_leaks_extraction.md` (12 sections, citations verbatim `file:line`, 10 mécanismes mappés avec ROI). **3 découvertes structurantes** : (1) **gap n°1 comblé** — aucun de nos prompts n'avait de directive anti-injection alors que Coder/Testeur consomment du contenu externe (fichiers, Context7, DuckDuckGo, Chrome DevTools = surfaces d'injection) ; le bloc `<critical_injection_defense>` de Claude Cowork (`claude-cowork.md:1384-1554`, 6 tags imbriqués, défense récursive) est le mécanisme le plus complet du corpus ; (2) taxonomie confirmation Codex 4 tiers (`computer-use.md:32-101`) = base concrète pour F-65 #1 ; (3) **correction d'attribution** — `<think>` 13 triggers / `report_environment_issue` / `<cite>` / "same turn/update_emitted" ne sont PAS dans ce corpus, ils viennent de la fiche 17/F-64 (le plan F-65 attribuait à tort ces sources à la fiche 29).
 - **Modification** : (a) `prompts.py` — nouvel invariant n°11 ANTI-PROMPT-INJECTION (tool output = DATA, pas instructions ; règles immuables priment sur contenu observé) + enrichissement invariant n°9 (honest-reporting, anti faux-vert, inspiré Amp `amp-code.md:215`) ; (b) `models.py` — `JSONFixSignature` durci (4 règles de fidélité stricte : ne jamais inventer de valeur absente, préserver les chaînes exactes) ; (c) `dspy_nodes.py` — `SkillResearchSignature` wrappé avec `with_invariants` + anti-injection (cohérence avec les autres nœuds DSPy ; ce ReAct consomme du tool output = surface d'injection) ; `DrafterSignature` durci (anti-placeholders explicites + exemple de format canonique) ; (d) `nodes.py` — `Synth` durci (doctrine concision + solution-first + honnêteté, inspiré Amp `final` channel) ; (e) `docs/NODES_AND_SKILLS.md` — passage de 10 à 11 invariants documentés.
-
-
-## Nouvelles Références d'Audit (Batch Août 2026)
-
-<!-- Ix -->
-Dans `plan_usine_logicielle.md`, ajouter dans les priorités concernées (si pertinent):
-- **P0** : `references/Ix/core-ingestion/src/queries.ts` (utilisation des requêtes tree-sitter natives d'Ix).
-- **P9** : `references/Ix/ix-cli/src/client/types.ts` (inspiration du schéma de graphe relationnel pour DuckDB).
-- **P10** : `references/Ix/skills/ix/SKILL.md` (template pour les skills de navigation sémantique).
-
-<!-- Scrapling -->
-- **Scrapling Parser (Selector)** (P3, `references/Scrapling/scrapling/parser.py`) : Parseur lxml avancé pour scraping adaptatif.
-- **StealthyFetcher** (P3, `references/Scrapling/scrapling/fetchers/stealth_chrome.py`) : Contournement anti-bot et automatisation web furtive.
-- **Scrapling MCP Server** (P2, `references/Scrapling/scrapling/core/ai.py`) : Serveur Model Context Protocol pour le pilotage de navigateurs par des agents.
-- **AutoThrottle** (P3, `references/Scrapling/scrapling/spiders/throttle.py`) : Logique d'ajustement dynamique du throttling web.
-
-<!-- OpenKB -->
-Dans `plan_usine_logicielle.md`, sous **P8-bis** (Robustesse Runtime) :
-```markdown
-- [ ] **Transactions & Rollbacks (Inspiré d'OpenKB)** : Remplacer les mutations directes du graphe par un mécanisme journalisé avec O(touched) via hardlinks (snapshot avant mutation, rollback déterministe au crash). Complément idéal aux replays idempotents.
-— *Référence : fiche **19-openkb** → `references/OpenKB/openkb/mutation.py` (`MutationSnapshot`, `snapshot_paths`, `_restore_hardlinked_dir`, journalisation).*
-- [ ] **Verrous FS Coopératifs (Inspiré d'OpenKB)** : Sécuriser les écritures concurrentes via des read/write locks (advisory cross-platform) + atomicité stricte des remplacements de fichiers.
-— *Référence : fiche **19-openkb** → `references/OpenKB/openkb/locks.py` (`kb_lock`, `_LocalRwLock`, `atomic_write_bytes`).*
-- [ ] **Cloisonnement des outils IO (Inspiré d'OpenKB)** : Bloquer les outils de lecture/écriture au niveau de l'agent en appliquant un allowlist strict (`wiki/`, `output/`, `skills/`) avant l'exécution du code.
-— *Référence : fiche **19-openkb** → `references/OpenKB/openkb/agent/tools.py` (`read_kb_file`, `write_kb_file` limites).*
-```
-
-Sous **P10** (Contexte à la Demande / Skills) :
-```markdown
-- [ ] **Doctrine d'Agent Skill (Inspiré d'OpenKB)** : Établir un modèle standard de documentation de skill (SKILL.md) avec un prompt de doctrine clair : boundary de confiance, avertissements contre l'exécution de payload généré par l'LLM, et limitation stricte des droits.
-— *Référence : fiche **19-openkb** → `references/OpenKB/skills/openkb/SKILL.md` (Trust boundary, MUST NOT modify the KB).*
-- [ ] **Agent Créateur de Skill (Inspiré d'OpenKB)** : Créer un nœud de génération (Skill Factory) capable de compiler dynamiquement de nouveaux skills (instructions + outils) à partir des retours de l'orchestrateur.
-— *Référence : fiche **19-openkb** → `references/OpenKB/openkb/skill/creator.py` (`build_skill_create_agent` et `run_skill_create`).*
-
-<!-- room -->
-- [ ] P8-bis Sandbox + Idempotence
-  — *Référence : fiche **19-room** → `src/shared/claude-code.ts` (`resolveNodeScript`, extraction du script Node sous Windows pour contourner les 8191 chars limite).*
-- [ ] P8 Middlewares anti-crash
-  — *Référence : fiche **19-room** → `src/shared/rate-limit.ts` (`RATE_LIMIT_PATTERNS`, détection de rate limits (429) sur les logs texte et sleep).*
-- [ ] P9 Reducers / Compaction
-  — *Référence : fiche **19-room** → `src/shared/agent-executor.ts` (`compressSession`, troncature préalable pour garantir que l'historique compressable rentre dans le modèle LLM réducteur).*
-- [ ] P10 Skill loading
-  — *Référence : fiche **19-room** → `src/shared/web-tools.ts` (`_browser`, pattern 'OpenClaw' gardant une instance Playwright active en singleton pour éviter 2s de boot).*
-- [ ] P11 Event stream
-  — *Référence : fiche **19-room** → `src/server/event-bus.ts` (`EventBus`, bus mémoire très simple Map/Set pour le fan-out).*
-
-<!-- brooklyn-skills -->
-Dans la section `### P0-bis : Invariants universels des system prompts` :
-- **[brooklyn-skills (fiche **30-brooklyn-skills**)]** : Règles issues de `defaults.md` (UI first, pas de code sans confirmation, clean avant PR) et liste d'anti-patterns d'écriture IA (`no-tropes`).
-
-Dans la section `### P6 : Auto-correction & TDD (Judge / Findings)` :
-- **[brooklyn-skills (fiche **30-brooklyn-skills**)]** : Protocole `runtime-debug` (forcer la lecture des logs) et protocole de révision `no-tropes` pour exiger des outputs directs sans fioritures.
-
-Dans la section `### P10 : Contexte à la demande (Skill Loading)` :
-- **[brooklyn-skills (fiche **30-brooklyn-skills**)]** : Structure de "skills portables" (`SKILL.md` autonome par dossier) et patterns utiles à injecter (`cpr` pour le cycle clean+PR, `ui-only`).
-
----
-
-<!-- Understand-Anything -->
-- [ ] P0-bis : Invariants universels
-  — *Référence : fiche **19-Understand-Anything** → `references/Understand-Anything/understand-anything-plugin/packages/core/src/schema.ts` (`EdgeTypeSchema`, modèle de données invariant pour modéliser des nœuds et arêtes génériques).*
-- [ ] P4 : Repo Map + KG structural
-  — *Référence : fiche **19-Understand-Anything** → `references/Understand-Anything/understand-anything-plugin/agents/tour-builder.md` (Topologie de graphe via Fan-In/Fan-Out et BFS, utile pour les tags de confiance et l'extraction).*
-- [ ] P9 : Reducers / Compaction
-  — *Référence : fiche **19-Understand-Anything** → `references/Understand-Anything/understand-anything-plugin/skills/understand/merge-batch-graphs.py` (`merge_graphs`, fusion en Python de résultats de batchs pour construire un graphe global).*
-
-<!-- prime-agent -->
-— *Référence : fiche **XX-prime-agent** → `references/prime-agent/packages/coding-agent/src/core/autonomous.ts` (`AgentAutonomousConfig`, limites de continuations et "gates" anti-emballement).*
-— *Référence : fiche **XX-prime-agent** → `references/prime-agent/packages/coding-agent/src/core/tools/output-accumulator.ts` (`OutputAccumulator`, troncature stream-safe avec écriture temporaire sur disque).*
-— *Référence : fiche **XX-prime-agent** → `references/prime-agent/packages/coding-agent/src/core/compaction/compaction.ts` (`createCompactionSummaryMessage`, réduction basée sur les opérations de fichiers accomplies).*
-— *Référence : fiche **XX-prime-agent** → `references/prime-agent/packages/coding-agent/src/modes/acp/acp-mode.ts` (`acpUpdatesForSessionEvent`, mapping des événements internes vers le Agent Client Protocol NDJSON).*
-
-<!-- obsidian-skills -->
-- *Référence : fiche **30-obsidian-skills** → `references/obsidian-skills/skills/obsidian-markdown/SKILL.md` (séparation prompt/doc, validation de la doctrine d'architecture de skill modulaire).*
-
-<!-- skills -->
-- [ ] — *Référence : fiche **40-skills** → `references/skills/skills/skill-creator/scripts/run_loop.py` (`split_eval_set`, harnais d'évaluation avec split train/test pour les skills agentiques).*
-- [ ] — *Référence : fiche **40-skills** → `references/skills/skills/mcp-builder/scripts/evaluation.py` (harnais d'évaluation pour valider la robustesse des serveurs MCP).*
-- [ ] — *Référence : fiche **40-skills** → `references/skills/skills/skill-creator/SKILL.md` (doctrine de création et d'itération de compétences).*
-
-<!-- langextract -->
-— *Référence : fiche **19-langextract** → `references/langextract/langextract/resolver.py` (`WordAligner`, alignement flou pour vérifier la présence des "findings" dans le code source).* (Sous P6)
-— *Référence : fiche **19-langextract** → `references/langextract/langextract/core/format_handler.py` (`FormatHandler._parse_with_fallback`, parsing robuste gérant les balises `<think>`).* (Sous P8)
-— *Référence : fiche **19-langextract** → `references/langextract/langextract/prompting.py` (`ContextAwarePromptBuilder`, conservation de contexte inter-chunks pour l'analyse de gros fichiers).* (Sous P9)
-
-<!-- waku-agent -->
-— *Référence : fiche **19-waku-agent** → `references/waku-agent/waku/loop/agent.py` (`run_loop`, boucle pure python avec guardrails).*
-— *Référence : fiche **19-waku-agent** → `references/waku-agent/waku/graph/engine.py` (`run_graph`, DAG déterministe avec `GraphStateCollision` et exécution en vagues).*
-— *Référence : fiche **19-waku-agent** → `references/waku-agent/evals/judge/test_response_quality.py` (`test_response_quality`, isolation stricte LLM-as-judge via DeepEval).*
-— *Référence : fiche **19-waku-agent** → `references/waku-agent/waku/memory/retrieval_gate.py` (`should_retrieve`, decisioning d'injection mémoire) et `waku/memory/consolidation.py` (`consolidate_if_due`, distillation périodique).*
-— *Référence : fiche **19-waku-agent** → `references/waku-agent/waku/ops/tracing.py` (`Tracer`, pattern d'observateur pour event stream en JSONL/OTel).*
-
-<!-- stagehand -->
-- **[Stagehand]**: Browser agent SDK (P3) - Provides self-healing Web automation and LLM-optimized DOM extraction capabilities (act/observe/extract).
-
-<!-- anydoc -->
-Dans la section P6 (Judge / Findings / TDD) :
-- [ ] — *Référence : fiche **19-anydoc** → `references/anydoc/bench/judge.py` (`PROMPT`, mécanisme d'évaluation pairwise par LLM avec inversion de position A/B pour annuler le biais).*
-
-Dans la section P9 (Reducers / Compaction) :
-- [ ] — *Référence : fiche **19-anydoc** → `references/anydoc/python/anydoc/_anydoc.pyi` (`Document`, typage AST clair pour ingérer et manipuler des documents bureautiques).*
-
-Dans la section P10 (Skill loading) :
-- [ ] — *Référence : fiche **19-anydoc** → `references/anydoc/skills/convert-documents-to-markdown/SKILL.md` (Modèle propre de définition déclarative d'une compétence agentique).*
-
-<!-- framework -->
-- Dans `P0 Cadre système & spécialisation` :
-  — *Référence : fiche **40-framework** → `references/framework/plugins/aidd-orchestrator/skills/01-sdlc/SKILL.md` (`01-sdlc flowchart`, SDLC découpé en Frame/Deliver/Check avec délégation agentique).*
-- Dans `P6 Judge / Findings / TDD` :
-  — *Référence : fiche **40-framework** → `references/framework/plugins/aidd-dev/skills/05-review/SKILL.md` (Axes de revue code/functional/relevancy et rubric de verdict stricte).*
-  — *Référence : fiche **40-framework** → `references/framework/plugins/aidd-dev/skills/08-debug/SKILL.md` (Procédure prescriptive à 11 étapes via validation d'hypothèses, empêchant les drive-by refactors).*
-- Dans `P10 Skill loading` :
-  — *Référence : fiche **40-framework** → Modélisation générale des skills via fichiers MD structurés (`Actions`, `Assets`, `References`) incluant des graphes d'état Mermaid.*
-
-<!-- sentrux -->
-**Ajouts pour plan_usine_logicielle.md :**
-
-Sous `## P6 - Judge / Findings / TDD` :
-- **Feedback structurel (Sensor)** : Inspiré de `sentrux` (fiche **XX-sentrux**), utiliser un capteur qui prend des instantanés avant (`session_start`) et après l'intervention de l'agent (`session_end`) pour comparer 5 métriques clés (modularité, acyclicité, profondeur, redondance). L'agent peut être bloqué ou corrigé si le score architectural global se dégrade (`sentrux-core/src/metrics/root_causes.rs`, `sentrux-core/src/metrics/rules/checks.rs`).
-
-Sous `## P10 - Skill loading / Tooling` :
-- **Outils MCP Introspectifs** : Implémenter des handlers MCP pour permettre à l'agent d'auditer lui-même l'état de l'architecture (`scan`, `health`) avant de décider où écrire du code, à l'image de ce que propose `sentrux` (**fiche XX-sentrux**, `sentrux-core/src/app/mcp_server/handlers.rs`).
-
----
