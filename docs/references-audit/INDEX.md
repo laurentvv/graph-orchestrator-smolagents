@@ -8,9 +8,9 @@
 
 | Métrique | Valeur |
 |---|---|
-| **Date de l'audit** | 2026-08-07 |
-| **Projets/dossiers audités** | 29 |
-| **Entrées de fichiers inventoriées** | 494 (inventaire machine : [`inventory.json`](./inventory.json)) |
+| **Date de l'audit** | 2026-08-12 |
+| **Projets/dossiers audités** | 44 |
+| **Entrées de fichiers inventoriées** | 569 (inventaire machine : [`inventory.json`](./inventory.json)) |
 | **Fichiers pertinents scannés** (base) | ~11 770 (hors `.git/`, `node_modules/`, médias, fixtures) |
 | **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css`) + JSON/YAML de spec/contrat |
 | **Exclusions** | `.git/` (~730 MB), `node_modules/`, médias (1 293 SVG, 16 mp4…), fixtures de tests, traductions de README (1 conservée/projet) |
@@ -52,6 +52,21 @@
 | 27 | **browser-use** | 🟢 Haute | [27-browser-use](./projects/27-browser-use.md) | Framework Python d'automatisation de navigateur par IA. Gère l'état du navigateur, la compaction du DOM et le système Judge |
 | 28 | **TencentDB-Agent-Memory** | 🟢 Haute | [28-TencentDB-Agent-Memory](./projects/28-TencentDB-Agent-Memory.md) | Framework de mémoire avancée (pipeline L0→L3 complet, dédup `store/skip/update/merge` supérieure, oubli par chaleur, Skill Review gate 5-critères/4-dim, context-offload Mermaid scoré) — prompts TypeScript transposables quasi-directement |
 | 29 | **system-prompts-leaks** | 🟢 Haute | [29-system-prompts-leaks](./projects/29-system-prompts-leaks.md) | Collection de prompts système de production (Claude Code, Gemini CLI, Cursor, etc.). Références incontournables |
+| 30 | **Ix** | 🟡 Moyenne | [30-Ix](./projects/30-Ix.md) | Framework de mémoire persistante (graphe relationnel ArangoDB) — requêtes tree-sitter réutilisables + skills de navigation sémantique |
+| 31 | **Scrapling** | 🟡 Moyenne | [31-Scrapling](./projects/31-Scrapling.md) | Framework Python de web scraping adaptatif (parseur lxml, fetchers anti-bot, spiders async) + serveur MCP pour agents |
+| 32 | **OpenKB** | 🟢 Haute | [32-OpenKB](./projects/32-OpenKB.md) | Knowledge Base compiler Python — robustesse FS (transactions hardlinks, verrous coopératifs, IO allowlist) + Skill Factory |
+| 33 | **room** | 🟡 Moyenne | [33-room](./projects/33-room.md) | Framework multi-agents TS (swarm Queen/Workers) — patterns résilience (rate-limit 429, singleton navigateur, event-bus, Windows 8191 chars) |
+| 34 | **brooklyn-skills** | 🟢 Haute | [34-brooklyn-skills](./projects/34-brooklyn-skills.md) | Skills portables — doctrine (`defaults.md` UI-first/clean-PR) + `no-tropes` (anti-tics d'écriture LLM) |
+| 35 | **Understand-Anything** | 🟢 Haute | [35-Understand-Anything](./projects/35-Understand-Anything.md) | Analyse de code multi-agent (tree-sitter + LLM) — scripts Python `merge_graphs` + prompts Tour Builder (Fan-In/Fan-Out) |
+| 36 | **prime-agent** | 🟡 Moyenne | [36-prime-agent](./projects/36-prime-agent.md) | Agent de coding RLM TS — gates anti-emballement (`AgentAutonomousConfig`) + compaction file-ops + `OutputAccumulator` stream-safe |
+| 37 | **obsidian-skills** | 🟢 Haute | [37-obsidian-skills](./projects/37-obsidian-skills.md) | Skills agentiques Obsidian — architecture modulaire déclarative (`SKILL.md`/`references/`), valide la Progressive Disclosure (P10) |
+| 38 | **skills** | 🟢 Haute | [38-skills](./projects/38-skills.md) | Skills officielles Anthropic — harnais d'évaluation (`skill-creator` split train/test, `mcp-builder` eval) + doctrine de création |
+| 39 | **langextract** | 🟢 Haute | [39-langextract](./projects/39-langextract.md) | Lib d'extraction structurée Google — grounding par alignement (`WordAligner` difflib/LCS) anti-hallucination des findings Judge |
+| 40 | **waku-agent** | 🟢 Haute | [40-waku-agent](./projects/40-waku-agent.md) | Agent perso local Python pur — boucle guardrails, DAG déterministe par vagues (`GraphStateCollision`), tracing JSONL/OTel |
+| 41 | **stagehand** | 🟡 Moyenne | [41-stagehand](./projects/41-stagehand.md) | SDK browser-agent LLM — primitives `act`/`observe`/`extract` self-healing + DOM tronqué optimisé tokens |
+| 42 | **anydoc** | 🟢 Haute | [42-anydoc](./projects/42-anydoc.md) | Conversion documentaire Rust/Python — LLM Judge pairwise anti-biais (inversion A/B) + skill déclaratif canonique |
+| 43 | **framework** | 🟡 Moyenne | [43-framework](./projects/43-framework.md) | Framework AI-Driven Dev — SDLC orchestré (`01-sdlc`) + revue 3-axes (code/functional/relevancy) + debug 11 étapes par hypothèses |
+| 44 | **sentrux** | 🟡 Moyenne | [44-sentrux](./projects/44-sentrux.md) | Capteur de santé structurelle (5 métriques racines, score 0-10000) + pipeline tree-sitter multi-langage (Rust, à porter) |
 
 ---
 
@@ -402,7 +417,23 @@ docs/references-audit/
     ├── 25-hermes-agent.md
     ├── 26-cloudflare-os.md
     ├── 27-browser-use.md
-    └── 28-TencentDB-Agent-Memory.md
+    ├── 28-TencentDB-Agent-Memory.md
+    ├── 29-system-prompts-leaks.md
+    ├── 30-Ix.md
+    ├── 31-Scrapling.md
+    ├── 32-OpenKB.md
+    ├── 33-room.md
+    ├── 34-brooklyn-skills.md
+    ├── 35-Understand-Anything.md
+    ├── 36-prime-agent.md
+    ├── 37-obsidian-skills.md
+    ├── 38-skills.md
+    ├── 39-langextract.md
+    ├── 40-waku-agent.md
+    ├── 41-stagehand.md
+    ├── 42-anydoc.md
+    ├── 43-framework.md
+    └── 44-sentrux.md
 ```
 
 **Pour recherche programmatique** : `inventory.json` est consommable directement :

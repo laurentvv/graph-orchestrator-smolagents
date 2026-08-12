@@ -1,4 +1,4 @@
-# 40 — skills
+# 38 — skills
 
 ## En-tête
 - **Nom** : skills (Anthropic)
