@@ -19,7 +19,7 @@
 
 ---
 
-## 🧭 Navigation — les 27 fiches
+## 🧭 Navigation — les 44 fiches
 
 | # | Projet | Réutilisabilité | Fiche | Résumé en 1 ligne |
 |---|---|---|---|---|
@@ -383,7 +383,7 @@ docs/references-audit/
 ├── README.md              ← Mode d'emploi (start ici)
 ├── INDEX.md               ← CE DOCUMENT (navigation + synthèse + Hall of Fame)
 ├── inventory.json         ← Inventaire machine-lisible (489 entrées, filtrable)
-└── projects/              ← 28 fiches détaillées (1 par projet)
+└── projects/              ← 44 fiches détaillées (1 par projet)
     ├── 01-prompt-vault.md
     ├── 02-aider.md
     ├── ...

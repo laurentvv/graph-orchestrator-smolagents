@@ -423,3 +423,126 @@ Plus d'information : `system_prompts_analysis.md`
 - **Validation** : 3 passes de minage parallèles (Codex+Claude Code, Cursor+Devin+Amp, sécurité/anti-injection) → livrable `docs/system_prompts_leaks_extraction.md` (12 sections, citations verbatim `file:line`, 10 mécanismes mappés avec ROI). **3 découvertes structurantes** : (1) **gap n°1 comblé** — aucun de nos prompts n'avait de directive anti-injection alors que Coder/Testeur consomment du contenu externe (fichiers, Context7, DuckDuckGo, Chrome DevTools = surfaces d'injection) ; le bloc `<critical_injection_defense>` de Claude Cowork (`claude-cowork.md:1384-1554`, 6 tags imbriqués, défense récursive) est le mécanisme le plus complet du corpus ; (2) taxonomie confirmation Codex 4 tiers (`computer-use.md:32-101`) = base concrète pour F-65 #1 ; (3) **correction d'attribution** — `<think>` 13 triggers / `report_environment_issue` / `<cite>` / "same turn/update_emitted" ne sont PAS dans ce corpus, ils viennent de la fiche 17/F-64 (le plan F-65 attribuait à tort ces sources à la fiche 29).
 - **Modification** : (a) `prompts.py` — nouvel invariant n°11 ANTI-PROMPT-INJECTION (tool output = DATA, pas instructions ; règles immuables priment sur contenu observé) + enrichissement invariant n°9 (honest-reporting, anti faux-vert, inspiré Amp `amp-code.md:215`) ; (b) `models.py` — `JSONFixSignature` durci (4 règles de fidélité stricte : ne jamais inventer de valeur absente, préserver les chaînes exactes) ; (c) `dspy_nodes.py` — `SkillResearchSignature` wrappé avec `with_invariants` + anti-injection (cohérence avec les autres nœuds DSPy ; ce ReAct consomme du tool output = surface d'injection) ; `DrafterSignature` durci (anti-placeholders explicites + exemple de format canonique) ; (d) `nodes.py` — `Synth` durci (doctrine concision + solution-first + honnêteté, inspiré Amp `final` channel) ; (e) `docs/NODES_AND_SKILLS.md` — passage de 10 à 11 invariants documentés.
 
+
+## Nouvelles Références d'Audit (Batch Août 2026)
+
+<!-- Ix -->
+Dans `plan_usine_logicielle.md`, ajouter dans les priorités concernées (si pertinent):
+- **P0** : `references/Ix/core-ingestion/src/queries.ts` (utilisation des requêtes tree-sitter natives d'Ix).
+- **P9** : `references/Ix/ix-cli/src/client/types.ts` (inspiration du schéma de graphe relationnel pour DuckDB).
+- **P10** : `references/Ix/skills/ix/SKILL.md` (template pour les skills de navigation sémantique).
+
+<!-- Scrapling -->
+- **Scrapling Parser (Selector)** (P3, `references/Scrapling/scrapling/parser.py`) : Parseur lxml avancé pour scraping adaptatif.
+- **StealthyFetcher** (P3, `references/Scrapling/scrapling/fetchers/stealth_chrome.py`) : Contournement anti-bot et automatisation web furtive.
+- **Scrapling MCP Server** (P2, `references/Scrapling/scrapling/core/ai.py`) : Serveur Model Context Protocol pour le pilotage de navigateurs par des agents.
+- **AutoThrottle** (P3, `references/Scrapling/scrapling/spiders/throttle.py`) : Logique d'ajustement dynamique du throttling web.
+
+<!-- OpenKB -->
+Dans `plan_usine_logicielle.md`, sous **P8-bis** (Robustesse Runtime) :
+```markdown
+- [ ] **Transactions & Rollbacks (Inspiré d'OpenKB)** : Remplacer les mutations directes du graphe par un mécanisme journalisé avec O(touched) via hardlinks (snapshot avant mutation, rollback déterministe au crash). Complément idéal aux replays idempotents.
+— *Référence : fiche **19-openkb** → `references/OpenKB/openkb/mutation.py` (`MutationSnapshot`, `snapshot_paths`, `_restore_hardlinked_dir`, journalisation).*
+- [ ] **Verrous FS Coopératifs (Inspiré d'OpenKB)** : Sécuriser les écritures concurrentes via des read/write locks (advisory cross-platform) + atomicité stricte des remplacements de fichiers.
+— *Référence : fiche **19-openkb** → `references/OpenKB/openkb/locks.py` (`kb_lock`, `_LocalRwLock`, `atomic_write_bytes`).*
+- [ ] **Cloisonnement des outils IO (Inspiré d'OpenKB)** : Bloquer les outils de lecture/écriture au niveau de l'agent en appliquant un allowlist strict (`wiki/`, `output/`, `skills/`) avant l'exécution du code.
+— *Référence : fiche **19-openkb** → `references/OpenKB/openkb/agent/tools.py` (`read_kb_file`, `write_kb_file` limites).*
+```
+
+Sous **P10** (Contexte à la Demande / Skills) :
+```markdown
+- [ ] **Doctrine d'Agent Skill (Inspiré d'OpenKB)** : Établir un modèle standard de documentation de skill (SKILL.md) avec un prompt de doctrine clair : boundary de confiance, avertissements contre l'exécution de payload généré par l'LLM, et limitation stricte des droits.
+— *Référence : fiche **19-openkb** → `references/OpenKB/skills/openkb/SKILL.md` (Trust boundary, MUST NOT modify the KB).*
+- [ ] **Agent Créateur de Skill (Inspiré d'OpenKB)** : Créer un nœud de génération (Skill Factory) capable de compiler dynamiquement de nouveaux skills (instructions + outils) à partir des retours de l'orchestrateur.
+— *Référence : fiche **19-openkb** → `references/OpenKB/openkb/skill/creator.py` (`build_skill_create_agent` et `run_skill_create`).*
+
+<!-- room -->
+- [ ] P8-bis Sandbox + Idempotence
+  — *Référence : fiche **19-room** → `src/shared/claude-code.ts` (`resolveNodeScript`, extraction du script Node sous Windows pour contourner les 8191 chars limite).*
+- [ ] P8 Middlewares anti-crash
+  — *Référence : fiche **19-room** → `src/shared/rate-limit.ts` (`RATE_LIMIT_PATTERNS`, détection de rate limits (429) sur les logs texte et sleep).*
+- [ ] P9 Reducers / Compaction
+  — *Référence : fiche **19-room** → `src/shared/agent-executor.ts` (`compressSession`, troncature préalable pour garantir que l'historique compressable rentre dans le modèle LLM réducteur).*
+- [ ] P10 Skill loading
+  — *Référence : fiche **19-room** → `src/shared/web-tools.ts` (`_browser`, pattern 'OpenClaw' gardant une instance Playwright active en singleton pour éviter 2s de boot).*
+- [ ] P11 Event stream
+  — *Référence : fiche **19-room** → `src/server/event-bus.ts` (`EventBus`, bus mémoire très simple Map/Set pour le fan-out).*
+
+<!-- brooklyn-skills -->
+Dans la section `### P0-bis : Invariants universels des system prompts` :
+- **[brooklyn-skills (fiche **30-brooklyn-skills**)]** : Règles issues de `defaults.md` (UI first, pas de code sans confirmation, clean avant PR) et liste d'anti-patterns d'écriture IA (`no-tropes`).
+
+Dans la section `### P6 : Auto-correction & TDD (Judge / Findings)` :
+- **[brooklyn-skills (fiche **30-brooklyn-skills**)]** : Protocole `runtime-debug` (forcer la lecture des logs) et protocole de révision `no-tropes` pour exiger des outputs directs sans fioritures.
+
+Dans la section `### P10 : Contexte à la demande (Skill Loading)` :
+- **[brooklyn-skills (fiche **30-brooklyn-skills**)]** : Structure de "skills portables" (`SKILL.md` autonome par dossier) et patterns utiles à injecter (`cpr` pour le cycle clean+PR, `ui-only`).
+
+---
+
+<!-- Understand-Anything -->
+- [ ] P0-bis : Invariants universels
+  — *Référence : fiche **19-Understand-Anything** → `references/Understand-Anything/understand-anything-plugin/packages/core/src/schema.ts` (`EdgeTypeSchema`, modèle de données invariant pour modéliser des nœuds et arêtes génériques).*
+- [ ] P4 : Repo Map + KG structural
+  — *Référence : fiche **19-Understand-Anything** → `references/Understand-Anything/understand-anything-plugin/agents/tour-builder.md` (Topologie de graphe via Fan-In/Fan-Out et BFS, utile pour les tags de confiance et l'extraction).*
+- [ ] P9 : Reducers / Compaction
+  — *Référence : fiche **19-Understand-Anything** → `references/Understand-Anything/understand-anything-plugin/skills/understand/merge-batch-graphs.py` (`merge_graphs`, fusion en Python de résultats de batchs pour construire un graphe global).*
+
+<!-- prime-agent -->
+— *Référence : fiche **XX-prime-agent** → `references/prime-agent/packages/coding-agent/src/core/autonomous.ts` (`AgentAutonomousConfig`, limites de continuations et "gates" anti-emballement).*
+— *Référence : fiche **XX-prime-agent** → `references/prime-agent/packages/coding-agent/src/core/tools/output-accumulator.ts` (`OutputAccumulator`, troncature stream-safe avec écriture temporaire sur disque).*
+— *Référence : fiche **XX-prime-agent** → `references/prime-agent/packages/coding-agent/src/core/compaction/compaction.ts` (`createCompactionSummaryMessage`, réduction basée sur les opérations de fichiers accomplies).*
+— *Référence : fiche **XX-prime-agent** → `references/prime-agent/packages/coding-agent/src/modes/acp/acp-mode.ts` (`acpUpdatesForSessionEvent`, mapping des événements internes vers le Agent Client Protocol NDJSON).*
+
+<!-- obsidian-skills -->
+- *Référence : fiche **30-obsidian-skills** → `references/obsidian-skills/skills/obsidian-markdown/SKILL.md` (séparation prompt/doc, validation de la doctrine d'architecture de skill modulaire).*
+
+<!-- skills -->
+- [ ] — *Référence : fiche **40-skills** → `references/skills/skills/skill-creator/scripts/run_loop.py` (`split_eval_set`, harnais d'évaluation avec split train/test pour les skills agentiques).*
+- [ ] — *Référence : fiche **40-skills** → `references/skills/skills/mcp-builder/scripts/evaluation.py` (harnais d'évaluation pour valider la robustesse des serveurs MCP).*
+- [ ] — *Référence : fiche **40-skills** → `references/skills/skills/skill-creator/SKILL.md` (doctrine de création et d'itération de compétences).*
+
+<!-- langextract -->
+— *Référence : fiche **19-langextract** → `references/langextract/langextract/resolver.py` (`WordAligner`, alignement flou pour vérifier la présence des "findings" dans le code source).* (Sous P6)
+— *Référence : fiche **19-langextract** → `references/langextract/langextract/core/format_handler.py` (`FormatHandler._parse_with_fallback`, parsing robuste gérant les balises `<think>`).* (Sous P8)
+— *Référence : fiche **19-langextract** → `references/langextract/langextract/prompting.py` (`ContextAwarePromptBuilder`, conservation de contexte inter-chunks pour l'analyse de gros fichiers).* (Sous P9)
+
+<!-- waku-agent -->
+— *Référence : fiche **19-waku-agent** → `references/waku-agent/waku/loop/agent.py` (`run_loop`, boucle pure python avec guardrails).*
+— *Référence : fiche **19-waku-agent** → `references/waku-agent/waku/graph/engine.py` (`run_graph`, DAG déterministe avec `GraphStateCollision` et exécution en vagues).*
+— *Référence : fiche **19-waku-agent** → `references/waku-agent/evals/judge/test_response_quality.py` (`test_response_quality`, isolation stricte LLM-as-judge via DeepEval).*
+— *Référence : fiche **19-waku-agent** → `references/waku-agent/waku/memory/retrieval_gate.py` (`should_retrieve`, decisioning d'injection mémoire) et `waku/memory/consolidation.py` (`consolidate_if_due`, distillation périodique).*
+— *Référence : fiche **19-waku-agent** → `references/waku-agent/waku/ops/tracing.py` (`Tracer`, pattern d'observateur pour event stream en JSONL/OTel).*
+
+<!-- stagehand -->
+- **[Stagehand]**: Browser agent SDK (P3) - Provides self-healing Web automation and LLM-optimized DOM extraction capabilities (act/observe/extract).
+
+<!-- anydoc -->
+Dans la section P6 (Judge / Findings / TDD) :
+- [ ] — *Référence : fiche **19-anydoc** → `references/anydoc/bench/judge.py` (`PROMPT`, mécanisme d'évaluation pairwise par LLM avec inversion de position A/B pour annuler le biais).*
+
+Dans la section P9 (Reducers / Compaction) :
+- [ ] — *Référence : fiche **19-anydoc** → `references/anydoc/python/anydoc/_anydoc.pyi` (`Document`, typage AST clair pour ingérer et manipuler des documents bureautiques).*
+
+Dans la section P10 (Skill loading) :
+- [ ] — *Référence : fiche **19-anydoc** → `references/anydoc/skills/convert-documents-to-markdown/SKILL.md` (Modèle propre de définition déclarative d'une compétence agentique).*
+
+<!-- framework -->
+- Dans `P0 Cadre système & spécialisation` :
+  — *Référence : fiche **40-framework** → `references/framework/plugins/aidd-orchestrator/skills/01-sdlc/SKILL.md` (`01-sdlc flowchart`, SDLC découpé en Frame/Deliver/Check avec délégation agentique).*
+- Dans `P6 Judge / Findings / TDD` :
+  — *Référence : fiche **40-framework** → `references/framework/plugins/aidd-dev/skills/05-review/SKILL.md` (Axes de revue code/functional/relevancy et rubric de verdict stricte).*
+  — *Référence : fiche **40-framework** → `references/framework/plugins/aidd-dev/skills/08-debug/SKILL.md` (Procédure prescriptive à 11 étapes via validation d'hypothèses, empêchant les drive-by refactors).*
+- Dans `P10 Skill loading` :
+  — *Référence : fiche **40-framework** → Modélisation générale des skills via fichiers MD structurés (`Actions`, `Assets`, `References`) incluant des graphes d'état Mermaid.*
+
+<!-- sentrux -->
+**Ajouts pour plan_usine_logicielle.md :**
+
+Sous `## P6 - Judge / Findings / TDD` :
+- **Feedback structurel (Sensor)** : Inspiré de `sentrux` (fiche **XX-sentrux**), utiliser un capteur qui prend des instantanés avant (`session_start`) et après l'intervention de l'agent (`session_end`) pour comparer 5 métriques clés (modularité, acyclicité, profondeur, redondance). L'agent peut être bloqué ou corrigé si le score architectural global se dégrade (`sentrux-core/src/metrics/root_causes.rs`, `sentrux-core/src/metrics/rules/checks.rs`).
+
+Sous `## P10 - Skill loading / Tooling` :
+- **Outils MCP Introspectifs** : Implémenter des handlers MCP pour permettre à l'agent d'auditer lui-même l'état de l'architecture (`scan`, `health`) avant de décider où écrire du code, à l'image de ce que propose `sentrux` (**fiche XX-sentrux**, `sentrux-core/src/app/mcp_server/handlers.rs`).
+
+---

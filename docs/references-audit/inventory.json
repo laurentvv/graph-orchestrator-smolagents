@@ -1,5 +1,5 @@
 {
-  "audit_date": "2026-08-07",
+  "audit_date": "2026-08-12",
   "scope": "filtered-useful (docs + code + specs; excludes .git/node_modules/media/fixtures/translated-READMEs)",
   "projects": [
     {
@@ -5556,7 +5556,854 @@
           "description": "Structure d'enregistrement brut des conversations (L0). (P9)"
         }
       ]
+    },
+    {
+      "id": "Ix",
+      "name": "Ix",
+      "path": "references/Ix",
+      "category": "agent-tools",
+      "reuse_rating": "medium",
+      "summary": "Ix est un outil en ligne de commande et un framework qui transforme un dépôt de code en un graphe requêtable (symbole, appels, imports) stocké dans une base de données (ArangoDB). Il permet aux agents...",
+      "files": [
+        {
+          "path": "references/Ix/core-ingestion/src/index.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "ParsedChunk",
+            "ParsedRelationship"
+          ],
+          "description": "Interface de représentation d'un fragment de code (chunk) et des relations (CALLS, IMPORTS, CONTAINS)."
+        },
+        {
+          "path": "references/Ix/core-ingestion/src/queries.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "LANGUAGE_QUERIES"
+          ],
+          "description": "Les requêtes tree-sitter pures pour extraire symboles et relations sur 26 langages."
+        },
+        {
+          "path": "references/Ix/core-ingestion/src/languages.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "SupportedLanguages",
+            "languageFromPath"
+          ],
+          "description": "Logique de détection du langage par extension/nom de fichier."
+        },
+        {
+          "path": "references/Ix/ix-cli/src/client/types.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "StructuredContext",
+            "GraphNode",
+            "GraphEdge",
+            "ScoredClaim"
+          ],
+          "description": "Schéma du graphe et typages API du contexte retourné à l'agent."
+        },
+        {
+          "path": "references/Ix/ix-cli/src/cli/format.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "formatContext",
+            "compactTreeNode",
+            "renderNodesLlm"
+          ],
+          "description": "Logique de formatage token-minimal pour optimiser les prompts des LLMs (LLM-friendly format au lieu de JSON)."
+        },
+        {
+          "path": "references/Ix/README.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Présentation générale du concept de \"virtual cartographer\" et de l'outil en ligne de commande."
+        },
+        {
+          "path": "references/Ix/CLAUDE.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Guide de développement du projet, contenant les patterns et le prompt système généré automatiquement (Ix Memory System)."
+        },
+        {
+          "path": "references/Ix/skills/ix/SKILL.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "La définition de la *Claude Code skill* pour interagir avec le graphe Ix. Modèle de référence pour l'intégration agent."
+        }
+      ]
+    },
+    {
+      "id": "Scrapling",
+      "name": "Scrapling",
+      "path": "references/Scrapling",
+      "category": "agent-tools",
+      "reuse_rating": "medium",
+      "summary": "...",
+      "files": []
+    },
+    {
+      "id": "OpenKB",
+      "name": "OpenKB",
+      "path": "references/OpenKB",
+      "category": "agent-tools",
+      "reuse_rating": "high",
+      "summary": "OpenKB est un système open-source en ligne de commande qui compile des documents bruts en une base de connaissances (Wiki) structurée à l'aide de LLMs et de requêtes sémantiques. L'originalité repose ...",
+      "files": [
+        {
+          "path": "references/OpenKB/openkb/mutation.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "MutationSnapshot",
+            "snapshot_paths",
+            "_restore_hardlinked_dir"
+          ],
+          "description": "Journalisation des écritures et rollbacks déterministes O(touched) (hardlinks) au crash."
+        },
+        {
+          "path": "references/OpenKB/openkb/locks.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "kb_lock",
+            "atomic_write_bytes",
+            "_LocalRwLock"
+          ],
+          "description": "Verrous d'accès concurentiels et d'écriture atomique multi-OS."
+        },
+        {
+          "path": "references/OpenKB/openkb/agent/tools.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "read_kb_file",
+            "write_kb_file"
+          ],
+          "description": "Outillage d'agents LLM imposant des limites strictes aux paths d'I/O (sandbox)."
+        },
+        {
+          "path": "references/OpenKB/openkb/skill/creator.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "build_skill_create_agent",
+            "run_skill_create"
+          ],
+          "description": "Pipeline de compilation d'agents dynamiques sur une cible donnée avec contraintes."
+        },
+        {
+          "path": "references/OpenKB/README.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Concepts clés et flow d'intégration d'un LLM sur document long"
+        }
+      ]
+    },
+    {
+      "id": "room",
+      "name": "room",
+      "path": "references/room",
+      "category": "agent-tools",
+      "reuse_rating": "high",
+      "summary": "Quoroom (\"room\") est un projet open-source expérimental de framework \"swarm\" (intelligence en essaim) fonctionnant en local. Il orchestre un ensemble d'agents répartis en rôles (Queen, Workers, Quorum...",
+      "files": [
+        {
+          "path": "references/room/src/shared/claude-code.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "resolveNodeScript",
+            "executeClaudeCode"
+          ],
+          "description": "Workaround pour extraire le script JS des wrappers `.cmd` Windows, évitant la limite de 8191 caractères de `cmd.exe`."
+        },
+        {
+          "path": "references/room/src/shared/web-tools.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "_browser",
+            "getBrowser",
+            "webFetch"
+          ],
+          "description": "Pattern \"OpenClaw\" : navigateur Playwright instancié une seule fois (singleton) et réutilisé par contextes."
+        },
+        {
+          "path": "references/room/src/server/event-bus.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "EventBus",
+            "wildcardHandlers"
+          ],
+          "description": "Implémentation minimaliste pub/sub via Map/Set pour router les événements vers les WebSockets."
+        },
+        {
+          "path": "references/room/src/shared/rate-limit.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "RATE_LIMIT_PATTERNS",
+            "detectRateLimit"
+          ],
+          "description": "Parsing par expressions régulières (429, quotas) sur la sortie brute du LLM."
+        },
+        {
+          "path": "references/room/src/shared/agent-executor.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "compressSession"
+          ],
+          "description": "Pré-troncature naïve (2000 caractères par tour) de l'historique avant de demander un résumé au modèle."
+        },
+        {
+          "path": "references/room/src/shared/quorum.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "announce",
+            "QuorumDecision"
+          ],
+          "description": "Mécanisme de vote asynchrone (\"Reine\" annonce, \"Worker\" peut objecter pendant X minutes)."
+        },
+        {
+          "path": "references/room/README.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Présentation des concepts Queen/Workers/Quorum."
+        }
+      ]
+    },
+    {
+      "id": "brooklyn-skills",
+      "name": "brooklyn-skills",
+      "path": "references/brooklyn-skills",
+      "category": "agent-tools",
+      "reuse_rating": "high",
+      "summary": "Le dépôt `brooklyn-skills` propose une collection de \"skills\" (compétences ou instructions ciblées) portables pour des agents de codage (Claude Code, Hermes Agent, Cursor, etc.). Chaque skill est enca...",
+      "files": [
+        {
+          "path": "references/brooklyn-skills/defaults.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "# Always-on defaults"
+          ],
+          "description": "Comportements de base applicables à toutes les sessions (invariants universels)."
+        },
+        {
+          "path": "references/brooklyn-skills/skills/no-tropes/tropes-reference.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "AI Writing Tropes"
+          ],
+          "description": "Catalogue des tics d'écriture des IA (magic adverbs, em-dash, listicles)."
+        },
+        {
+          "path": "references/brooklyn-skills/skills/cpr/SKILL.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "clean then pr-update"
+          ],
+          "description": "Skill combinant le nettoyage (KISS/DRY) et la création/mise à jour de PR."
+        },
+        {
+          "path": "references/brooklyn-skills/skills/runtime-debug/SKILL.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "# Runtime Debug"
+          ],
+          "description": "Doctrine forçant l'agent à lire les logs/observabilité avant de toucher au code."
+        },
+        {
+          "path": "references/brooklyn-skills/skills/ui-only/SKILL.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "# UI Only"
+          ],
+          "description": "Bloque les suites de tests, le lint et les commits tant que l'UI n'est pas validée."
+        },
+        {
+          "path": "references/brooklyn-skills/skills/work/SKILL.md",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "git worktree"
+          ],
+          "description": "Isolation des tâches via git worktree."
+        },
+        {
+          "path": "references/brooklyn-skills/README.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Explication du concept de skills portables sans commandes ni hooks."
+        }
+      ]
+    },
+    {
+      "id": "Understand-Anything",
+      "name": "Understand-Anything",
+      "path": "references/Understand-Anything",
+      "category": "agent-tools",
+      "reuse_rating": "high",
+      "summary": "Understand-Anything est un outil d'analyse structurelle et sémantique de code (plugin pour Claude Code/Copilot) qui utilise une approche hybride : Tree-sitter pour l'extraction déterministe (imports, ...",
+      "files": [
+        {
+          "path": "references/Understand-Anything/understand-anything-plugin/skills/understand/merge-batch-graphs.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "merge_graphs",
+            "normalize_direction"
+          ],
+          "description": "Fusion de graphes (batch) en Python, résolution des IDs et du sens des arêtes."
+        },
+        {
+          "path": "references/Understand-Anything/understand-anything-plugin/skills/understand/merge-subdomain-graphs.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "STRUCTURAL_EDGE_TYPES",
+            "merge_graphs"
+          ],
+          "description": "Fusion de graphes de domaines. Gère la déduplication et l'alerte sur la perte d'arêtes structurelles."
+        },
+        {
+          "path": "references/Understand-Anything/understand-anything-plugin/agents/file-analyzer.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "*Prompting*"
+          ],
+          "description": "Prompt d'agent pour extraire les nœuds et arêtes d'un fichier en combinant vue Tree-sitter et source."
+        },
+        {
+          "path": "references/Understand-Anything/understand-anything-plugin/agents/domain-analyzer.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "*Prompting*",
+            "domainMeta"
+          ],
+          "description": "Agent spécialisé dans l'extraction de domaines, flux et étapes métier."
+        },
+        {
+          "path": "references/Understand-Anything/understand-anything-plugin/agents/tour-builder.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "*Fan-In/Fan-Out*",
+            "BFS traversal"
+          ],
+          "description": "Combinaison script d'analyse de graphe (PageRank/BFS) et prompt pour créer un tour guidé."
+        },
+        {
+          "path": "references/Understand-Anything/understand-anything-plugin/packages/core/src/schema.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "EdgeTypeSchema",
+            "NODE_TYPE_ALIASES"
+          ],
+          "description": "Invariants et schéma exhaustif des types de nœuds et d'arêtes."
+        },
+        {
+          "path": "references/Understand-Anything/understand-anything-plugin/packages/core/src/staleness.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "GraphFreshnessResult"
+          ],
+          "description": "Détection des fichiers modifiés via Git pour l'analyse incrémentale."
+        },
+        {
+          "path": "references/Understand-Anything/understand-anything-plugin/skills/understand/SKILL.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Point d'entrée du skill Claude, illustre le lancement de l'analyse (batching)."
+        }
+      ]
+    },
+    {
+      "id": "prime-agent",
+      "name": "prime-agent",
+      "path": "references/prime-agent",
+      "category": "agent-tools",
+      "reuse_rating": "medium",
+      "summary": "Prime Agent est un agent de codage open-source en TypeScript par Prime Intellect. Il s'agit d'un agent \"self-improving\" (RLM) conçu avec une architecture robuste incluant des capacités d'autonomie (ga...",
+      "files": [
+        {
+          "path": "references/prime-agent/packages/coding-agent/src/core/compaction/compaction.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "createCompactionSummaryMessage",
+            "serializeConversation"
+          ],
+          "description": "Compaction de contexte basée sur un suivi des opérations fichiers (`FileOperations`)."
+        },
+        {
+          "path": "references/prime-agent/packages/coding-agent/src/core/autonomous.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "AgentAutonomousConfig",
+            "AgentAutonomousGateConfig"
+          ],
+          "description": "Garde-fous d'autonomie (limites de tours, tokens) et \"gates\" de validation avant de poursuivre."
+        },
+        {
+          "path": "references/prime-agent/packages/coding-agent/src/core/tools/output-accumulator.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "OutputAccumulator",
+            "DEFAULT_MAX_BYTES"
+          ],
+          "description": "Accumulateur stream-safe de stdout/stderr avec troncature et sauvegarde sur disque temporaire."
+        },
+        {
+          "path": "references/prime-agent/packages/coding-agent/src/modes/acp/acp-mode.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "acpUpdatesForSessionEvent"
+          ],
+          "description": "Implémentation du Agent Client Protocol (ACP) sur NDJSON pour streamer les événements."
+        },
+        {
+          "path": "references/prime-agent/packages/agent/src/agent-loop.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "AgentMessage",
+            "ToolExecutionMode"
+          ],
+          "description": "Boucle d'agent séparant rigoureusement les messages internes de ceux envoyés au LLM (exécution parallèle supportée)."
+        },
+        {
+          "path": "references/prime-agent/AGENTS.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Règles de comportement de l'agent, instructions sur la gestion des erreurs et du formatage."
+        }
+      ]
+    },
+    {
+      "id": "obsidian-skills",
+      "name": "obsidian-skills",
+      "path": "references/obsidian-skills",
+      "category": "agent-tools",
+      "reuse_rating": "high",
+      "summary": "Le dépôt `obsidian-skills` propose une collection de skills (compétences) formatées selon la spécification `Agent Skills` (agentskills.io). Ces skills sont destinées à des agents IA comme Claude Code,...",
+      "files": [
+        {
+          "path": "references/obsidian-skills/skills/obsidian-markdown/SKILL.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "name: obsidian-markdown",
+            "# Obsidian Flavored Markdown Skill"
+          ],
+          "description": "Modèle de prompt pour enseigner une syntaxe spécifique."
+        },
+        {
+          "path": "references/obsidian-skills/skills/obsidian-markdown/references/PROPERTIES.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "N/A"
+          ],
+          "description": "Exemple de documentation de référence déportée de la skill principale."
+        },
+        {
+          "path": "references/obsidian-skills/skills/obsidian-cli/SKILL.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "name: obsidian-cli",
+            "obsidian vault=\"My Vault\" search"
+          ],
+          "description": "Skill pour interagir avec une CLI. Montre comment documenter les flags et paramètres d'un outil en ligne de commande pour le LLM."
+        },
+        {
+          "path": "references/obsidian-skills/skills/defuddle/SKILL.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "name: defuddle",
+            "defuddle parse <url> --md"
+          ],
+          "description": "Pattern de skill simple remplaçant une action générique (WebFetch) par un outil spécifique (defuddle) selon des critères (non-.md)."
+        },
+        {
+          "path": "references/obsidian-skills/README.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Instruction sur la structure et l'installation d'une skill agentique"
+        }
+      ]
+    },
+    {
+      "id": "skills",
+      "name": "skills",
+      "path": "references/skills",
+      "category": "agent-tools",
+      "reuse_rating": "high",
+      "summary": "Le dépôt `skills` officiel d'Anthropic propose une collection d'exemples de \"skills\" (compétences) pour des agents LLM. Il fournit des modèles de *prompts* (doctrine d'usage) ainsi que des scripts d'é...",
+      "files": [
+        {
+          "path": "references/skills/skills/skill-creator/scripts/run_loop.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "split_eval_set",
+            "run_eval"
+          ],
+          "description": "Boucle d'évaluation avec un split train/test pour prévenir l'overfitting des compétences agentiques."
+        },
+        {
+          "path": "references/skills/skills/mcp-builder/scripts/evaluation.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "EVALUATION_PROMPT",
+            "XML parsing"
+          ],
+          "description": "Harnais d'évaluation se connectant à un serveur MCP pour évaluer la fiabilité des outils exposés via Claude."
+        },
+        {
+          "path": "references/skills/skills/skill-creator/SKILL.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Doctrine d'orchestration pour la création de skills (boucle brouillon, test, évaluation)."
+        },
+        {
+          "path": "references/skills/skills/mcp-builder/reference/mcp_best_practices.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Bonnes pratiques pour l'architecture de serveurs MCP (nommage, pagination)."
+        },
+        {
+          "path": "references/skills/skills/webapp-testing/SKILL.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Arbre de décision pour éviter à l'agent de lire le code source des scripts complexes avant de les tester en boîte noire."
+        }
+      ]
+    },
+    {
+      "id": "langextract",
+      "name": "langextract",
+      "path": "references/langextract",
+      "category": "agent-tools",
+      "reuse_rating": "high",
+      "summary": "LangExtract est une bibliothèque développée par Google pour extraire des informations structurées à partir de textes longs en utilisant des LLM. Son atout majeur est le \"grounding\" (ancrage), qui s'as...",
+      "files": [
+        {
+          "path": "references/langextract/[langextract/resolver.py](file:///references/langextract/langextract/resolver.py)",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "WordAligner",
+            "_fuzzy_align_extraction"
+          ],
+          "description": "Algorithme d'alignement (difflib/LCS) pour ancrer les extractions LLM dans le texte source"
+        },
+        {
+          "path": "references/langextract/[langextract/prompt_validation.py](file:///references/langextract/langextract/prompt_validation.py)",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "validate_prompt_alignment"
+          ],
+          "description": "Validation stricte de l'alignement des exemples few-shot"
+        },
+        {
+          "path": "references/langextract/[langextract/prompting.py](file:///references/langextract/langextract/prompting.py)",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "ContextAwarePromptBuilder"
+          ],
+          "description": "Construction de prompts qui transmettent la fin du chunk précédent au chunk suivant"
+        },
+        {
+          "path": "references/langextract/[langextract/extraction.py](file:///references/langextract/langextract/extraction.py)",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "extract",
+            "extraction_passes"
+          ],
+          "description": "Stratégie multi-passes pour augmenter le rappel sur des documents longs"
+        },
+        {
+          "path": "references/langextract/[langextract/core/format_handler.py](file:///references/langextract/langextract/core/format_handler.py)",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "FormatHandler._parse_with_fallback",
+            "_THINK_TAG_RE"
+          ],
+          "description": "Gestion robuste du parsing JSON/YAML, incluant le nettoyage des balises `<think>` (DeepSeek)"
+        }
+      ]
+    },
+    {
+      "id": "waku-agent",
+      "name": "waku-agent",
+      "path": "references/waku-agent",
+      "category": "agent-tools",
+      "reuse_rating": "high",
+      "summary": "Waku-agent est un assistant personnel local axé sur la transparence et la lisibilité de l'architecture. Son point fort réside dans son code modulaire avec peu ou pas de frameworks abstraits (ex. LangG...",
+      "files": [
+        {
+          "path": "references/waku-agent/waku/loop/agent.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "run_loop",
+            "LoopResult"
+          ],
+          "description": "Boucle agentique pure sans framework (~95 lignes)"
+        },
+        {
+          "path": "references/waku-agent/waku/memory/retrieval_gate.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "should_retrieve",
+            "GATE_PROMPT"
+          ],
+          "description": "Porte de décision (petit LLM) pour la récupération mémoire"
+        },
+        {
+          "path": "references/waku-agent/waku/graph/engine.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "run_graph",
+            "GraphStateCollision"
+          ],
+          "description": "Moteur de graphe asynchrone fonctionnant par vagues"
+        },
+        {
+          "path": "references/waku-agent/waku/memory/consolidation.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "consolidate_if_due",
+            "SUMMARIZER_PROMPT"
+          ],
+          "description": "Résumé périodique et distillation des faits en mémoire"
+        },
+        {
+          "path": "references/waku-agent/evals/judge/test_response_quality.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "geval_metrics",
+            "test_scheduling_reply_is_helpful"
+          ],
+          "description": "Évaluation as-judge basée sur DeepEval"
+        },
+        {
+          "path": "references/waku-agent/waku/ops/tracing.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "Tracer",
+            "compose",
+            "_record_usage"
+          ],
+          "description": "Export OpenTelemetry, JSONL, et facturation tokens"
+        },
+        {
+          "path": "references/waku-agent/README.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Explication complète de l'architecture (loop, graph, gate) avec diagrammes"
+        }
+      ]
+    },
+    {
+      "id": "stagehand",
+      "name": "stagehand",
+      "path": "references/stagehand",
+      "category": "agent-tools",
+      "reuse_rating": "medium",
+      "summary": "...",
+      "files": []
+    },
+    {
+      "id": "anydoc",
+      "name": "anydoc",
+      "path": "references/anydoc",
+      "category": "agent-tools",
+      "reuse_rating": "high",
+      "summary": "`anydoc` est une bibliothèque très rapide permettant de convertir de multiples formats de documents (Word, PPT, Excel, ODT, etc.) en Markdown de façon déterministe. Bien que le cœur soit développé en ...",
+      "files": [
+        {
+          "path": "references/anydoc/skills/convert-documents-to-markdown/SKILL.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "name",
+            "rules"
+          ],
+          "description": "Définition déclarative d'une compétence agentique avec frontmatter YAML et règles de comportement."
+        },
+        {
+          "path": "references/anydoc/python/anydoc/_anydoc.pyi",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "Document",
+            "Block",
+            "Inline"
+          ],
+          "description": "Typage strict Python de l'AST document (titres, tableaux, inlines)."
+        },
+        {
+          "path": "references/anydoc/bench/judge.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "PROMPT",
+            "parse_verdict"
+          ],
+          "description": "Script d'évaluation A/B par LLM (Claude) avec inversion de position pour annuler le biais."
+        },
+        {
+          "path": "references/anydoc/README.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Explication du modèle universel (AST) pour la conversion documentaire."
+        },
+        {
+          "path": "references/anydoc/bench/README.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [],
+          "description": "Méthodologie d'évaluation de la qualité par un LLM Juge (pairwise)."
+        }
+      ]
+    },
+    {
+      "id": "framework",
+      "name": "framework",
+      "path": "references/framework",
+      "category": "agent-tools",
+      "reuse_rating": "medium",
+      "summary": "Le framework AI-Driven Dev est une collection très structurée de \"skills\" et \"plugins\" pour divers agents de codage (Claude Code, Cursor, Copilot). Il définit un SDLC (Software Development Life Cycle)...",
+      "files": [
+        {
+          "path": "references/framework/plugins/aidd-orchestrator/skills/01-sdlc/SKILL.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "01-sdlc flowchart"
+          ],
+          "description": "Orchestrateur SDLC avec phases Frame, Deliver, Check. Modélisation par state machine Mermaid."
+        },
+        {
+          "path": "references/framework/plugins/aidd-dev/skills/05-review/SKILL.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "review-code",
+            "review-functional",
+            "review-relevancy"
+          ],
+          "description": "Processus de revue de code à 3 axes avec template de rapport imposé."
+        },
+        {
+          "path": "references/framework/plugins/aidd-dev/skills/05-review/references/review-rubric.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "critical",
+            "approve",
+            "blocked"
+          ],
+          "description": "Grille de sévérité et de verdict stricte pour les revues automatiques."
+        },
+        {
+          "path": "references/framework/plugins/aidd-dev/skills/08-debug/SKILL.md",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "reproduce",
+            "debug",
+            "reflect-issue"
+          ],
+          "description": "Skill de débogage empêchant les drive-by refactors et forçant la recherche de cause racine."
+        },
+        {
+          "path": "references/framework/plugins/aidd-dev/skills/08-debug/actions/02-debug.md",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "summarize",
+            "whys",
+            "causes"
+          ],
+          "description": "Séquence en 11 étapes (5 why's, hypotheses validation) pour trouver l'origine d'un bug."
+        },
+        {
+          "path": "references/framework/plugins/aidd-vcs/skills/02-pull-request/SKILL.md",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "collect",
+            "draft",
+            "create"
+          ],
+          "description": "Skill structurant la création d'une PR sans jamais forcer un push direct."
+        },
+        {
+          "path": "references/framework/README.md",
+          "type": "doc",
+          "reuse": "medium",
+          "key_symbols": [],
+          "description": "Point d'entrée, description du SDLC et des plugins."
+        }
+      ]
+    },
+    {
+      "id": "sentrux",
+      "name": "sentrux",
+      "path": "references/sentrux",
+      "category": "agent-tools",
+      "reuse_rating": "medium",
+      "summary": "...",
+      "files": []
     }
   ],
-  "projects_audited": 29
+  "projects_audited": 44
 }
