@@ -25,12 +25,23 @@ async def main():
         api_key="local-no-key"
     )
     
-    # On mock une tache pour l'agent
+    # On mock une tache pour l'agent. Cible = bubble sort valide (bouton #start-btn,
+    # compteur #counter, barres). La skill web-tester (chargée par défaut) référence des
+    # fichiers resources/ via view_file — c'est le chemin qui faisait crashed le Tester
+    # en run9 F-90 (modèle confondait view_file avec import os Python). Tâche alignée
+    # avec le prompt DevTools-first actuel (navigate_page, pas puppeteer_navigate).
     task = {
         "id": "standalone-test",
         "tech": "web",
-        "target_files": ["runs/2026-08-05_0112_bubble_sort/index.html"],
-        "content": "Clique sur Démarrer, attends 500ms. Utilise l'outil `puppeteer_add_visual_tags` puis fais un `take_screenshot` pour vérifier visuellement si les barres disparaissent.",
+        "target_files": ["runs/2026-08-11_2109_bubble_sort_multifile_v6/index.html"],
+        "content": (
+            "Teste le visualiseur de tri à bulles : (1) navigate_page pour ouvrir la page ; "
+            "(2) list_console_messages pour vérifier l'absence d'erreurs JS ; (3) clique sur "
+            "le bouton 'Démarrer le tri' ; (4) TEST TEMPOREL : snapshot du compteur de "
+            "comparaisons avant clic, attends ~500ms, re-snapshot après — vérifie une "
+            "progression PARTIELLE (animation non instantanée) ; (5) take_screenshot. "
+            "Verdict PASS/FAIL couvrant : démarrage, animation progressive, compteur."
+        ),
         "skills": []
     }
     

@@ -1225,17 +1225,32 @@ Coder est appliquée correctement par Qwen3.5-9B.
   (3) saturation llama-server (2× Pydantic→DSPy rescue→Connection error, déjà atténué par
   AUDIT_PARALLEL=false, infra).
 - [x] **MA-2 Fix `import os` Tester** (jumeau du fix `import time` F-61/RAA-2, même failure
-  mode) : (a) règle n°4 `web_tester.py` étendue — OUTILS `read_file`/`list_directory` obligatoires,
-  JAMAIS `import os`/`import sys`/`open()`/`read()` en Python + liste des imports autorisés ;
-  (b) safety net `additional_authorized_imports=["os"]` sur le `CompactingCodeAgent` du Tester
-  (miroir du Coder `nodes.py:1071`). Doctrine F-33 « un prompt seul ne suffit jamais » :
-  la règle steer vers les outils, le safety net rattrape le slip sans crash. `os` seul (PAS
-  `subprocess` — frontière de périmètre vs Coder). Validation : py_compile OK + sous-ensemble
-  pytest (test_tester_dispatch + test_config + test_static_tester) 47 passed / 1 skipped /
-  0 failed. Branche `fix/tester-import-os-guard`.
+  mode) : (a) règle n°4 `web_tester.py` réécrite — OUTILS `read_file`/`list_directory` préférés
+  pour LIRE, built-ins `open()`/`read()` restent interdits par la sandbox ; (b) safety net
+  `additional_authorized_imports=["os", "subprocess"]` sur le `CompactingCodeAgent` du Tester.
+  **DÉCISION UTILISATEUR (principe TESTER = CODER)** : le Tester écrit des scripts de test et
+  doit pouvoir coder comme le Coder → même set d'imports que `nodes.py:1071` (os + subprocess,
+  1:1). Premiere version du fix n'avait mis que `["os"]` (subprocess écarté par « frontière de
+  périmètre » — sur-prudent, corrigé). Doctrine F-33 « un prompt seul ne suffit jamais » :
+  la règle steer vers les outils, le safety net rattrape le slip sans crash. Validation :
+  py_compile OK + sous-ensemble pytest (test_tester_dispatch + test_config + test_static_tester)
+  47 passed / 1 skipped / 0 failed. Branche `fix/tester-import-os-guard`.
 - [ ] **MA-3 (à évaluer, hors petite tâche)** : explosion contexte Coder (compaction L4
   existante via CompactingCodeAgent mais insuffisante — envisager Context Epochs / budget
   par step plus strict). Cycle lourd, reporté.
-- [ ] **MA-4 (validation live recommandée)** : `debug/run_web_tester_standalone.py` sur un
-  HTML Bubble Sort pour confirmer en run GPU que le Tester n'émet plus `import os` (et que le
-  safety net le rattrape s'il glisse). ~3-5 min GPU, optionnel ce cycle.
+- [x] **MA-4 Validation live GPU** (`debug/run_web_tester_standalone.py` retargeté vers
+  `runs/2026-08-11_2109_bubble_sort_multifile_v6/index.html`, Ornith-9B reasoning off, 8 steps).
+  **RÉSULTAT : bug `import os` ÉLIMINÉ.** Sur les 8 steps, le Tester n'a JAMAIS tenté `import os`
+  — il a utilisé l'outil `read_file` (steering règle n°4). Zéro `InterpreterError: Import of os`.
+  Le safety net `additional_authorized_imports=["os","subprocess"]` n'a même pas eu à agir (cas
+  idéal : la règle a suffi). Le fix MA-2 est donc VALIDÉ en run réel.
+- [ ] **MA-5 (révélé par la validation, AUTRE cycle, hors périmètre MA)** : le run s'est terminé
+  en `failure` non à cause d'`import os` mais d'un failure mode DISTINCT pré-existant — (a) le
+  Tester a brûlé ses 8 steps à lire les 5 `resources/` F-92 de la skill (progressive disclosure)
+  sans jamais atteindre le test réel (0 navigate_page, 0 assertion, 0 screenshot) ; (b) 3 steps
+  perdus sur des erreurs de format de chemin Windows (`file:///...` → [Errno 22], `/D:/GIT/...`
+  (préfixe MSYS) → WinError 123) avant de trouver `D:/GIT/...`. Le fallback F-90 a dérivé un
+  verdict `failure` correct. Pistes cycle futur : plafonner/réduire le nb de resources lues par
+  le Tester (ou injecter leur contenu en eager plutôt que lazy), et durcir le prompt chemin
+  Windows (la directive existante n'a pas empêché le modèle d'utiliser `file:///` depuis les
+  liens markdown de la skill).

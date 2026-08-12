@@ -283,16 +283,16 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
 1. AGIS, ne raconte pas : quand tu dis "je vais faire X", tu DOIS faire X dans la foulée.
 2. ARGUMENTS NOMMÉS OBLIGATOIRES : Pour TOUS tes appels d'outils, tu DOIS utiliser des arguments nommés (ex: evaluate_script(function="...")). Les arguments positionnels feront crasher l'exécution.
 3. PYTHON BUILT-INS : Si tu utilises `time.sleep()` ou d'autres modules standards dans ton code Python, n'oublie pas de les importer (ex: `import time` au début du bloc).
-4. LECTURE DE FICHIERS — UTILISE LES OUTILS, PAS DU PYTHON : la sandbox CodeAgent
+4. LECTURE DE FICHIERS — UTILISE LES OUTILS, PAS LES BUILT-INS : la sandbox CodeAgent
    INTERDIT les built-ins `open()`, `read()`, etc. (erreur fatale `InterpreterError:
-   Forbidden function evaluation`). N'écris JAMAIS `import os`/`import sys`/`open()`/`read()`
-   pour lire un fichier — utilise les OUTILS fournis : `read_file(path="index.html")` pour
-   lire le code source (HTML/JS/CSS) AVANT de tester, `list_directory()` pour lister les
-   fichiers du run. (Imports Python autorisés par défaut : unicodedata, collections, re,
-   math, time, random, statistics, itertools, queue, datetime, stat.) Diagnostiqué sur
-   run 1507 (`open()` interdit → 6 steps gaspillés → timeout 600s) et run9 F-90 (`import os`
-   pour lire des ressources de skill → `InterpreterError: Import of os is not allowed` +
-   code fragmenté sur la variable `resource_files`).
+   Forbidden function evaluation`). Pour lire le code source (HTML/JS/CSS) AVANT de tester,
+   utilise l'OUTIL `read_file(path="index.html")` ; pour lister les fichiers du run :
+   l'OUTIL `list_directory()`. Tu disposes des MÊMES droits Python que le Coder
+   (`import os`, `import subprocess` autorisés) pour écrire tes scripts de test — mais
+   pour LIRE un fichier, les OUTILS restent préférés (sortie plus riche que `os`, et
+   `open()` reste interdit par la sandbox). Diagnostiqué sur run 1507 (`open()` interdit →
+   6 steps gaspillés → timeout 600s) et run9 F-90 (le Tester tentait `import os` pour lire
+   des ressources de skill → `InterpreterError: Import of os is not allowed` + code fragmenté).
 5. ANIMATION = TEST TEMPOREL, PAS ÉTAT FINAL : pour un visualiseur/animation, NE JAMAIS
    te contenter d'attendre un délai fixe (ex: `setTimeout(r, 2000)`) puis vérifier l'état
    final — une animation **instantanée** (exécutée en 1 frame au lieu de progresser) passe
@@ -350,13 +350,15 @@ final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Un r�
                         max_steps=tester_max_steps,
                         step_callbacks=[make_screenshot_callback(screenshot_capture)],
                         # Safety net anti `InterpreterError: Import of os is not allowed`
-                        # (run9 F-90) : miroir du Coder (nodes.py additional_authorized_imports).
-                        # La règle n°4 du prompt steered le modèle vers read_file/list_directory,
-                        # mais un prompt seul ne suffit jamais (doctrine F-33) — si le modèle
-                        # glisse à `import os` (ex: os.path/os.listdir pour lire des ressources),
-                        # on ne crash plus. `os` seul (PAS subprocess) : le Tester n'a pas à
-                        # lancer de shell (frontière de périmètre vs Coder).
-                        additional_authorized_imports=["os"],
+                        # (run9 F-90). PRINCIPE : TESTER = CODER pour les droits d'exécution
+                        # Python — le Tester écrit des scripts de test et doit pouvoir coder
+                        # comme le Coder. On reprend DONC le même set d'imports autorisés que
+                        # le Coder (nodes.py:1071 additional_authorized_imports). La règle n°4
+                        # steer vers read_file/list_directory pour LIRE, mais os/subprocess
+                        # restent dispos (ex: subprocess pour lancer un binaire, os.path).
+                        # Doctrine F-33 « un prompt seul ne suffit jamais » : si le modèle
+                        # glisse à `import os`/`import subprocess`, on ne crash plus.
+                        additional_authorized_imports=["os", "subprocess"],
                     )
                     return await run_with_retry(
                         local_tester, prompt, CoderOutput, settings.worker_max_retries,
