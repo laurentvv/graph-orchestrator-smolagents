@@ -182,3 +182,12 @@ Pour toute vérification, un "Golden Run" (run E2E parfait ayant généré le co
 - **Modèles :** Qwen-4B (Coder) et Ornith-9B (Architect/Judge).
 
 Ce run sert d'étalon-or pour prouver que l'orchestrateur, le *Monkey Testing* (Fuzzing UI) et les *Guardrails* syntaxiques (triples quotes) permettent à des petits modèles (4B) de réaliser des applications Vanilla JS complexes de manière fiable.
+
+## 11. Maintenance Régulière des Dépendances et de Python (Feature F-98)
+Pour éviter l'accumulation de dette technique et garantir la compatibilité continue de l'infrastructure logicielle, la maintenance de la stack (version de Python et paquets `uv`) est confiée à l'Assistant IA (Pair Programmer).
+
+**Directives pour l'Assistant IA :**
+1. **Exécution de la Mise à Niveau** : À la demande de l'utilisateur ou lors des cycles de maintenance, c'est **toi (l'assistant)** qui as la charge d'exécuter la montée de version des dépendances via `uv lock --upgrade` et `uv sync` (ou via le script `scripts/upgrade_stack.py`).
+2. **Validation Immédiate par Tests (Non-Régression)** : Après toute mise à niveau, tu dois impérativement lancer la suite de tests (`pytest`), diagnostiquer les éventuels conflits d'API ou ruptures de signatures et adapter les tests/middlewares en conséquence.
+3. **Validation E2E & Rapport** : Confirmer la stabilité via un run d'isolation ou de test du graphe, présenter à l'utilisateur la synthèse des montées de versions majeures/mineures et préparer la Pull Request dédiée.
+
