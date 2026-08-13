@@ -77,6 +77,7 @@ Tu ne dois jamais te fier uniquement à ta fenêtre de contexte pour suivre l'av
 3. **Phase de Synchronisation** : Après chaque écriture de fichier ou test, mets à jour le fichier de statut associé (`progress.md` ou `feature_list.json`).
 4. **Gestion des Erreurs** : Si une exception survient ou si le processus s'interrompt, l'état valide est celui extrait du dernier événement enregistré dans DuckDB, combiné aux assertions de `progress.md`.
 5. **Mise à jour du `README.md`** : À chaque fois que tu termines une nouvelle fonctionnalité importante, tu dois impérativement mettre à jour le fichier `README.md` avant de terminer ta tâche.
+6. **INTERDICTION DE SUPPRESSION (RÈGLE CRITIQUE)** : Tu ne dois **JAMAIS** supprimer ou vider les fichiers `progress.md`, `feature_list.json` et `contract.md`, ni altérer/supprimer les bases de données du dossier `data/` (ex: DuckDB, SQLite). Même si l'utilisateur te demande un "full run de 0" pour l'orchestrateur, ces fichiers et bases de données constituent ta propre mémoire d'agent et l'historique d'exécution ; ils n'ont aucun rapport avec les fichiers générés par l'orchestrateur.
 
 # PARTIE 2 : GUIDE D'UTILISATION POUR LE DÉVELOPPEUR
 
@@ -181,3 +182,12 @@ Pour toute vérification, un "Golden Run" (run E2E parfait ayant généré le co
 - **Modèles :** Qwen-4B (Coder) et Ornith-9B (Architect/Judge).
 
 Ce run sert d'étalon-or pour prouver que l'orchestrateur, le *Monkey Testing* (Fuzzing UI) et les *Guardrails* syntaxiques (triples quotes) permettent à des petits modèles (4B) de réaliser des applications Vanilla JS complexes de manière fiable.
+
+## 11. Maintenance Régulière des Dépendances et de Python (Feature F-98)
+Pour éviter l'accumulation de dette technique et garantir la compatibilité continue de l'infrastructure logicielle, la maintenance de la stack (version de Python et paquets `uv`) est confiée à l'Assistant IA (Pair Programmer).
+
+**Directives pour l'Assistant IA :**
+1. **Exécution de la Mise à Niveau** : À la demande de l'utilisateur ou lors des cycles de maintenance, c'est **toi (l'assistant)** qui as la charge d'exécuter la montée de version des dépendances via `uv lock --upgrade` et `uv sync` (ou via le script `scripts/upgrade_stack.py`).
+2. **Validation Immédiate par Tests (Non-Régression)** : Après toute mise à niveau, tu dois impérativement lancer la suite de tests (`pytest`), diagnostiquer les éventuels conflits d'API ou ruptures de signatures et adapter les tests/middlewares en conséquence.
+3. **Validation E2E & Rapport** : Confirmer la stabilité via un run d'isolation ou de test du graphe, présenter à l'utilisateur la synthèse des montées de versions majeures/mineures et préparer la Pull Request dédiée.
+

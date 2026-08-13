@@ -260,7 +260,7 @@ class TestCatalogueEtendu:
     def test_frontend_design_custom_est_preserve(self):
         # Notre version custom (avec ÉTAPE 0 APP/LANDING) ne doit pas avoir été écrasée.
         body = load_skill_body("frontend-design")
-        assert "APP" in body or "LANDING" in body or "APP/TOOL" in body, (
+        assert "frontend design pro" in body.lower() or "étape 0" in body.lower(), (
             "Notre frontend-design custom a peut-être été écrasé par la version Anthropic"
         )
 

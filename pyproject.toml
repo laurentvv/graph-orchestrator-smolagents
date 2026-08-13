@@ -3,7 +3,7 @@ name = "graph-orchestrator-smolagents"
 version = "0.5.0"
 description = "Architecture de Graph Engineering (Fan-out -> Judge -> Synthesize) pour agents IA avec smolagents et asyncio"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 dependencies = [
     "ddgs>=9.0",
     "dspy-ai>=3.2.1",
