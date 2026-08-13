@@ -154,7 +154,10 @@ async def run_one(name: str, label: str, code: str, test_res, security_res, expe
         if result.findings:
             print(f"  FINDINGS ({len(result.findings)}) :")
             for fd in result.findings:
-                print(f"    [{fd.severity}] {fd.category} @ {fd.location or '(n/a)'}")
+                # F-93 : le grounding rétrograde la sévérité + ajoute un flag [ungrounded]
+                # dans la description (politique non-destructive, is_approved inchangé).
+                flag = " ⚠️[ungrounded-rétrogradé]" if "[ungrounded" in fd.description else ""
+                print(f"    [{fd.severity}]{flag} {fd.category} @ {fd.location or '(n/a)'}")
         if metrics:
             print(f"  MODÈLE  : {metrics.model} ({metrics.duration_s:.1f}s)")
         return verdict == expect_approved

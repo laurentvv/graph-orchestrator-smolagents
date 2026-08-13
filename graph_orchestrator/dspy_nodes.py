@@ -1063,7 +1063,26 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
             input_tokens=0,
             output_tokens=0
         )
-        return result.output, metrics
+        # F-93 : grounding post-hoc des findings (anti-hallucination de localisation).
+        # Politique non-destructive (Option 1) : rétrograde + flague les findings dont la
+        # localisation/fragment ne s'ancre dans AUCUN fichier source ; is_approved
+        # inchangé. Fail-open total : un bug grounding ne peut JAMAIS casser le verdict.
+        verdict = result.output
+        if settings.judge_grounding_enabled and verdict is not None and getattr(verdict, "findings", None):
+            try:
+                from .judge_grounding import apply_grounding, ground_findings, read_source_files
+                _src = read_source_files(_judge_deliverable_files(subtask))
+                _report = ground_findings(verdict.findings, _src)
+                if _report.ungrounded_count:
+                    verdict = apply_grounding(verdict, _report)
+                    print(
+                        f"[i] Judge grounding (F-93) : {_report.ungrounded_count}/"
+                        f"{_report.total} finding(s) non ancré(s) → rétrogradé(s)+flagué(s) "
+                        f"(is_approved inchangé)."
+                    )
+            except Exception as _ge:
+                print(f"[!] Judge grounding (F-93) échec (fail-open, verdict intact) : {_ge}")
+        return verdict, metrics
     except Exception as e:
         print(f"[-] Erreur critique DSPy (CodeJudge) : {e}")
         return None, None

@@ -287,6 +287,16 @@ class Settings:
     stall_detector_enabled: bool = True
     stall_detector_threshold: int = 2
 
+    # --- Judge Grounding (Priorité 6 / F-93) ---
+    # Anti-hallucination de localisation : après le verdict LLM, chaque finding est
+    # ancré dans le code source (alignement flou de tokens, port simplifié du
+    # WordAligner de langextract). Les findings non ancrés (ligne inexistante ou
+    # fragment inventé) sont rétrogradés d'un cran + flagués ``[ungrounded]`` —
+    # ``is_approved`` inchangé (politique non-destructive : calibrage d'abord, le
+    # taux de faux positifs sera mesuré par le Meta-Analyste P15 avant toute
+    # automation du verdict). Opt-out ``JUDGE_GROUNDING_ENABLED=0`` pour A/B/debug.
+    judge_grounding_enabled: bool = True
+
     # --- Consolidation mémoire KG (Priorité 6-ter / F-68 Phase 1) ---
     # Le KG DuckDB grossit indéfiniment : dedup_key ne capte que les doublons
     # EXACTS, et rien n'oublie jamais. La consolidation (LLM-juge qm émettant
@@ -475,6 +485,7 @@ def load_settings() -> Settings:
         loop_guard_threshold=_get_int("LOOP_GUARD_THRESHOLD", 3),
         stall_detector_enabled=_get_bool("STALL_DETECTOR_ENABLED", True),
         stall_detector_threshold=_get_int("STALL_DETECTOR_THRESHOLD", 2),
+        judge_grounding_enabled=_get_bool("JUDGE_GROUNDING_ENABLED", True),
         memory_consolidation_enabled=_get_bool("MEMORY_CONSOLIDATION_ENABLED", True),
         memory_consolidation_after=_get_int("MEMORY_CONSOLIDATION_AFTER", 10),
         memory_retention_days=_get_int("MEMORY_RETENTION_DAYS", 30),

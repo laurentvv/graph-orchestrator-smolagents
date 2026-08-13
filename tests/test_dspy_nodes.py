@@ -14,6 +14,7 @@ from graph_orchestrator.models import (
     ArchitectTask,
     SecurityOutput,
     CodeJudgeOutput,
+    Finding,
 )
 
 
@@ -169,6 +170,75 @@ def test_execute_code_judge_node(mock_cot, mock_configure, mock_settings):
     assert output is not None
     assert output.is_approved is False
     assert "faille XSS" in output.final_feedback
+
+
+@patch("graph_orchestrator.dspy_nodes._configure_dspy")
+@patch("graph_orchestrator.dspy_nodes.dspy.ChainOfThought")
+def test_execute_code_judge_node_grounds_ungrounded_finding(mock_cot, mock_configure, mock_settings, tmp_path):
+    """F-93 : un finding dont le fragment ne s'ancre dans aucun fichier source est
+    rétrogradé d'un cran + flagué ``[ungrounded]`` ; ``is_approved`` inchangé
+    (politique non-destructive, branchement post-LLM dans execute_code_judge_node)."""
+    mock_settings.judge_grounding_enabled = True  # explicite (MagicMock est truthy par défaut)
+    mock_instance = MagicMock()
+    mock_prediction = MagicMock()
+    mock_prediction.output = CodeJudgeOutput(
+        task_id="T2",
+        is_approved=False,
+        final_feedback="rejet pour bug invente",
+        findings=[Finding(
+            severity="critical", category="correctness", location="index.html",
+            description="calls `totallyInventedFunctionXYZ` which crashes",
+        )],
+    )
+    mock_instance.return_value = mock_prediction
+    mock_cot.return_value = mock_instance
+
+    f = tmp_path / "index.html"
+    f.write_text("function bubbleSort(arr){ return arr; }\n", encoding="utf-8")
+    subtask_dict = {"id": "T2", "target_files": [str(f)]}
+    security_res = SecurityOutput(task_id="T2", is_secure=True, vulnerabilities=[])
+
+    output, metrics = asyncio.run(execute_code_judge_node(
+        subtask_dict, "TESTS: SUCCESS", security_res,
+        mock_settings.reasoning_model_id, mock_settings,
+    ))
+
+    assert output is not None
+    assert output.is_approved is False  # verdict du LLM inchangé (non-destructif)
+    assert output.findings[0].severity == "high"  # critical → high (rétrograde)
+    assert "[ungrounded" in output.findings[0].description  # flagué
+
+
+@patch("graph_orchestrator.dspy_nodes._configure_dspy")
+@patch("graph_orchestrator.dspy_nodes.dspy.ChainOfThought")
+def test_execute_code_judge_node_grounding_opt_out(mock_cot, mock_configure, mock_settings, tmp_path):
+    """F-93 opt-out : ``JUDGE_GROUNDING_ENABLED=false`` → finding laissé à l'identique."""
+    mock_settings.judge_grounding_enabled = False
+    mock_instance = MagicMock()
+    mock_prediction = MagicMock()
+    mock_prediction.output = CodeJudgeOutput(
+        task_id="T2", is_approved=False, final_feedback="rejet",
+        findings=[Finding(
+            severity="critical", category="correctness", location="index.html",
+            description="calls `totallyInventedFunctionXYZ` which crashes",
+        )],
+    )
+    mock_instance.return_value = mock_prediction
+    mock_cot.return_value = mock_instance
+
+    f = tmp_path / "index.html"
+    f.write_text("function bubbleSort(arr){ return arr; }\n", encoding="utf-8")
+    subtask_dict = {"id": "T2", "target_files": [str(f)]}
+    security_res = SecurityOutput(task_id="T2", is_secure=True, vulnerabilities=[])
+
+    output, metrics = asyncio.run(execute_code_judge_node(
+        subtask_dict, "TESTS: SUCCESS", security_res,
+        mock_settings.reasoning_model_id, mock_settings,
+    ))
+
+    assert output is not None
+    assert output.findings[0].severity == "critical"  # inchangé (opt-out)
+    assert "[ungrounded" not in output.findings[0].description
 
 
 @patch("graph_orchestrator.dspy_nodes._configure_dspy")
