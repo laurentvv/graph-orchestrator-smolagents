@@ -1335,3 +1335,58 @@ Coder est appliquée correctement par Qwen3.5-9B.
   le Tester (ou injecter leur contenu en eager plutôt que lazy), et durcir le prompt chemin
   Windows (la directive existante n'a pas empêché le modèle d'utiliser `file:///` depuis les
   liens markdown de la skill).
+
+## Jalons de l'Itération (cycle MA-5 — durcir le Tester : resources skill + chemins Windows, F-97)
+> Reprise du thread MA-5 laissé ouvert ci-dessus. Périmètre = les 2 failure modes révélés par la
+> validation live du fix MA-2. Investigation approfondie (2 subagents Explore) → les racines
+> réelles étaient PLUS PRÉCISES que le framing MA-5 initial (bug générateur `view_file` n'existe
+> pas + piège `file:///` correct pour un outil, fatal pour l'autre).
+
+- [x] Étape MA5-1 : Plan approuvé (EnterPlanMode → ExitPlanMode). Décisions clés : (a) résoudre
+  la progressive disclosure F-92 **côté serveur** pour le Tester (inline) plutôt que compter sur
+  le prompt — l'inline est strictement meilleur pour un agent one-shot qui a besoin de TOUT le
+  contenu ; (b) garde logiciel de normalisation en tête des outils fichier (doctrine F-33) + prompt
+  réécrit, pas prompt seul.
+- [x] Étape MA5-2 : `graph_orchestrator/path_utils.py` (NEW) — `normalize_tool_path` (pur chaîne,
+  SANS abspath pour préserver relatifs + hashing read_gate ; strippe `file:///` variantes + MSYS
+  `/d/` ; fail-open). Aucune règle `^([a-zA-Z])/` sans slash initial (sinon `src/a.js` → `S:/rc/a.js`).
+- [x] Étape MA5-3 : `tests/test_path_utils.py` (NEW, 19 tests) — 3 variantes de slashes, `/X:/`,
+  MSYS `/x/`, anti-corruption relatifs, backslash inchangé, déjà-correct, vide/non-str, idempotence.
+  19/19 PASS.
+- [x] Étape MA5-4 : `tools.py` — `read_file` + `list_directory` appliquent `normalize_tool_path`
+  en tête (défense en profondeur, bénéficie au Coder). Import ajouté. +2 tests d'intégration
+  dans `test_tools.py` (read_file/list_directory acceptent un `file:///` sur tmp_file/tmp_dir).
+- [x] Étape MA5-5 : `skills_loader.py` — `load_skill_body_resolved(name)` : inline les
+  `resources/*.md` sous `### <title>` (tri déterministe) + RETIRE la section pointeur
+  « ## Dynamic Resources » (sinon l'instruction `view_file` reste, contradictoire) + bannière
+  anti-re-read. Fallback corps brut si pas de `resources/`. Skill absent → `""`.
+- [x] Étape MA5-6 : `tests/test_skill_resolve.py` (NEW, 7 tests) — mécaniques (tmp skills via
+  monkeypatch SKILLS_DIR) + intégration sur la VRAIE skill `web-tester` (resources inlinées, plus
+  de `view_file`, plus de liens `file:///.../resources/`). 7/7 PASS.
+- [x] Étape MA5-7 : `web_tester.py` — `:150` utilise `load_skill_body_resolved` (gated flag,
+  défaut ON) ; `:250` règle chemins réécrite (`file:///` RÉSERVÉ à `navigate_page` ;
+  `read_file`/`list_directory` attendent un chemin simple, note que la normalisation auto rattrape).
+- [x] Étape MA5-8 : `config.py` + `.env.example` + `.env` — `tester_inline_skill_resources: bool
+  = True` + `_get_bool("TESTER_INLINE_SKILL_RESOURCES", True)` + report local.
+- [x] Étape MA5-9 : Racine générateur — `scripts/refactor_skills.py` `view_file` → `read_file` +
+  « read on-demand, NOT all upfront ». Hygiène ressource `evaluation_criteria` : « 12 max steps »
+  (stale, cap réel 8) → « TESTER_MAX_STEPS, par défaut 8 ».
+- [x] Étape MA5-10 : Validation — py_compile OK (9 fichiers). 28 nouveaux tests PASS. Suite
+  complète **892 passed / 8 failed** (les 8 STRICTEMENT pré-existants `test_read_gate` ×4 +
+  `test_skill_lazy_loading` ×3 + `test_guard` ×1, confirmés identiques via `git stash`). **0 régression.**
+- [x] Étape MA5-11 : État disque synchronisé — feature_list.json +F-97 (completed), contract.md
+  +critères 327-336, progress.md (ce bloc), .gitignore (.pytest_tmp/). Branche
+  `fix/tester-resources-paths-ma5`. Commit + push + PR.
+
+> **Décision clé (a)** : résoudre la progressive disclosure côté serveur plutôt que durcir le stub.
+> Le Tester (one-shot, 8 steps) a besoin de TOUT le contenu de la skill — lire 5 resources
+> dynamiquement = 5 steps + 5× tokens en contexte dynamique, alors que l'inline = 1× tokens en
+> system prompt (cached). La progressive disclosure F-92 n'est bénéfique QUE pour les agents qui
+> lisent à la demande ; le Tester non. Le bug générateur `view_file` (qui n'existe pas dans le
+> projet) rendait en plus la consigne inapplicable. Le loader `load_skill_body_resolved` est
+> générique (réutilisable par d'autres nœuds si besoin) et préserve F-92 sur disque.
+> **Décision clé (b)** : un garde logiciel de normalisation (et pas seulement un prompt) —
+> `file:///` est un token correct pour `navigate_page` et fatal pour `read_file`/`list_directory` ;
+> aucun prompt ne peut rendre ce dualisme infaillible. `normalize_tool_path` rend le bug impossible
+> quel que soit le comportement du modèle, SANS corrompre les chemins relatifs (pas d'abspath).
+

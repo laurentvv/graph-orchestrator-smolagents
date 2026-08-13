@@ -219,6 +219,14 @@ class Settings:
     # le wall-clock (360s puis 600s) gagnait toujours → timeout systématique sans verdict.
     tester_timeout_s: int = 480
 
+    # --- Inline des resources de skill pour le Tester (F-97 / MA-5) ---
+    # Résout la progressive disclosure F-92 côté serveur : inline les resources/*.md
+    # directement dans le bloc injecté. Sans cela, le stub SKILL.md ordonne au Tester
+    # de lire chaque resource via read_file → 5 steps perdus sur 8 (diagnostiqué runs
+    # e2e_f90_validation_run3/4 : 0 navigate_page, 0 assertion). Opt-out rare :
+    # TESTER_INLINE_SKILL_RESOURCES=false pour revenir au comportement F-92 (lazy).
+    tester_inline_skill_resources: bool = True
+
     # --- Cap steps du Coder (post-mortem run coding_d72dc8e36445c4b6, F-61) ---
     # max_steps du CodeAgent Coder. Le défaut historique (25 hardcoded) laissait le
     # modèle boucler jusqu'à 87 steps (observé : 80 min, 18M tokens → crash serveur
@@ -458,6 +466,7 @@ def load_settings() -> Settings:
         stderr_tail_lines=_get_int("STDERR_TAIL_LINES", 20),
         feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),
         tester_max_steps=_get_int("TESTER_MAX_STEPS", 8),
+        tester_inline_skill_resources=_get_bool("TESTER_INLINE_SKILL_RESOURCES", True),
         coder_max_steps=_get_int("CODER_MAX_STEPS", 30),
         idle_breaker_threshold=_get_int("IDLE_BREAKER_THRESHOLD", 3),
         escalation_enabled=_get_bool("ESCALATION_ENABLED", True),

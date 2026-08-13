@@ -132,6 +132,77 @@ def load_skill_body(skill_name: str) -> str:
         return ""
 
 
+def load_skill_body_resolved(skill_name: str) -> str:
+    """Charge un skill ET résout sa progressive disclosure (F-92 → inline, F-97 / MA-5).
+
+    Contexte : ``scripts/refactor_skills.py`` (F-92) découpe les skills longs en un
+    stub ``SKILL.md`` + des fichiers ``resources/*.md``, et le stub ordonne à l'agent
+    de les lire « à la demande ». Mais pour le Web Tester (CodeAgent one-shot,
+    ``tester_max_steps=8``), cette consigne épuise le budget steps : le modèle lit les
+    5 resources (5 steps) via ``read_file`` au lieu de tester (diagnostiqué runs
+    e2e_f90_validation_run3/4 : 0 navigate_page, 0 assertion). De plus le stub cite un
+    outil ``view_file`` qui n'existe pas dans le projet.
+
+    Ici on résout la disclosure CÔTÉ SERVEUR : on inline le contenu de tous les
+    ``resources/*.md`` directement dans le bloc injecté (1× tokens en system prompt
+    cached, au lieu de N steps + N× tokens en contexte dynamique). On retire au
+    passage la section pointeur « Dynamic Resources » (sinon l'instruction
+    contradictoire « tu DOIS lire ces fichiers » reste).
+
+    Si le skill n'a pas été refactoré (pas de ``resources/``), renvoie le corps brut
+    (rétro-compat strict avec ``load_skill_body``).
+
+    Args:
+        skill_name: nom du skill (sous-dossier de ``skills/``).
+
+    Returns:
+        Corps du skill, resources inlinées si présentes. ``""`` si skill absent.
+        Jamais d'exception (fail-open → ``load_skill_body``).
+    """
+    body = load_skill_body(skill_name)
+    if not body:
+        return ""
+
+    res_dir = os.path.join(SKILLS_DIR, skill_name, "resources")
+    if not os.path.isdir(res_dir):
+        # Skill non refactoré (pas de progressive disclosure) → corps brut.
+        return body
+
+    # On retire la section pointeur F-92 (« ## Dynamic Resources ... » jusqu'à la fin
+    # du corps) : elle contient l'instruction contradictoire « view_file » et les
+    # liens file:/// qui poussent le modèle à read_file les resources.
+    body_core = body.split("## Dynamic Resources")[0].rstrip()
+
+    # On inline chaque resource sous un ### <titre>. Ordre déterministe (tri par nom).
+    try:
+        resource_files = sorted(
+            f for f in os.listdir(res_dir) if f.endswith(".md")
+        )
+    except Exception:
+        return body_core or body
+
+    if not resource_files:
+        return body_core or body
+
+    parts = [
+        body_core,
+        "\n\n---\n\n"
+        "## 📎 RESSOURCES (DÉJÀ CHARGÉES ci-dessous — NE PAS les relire via read_file)",
+    ]
+    for fname in resource_files:
+        # Titre reconstitué depuis le slug de fichier (lisible, stable).
+        title = os.path.splitext(fname)[0].replace("_", " ").strip()
+        try:
+            with open(os.path.join(res_dir, fname), "r", encoding="utf-8") as f:
+                content = f.read().strip()
+        except Exception:
+            continue  # resource illisible → on saute (fail-open partiel)
+        parts.append(f"\n\n### {title}\n{content}")
+
+    return "".join(parts)
+
+
+
 def select_skills_for_tester(task: dict, router_lang: str = None) -> List[str]:
     """Retourne les skills de test adaptés à la techno de la sous-tâche (Tester polyvalent).
 

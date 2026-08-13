@@ -104,7 +104,7 @@ def refactor_skill(skill_dir):
         f.write("\n".join(intro_lines))
         f.write("\n\n## Dynamic Resources (Progressive Disclosure)\n\n")
         f.write("This skill is large. To save context, its detailed instructions are split into separate files in the `resources/` directory.\n")
-        f.write("**You MUST use your `view_file` tool to read the relevant file when you reach that stage of the process.**\n\n")
+        f.write("**Use your `read_file` tool to read the relevant file when you reach that stage of the process (read on-demand, NOT all upfront).**\n\n")
         f.write("\n".join(pointers))
         f.write("\n")
 
