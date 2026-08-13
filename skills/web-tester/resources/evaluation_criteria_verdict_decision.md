@@ -8,7 +8,7 @@
 Otherwise return `status: "failure"` with the specific failing assertion and steps to reproduce.
 
 ### ⚠️ ANTI-ACHARNEMENT — Conclure VITE sur un bug réel (failure mode observé)
-Tu as un budget limité de steps (12 max). Ne gaspille PAS tes steps à explorer 15
+Tu as un budget limité de steps (cf. TESTER_MAX_STEPS, par défaut 8). Ne gaspille PAS tes steps à explorer 15
 sélecteurs différents si un comportement clé échoue. Si une assertion CRITIQUE échoue
 deux fois de suite (ex: élément attendu introuvable, ou résultat faux), c'est un **bug
 réel** — déclare FAILURE immédiatement avec un rapport clair.

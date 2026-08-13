@@ -4,6 +4,7 @@ import subprocess
 from smolagents import tool
 
 from .idempotency import get_current_store, make_op_key
+from .path_utils import normalize_tool_path
 from .search_replace_utils import find_similar_lines, replace_most_similar_chunk
 
 # --- Mutex par fichier (anti race-condition) ---------------------------------
@@ -67,6 +68,9 @@ def read_file(path: str, offset: int = 0, limit: int = -1) -> str:
         offset: The starting line number (0-indexed). Defaults to 0.
         limit: The number of lines to read. Set to -1 to read all remaining lines. Defaults to -1.
     """
+    # F-97 / MA-5 : un petit LLM passe parfois un `file:///` URL (correct pour
+    # navigate_page mais fatal à open()) ou un préfixe MSYS `/d/...`. On normalise.
+    path = normalize_tool_path(path)
     try:
         with open(path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
@@ -104,6 +108,7 @@ def list_directory(path: str = ".") -> str:
     Args:
         path: The directory path to list. Defaults to current directory.
     """
+    path = normalize_tool_path(path)
     try:
         files = os.listdir(path)
         return f"Contents of {path}:\n" + "\n".join(files)

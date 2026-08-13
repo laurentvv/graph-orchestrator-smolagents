@@ -38,7 +38,7 @@ class WebTestRunner:
         from graph_orchestrator.compaction import CompactingCodeAgent
 
         from ..nodes import run_with_retry, resolve_verbosity
-        from ..skills_loader import load_skill_body
+        from ..skills_loader import load_skill_body, load_skill_body_resolved
         from ..loop_guard import LoopGuard
 
         env = os.environ.copy()
@@ -146,8 +146,13 @@ class WebTestRunner:
                 )
                 
                 blocks = []
+                # F-97 / MA-5 : résout la progressive disclosure F-92 côté serveur.
+                # Le Tester (one-shot, 8 steps) a besoin de TOUT le contenu de la skill ;
+                # lire les resources/*.md dynamiquement épuise son budget (5 steps perdus).
+                # On inline donc les resources quand le flag est actif (défaut ON).
+                loader = load_skill_body_resolved if settings.tester_inline_skill_resources else load_skill_body
                 for s in tester_skills:
-                    body = load_skill_body(s)
+                    body = loader(s)
                     if body:
                         blocks.append(f"### SKILL: {s}\n{body}")
                 skill_content = "\n\n".join(blocks)
@@ -247,7 +252,10 @@ Voici tes instructions obligatoires (Skill) :
 ATTENTION - Le dossier de travail absolu est : {workspace_url}
 {target_files_urls}
 
-[WINDOWS PATH WARNING] : Ne traduis JAMAIS les chemins Windows en chemins Unix (ex: `/d/GIT/...` au lieu de `D:/GIT/...` ou `D:\\GIT\\...`). Utilise EXACTEMENT le chemin fourni sans le modifier, sinon tes appels à `list_directory` ou `read_file` échoueront avec [WinError 3] Chemin introuvable.
+[FORMAT DES CHEMINS — OUTILS DIFFÉRENTS] Tes outils n'acceptent PAS le même format de chemin :
+- `navigate_page(url=...)` (DevTools) : utilise le format URL `file:///D:/...` (cf. primary_url ci-dessous). C'est le SEUL outil qui attend `file:///`.
+- `read_file(path=...)` / `list_directory(path=...)` : utilise un chemin simple SANS `file:///` — soit relatif (`index.html`, `landing_page/styles.css`) soit absolu `D:/GIT/...`. Passer un `file:///` ici → [Errno 22] ; passer `/d/GIT/` (MSYS) → [WinError 123].
+(Sécurité : read_file/list_directory normalisent automatiquement un `file:///` ou un préfixe MSYS `/d/...` si tu glisses, mais UTILISE LE BON FORMAT pour ne pas gaspiller de steps.) Ne traduis JAMAIS en MSYS `/d/GIT/...`.
 
 ### ⚠️ NAVIGATION OBLIGATOIRE avec DevTools `navigate_page` (PAS puppeteer_navigate)
 [BUG CONNU CRITIQUE] Le serveur `puppeteer_navigate` répond "Navigated to ..." mais ne
