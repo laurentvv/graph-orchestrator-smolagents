@@ -42,65 +42,18 @@ from __future__ import annotations
 import logging
 import os
 import re
-import subprocess
-import tempfile
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple
+
+# F-72 (Prompt Offloading) : _run_node_check et la constante _MAX_JS_CHARS sont
+# extraits vers js_utils.py (partagés avec l'outil check_js_syntax du Coder).
+# Alias privés pour préserver le code appelant (0 changement comportemental).
+from .js_utils import MAX_JS_CHARS as _MAX_JS_CHARS, run_node_check as _run_node_check
 
 from .logging_utils import NodeMetrics
 from .models import CoderOutput
 
 logger = logging.getLogger(__name__)
-
-# Limite de JS extrait soumis à node --check (un HTML monstrueux pourrait
-# dépasser la ligne de commande OS ; on tronque par sécurité).
-_MAX_JS_CHARS = 200_000
-
-
-# ==========================================
-# Utilitaire subprocess Node — miroir de git_snapshot._run_git
-# ==========================================
-def _run_node_check(js_source: str) -> Tuple[int, str]:
-    """Lance `node --check` sur le JS, retourne (exit_code, stderr).
-
-    Tolérant : jamais d'exception (subprocess peut échouer si node absent).
-    Copie carbone de git_snapshot._run_git : arg-list, capture_output,
-    timeout, encoding utf-8, errors replace, catch FileNotFoundError.
-    """
-    # node --check lit le fichier (pas stdin) — on écrit en tmp.
-    try:
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".js", delete=False, encoding="utf-8"
-        ) as f:
-            f.write(js_source)
-            tmp_path = f.name
-    except OSError as e:
-        logger.debug("Static Tester : écriture tmp JS échouée (%s).", e)
-        return 1, ""
-
-    try:
-        result = subprocess.run(
-            ["node", "--check", tmp_path],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            encoding="utf-8",
-            errors="replace",
-        )
-        return result.returncode, result.stderr
-    except FileNotFoundError:
-        # node absent du PATH — dégradation gracieuse (le LLM Tester prend le relais).
-        logger.debug("Static Tester : `node` absent du PATH — skip node --check.")
-        return 0, ""
-    except subprocess.SubprocessError as e:
-        logger.debug("Static Tester : node --check échoué (%s).", e)
-        return 1, ""
-    finally:
-        try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
-
 
 # ==========================================
 # Tier 1a — Extraction du JS + node --check (méthode étape 2)

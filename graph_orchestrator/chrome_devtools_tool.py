@@ -31,6 +31,21 @@ from smolagents import ToolCollection
 logger = logging.getLogger(__name__)
 
 
+# Doc de base des outils Chrome DevTools, partagée entre le Coder
+# (nodes.py::_DEVTOOLS_TOOLS_DOC) et le WebTester (web_tester.py::devtools_hint).
+# F-72 (Prompt Offloading) : single source of truth pour les signatures communes
+# + l'avertissement anti-IIFE CRITIQUE (le point de sécurité d'exécution le plus
+# important — une IIFE fait crasher le CDP). Chaque rôle ajoute ses spécificités
+# via concatenation (Coder : note syntax check / pas Lighthouse ; Tester :
+# take_snapshot/click/fill/take_screenshot + filePath/visual bug/python builtins).
+DEVTOOLS_BASE_DOC = """\
+- `navigate_page(url=...)` : ouvre la page dans Chrome (OBLIGATOIRE pour la navigation initiale ; utilise un file:/// absolu pour un fichier local).
+- `list_console_messages()` : erreurs JS de la console (avec source maps). ⚠️ Renvoie une chaîne Markdown directement affichable — ne fais NI boucle `for` NI `.get()` : utilise simplement `print(list_console_messages())`.
+- `evaluate_script(function="...")` : exécute du JS dans la page (lecture DOM, assertions fonctionnelles).
+  ⚠️ ATTENTION : Les arguments nommés sont OBLIGATOIRES pour tous ces outils (ex: `evaluate_script(function="...")`).
+  ⚠️ CRITIQUE (anti-IIFE) : N'utilise JAMAIS 'await' au premier niveau (top-level await). Le MCP chrome-devtools attend une DÉCLARATION de fonction (et l'invoque lui-même). Tu dois fournir une fonction asynchrone NON invoquée. Correct : `async () => { await ... }`. Ne JAMAIS utiliser une IIFE comme `(() => { await ... })()`, sinon le CDP crashera avec l'erreur 'await is only valid in async functions'."""
+
+
 def _build_params() -> Optional[Any]:
     """Construit les params MCP Chrome DevTools, ou None si désactivé/indisponible.
 

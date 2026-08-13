@@ -12,7 +12,8 @@ outils **Chrome DevTools MCP** (SANS préfixe `puppeteer_`) :
 - `take_screenshot(fullPage=True)` — capture visuelle (l'image te revient).
 **[2 NAVIGATEURS SÉPARÉS]** : Puppeteer et DevTools pilotent chacun LEUR Chrome. Ne mélange
 JAMAIS : si tu navigues avec `navigate_page`, fais TOUT le reste avec DevTools. Un
-`puppeteer_evaluate` verrait l'AUTRE navigateur (vide). Les outils `puppeteer_clean_dom` /
-`puppeteer_add_visual_tags` sont donc À ÉVITER (ils instrumentent le navigateur Puppeteur vide).
+`puppeteer_evaluate` verrait l'AUTRE navigateur (vide). En revanche, les outils helper
+`clean_dom` / `add_visual_tags` / `fuzz_click_all_buttons` (SANS préfixe puppeteer_) sont
+branchés sur DevTools (`evaluate_script`) et donc OK à utiliser sur le navigateur actif.
 La syntaxe `evaluate_script` DIFFÈRE de `puppeteer_evaluate` (voir section syntaxe ci-dessous) :
 `evaluate_script` prend une **fonction non-invoquée** `async () => {...}`, PAS une IIFE.

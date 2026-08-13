@@ -719,7 +719,7 @@ silencieusement (boutons morts, éléments non générés). Seule la console le 
 Workflow de validation (À FAIRE après avoir créé les fichiers, AVANT final_answer) :
 1. `navigate_page(url="{primary_url}")` — ouvre ta page dans Chrome (URL absolue ci-dessous).
 2. `take_screenshot()` — OBLIGATOIRE EN PREMIER pour voir l'état initial.
-3. FUZZING UI OBLIGATOIRE : Exécute `evaluate_script(function="() => document.querySelectorAll('button').forEach(b => b.click())")` pour cliquer sur tous les boutons et réveiller les bugs JS cachés.
+3. FUZZING UI OBLIGATOIRE : Exécute `fuzz_click_all_buttons()` pour cliquer sur tous les boutons et réveiller les bugs JS cachés (monkey testing en 1 appel, encapsule le snippet JS).
 4. `list_console_messages()` — OBLIGATOIRE EN DERNIER. Vérifie 0 erreur JS (SyntaxError, undefined, Uncaught). Sans l'étape 3, tu rateras 80% des erreurs !
 5. Si erreur : CORRIGE via `search_replace` (jamais de rewrite total), puis recommence le cycle (navigate, screenshot, fuzzing, console).
 {criteria_note}
@@ -731,15 +731,12 @@ vrai fichier (ex: landing_page/index.html), pas sur la racine du workspace.{visu
 
 
 # Doc compacte des outils Chrome DevTools injectée dans la section OUTILS du Coder.
-# On ne liste que les outils utiles au Coder (pas les 40+ du serveur) pour économiser
-# le contexte. Le Coder n'a pas besoin de Lighthouse/perf (ça, c'est le Tester).
-_DEVTOOLS_TOOLS_DOC = """
-- `navigate_page(url="...")` : ouvre une URL dans Chrome (utilise file:/// absolu pour un fichier local).
-- `list_console_messages()` : liste les erreurs/warnings JS de la console. ⚠️ Cet outil renvoie une chaîne de caractères Markdown directement affichable (ne fais surtout pas de boucle `for` ni de `.get()`, utilise simplement `print(list_console_messages())`).
-- `evaluate_script(function="...")` : exécute du JS dans la page (ex: lire une valeur du DOM).
-  ⚠️ ATTENTION : Les arguments nommés sont OBLIGATOIRES pour tous ces outils (ex: `evaluate_script(function="...")`).
-  ⚠️ CRITIQUE : N'utilise JAMAIS 'await' au premier niveau (top-level await) dans evaluate_script. Le MCP chrome-devtools attend une DECLARATION de fonction (et l'invoque lui-même). Tu dois fournir une fonction asynchrone non invoquée. Correct : `async () => { await ... }` (NE FAIS PAS d'IIFE).
-Note : pour un check rapide de syntaxe, `navigate_page` puis `list_console_messages` suffisent dans 90% des cas."""
+# F-72 (Prompt Offloading) : signatures communes factorisées dans DEVTOOLS_BASE_DOC
+# (chrome_devtools_tool.py, partagée avec le WebTester). Le Coder n'ajoute que sa note
+# spécifique (pas Lighthouse/perf ni take_snapshot avancé = réservés au Tester).
+from .chrome_devtools_tool import DEVTOOLS_BASE_DOC
+_DEVTOOLS_TOOLS_DOC = DEVTOOLS_BASE_DOC + """
+Note : pour un check rapide de syntaxe, `navigate_page` puis `list_console_messages` suffisent dans 90% des cas. (Lighthouse/perf et take_snapshot avancé sont réservés au Tester, pas au Coder.)"""
 async def execute_coder_node(
     task: dict,
     fast_model: OpenAIServerModel,
@@ -770,15 +767,20 @@ async def execute_coder_node(
         from .tools import (
             read_file, write_file, append_file, list_directory,
             search_replace, multi_replace, edit_file,
-            read_python_skeleton, check_run_state, log_event
+            read_python_skeleton, check_js_syntax, check_run_state, log_event
         )
-        coder_tools = [list_directory, read_file, read_python_skeleton, write_file, append_file, edit_file, search_replace, multi_replace, check_run_state, log_event, DuckDuckGoSearchTool()]
+        coder_tools = [list_directory, read_file, read_python_skeleton, check_js_syntax, write_file, append_file, edit_file, search_replace, multi_replace, check_run_state, log_event, DuckDuckGoSearchTool()]
         coder_tools.extend(c7_tools)
         # On redonne tous les outils web au coder, incluant vision (DevTools ON par
         # défaut — le feedback console est critique pour que le Coder corrige ses
         # bugs de structure HTML/CSS). Le screenshot coûteux est géré par le
         # step_callback vision (F-45), pas désactivable ici.
         coder_tools.extend(cdt_tools)
+        # F-72 (Prompt Offloading) : helpers DevTools (clean_dom, add_visual_tags,
+        # fuzz_click_all_buttons) — encapsulent des snippets JS récurrents pour
+        # décharger le prompt (ex: fuzzing UI). Fail-open si DevTools indispo.
+        from .devtools_dom_tools import build_devtools_helper_tools
+        coder_tools.extend(build_devtools_helper_tools(cdt_tools))
         effective_cdt_tools = cdt_tools  # DevTools ON → preview_block actif
         # F-57 (Priorité 10) : tool load_skill pour la flexibilité. Les skills
         # sélectionnés par l'Architect sont déjà injectés en corps complet dans le
@@ -837,7 +839,7 @@ async def execute_coder_node(
 - ⚠️ AVANT TOUTE CHOSE : Si tu as un BROUILLON DRAFTER (section '### BROUILLON DE L'ALGORITHM DRAFTER' ci-dessous), SAUTE check_run_state et va DIRECTEMENT lire le draft — c'est ton point de départ, pas la peine de vérifier l'état (tu es en iteration 1 propre). Sinon (pas de draft), appelle `check_run_state()` pour vérifier si tu es dans une boucle de redémarrage.
 - ⚠️ AVANT DE CRÉER UN FICHIER : Vérifie TOUJOURS s'il existe déjà en utilisant l'outil `list_directory(path=".")`. S'il est listé et semble complet, NE LE RÉÉCRIS PAS en entier (utilise search_replace/append_file).
 - Sinon, tu DOIS créer le fichier avant de passer au reste.
-- 🚀 AUTO-VALIDATION RAPIDE (JS) : Si tu génères ou modifies du JavaScript, vérifie instantanément sa syntaxe AVANT d'appeler final_answer. Fais-le en exécutant `import subprocess; print(subprocess.run(["node", "--check", "ton_script.js"], capture_output=True, text=True).stderr)` dans ton bloc Python. Cela te coûte 1 step et t'évite un rejet du Linter."""
+- 🚀 AUTO-VALIDATION RAPIDE (JS) : Si tu génères ou modifies du JavaScript, vérifie instantanément sa syntaxe AVANT final_answer en appelant l'outil `check_js_syntax(path="ton_script.js")`. Cela te coûte 1 step et t'évite un rejet du Linter."""
 
         # Skills ciblés pour cette tâche. F-57 (Priorité 10) : L'ARCHITECT SÉLECTIONNE
         # les skills dans son plan (subtask.skills), et le Coder reçoit leur corps
