@@ -385,8 +385,10 @@ async def run_coding_workflow(
         # donne les lignes EXACTES modifiées (re-test ciblé Tester + Judge in-diff).
         # Tolérant : si git absent, has_git_history() retourne False partout → fallback
         # sur les réfutations texte (F-47). Le .git vit dans runs/<dated>/ (gitignored).
+        # F-53 : repo_path explicite (cwd-indépendant) + garde anti-pollution show-toplevel
+        # qui refuse tout commit vers le repo principal, quelle que soit la cause racine.
         from .git_snapshot import init_run_git
-        git_ok = init_run_git()
+        git_ok = init_run_git(repo_path=run_output_dir)
 
         results = []
         from .nodes import execute_tester_node, execute_coder_node
@@ -656,8 +658,8 @@ async def run_coding_workflow(
                 # (HEAD~1..HEAD). En itération 1, pas de diff (création initiale).
                 if git_ok:
                     from .git_snapshot import commit_iteration, get_last_diff
-                    commit_iteration(iteration)
-                    sub_dict["git_diff"] = get_last_diff()
+                    commit_iteration(iteration, repo_path=run_output_dir)
+                    sub_dict["git_diff"] = get_last_diff(repo_path=run_output_dir)
 
                 print("    [>] Coder terminé. Déclenchement des Audits parallèles (Tester & Sécurité)...")
 

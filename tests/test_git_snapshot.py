@@ -102,6 +102,113 @@ class TestRobustesse:
         assert commit_iteration(1) is False
 
 
+class TestIsolationRobustesse:
+    """F-53 (fix pollution repo principal) : isolation cwd-indépendante + garde défensive.
+
+    Contexte : un run E2E a créé un commit vide « Iteration 1 » dans le repo principal
+    (reflog 9e860af, droppé ensuite). Le code reposait sur _run_git(cwd=None) qui hérite
+    du cwd process, sans garde vérifiant que le repo découvert EST bien le run dir.
+    Fix : param ``repo_path`` explicite (cwd-indépendant) + garde ``show-toplevel`` qui
+    refuse tout commit vers un repo parent. Publication du run dir jamais polluée.
+    """
+
+    def test_init_with_explicit_repo_path(self, tmp_path, monkeypatch):
+        """init_run_git(repo_path=...) crée .git dans run_dir SANS chdir (cwd ailleurs)."""
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        monkeypatch.chdir(tmp_path)  # cwd volontairement ailleurs
+        assert init_run_git(repo_path=str(run_dir)) is True
+        assert (run_dir / ".git").is_dir()
+        # Le cwd (tmp_path) ne doit PAS recevoir un .git par erreur
+        assert not (tmp_path / ".git").exists()
+
+    def test_commit_with_explicit_repo_path_from_other_cwd(self, tmp_path, monkeypatch):
+        """commit_iteration(repo_path=...) opère sur run_dir même si le cwd process est ailleurs."""
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        monkeypatch.chdir(tmp_path)  # cwd ≠ run_dir
+        assert init_run_git(repo_path=str(run_dir)) is True
+        (run_dir / "index.html").write_text("<html>v1</html>")
+        assert commit_iteration(1, repo_path=str(run_dir)) is True
+        # Le commit atterrit dans run_dir ; le parent (cwd) reste vierge de .git
+        assert (run_dir / ".git").is_dir()
+        assert not (tmp_path / ".git").exists()
+
+    def test_get_last_diff_with_explicit_repo_path(self, tmp_path, monkeypatch):
+        """get_last_diff(repo_path=...) extrait le diff cwd-indépendamment."""
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        monkeypatch.chdir(tmp_path)
+        init_run_git(repo_path=str(run_dir))
+        (run_dir / "f.txt").write_text("v1\n")
+        commit_iteration(1, repo_path=str(run_dir))
+        (run_dir / "f.txt").write_text("v2-added\n")
+        commit_iteration(2, repo_path=str(run_dir))
+        diff = get_last_diff(repo_path=str(run_dir))
+        assert "v2-added" in diff
+
+    def test_has_git_history_with_explicit_repo_path(self, tmp_path, monkeypatch):
+        """has_git_history(repo_path=...) reflète l'état du run_dir cwd-indépendamment."""
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        monkeypatch.chdir(tmp_path)
+        init_run_git(repo_path=str(run_dir))
+        (run_dir / "f.txt").write_text("v1")
+        commit_iteration(1, repo_path=str(run_dir))
+        assert has_git_history(repo_path=str(run_dir)) is False  # 1 commit
+        commit_iteration(2, repo_path=str(run_dir))
+        assert has_git_history(repo_path=str(run_dir)) is True  # 2 commits
+
+    def test_commit_refuses_parent_repo_pollution(self, tmp_path, monkeypatch):
+        """GARDE DÉFENSIVE (cœur du fix F-53) : si run_dir n'a pas de .git propre, git
+        découvrirait le repo parent. commit_iteration(repo_path=run_dir) DOIT refuser
+        (False) et NE PAS créer de commit dans le parent."""
+        import subprocess
+        # Parent repo = simule le repo principal
+        parent = tmp_path / "main_repo"
+        parent.mkdir()
+        subprocess.run(["git", "init", "-q"], cwd=str(parent), check=True)
+        subprocess.run(["git", "config", "user.email", "t@t.t"], cwd=str(parent), check=True)
+        subprocess.run(["git", "config", "user.name", "t"], cwd=str(parent), check=True)
+        (parent / "README").write_text("base")
+        subprocess.run(["git", "add", "-A"], cwd=str(parent), check=True)
+        subprocess.run(["git", "commit", "-qm", "base"], cwd=str(parent), check=True)
+        head_before = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=str(parent),
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+
+        # run_dir = sous-dossier du parent SANS .git propre (simule l'échec d'isolation)
+        run_dir = parent / "runs" / "foo"
+        run_dir.mkdir(parents=True)
+        monkeypatch.chdir(tmp_path)  # cwd ailleurs
+
+        # commit_iteration DOIT refuser (run_dir n'est pas un repo isolé)
+        assert commit_iteration(1, repo_path=str(run_dir)) is False
+
+        # AUCUN nouveau commit dans le parent → pas de pollution
+        head_after = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=str(parent),
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        assert head_before == head_after, "POLLUTION : un commit a atterri dans le repo parent !"
+
+    def test_init_isolation_verified_after_init(self, tmp_path, monkeypatch):
+        """init_run_git(repo_path) garantit que le repo créé est isolé (toplevel == run_dir)."""
+        import os as _os
+        import subprocess
+        run_dir = tmp_path / "run"
+        run_dir.mkdir()
+        monkeypatch.chdir(tmp_path)
+        assert init_run_git(repo_path=str(run_dir)) is True
+        toplevel = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"], cwd=str(run_dir),
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        norm = lambda p: _os.path.normpath(_os.path.normcase(p))
+        assert norm(toplevel) == norm(str(run_dir))
+
+
 class TestTargetedRetestWithDiff:
     def test_bloc_contient_diff_quand_fourni(self):
         """build_targeted_retest_block injecte le diff git dans le prompt."""
