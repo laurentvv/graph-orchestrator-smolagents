@@ -258,8 +258,27 @@ def _tester_max_steps_fallback(steps, prompt: str):
             "Le Tester a atteint max_steps sans final_answer structuré — verdict dérivé du step history.",
         )
 
-    # Pas de signal (le Tester n'a quasi rien testé) → on ne valide pas à l'aveugle.
-    return None
+    # F-61 (post-mortem run partiel 1h30, 2026-08-13) : on NE retourne PLUS None.
+    # Renvoyer None déclenchait un retry complet du Tester (run_with_retry) qui
+    # re-thrashait à l'identique (5 retries observés, ~43 steps, 1h30 sans verdict)
+    # car le Tester reproduit le même échec de convergence. Un run à max_steps
+    # SANS conclusion est lui-même un signal : le Tester n'a pas pu valider →
+    # failure pour le Coder (feedback "test inconclusive"), qui retente à
+    # l'itération suivante ou déclenche l'escalation après max_iterations cycles.
+    # Strictement meilleur que brûler des retries vains : on ne valide rien à
+    # l'aveugle (status=failure, pas success), on rapporte juste honnêtement
+    # que le Tester n'a pas convergé.
+    return CoderOutput(
+        task_id=task_id,
+        status="failure",
+        details=(
+            f"Tester n'a pas convergé (max_steps atteint sans conclusion claire : "
+            f"0 assertion PASS/FAIL observée sur {n_obs} observation(s)). "
+            "Le Tester a probablement thrashé (erreurs outils, navigation sans "
+            "assertion utilisable). Réexaminer la testabilité du code ou la "
+            "stabilité du Tester."
+        ),
+    )
 
 
 async def run_with_retry(

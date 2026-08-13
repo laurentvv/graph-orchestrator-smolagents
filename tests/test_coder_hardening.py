@@ -377,12 +377,18 @@ class TestTesterMaxStepsFallback:
         assert "not sorted" in r.details
         assert r.task_id == "ts-2"
 
-    def test_fallback_none_si_aucun_signal(self):
-        """Ni PASS ni FAIL (le Tester n'a quasi rien testé) → None (ne valide pas à l'aveugle)."""
+    def test_fallback_failure_si_aucun_signal(self):
+        """Ni PASS ni FAIL (Tester n'a pas convergé) → failure (F-61, post-mortem 1h30) :
+        ne retourne PLUS None, sinon retry complet du Tester qui re-thrash → 5 retries /
+        ~43 steps / 1h30 sans verdict observés. failure est strictement meilleur
+        (feedback honnête au Coder + déclenche l'itération/escalade au lieu de boucler)."""
         from graph_orchestrator.nodes import _tester_max_steps_fallback
         step = SimpleNamespace(observations="", error=None)
         r = _tester_max_steps_fallback([step], 'final_answer({"task_id": "ts-3"})')
-        assert r is None
+        assert r is not None
+        assert r.status == "failure"
+        assert r.task_id == "ts-3"
+        assert "convergé" in r.details or "max_steps" in r.details
 
     def test_fallback_task_id_unknown_si_absent_du_prompt(self):
         """task_id non trouvable dans le prompt → 'unknown' (ne crash pas)."""
