@@ -786,7 +786,7 @@
       "id": "F-98",
       "name": "Maintenance proactive des dépendances et de Python (Workflow automatisé de mise à niveau)",
       "description": "Routine d'actualisation périodique de l'infrastructure logicielle pour éviter l'accumulation de dette technique : (1) Script local automatisé (ex: `scripts/upgrade_stack.py`) réalisant `uv lock --upgrade`, `uv sync` et validant la non-régression via `pytest` ; (2) Workflow CI GitHub Actions planifié (hebdomadaire/mensuel) pour tester et créer des PRs automatiques de montée de versions de paquets et de Python ; (3) Veille et validation proactive de compatibilité sur les dépendances critiques (DSPy, smolagents, LiteLLM, FastAPI, WebSockets).",
-      "status": "pending",
+      "status": "completed",
       "dependencies": []
     }
   ]

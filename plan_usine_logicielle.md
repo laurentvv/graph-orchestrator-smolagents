@@ -476,5 +476,5 @@ Plus d'information : `system_prompts_analysis.md`
   1. **Script de maintenance local** (`scripts/upgrade_stack.py`) : automatise l'exécution de `uv lock --upgrade`, `uv sync` et le lancement immédiat des suites de tests unitaires et d'intégration (`pytest`).
   2. **Workflow CI automatisé** (GitHub Actions / Renovate) : exécution planifiée récurrente (ex: hebdomadaire) avec création de Pull Request automatique si tous les tests passent.
   3. **Matrice de compatibilité** : surveillance des dépendances critiques (DSPy, smolagents, LiteLLM, FastAPI, WebSockets).
-- **Statut** : Planifié (pending).
+- **Statut** : ✅ **FAIT** — Script `scripts/upgrade_stack.py` opérationnel (gestion `uv lock`, parsing diff, encodage Windows, rapport markdown et options pytest) + Section 11 dans `AGENTS.md`.
 
