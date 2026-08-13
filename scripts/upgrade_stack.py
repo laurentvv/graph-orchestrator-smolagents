@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shlex
 import subprocess
 import sys
 from datetime import datetime
@@ -48,14 +49,21 @@ def _parse_lockfile(lock_content: str) -> Dict[str, str]:
 
 def _classify_bump(old_ver: str, new_ver: str) -> str:
     """Classifie le changement de version : MAJEURE, MINEURE, PATCH ou AUTRE."""
-    old_parts = re.findall(r"\d+", old_ver)
-    new_parts = re.findall(r"\d+", new_ver)
+    old_parts = [int(p) for p in re.findall(r"\d+", old_ver)]
+    new_parts = [int(p) for p in re.findall(r"\d+", new_ver)]
     if not old_parts or not new_parts:
         return "AUTRE"
-    if int(new_parts[0]) > int(old_parts[0]):
+    # Normalise à au moins 3 composants (major, minor, patch)
+    while len(old_parts) < 3:
+        old_parts.append(0)
+    while len(new_parts) < 3:
+        new_parts.append(0)
+    if new_parts[0] > old_parts[0]:
         return "🔴 MAJEURE"
-    if len(new_parts) > 1 and len(old_parts) > 1 and int(new_parts[1]) > int(old_parts[1]):
+    if new_parts[1] > old_parts[1]:
         return "🟡 MINEURE"
+    if new_parts[2] > old_parts[2]:
+        return "🟢 PATCH"
     return "🟢 PATCH"
 
 
@@ -130,7 +138,7 @@ def run_upgrade(skip_tests: bool = False, pytest_args: str = "", save_report: bo
         print("\n[4/4] 🧪 Exécution des tests de non-régression (pytest)...")
         cmd = ["uv", "run", "pytest", "-v"]
         if pytest_args:
-            cmd.extend(pytest_args.split())
+            cmd.extend(shlex.split(pytest_args))
         print(f"[*] Commande : {' '.join(cmd)}")
         test_res = subprocess.run(cmd)
         test_exit_code = test_res.returncode

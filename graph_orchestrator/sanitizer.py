@@ -159,14 +159,11 @@ def sanitize_tool_arguments(arguments: Any, inputs: dict) -> Any:
     if not isinstance(inputs, dict):
         return arguments
         
-    # --- Hack spécifique Chrome DevTools MCP ---
-    # Le LLM utilise souvent 'warning' au lieu de 'warn' pour l'outil list_console_messages.
-    if "types" in arguments and isinstance(arguments["types"], list):
-        arguments["types"] = ["warn" if t == "warning" else t for t in arguments["types"]]
-    # -----------------------------------------
-        
     coerced: dict = {}
     for key, value in arguments.items():
+        # Coercion spécifique Chrome DevTools MCP : 'warning' -> 'warn' pour list_console_messages
+        if key == "types" and isinstance(value, list):
+            value = ["warn" if t == "warning" else t for t in value]
         coerced[key] = coerce_value(value, inputs.get(key))
     return coerced
 
