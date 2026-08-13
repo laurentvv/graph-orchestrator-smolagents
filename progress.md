@@ -38,6 +38,38 @@
       web-tester). Implémentation TERMINÉE (42 tests sur les 3 zones, 692 passed / 7
       pré-existants non liés).
 
+## Jalons de l'Itération (cycle fix F-53 — isolation git du run dir anti-pollution repo principal)
+> Bug signalé en bonus de la PR #61 : `git_snapshot` (F-53) avait créé un commit vide « Iteration 1 »
+> dans le **repo principal** pendant un run E2E (reflog `9e860af`, droppé ensuite). Le `.git` du run
+> est censé vivre dans `runs/<dated>/` (gitignoré), pas polluer le repo parent.
+
+- [x] F53-1 : **Diagnostic**. Le code reposait sur `_run_git(cwd=None)` (hérite du cwd process) +
+  garde Python `os.path.isdir(".git")` qui ne vérifie que le `.git` direct. Or **git remonte
+  l'arborescence** pour découvrir un repo : si pour quelque raison que ce soit (cwd erroné, `.git`
+  non créé, env `GIT_DIR`, etc.) le repo découvert n'est pas le run dir, le commit atterrit dans le
+  parent. Preuve : `git show 9e860af` = commit vide (`--allow-empty`, signature exacte de
+  `commit_iteration`) sur parent `81773e3` (état détaché droppé). Les run dirs ont bien un `.git`
+  imbriqué → l'isolation marche *en principe*, mais aucun garde logiciel ne garantit l'isolation
+  en cas de divergence cwd/decouverte.
+- [x] F53-2 : **Fix de robustesse** (TDD). `git_snapshot.py` : (a) param `repo_path` optionnel sur
+  les 4 fonctions publiques (`init_run_git`/`commit_iteration`/`get_last_diff`/`has_git_history`),
+  rétrocompatible (défaut `None` = cwd process, les 12 tests existants inchangés) ; (b) toutes les
+  commandes git passent `cwd=repo_path` (cwd-indépendant) ; (c) **garde défensive `_is_isolated`**
+  qui compare `git rev-parse --show-toplevel` au run dir attendu (Windows-safe : `normcase`+`normpath`)
+  et **REFUSE** toute opération si le repo découvert n'est pas le run dir. `workflows.py` passe
+  `run_output_dir` explicitement aux 3 call sites (init/commit/get_diff).
+- [x] F53-3 : **Tests** : 6 nouveaux tests `TestIsolationRobustesse` (init/commit/diff/history avec
+  `repo_path` depuis un cwd ailleurs + **garde anti-pollution** : un run dir sans `.git` propre
+  découvrant un parent ne crée AUCUN commit dans le parent + vérif toplevel après init). RED → GREEN.
+  Fichier `test_git_snapshot.py` : 12 → 18 passed.
+- [x] F53-4 : **Validation** : suite complète **908 passed / 8 failed** — les 8 échecs sont
+  **pré-existants** (test_read_gate ×4 + test_skill_lazy_loading ×3 + test_guard ×1), confirmés sur
+  main via `git stash` (test_guard échoue aussi sur main, non lié à F-53). **0 régression**.
+  Note : `test_output_dir::test_e2e_resume_reuses_same_run_dir` est **flaky minute-boundary** par
+  construction (run 1 clear le checkpoint ligne 966 + run_id diffère entre les 2 runs → run 2 ne
+  reprend jamais via checkpoint, passe uniquement si les 2 runs tombent dans la même minute). À
+  durcir dans un cycle dédié (hors scope F-53).
+
 ## Jalons de l'Itération (cycle F-61 Meta-Analyste — post-mortem run partiel 1h30)
 > Rôle Meta-Analyste (AGENTS.md §8). Run E2E `bubble-sort-multifile-v6` lancé puis interrompu
 > après 1h30 (trop long). `run_analyzer.py` sur le log partiel → diagnostic confirmé par lecture code.
