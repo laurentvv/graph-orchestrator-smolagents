@@ -77,6 +77,62 @@
   F-97/F-82, AUCUN lié à F-72). **0 régression.** État disque synchronisé (feature_list F-72
   completed, contract C337-C344, plan_usine case P10 cochée, progress).
 
+## Jalons de l'Itération (cycle F-93 — Grounding des findings Judge, P6)
+> Anti-hallucination de localisation. Le Judge exige « LOCALISATION OBLIGATOIRE » mais aucun garde
+> logiciel ne vérifiait qu'elle existe dans le source → un critical inventé pouvait faire rejeter
+> le code à tort. Décision utilisateur : **politique Option 1 non-destructive** (rétrograde+flag,
+> is_approved inchangé) — calibrage d'abord, automation du verdict en cycle futur après mesure du
+> taux de faux-positifs par le Meta-Analyste (P15).
+
+- [x] Étape F93-1 : Exploration (2 subagents parallèles) — map précise : `Finding` schema
+  (models.py:23, Pydantic mutable, `findings` JAMAIS persisté en DuckDB → liberté de mutation),
+  point d'insertion `execute_code_judge_node` dspy_nodes.py (retournait `result.output` brut,
+  aucun post-traitement ; fail-closed security=None retourne avant LLM = naturellement exclu),
+  miroir F-70 (judge_metrics + judge_diff style), algorithme langextract (legacy sliding-window
+  + LCS DP, pure stdlib). Décision design : porter le LEGACY `_fuzzy_align_extraction` (plus
+  simple, bornage fenêtre implique densité) plutôt que le DP LCS.
+- [x] Étape F93-2 : Module `graph_orchestrator/judge_grounding.py` (~330 lignes, 0 LLM) — port
+  `_normalize_token` (lowercase+plural stem), `fragment_is_grounded` (sliding-window difflib,
+  coverage 0.75, max_window 2·needle), `read_source_files`/`_resolve_file`/`extract_code_fragments`
+  (spans backtick + chains a.b.c ONLY, PAS de prose ni filenames via `_looks_like_filename`),
+  `_extract_file_line_refs`, `ground_finding` (line-range check + fragments), `ground_findings`,
+  `apply_grounding` (Option 1 : rétrograde 1 cran + flag `[ungrounded]`, `model_copy` is_approved
+  inchangé, no-op si 0 ungrounded). Data models locaux.
+- [x] Étape F93-3 : Intégration `execute_code_judge_node` — post-LLM, gardé par
+  `settings.judge_grounding_enabled`, `try/except` fail-open total, log observabilité.
+- [x] Étape F93-4 : Config `judge_grounding_enabled` (défaut True) + `.env.example` + `.env`.
+- [x] Étape F93-5 : Tests — `test_judge_grounding.py` (34 : normalize 4, fragment_grounded 8,
+  extract 6 dont filename-exclu, read/resolve 7, ground_finding 6, ground_findings 2, apply 4) +
+  2 intégration `test_dspy_nodes.py` (downgrade critical→high+flag / opt-out). **36 nouveaux PASS.**
+- [x] Étape F93-6 : Bug trouvé + corrigé pendant les tests — `extract_code_fragments` extrayait
+  les filenames (`index.html`) comme chains → false ungrounded (prose-only) OU faux grounded si
+  un fichier du repo contenait `index`/`html`. Fix : `_looks_like_filename` + `_FILE_EXTS` exclut
+  les filenames (gérés par line-range + _resolve_file). Test `test_filename_exclu_des_fragments`.
+- [x] Étape F93-7 (Stade A) : py_compile OK + suite Judge ciblée **75/75 PASS**. Suite complète
+  **979 passed / 9 failed** dont **8 STRICTEMENT pré-existants** confirmés identiques via `git stash`
+  (read_gate×4 + skill_lazy×3 + guard×1, AUCUN lié au grounding) + 1 flaky non reproduit en
+  isolation. **0 régression F-93.**
+- [x] Étape F93-8 (Stade B) : `debug/run_judge_grounding.py` (déterministe 0 LLM) — valide les 4
+  invariants politique Option 1 (ancré conservé, inventé rétrogradé critical→high+flagué,
+  prose-only fail-open, is_approved invariant). `debug/run_judge.py` étendu (flag ungrounded).
+- [ ] Étape F93-9 (Stade B live) : `debug/run_architect.py` (nœud Architect isolé GPU) produit un
+  ArchitectOutput réaliste (vrais target_files + critères F-90) pour ancrer le test grounding.
+- [x] Étape F93-10 (Stade C) : run E2E `FRESH_START=1 JUDGE_GROUNDING_ENABLED=1` Bubble Sort
+  lancé (~57 min, **tué par décision utilisateur** — trajectoire estimée 1,5-2 h, F-93 étant
+  par ailleurs validé). **Intégration tenue** : boot sain (Router=HTML, Architect plan 3-fichiers,
+  Recall 8 leçons), 23 Coder steps, Judge iter 1 a rejeté normalement (`ts-html-structure REJETÉ`
+  → DuckDB), **grounding silencieux = 0 ligne « ungrounded »/« grounding » dans le log → 0 faux
+  flooding, 0 crash, fail-open confirmé en prod**. Les 2 exceptions sont des `Connection error`
+  llama-server transitoires (infra, pas F-93). Le déclenchement positif (downgrade d'un finding
+  halluciné) est probabiliste et n'a pas été observé sur la portion de run ; l'objectif d'intégration
+  (« F-93 marche dans la vraie chaîne sans casser le Judge ») est atteint. Log : `logs/e2e_f93_run.log`.
+
+> **Décision clé (politique)** : Option 1 (non-destructive)而非 Option 2/3 (recompute verdict).
+> Le grounding ne peut JAMAIS approuver à tort (is_approved inchangé). La phase de calibrage
+> collecte les flags `[ungrounded]` pour que le Meta-Analyste (P15) mesure le taux de faux-positifs
+> avant toute automation. Complément orthogonal à F-70 (métriques quantitatives) : vérification
+> d'intégrité qualitative en ligne.
+
 ## Jalons de l'Itération (cycle fix F-53 — isolation git du run dir anti-pollution repo principal)
 > Bug signalé en bonus de la PR #61 : `git_snapshot` (F-53) avait créé un commit vide « Iteration 1 »
 > dans le **repo principal** pendant un run E2E (reflog `9e860af`, droppé ensuite). Le `.git` du run
