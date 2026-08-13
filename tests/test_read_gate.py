@@ -19,6 +19,7 @@ Couvre :
 """
 from __future__ import annotations
 
+import pytest
 from pathlib import Path
 
 
@@ -254,7 +255,12 @@ class TestGatedWriteTool:
     """
 
     def test_block_does_not_delegate(self, tmp_path: Path):
-        """Si check_write bloque, l'outil sous-jacent n'est JAMAIS appelé."""
+        """Si check_write bloque, l'outil sous-jacent n'est JAMAIS appelé.
+
+        Le gate LÈVE ``RuntimeError`` (message pédagogique citant ``read_file``) —
+        comportement prod : smolagents remonte l'erreur d'outil au LLM pour pédagogie
+        forte (F-67). Le fichier disque reste INCHANGÉ (non délégué).
+        """
         from graph_orchestrator.tools import write_file
 
         f = tmp_path / "existing.txt"
@@ -262,9 +268,8 @@ class TestGatedWriteTool:
         original = f.read_text(encoding="utf-8")
         gate = ReadGate()
         gated = _GatedWriteTool(write_file, gate)
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(RuntimeError, match="read_file"):
             gated(path=str(f), content="completely different new content")
-        assert "read_file" in str(exc_info.value).lower()  # message pédagogique.
         # Le fichier disque est INCHANGÉ → l'outil sous-jacent n'a pas été appelé.
         assert f.read_text(encoding="utf-8") == original
 
@@ -306,16 +311,15 @@ class TestGatedWriteTool:
         )
 
     def test_forward_path_also_gated(self, tmp_path: Path):
-        """Le chemin TCA `forward` applique aussi le gate."""
+        """Le chemin TCA `forward` applique aussi le gate (lève RuntimeError)."""
         from graph_orchestrator.tools import write_file
 
         f = tmp_path / "y.txt"
         f.write_text("initial content here", encoding="utf-8")
         original = f.read_text(encoding="utf-8")
         gated = _GatedWriteTool(write_file, ReadGate())
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(RuntimeError, match="read_file"):
             gated.forward(path=str(f), content="new different content")
-        assert "read_file" in str(exc_info.value).lower()
         assert f.read_text(encoding="utf-8") == original  # non délégué.
 
 
@@ -444,9 +448,8 @@ class TestEndToEnd:
         f.write_text("print('init')\n", encoding="utf-8")
         gate = ReadGate()
         gated_write = _GatedWriteTool(write_file, gate)
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(RuntimeError, match="read_file"):
             gated_write(path=str(f), content="print('new')\n")
-        assert "read_file" in str(exc_info.value).lower()
         # Le fichier disque n'a pas été modifié (le write a été bloqué).
         assert f.read_text(encoding="utf-8") == "print('init')\n"
 
@@ -483,11 +486,10 @@ class TestEndToEnd:
         gated_write(
             path=str(f), content="v1 brand new content"
         )  # write OK, mark invalidée (Strict).
-        with pytest.raises(RuntimeError) as exc_info:
+        with pytest.raises(RuntimeError, match="read_file"):
             gated_edit(
                 path=str(f), old_string="v1", new_string="v2 fixed content"
-            )
-        assert "read_file" in str(exc_info.value).lower()  # edit bloqué : doit re-read.
+            )  # edit bloqué : doit re-read.
 
     def test_message_cites_path_and_read_file(self, tmp_path: Path):
         """Le message pédagogique cite le path ET read_file (vérifiable par substring)."""
