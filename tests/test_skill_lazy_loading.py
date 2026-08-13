@@ -38,11 +38,16 @@ from graph_orchestrator.skills_loader import (
 class TestAlwaysSkillsCoder:
     """Le socle ALWAYS est un contrat critique (failure modes fatals si oubli)."""
 
-    def test_contient_les_3_skills_critiques(self):
-        # file-creation + coding + context7-research = socle universel ALWAYS.
-        # web-animation est sélectionné DYNAMIQUEMENT par l'Architect (catalogue F-57)
-        # quand la tâche est un visualiseur/animation, pas en ALWAYS.
-        assert ALWAYS_SKILLS_CODER == {"file-creation", "coding", "context7-research"}
+    def test_contient_les_skills_critiques(self):
+        # Socle universel ALWAYS (failure modes fatals si oubli) : file-creation
+        # (anti-contenu-vide), coding (anti-TypeScript + CSS), context7-research
+        # (décision QUAND chercher), draft-extraction (méthodologie de draft du
+        # Drafter réinjectée au Coder). Les skills conditionnels (frontend-design,
+        # web-tester, devtools-preview...) sont sélectionnés DYNAMIQUEMENT par
+        # l'Architect (catalogue F-57), pas en ALWAYS.
+        assert ALWAYS_SKILLS_CODER == {
+            "file-creation", "coding", "context7-research", "draft-extraction",
+        }
 
     def test_est_un_set(self):
         assert isinstance(ALWAYS_SKILLS_CODER, set)
@@ -79,8 +84,13 @@ class TestCountSkillTokens:
         assert "coding" in _SKILL_TOKENS_CACHE
 
     def test_est_proportionnel_a_la_taille(self):
-        # web-tester (~3344 tok) > file-creation (~736 tok).
-        assert count_skill_tokens("web-tester") > count_skill_tokens("file-creation")
+        # Le compte de tokens suit la taille du corps du skill. Vérifié sur deux
+        # skills à structure stable : coding (corps long, ~1230 tok) > file-creation
+        # (corps plus court, ~702 tok). NB : web-tester a rétréci depuis F-92 (corps
+        # déplacé en resources/ via progressive disclosure) — on ne l'utilise plus
+        # comme référence de grandeur.
+        assert len(load_skill_body("coding")) > len(load_skill_body("file-creation"))
+        assert count_skill_tokens("coding") > count_skill_tokens("file-creation")
 
     def test_nouveaux_skills_ont_un_compte(self):
         # Les 4 nouveaux skills du catalogue étendu doivent avoir un compte valide.

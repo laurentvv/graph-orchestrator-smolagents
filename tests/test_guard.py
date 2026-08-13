@@ -179,13 +179,17 @@ async def test_run_with_retry_code_agent_emits_retry_log():
 # run_with_retry : node_kind="tester" active le guard idle Puppeteer
 # ==========================================
 @pytest.mark.anyio
-async def test_run_with_retry_tester_idle_emits_puppeteer_log():
-    """node_kind='tester' + step idle → le guard se déclenche (log 'tour sans appel d'outil').
+async def test_run_with_retry_tester_idle_routes_to_fallback():
+    """node_kind='tester' + output invalide + step idle → fallback max_steps F-90.
 
-    Fix TIMINGS_ANALYSE : le Tester souffrait du failure mode 'does not contain any JSON blob'
-    (modèle thinking sans tool call). Le guard idle n'existait qu'à l'intérieur de run_with_retry
-    mais sans différenciation — désormais tout agent appelant run_with_retry en bénéficie.
-    On valide que le guard se déclenche (print) sans crash.
+    Évolution F-90 : un Tester qui rend un output invalide (typiquement over-
+    exploration du 9B sans final_answer structuré) ne boucle plus sur le guard
+    idle (message puppeteer réinjecté N fois en vain). Désormais le fallback
+    ``_tester_max_steps_fallback`` dérive un verdict comportemental depuis le
+    step history (status=failure par défaut sur step idle sans signal) et
+    court-circuite — c'est le fix qui a tué le hang du Tester (post-mortem run9).
+    Le guard idle (message puppeteer, unit-testé par ``test_detect_idle_step_*``)
+    reste actif pour les nœuds non-tester et les cas sans fallback.
     """
     agent = MagicMock()
     agent.__class__ = type("ToolCallingAgent", (), {})
@@ -205,9 +209,10 @@ async def test_run_with_retry_tester_idle_emits_puppeteer_log():
                     agent, "PROMPT", MagicMock, max_retries=1, node_kind="tester"
                 )
 
-    # Le guard idle émet son log spécifique (ré-injection d'une consigne d'action).
+    # F-90 : le fallback dérive un verdict au lieu d'attendre l'idle message
+    # (qui ne serait imprimé qu'au retry suivant, jamais atteint grâce au fallback).
     printed = " ".join(str(c) for c in mock_print.call_args_list)
-    assert "tour sans appel d'outil" in printed
+    assert "Tester max_steps fallback activé" in printed
 
 
 # ==========================================
