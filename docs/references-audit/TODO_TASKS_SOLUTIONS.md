@@ -15,7 +15,7 @@ LlamaBot utilise une approche où la liste de TODOs fait partie intégrante de l
 
 ### 🔗 Fichiers de référence pour copie de code :
 - **L'outil :** [`references/LlamaBot/app/agents/leonardo/rails_agent/tools.py`](references/LlamaBot/app/agents/leonardo/rails_agent/tools.py#L162-L172)
-- **Le schéma de l'état :** [`references/LlamaBot/app/agents/leonardo/rails_agent/state.py`](file:///D:/GIT/graph-orchestrator-smolagents/references/LlamaBot/app/agents/leonardo/rails_agent/state.py#L19)
+- **Le schéma de l'état :** [`references/LlamaBot/app/agents/leonardo/rails_agent/state.py`](references/LlamaBot/app/agents/leonardo/rails_agent/state.py#L19)
 - **Les prompts :** [`references/LlamaBot/app/agents/leonardo/rails_agent/prompt_with_capybara.py`](file:///D:/GIT/graph-orchestrator-smolagents/references/LlamaBot/app/agents/leonardo/rails_agent/prompt_with_capybara.py#L55)
 
 ### 💡 Mécanismes Clés :
