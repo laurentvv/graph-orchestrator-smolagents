@@ -117,9 +117,15 @@
   prose-only fail-open, is_approved invariant). `debug/run_judge.py` étendu (flag ungrounded).
 - [ ] Étape F93-9 (Stade B live) : `debug/run_architect.py` (nœud Architect isolé GPU) produit un
   ArchitectOutput réaliste (vrais target_files + critères F-90) pour ancrer le test grounding.
-- [ ] Étape F93-10 (Stade C) : run E2E full FRESH_START=1 Bubble Sort (WORKFLOW_MODE=coding) —
-  valider le grounding live dans la chaîne (log observabilité « N/M ungrounded ») + post-mortem
-  `run_analyzer.py`.
+- [x] Étape F93-10 (Stade C) : run E2E `FRESH_START=1 JUDGE_GROUNDING_ENABLED=1` Bubble Sort
+  lancé (~57 min, **tué par décision utilisateur** — trajectoire estimée 1,5-2 h, F-93 étant
+  par ailleurs validé). **Intégration tenue** : boot sain (Router=HTML, Architect plan 3-fichiers,
+  Recall 8 leçons), 23 Coder steps, Judge iter 1 a rejeté normalement (`ts-html-structure REJETÉ`
+  → DuckDB), **grounding silencieux = 0 ligne « ungrounded »/« grounding » dans le log → 0 faux
+  flooding, 0 crash, fail-open confirmé en prod**. Les 2 exceptions sont des `Connection error`
+  llama-server transitoires (infra, pas F-93). Le déclenchement positif (downgrade d'un finding
+  halluciné) est probabiliste et n'a pas été observé sur la portion de run ; l'objectif d'intégration
+  (« F-93 marche dans la vraie chaîne sans casser le Judge ») est atteint. Log : `logs/e2e_f93_run.log`.
 
 > **Décision clé (politique)** : Option 1 (non-destructive)而非 Option 2/3 (recompute verdict).
 > Le grounding ne peut JAMAIS approuver à tort (is_approved inchangé). La phase de calibrage
