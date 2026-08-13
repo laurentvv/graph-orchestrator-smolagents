@@ -87,8 +87,26 @@ L'agent n'a pas d'outils "spéciaux" pour ses TODOs. Il lit et écrit dans un fi
 
 ---
 
-## 📝 Recommandations d'Implémentation pour le Projet Actuel
+## 5. Stratégies de Découpage (Task Decomposition)
+Au-delà du simple suivi, les références mettent en œuvre des stratégies spécifiques (Prompt Engineering + Rôles) pour forcer le LLM à découper intelligemment une demande utilisateur floue en "mini-tâches" concrètes.
 
+### A. La décomposition itérative orientée MVP (LlamaBot)
+LlamaBot ne possède pas d'agent "Planner" distinct, il oblige l'agent d'exécution à planifier avant d'agir via son prompt système.
+- **🔗 Fichier :** [`references/LlamaBot/app/agents/leonardo/rails_agent/prompt_with_capybara.py`](file:///D:/GIT/graph-orchestrator-smolagents/references/LlamaBot/app/agents/leonardo/rails_agent/prompt_with_capybara.py)
+- **💡 Mécanisme :** Le prompt dicte : *"Create a tiny, testable MVP roadmap as TODOs... Define explicit acceptance criteria per step"*. L'obligation d'utiliser l'outil `write_todos` dès le premier tour force le LLM à structurer son approche (Chain-of-Thought) avant d'écrire la moindre ligne de code.
+
+### B. Le "Split Check" par Couches Architecturales (LlamaBot - Ticket Mode)
+C'est la méthode de décomposition algorithmique la plus aboutie des références. 
+- **🔗 Fichier :** [`references/LlamaBot/app/agents/leonardo/rails_ticket_mode_agent/prompts.py`](file:///D:/GIT/graph-orchestrator-smolagents/references/LlamaBot/app/agents/leonardo/rails_ticket_mode_agent/prompts.py)
+- **💡 Mécanisme :** Le LLM doit remplir une grille stricte d'évaluation des "Layers" (Modèle, Contrôleur, Vue, DB). S'il détecte que 3+ couches sont touchées, le prompt l'oblige à la scinder immédiatement en 2 ou 3 sous-tickets séquentiels. Il génère alors une section obligatoire **"Recommended Split"** et refuse de coder un ticket global.
+
+### C. La décomposition déléguée via Subagents (learn-claude-code / deer-flow)
+- **🔗 Fichier :** [`references/learn-claude-code/README.md`](file:///D:/GIT/graph-orchestrator-smolagents/references/learn-claude-code/README.md) (s06_subagent)
+- **💡 Mécanisme :** *"Big tasks split small, each subtask gets clean context"*. Plutôt que de lister des TODOs à cocher dans sa propre boucle, l'agent principal éclate le problème et délègue chaque morceau à un sous-agent isolé (via un outil `task_tool`). C'est l'approche privilégiée par **deer-flow** pour empêcher l'agent de saturer sa mémoire sur les gros chantiers.
+
+---
+
+## 📝 Recommandations d'Implémentation pour le Projet Actuel
 Si l'objectif est d'avoir des TODOs générés par l'Architecte qui se cochent **au fur et à mesure de l'exécution du Codeur**, la meilleure combinaison serait :
 
 1. **Génération initiale (Architecte)** : L'architecte définit le tableau initial des TODOs (format JSON) et le stocke dans le Knowledge Graph (DuckDB).
