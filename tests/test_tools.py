@@ -1,4 +1,12 @@
-from graph_orchestrator.tools import edit_file, list_directory, read_file, write_file
+import pytest
+
+from graph_orchestrator.tools import (
+    check_js_syntax,
+    edit_file,
+    list_directory,
+    read_file,
+    write_file,
+)
 
 def test_edit_file(tmp_path):
     # Setup
@@ -46,4 +54,50 @@ def test_list_directory_accepts_file_scheme_url(tmp_path):
     res = list_directory(url)
     assert "Error listing directory" not in res
     assert "index.html" in res
+
+
+# === F-72 : check_js_syntax (Prompt Offloading — outil Coder verify-after) ===
+
+import shutil  # noqa: E402
+
+_NODE_AVAILABLE = shutil.which("node") is not None
+node_required = pytest.mark.skipif(
+    not _NODE_AVAILABLE, reason="node.js non installé sur cette machine"
+)
+
+
+@node_required
+def test_check_js_syntax_valid(tmp_path):
+    """Fichier JS valide → message ✅."""
+    f = tmp_path / "app.js"
+    f.write_text("const x = [3, 1, 2].sort(); console.log(x);", encoding="utf-8")
+    res = check_js_syntax(path=str(f))
+    assert "valide" in res.lower()
+    assert "Erreur" not in res
+
+
+@node_required
+def test_check_js_syntax_syntax_error(tmp_path):
+    """Fichier JS avec SyntaxError → message ❌ contenant l'erreur du parseur."""
+    f = tmp_path / "buggy.js"
+    f.write_text("const x = 1 + ;", encoding="utf-8")  # expression incomplète
+    res = check_js_syntax(path=str(f))
+    assert "Erreur de syntaxe" in res
+    assert "buggy.js" in res
+
+
+def test_check_js_syntax_missing_file(tmp_path):
+    """Fichier absent → message d'erreur de lecture (jamais d'exception)."""
+    res = check_js_syntax(path=str(tmp_path / "nope.js"))
+    assert "Erreur de lecture" in res
+
+
+def test_check_js_syntax_node_absent(tmp_path, monkeypatch):
+    """node absent du PATH (mock shutil.which) → message informatif (pas de mensonge ✅)."""
+    monkeypatch.setattr(shutil, "which", lambda cmd: None)
+    f = tmp_path / "app.js"
+    f.write_text("const x = 1;", encoding="utf-8")
+    res = check_js_syntax(path=str(f))
+    assert "non disponible" in res
+    assert "valide" not in res.lower(), "Ne doit PAS affirmer 'valide' sans avoir vérifié."
 

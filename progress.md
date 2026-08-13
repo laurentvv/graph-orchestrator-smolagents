@@ -38,6 +38,45 @@
       web-tester). Implémentation TERMINÉE (42 tests sur les 3 zones, 692 passed / 7
       pré-existants non liés).
 
+## Jalons de l'Itération (cycle F-72 — Prompt Offloading)
+> Priorité 10 du plan usine logicielle (volet Prompt Offloading). Encapsuler la complexité
+> (snippets JS, algorithmes) dans des OUTILS Python dédiés au lieu de l'injecter en texte
+> brut dans les prompts système. Modèle cité en réf : Web Tester (`puppeteer_clean_dom` /
+> `puppeteer_add_visual_tags`). **Découverte clé : ce « modèle » était CASSÉ** — il wrappait
+> `puppeteer_evaluate` (navigateur Puppeteer qui ne charge PAS les `file://` locaux → DevTools
+> est devenu le pilote primaire). Le prompt du Tester disait même de NE PAS les utiliser. F-72
+> recrée ces helpers en version DevTools, plus `check_js_syntax` et la centralisation de la doc.
+
+- [x] F72-1 : Module `js_utils.py` — extraction DRY de `run_node_check` + `MAX_JS_CHARS` depuis
+  `static_tester.py` (alias privés `_run_node_check`/`_MAX_JS_CHARS` préservent l'appelant, imports
+  morts `subprocess`/`tempfile` retirés, 0 changement comportemental). Partagé Static Tester
+  Tier 1a + futur outil Coder.
+- [x] F72-2 : Outil `@tool check_js_syntax(path)` (tools.py, Coder) — auto-validation verify-after
+  de la syntaxe JS via `node --check` ; détection `node` absent upfront (`shutil.which` → message
+  informatif, n'affirme jamais 'valide' à tort) ; retrait de l'exemple subprocess `node --check`
+  du prompt Coder (→ mention de l'outil).
+- [x] F72-3 : Module `devtools_dom_tools.py` — 3 sous-classes `Tool` (`clean_dom`, `add_visual_tags`,
+  `fuzz_click_all_buttons`) wrappent `evaluate_script` (DevTools) via `function=<JS>` ; snippets JS
+  corps préservés EXACTS, adaptation `script=`→`function=` + retrait enveloppe IIFE (DevTools exige
+  une fonction NON invoquée, une IIFE crasherait le CDP). Factory `build_devtools_helper_tools`
+  fail-open. **Répare le modèle cassé.**
+- [x] F72-4 : WebTester — retrait du bloc Puppeteer mort (`PuppeteerAddVisualTagsTool`/
+  `PuppeteerCleanDomTool`) + branchement `build_devtools_helper_tools(cdt_tools)` ; prompt màj
+  (les 3 outils désormais DevTools-based et OK à utiliser) ; 2 skills `web-tester/resources/` màj
+  cohérence (`puppeteer_clean_dom`→`clean_dom` ; note « À ÉVITER » → « OK sur le navigateur actif »).
+- [x] F72-5 : Coder — branchement `build_devtools_helper_tools(cdt_tools)` + retrait du snippet
+  fuzzing inline du `preview_block` (étape 3 → `fuzz_click_all_buttons()`).
+- [x] F72-6 : Centralisation doc DevTools — `DEVTOOLS_BASE_DOC` (chrome_devtools_tool.py, signatures
+  communes `navigate_page`/`list_console_messages`/`evaluate_script` + anti-IIFE CRITIQUE, single
+  source of truth) partagée Coder (`_DEVTOOLS_TOOLS_DOC`) + Tester (`devtools_hint`, ajoute
+  `take_snapshot`/`click`/`fill`/`take_screenshot` + filePath/visual bug/python builtins). Couverture
+  point-par-point vérifiée (0 marqueur perdu vs 6 points doc Coder + 13 points hint Tester).
+- [x] F72-7 : Validation — py_compile OK (7 fichiers). **19 nouveaux tests PASS** (js_utils 5 +
+  devtools_dom_tools 10 + tools +4). Suite complète **940 passed / 8 failed** (les 8 STRICTEMENT
+  pré-existants `test_read_gate`×4 + `test_skill_lazy_loading`×3 + `test_guard`×1, documentés
+  F-97/F-82, AUCUN lié à F-72). **0 régression.** État disque synchronisé (feature_list F-72
+  completed, contract C337-C344, plan_usine case P10 cochée, progress).
+
 ## Jalons de l'Itération (cycle fix F-53 — isolation git du run dir anti-pollution repo principal)
 > Bug signalé en bonus de la PR #61 : `git_snapshot` (F-53) avait créé un commit vide « Iteration 1 »
 > dans le **repo principal** pendant un run E2E (reflog `9e860af`, droppé ensuite). Le `.git` du run

@@ -84,35 +84,15 @@ class WebTestRunner:
                 screenshot_capture: list = []
                 tester_tools = wrap_screenshot_tools(tester_tools, screenshot_capture)
 
-                # Custom tools pour décharger le prompt du LLM
-                eval_tool = next((t for t in tester_tools if getattr(t, "name", "") == "puppeteer_evaluate"), None)
-                if eval_tool:
-                    from smolagents import Tool
-                    class PuppeteerAddVisualTagsTool(Tool):
-                        name = "puppeteer_add_visual_tags"
-                        description = "Ajoute des badges rouges (e1, e2...) sur tous les éléments cliquables VISIBLES de la page. À appeler SANS ARGUMENT AVANT take_screenshot pour faciliter le clic (méthode OpenFox)."
-                        inputs = {}
-                        output_type = "string"
-                        def __init__(self, e_tool: Tool):
-                            super().__init__()
-                            self.e_tool = e_tool
-                        def forward(self) -> str:
-                            script = "(() => { let c = 1; document.querySelectorAll('button, input, select, a').forEach(el => { const r = el.getBoundingClientRect(); if (r.width === 0 || r.height === 0) return; const b = document.createElement('div'); b.innerText = 'e' + c++; b.style.cssText = `position:absolute; left:${r.left+window.scrollX}px; top:${r.top+window.scrollY-10}px; background:red; color:white; font-size:12px; padding:2px; z-index:9999; pointer-events:none;`; document.body.appendChild(b); }); return 'Tags OpenFox injectés avec succès. Prends un screenshot maintenant !'; })()"
-                            return self.e_tool.forward(script=script)
-
-                    class PuppeteerCleanDomTool(Tool):
-                        name = "puppeteer_clean_dom"
-                        description = "Nettoie le DOM actuel (supprime script, style, svg, canvas) et renvoie le HTML allégé pour analyse. À appeler SANS ARGUMENT pour voir la structure de la page sans polluer ton contexte."
-                        inputs = {}
-                        output_type = "string"
-                        def __init__(self, e_tool: Tool):
-                            super().__init__()
-                            self.e_tool = e_tool
-                        def forward(self) -> str:
-                            script = "(() => { const clone = document.documentElement.cloneNode(true); clone.querySelectorAll('script,style,svg,canvas,iframe,noscript,template').forEach(el => el.remove()); return clone.outerHTML.replace(/<!--[\\s\\S]*?-->/g,'').replace(/\\s{2,}/g,' ').slice(0, 8000); })()"
-                            return self.e_tool.forward(script=script)
-                            
-                    tester_tools.extend([PuppeteerAddVisualTagsTool(eval_tool), PuppeteerCleanDomTool(eval_tool)])
+                # F-72 (Prompt Offloading) : outils helper DevTools (clean_dom,
+                # add_visual_tags, fuzz_click_all_buttons) — encapsulent des snippets JS
+                # récurrents pour décharger le prompt du LLM. Wrappent evaluate_script
+                # (DevTools, pilote primaire) — contrairement aux anciens
+                # puppeteer_clean_dom/add_visual_tags qui wrappaient puppeteer_evaluate
+                # (navigateur Puppeteer ne chargeant pas les file:// locaux = morts).
+                # Fail-open : si DevTools indispo, factory retourne [] (rien ajouté).
+                from ..devtools_dom_tools import build_devtools_helper_tools
+                tester_tools.extend(build_devtools_helper_tools(cdt_tools))
 
                 # F-47 : mode re-test ciblé si itération >1 ET réfutations disponibles.
                 # Le Tester ne re-valide QUE les bugs signalés par le Judge + smoke-test,
@@ -186,22 +166,27 @@ class WebTestRunner:
                 # snapshot + console + assertions). Puppeteer navigate ne charge pas les
                 # fichiers file:// locaux (bug du serveur @modelcontextprotocol/server-puppeteer
                 # déprécié) → orientation DevTools-first pour fiabiliser le Tester.
-                devtools_hint = (
-                    "\n## OUTILS Chrome DevTools (pilote PRIMAIRE — navigation + assertions)\n"
-                    "Tu as accès à des outils DevTools (SANS préfixe puppeteer_). Ce sont désormais tes outils PRINCIPAUX (la navigation Puppeteer ne charge pas les fichiers locaux). ATTENTION :\n"
-                    "  [DANGER FATAL] : N'utilise JAMAIS l'argument optionnel `filePath` dans AUCUN de ces outils (laisse-le omis/non défini). Si tu essaies de l'utiliser (même avec une chaîne vide), tu auras une erreur critique 'Access denied' MCP.\n"
-                    "- `navigate_page(url=..., type='url')` : ouvre la page (OBLIGATOIRE pour la navigation initiale, cf. ci-dessus).\n"
-                    "- `list_console_messages()` : erreurs JS avec source maps (plus précis que puppeteer_evaluate pour la console).\n"
-                    "- `take_snapshot(verbose: true)` : arbre a11y complet (structure, IDs). Avec `verbose: true`, tu obtiendras tout le DOM ultra-détaillé.\n"
-                    "- `evaluate_script(function)` : JS dans la page — utilise-le pour tes ASSERTIONS fonctionnelles.\n"
-                    "  [ERREUR FATALE FRÉQUENTE AWAIT] : Tu DOIS fournir une déclaration de fonction NON invoquée exacte : `async () => { ... }`. Ne JAMAIS utiliser une IIFE comme `(() => { await ... })()` ni un await au top-level, sinon le CDP crashera avec l'erreur 'await is only valid in async functions'.\n"
-                    "- `click(uid=...)` / `fill(uid=..., value=...)` : interactions (uids vus dans take_snapshot).\n"
-                    "- `take_screenshot(fullPage: true)` : capture visuelle. Avec `fullPage: true`, capture toute la hauteur. L'image TE REVIENT.\n"
-                    "  [VISUAL BUG ALERT CRITIQUE] : Tu dois impérativement t'assurer qu'AUCUN élément clé ne disparaît ou ne devient invisible pendant l'interaction (ex: des barres qui s'effacent car elles perdent leur classe couleur sur un fond sombre). Si tu vois des éléments s'évaporer, c'est un FAILURE immédiat ! Tu peux utiliser `evaluate_script` pour inspecter les styles calculés (ex: getComputedStyle) et vérifier que les éléments ont bien une couleur.\n"
-                    "  [PYTHON BUILT-INS] : Si tu utilises `time.sleep()` en Python, n'oublie pas de faire `import time` au début de ton code.\n"
-                    "Priorité : DevTools pour TOUT (navigation, assertions, console, visuel). N'utilise les outils `puppeteer_*` QUE si DevTools est indisponible.\n"
-                    if cdt_tools else ""
-                )
+                # F-72 : doc DevTools factorisée. DEVTOOLS_BASE_DOC (signatures communes
+                # navigate_page/list_console_messages/evaluate_script + anti-IIFE critique)
+                # est partagée avec le Coder (nodes.py::_DEVTOOLS_TOOLS_DOC). Le Tester
+                # ajoute take_snapshot/click/fill/take_screenshot + ses avertissements
+                # spécifiques (filePath, visual bug, python builtins).
+                from ..chrome_devtools_tool import DEVTOOLS_BASE_DOC
+                if cdt_tools:
+                    devtools_hint = (
+                        "\n## OUTILS Chrome DevTools (pilote PRIMAIRE — navigation + assertions)\n"
+                        "Tu as accès à des outils DevTools (SANS préfixe puppeteer_). Ce sont désormais tes outils PRINCIPAUX (la navigation Puppeteer ne charge pas les fichiers locaux). ATTENTION :\n"
+                        "  [DANGER FATAL] : N'utilise JAMAIS l'argument optionnel `filePath` dans AUCUN de ces outils (laisse-le omis/non défini). Si tu essaies de l'utiliser (même avec une chaîne vide), tu auras une erreur critique 'Access denied' MCP.\n"
+                        + DEVTOOLS_BASE_DOC
+                        + "\n- `take_snapshot(verbose: true)` : arbre a11y complet (structure, IDs, visibilité). Avec `verbose: true`, tu obtiendras tout le DOM ultra-détaillé.\n"
+                        "- `click(uid=...)` / `fill(uid=..., value=...)` : interactions (uids vus dans take_snapshot).\n"
+                        "- `take_screenshot(fullPage: true)` : capture visuelle. Avec `fullPage: true`, capture toute la hauteur. L'image TE REVIENT.\n"
+                        "  [VISUAL BUG ALERT CRITIQUE] : Tu dois impérativement t'assurer qu'AUCUN élément clé ne disparaît ou ne devient invisible pendant l'interaction (ex: des barres qui s'effacent car elles perdent leur classe couleur sur un fond sombre). Si tu vois des éléments s'évaporer, c'est un FAILURE immédiat ! Tu peux utiliser `evaluate_script` pour inspecter les styles calculés (ex: getComputedStyle) et vérifier que les éléments ont bien une couleur.\n"
+                        "  [PYTHON BUILT-INS] : Si tu utilises `time.sleep()` en Python, n'oublie pas de faire `import time` au début de ton code.\n"
+                        "Priorité : DevTools pour TOUT (navigation, assertions, console, visuel). N'utilise les outils `puppeteer_*` QUE si DevTools est indisponible.\n"
+                    )
+                else:
+                    devtools_hint = ""
 
                 # F-46 : checklist PARSÉE depuis la spec (déterministe, 0 LLM). Force le
                 # Tester à tester CHACUNE des fonctionnalités du cahier des charges, pas
@@ -278,8 +263,11 @@ Pour inspecter la structure sans surcharger ton contexte :
    principale du DOM. Utilise `verbose=True` pour le détail complet.
 2. `evaluate_script(function="async () => document.body.innerHTML.length")` (DevTools) : pour
    des checks ponctuels (nombre d'éléments, valeurs, styles calculés).
-Les outils `puppeteer_clean_dom()` / `puppeteer_add_visual_tags()` instrumentent l'AUTRE
-navigateur (Puppeteer) qui ne charge pas la page — NE LES UTILISE PAS (tu verrais un DOM vide).
+Les outils `clean_dom()` / `add_visual_tags()` / `fuzz_click_all_buttons()` (SANS préfixe
+puppeteer_) instrumentent le navigateur DevTools actif — tu peux les utiliser librement :
+`clean_dom()` renvoie le DOM allégé (analyse sans polluer ton contexte), `add_visual_tags()`
+ajoute des badges rouges numérotés sur les éléments cliquables avant un screenshot,
+`fuzz_click_all_buttons()` réveille les bugs JS cachés en cliquant tous les `<button>`.
 
 Vérifie l'application web générée. N'oublie PAS l'étape 4 du skill (Functional Logic Testing) :
 identifie les comportements clés du cahier des charges ci-dessus et écris des assertions via
@@ -326,7 +314,7 @@ Une fois terminé, retourne ton résultat final STRICTEMENT en appelant l'outil 
 Le dictionnaire passé à `final_answer` DOIT absolument respecter ce format exact :
 ```python
 # Thought courte (1 phrase) PUIS appel immédiat — pas de longue réflexion
-puppeteer_add_visual_tags()
+add_visual_tags()
 # ... autres appels ...
 final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Un résumé détaillé de tes tests visuels, console ET assertions fonctionnelles."}})
 ```

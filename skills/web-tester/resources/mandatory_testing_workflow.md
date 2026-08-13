@@ -115,7 +115,7 @@ ci-dessous qui mesure la **progression dans le temps**.
 })()
 ```
 **IMPORTANT** : tu dois DÉCOUVRIR le signal de progression et le déclencheur depuis le HTML
-réel de la page (lis le source d'abord via `read_file` ou `puppeteer_clean_dom`), pas
+réel de la page (lis le source d'abord via `read_file` ou `clean_dom`), pas
 deviner des ids. Verdict : `progressed === false` après 400ms = animation **instantanée** ou
 non démarrée → investigager (FAIL si l'animation est censée être visible). `t1 > t0` =
 l'animation progresse bien dans le temps → OK.

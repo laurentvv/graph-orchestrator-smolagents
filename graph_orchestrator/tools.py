@@ -100,6 +100,37 @@ def read_python_skeleton(path: str) -> str:
     except Exception as e:
         return f"Error generating skeleton for {path}: {str(e)}"
 
+
+@tool
+def check_js_syntax(path: str) -> str:
+    """Vérifie instantanément la syntaxe d'un fichier JavaScript via `node --check`.
+    Retourne un message ✅ si la syntaxe est valide, ou ❌ avec l'erreur du parseur
+    (ligne/colonne) s'il y a une SyntaxError. À appeler AVANT final_answer sur tout
+    fichier .js généré ou modifié : c'est 1 step et ça évite un rejet du Linter.
+    Dégradation gracieuse : si `node` est absent du PATH, retourne un message
+    informatif (ne bloque pas l'agent — le Linter/Static Tester prend le relais).
+
+    Args:
+        path: Chemin du fichier JavaScript à valider (relatif ou absolu).
+    """
+    import shutil
+
+    if shutil.which("node") is None:
+        return f"ℹ️ `node` non disponible — vérification de syntaxe ignorée pour {path}."
+    try:
+        from .js_utils import run_node_check, MAX_JS_CHARS
+
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            js = f.read()
+    except OSError as e:
+        return f"Erreur de lecture de {path} : {str(e)}"
+    if len(js) > MAX_JS_CHARS:
+        js = js[:MAX_JS_CHARS]  # sécurité : éviter une ligne de commande trop longue.
+    code, stderr = run_node_check(js)
+    if code == 0:
+        return f"✅ Syntaxe JS valide : {path}"
+    return f"❌ Erreur de syntaxe dans {path} :\n{stderr.strip()[:2000]}"
+
 @tool
 def list_directory(path: str = ".") -> str:
     """Lists the contents of a directory.
