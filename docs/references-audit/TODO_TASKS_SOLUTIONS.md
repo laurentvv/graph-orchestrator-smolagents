@@ -37,7 +37,7 @@ LlamaBot utilise une approche où la liste de TODOs fait partie intégrante de l
 Cette approche est une implémentation pure Python (sans framework externe) qui inclut des gardes-fous contre les hallucinations du modèle.
 
 ### 🔗 Fichiers de référence pour copie de code :
-- **L'orchestrateur complet :** [`references/learn-claude-code/s05_todo_write/code.py`](file:///D:/GIT/graph-orchestrator-smolagents/references/learn-claude-code/s05_todo_write/code.py)
+- **L'orchestrateur complet :** [`references/learn-claude-code/s05_todo_write/code.py`](references/learn-claude-code/s05_todo_write/code.py)
 
 ### 💡 Mécanismes Clés :
 - **Validation Défensive (`_normalize_todos`) :** Les LLMs (surtout les petits) peuvent renvoyer un tableau JSON mal formaté ou une chaîne Python au lieu d'un vrai JSON. Cette fonction utilise un fallback `ast.literal_eval` pour récupérer la donnée coûte que coûte.
