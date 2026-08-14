@@ -36,6 +36,7 @@ from .skill_loader_tool import load_skill
 from .skills_loader import load_skill_body
 from .loop_guard import LoopGuard, extract_tool_calls_from_step
 from .stall_detector import StallDetector, classify_turn, dominant_material_hash
+from .goal_enforcer import GoalAction, GoalEnforcer
 from .llama_server import model_lifecycle
 from .orphan_repair import repair_orphan_steps
 from .sanitizer import sanitize_tools
@@ -293,6 +294,7 @@ async def run_with_retry(
     timeout_s: Optional[float] = None,
     idle_breaker_threshold: int = 3,
     stall_detector: Optional["StallDetector"] = None,
+    goal_enforcer: Optional["GoalEnforcer"] = None,
 ) -> Tuple[Optional[object], Optional[NodeMetrics]]:
     """Exécute un agent avec retry. Retourne (données_validées, métriques).
 
@@ -315,6 +317,14 @@ async def run_with_retry(
     write_file/search_replace, tester = puppeteer_*). Le Tester souffrait du failure mode
     "does not contain any JSON blob" (modèle thinking sans tool call) que le guard F-33
     n'existait que pour le Coder. Désormais tout agent appelant run_with_retry en bénéficie.
+
+    P3-ter (F-99, Goal Enforcement) : si un `goal_enforcer` est passé, un final_answer
+    VALIDE n'est plus accepté tel quel — le harnais audite les preuves matérielles de
+    complétion (écritures, livrables sur disque, verify-after). Non prouvé → prompt de
+    continuation qm (« treat completion as unproven ») ; même impasse 3 rounds → accepté
+    blocked (le Judge arbitre) ; aucun tool call → auto-waiver anti-deadlock ; plafond
+    tokens → wind-down unique. Complète F-36/F-88 (déterministe tool-level) par la garde
+    comportementale du faux « j'ai fini ».
     """
     last_metrics: Optional[NodeMetrics] = None
     # Détecte si l'agent est un CodeAgent (P1) pour adapter le message de retry
@@ -332,6 +342,10 @@ async def run_with_retry(
     _RUN_ERRORS.clear()
 
     for attempt in range(max_retries):
+        # F-99 : le final_answer peut être valide MAIS non prouvé (audit de
+        # complétion) → continuation injectée. Le flag supprime le RAPPEL
+        # générique "JSON invalide" qui serait mensonger dans ce cas.
+        goal_continued = False
         # P8 (Orphan Repair) : avant chaque exécution, on répare les appels d'outil
         # orphelins de la mémoire (tool_calls sans observation/erreur). Un historique
         # restauré depuis un checkpoint peut contenir un appel interrompu ; renvoyé
@@ -395,6 +409,10 @@ async def run_with_retry(
 
             # Collecte métriques depuis le RunResult
             last_metrics = _metrics_from_run(agent, run_result)
+            # F-99 : metering cumulatif (même tentative échouée) pour le
+            # plafond de tokens du goal enforcer (meterGoalCall qm : in+out).
+            if goal_enforcer is not None:
+                goal_enforcer.record_tokens(last_metrics)
 
             # P3 (Anti-Loop) : enregistre les tool calls de CETTE exécution dans
             # le guard. On profite de la boucle sur les steps pour extraire les tool
@@ -457,27 +475,51 @@ async def run_with_retry(
                     prompt += f"\n\n{error_msg}"
                     validated = None
                 else:
-                    # Un final_answer valide prime sur le LoopGuard (F-36). Le guard
-                    # scanne tout l'historique du run et peut comptabiliser comme
-                    # "répétition" une itération de correction légitime (même write_file
-                    # /search_replace rejoué après lecture). Éjecter un résultat réussi
-                    # pour ça le transforme en échec technique (post-mortem run
-                    # coding_d72dc8e36445c4b6 : final_answer success jeté → verdict
-                    # failure). loop_msg reste ajouté au prompt de retry (ligne ci-dessus)
-                    # pour le cas où validated est None — il guide alors le retry suivant.
-                    if loop_msg:
-                        print(
-                            "[i] LoopGuard a signalé une répétition, mais le "
-                            "final_answer est valide → succès conservé (priorité au "
-                            "résultat sur le guard F-36)."
-                        )
-                    if stall_msg:
-                        print(
-                            "[i] Stall Detector a signalé un stall, mais le "
-                            "final_answer est valide → succès conservé (priorité au "
-                            "résultat sur le stall detector F-88)."
-                        )
-                    return validated, last_metrics
+                    # P3-ter (F-99, Goal Enforcement) : le final_answer est valide,
+                    # mais la COMPLÉTION n'est pas prouvée pour autant. Audit
+                    # déterministe des preuves matérielles (écritures + disque +
+                    # verify-after) ; non prouvé → prompt de continuation qm et on
+                    # boucle (consomme un attempt) ; impasse répétée/deadlock/cap →
+                    # waiver : résultat conservé, le Judge arbitre en aval.
+                    if goal_enforcer is not None:
+                        decision = goal_enforcer.enforce(steps)
+                        if decision.action == GoalAction.CONTINUE:
+                            print(
+                                f"[!] Goal enforcement (Tentative {attempt + 1}/{max_retries}) : "
+                                f"{decision.reason}"
+                            )
+                            record_run_error(
+                                f"Goal enforcement : complétion non prouvée — {decision.reason}"
+                            )
+                            prompt += f"\n\n{decision.prompt_note}"
+                            validated = None
+                            goal_continued = True
+                        elif decision.action == GoalAction.WAIVE:
+                            print(
+                                f"[i] Goal enforcement : {decision.reason}"
+                            )
+                    if validated is not None:
+                        # Un final_answer valide prime sur le LoopGuard (F-36). Le guard
+                        # scanne tout l'historique du run et peut comptabiliser comme
+                        # "répétition" une itération de correction légitime (même write_file
+                        # /search_replace rejoué après lecture). Éjecter un résultat réussi
+                        # pour ça le transforme en échec technique (post-mortem run
+                        # coding_d72dc8e36445c4b6 : final_answer success jeté → verdict
+                        # failure). loop_msg reste ajouté au prompt de retry (ligne ci-dessus)
+                        # pour le cas où validated est None — il guide alors le retry suivant.
+                        if loop_msg:
+                            print(
+                                "[i] LoopGuard a signalé une répétition, mais le "
+                                "final_answer est valide → succès conservé (priorité au "
+                                "résultat sur le guard F-36)."
+                            )
+                        if stall_msg:
+                            print(
+                                "[i] Stall Detector a signalé un stall, mais le "
+                                "final_answer est valide → succès conservé (priorité au "
+                                "résultat sur le stall detector F-88)."
+                            )
+                        return validated, last_metrics
 
             # F-33 (1) : tour sans tool call exécuté ? (modèle réfléchit sans agir)
             idle_msg = _detect_idle_step(agent, node_kind=node_kind)
@@ -508,23 +550,30 @@ async def run_with_retry(
             else:
                 # Un run productif (avec tool calls) reset le compteur d'idles consécutifs.
                 consecutive_idle = 0
-                print(
-                    f"[!] Tentative {attempt + 1}/{max_retries} échouée pour "
-                    f"{model_class.__name__}. Nouvelle tentative..."
-                )
-                record_run_error(f"Tentative {attempt + 1} échouée : JSON non valide ou outil final non utilisé.")
-                # Message de retry adapté au type d'agent (Python pour CodeAgent, JSON pour TCA).
-                if is_code_agent:
-                    prompt += (
-                        f"\n\nRAPPEL: ton dernier essai n'a pas abouti. Appelle final_answer(...) "
-                        f"en PYTHON avec un dict conforme au schéma {model_class.__name__}."
-                    )
+                if goal_continued:
+                    # F-99 : le final_answer ÉTAIT valide — c'est l'audit de
+                    # complétion qui a exigé une continuation. Le message qm est
+                    # déjà injecté ; le RAPPEL générique "JSON invalide" serait
+                    # mensonger ici.
+                    pass
                 else:
-                    prompt += (
-                        f"\n\nRAPPEL CRITIQUE: Tu as échoué au dernier essai. Renvoie STRICTEMENT "
-                        f"un JSON valide pour ce schéma : {model_class.model_json_schema()} "
-                        f"via l'outil final_answer."
+                    print(
+                        f"[!] Tentative {attempt + 1}/{max_retries} échouée pour "
+                        f"{model_class.__name__}. Nouvelle tentative..."
                     )
+                    record_run_error(f"Tentative {attempt + 1} échouée : JSON non valide ou outil final non utilisé.")
+                    # Message de retry adapté au type d'agent (Python pour CodeAgent, JSON pour TCA).
+                    if is_code_agent:
+                        prompt += (
+                            f"\n\nRAPPEL: ton dernier essai n'a pas abouti. Appelle final_answer(...) "
+                            f"en PYTHON avec un dict conforme au schéma {model_class.__name__}."
+                        )
+                    else:
+                        prompt += (
+                            f"\n\nRAPPEL CRITIQUE: Tu as échoué au dernier essai. Renvoie STRICTEMENT "
+                            f"un JSON valide pour ce schéma : {model_class.model_json_schema()} "
+                            f"via l'outil final_answer."
+                        )
         except asyncio.TimeoutError:
             # Fix blocage Tester Chrome DevTools : timeout wall-clock expiré.
             # Le thread agent.run (et le Chrome/npx bloqué) reste zombie — Python ne peut
@@ -1066,6 +1115,27 @@ Code prêt pour la production, respectant les conventions du langage.
             threshold=settings.stall_detector_threshold,
             enabled=settings.stall_detector_enabled,
         )
+        # P3-ter (F-99) : Goal Enforcer — garde comportementale du faux « j'ai
+        # fini ». Un final_answer valide est audité contre l'état autoritaire
+        # (écritures + livrables sur disque + verify-after web). Contrairement
+        # aux guards ci-dessus, son état (impasse, streak, tokens) VIT à travers
+        # les retries : les rounds de continuation sont ce qu'on compte (qm
+        # goal.ts GOAL_BLOCKED_MIN_ROUNDS=3 ↔ worker_max_retries=3).
+        goal = GoalEnforcer(
+            objective=(
+                task.get("content")
+                or task.get("description")
+                or task.get("original_content")
+                or ""
+            ),
+            target_files=task.get("target_files") or [],
+            iteration=task.get("iteration", 1),
+            is_web=_is_web_task(task),
+            blocked_min_rounds=settings.goal_blocked_min_rounds,
+            waiver_stalled_rounds=settings.goal_waiver_stalled_rounds,
+            token_cap=settings.goal_token_cap,
+            enabled=settings.goal_enforcement_enabled,
+        )
         # max_retries can be slightly higher for coding since it involves tool use steps
         # max_retries can be slightly higher for coding since it involves tool use steps
         with model_lifecycle(settings.fast_spec) as srv:
@@ -1095,6 +1165,7 @@ Code prêt pour la production, respectant les conventions du langage.
                 local_coder, prompt, CoderOutput, settings.worker_max_retries, loop_guard=guard,
                 idle_breaker_threshold=settings.idle_breaker_threshold,
                 stall_detector=stall,
+                goal_enforcer=goal,
             )
 
 
