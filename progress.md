@@ -1485,3 +1485,9 @@ Coder est appliquée correctement par Qwen3.5-9B.
 > aucun prompt ne peut rendre ce dualisme infaillible. `normalize_tool_path` rend le bug impossible
 > quel que soit le comportement du modèle, SANS corrompre les chemins relatifs (pas d'abspath).
 
+## Jalons de l'Itération (cycle Coder Stop Condition & Navigation HTML-only — PR #70)
+- [x] Étape CSC-1 : Diagnostic empirique du run de 2 heures — le Coder naviguait sur `styles.css` avec DevTools MCP, générant un DOM vide (`<pre>`), entraînant des assertions JS fausses et une boucle de 35 steps de tests redondants.
+- [x] Étape CSC-2 : Ajout de l'Invariant universel 13 (Deterministic Stop Condition) dans `graph_orchestrator/prompts.py` (obligation d'appeler `final_answer` dès les tests initiaux validés).
+- [x] Étape CSC-3 : Interdiction formelle de naviguer sur des fichiers non-HTML (`.css`, `.js`, etc.) dans `skills/devtools-preview/SKILL.md` et dans le prompt du `coder_frontend`.
+- [x] Étape CSC-4 : Validation en isolation via `debug/run_coder.py` (Qwen 4B) : 3 fichiers générés (`index.html`, `styles.css`, `script.js`), 0 erreur console, rendu visuel validé, fuzzing boutons réussi, sortie propre via `final_answer` à l'étape 14 (sans boucle).
+- [x] Étape CSC-5 : Revue Kilo validée sans réserve ("No Issues Found | Recommendation: Merge"), PR #70 squash-mergée et branche supprimée.
