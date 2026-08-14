@@ -272,15 +272,22 @@ def test_cli_log_event_insere_et_horodate(tmp_path, capsys):
 
 
 def test_cli_log_event_date_invalide_rejette(tmp_path, capsys):
+    """Rejet AVANT toute connexion : --date invalide ne crée même pas le fichier."""
     db = str(tmp_path / "ev.duckdb")
     rc = log_event_main(["fix", "x", "--date", "pas-une-date", "--db", db])
     assert rc == 2
-    assert not os.path.exists(db) or _count(db) in (0, None) or True  # rien d'inséré
+    assert not os.path.exists(db)
 
 
-def _count(db: str) -> int:
+def test_insert_entries_sur_base_fraiche(tmp_path):
+    """Review Kilo #72 : insert_entries doit créer le schéma si la base n'existe
+    pas encore (aucun SELECT sur une table absente)."""
+    db = str(tmp_path / "fraiche.duckdb")
+    assert not os.path.exists(db)
+    entries = [LogEntry(date="2026-08-14", event_type="init", title="A", body="")]
+    stats = insert_entries(db, entries)
+    assert stats["inserted"] == 1
     con = duckdb.connect(db, read_only=True)
-    try:
-        return con.execute("SELECT count(*) FROM run_event").fetchone()[0]
-    finally:
-        con.close()
+    rows = con.execute("SELECT run_id, event_type FROM run_event").fetchall()
+    con.close()
+    assert rows == [("legacy_md", "init")]

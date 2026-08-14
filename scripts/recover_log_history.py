@@ -210,6 +210,23 @@ def insert_entries(
     }
     con = duckdb.connect(db_path)
     try:
+        # Garde base fraîche (review Kilo #72) : la table peut ne pas exister
+        # si aucune écriture n'a encore initialisé le schéma. Miroir de la
+        # création dans scripts/log_event.py / event_stream.py.
+        con.execute(
+            """
+            CREATE SEQUENCE IF NOT EXISTS event_seq;
+            CREATE TABLE IF NOT EXISTS run_event (
+                id          BIGINT DEFAULT nextval('event_seq'),
+                run_id      VARCHAR NOT NULL,
+                node        VARCHAR NOT NULL,
+                event_type  VARCHAR NOT NULL,
+                message     VARCHAR NOT NULL,
+                created_at  TIMESTAMP DEFAULT now(),
+                PRIMARY KEY (id)
+            )
+            """
+        )
         existing = {
             (row[0], row[1])
             for row in con.execute(
@@ -229,10 +246,13 @@ def insert_entries(
             return stats
 
         for rid in replace_run_ids:
-            deleted = con.execute(
-                f"DELETE FROM run_event WHERE run_id = ?", [rid]
-            ).fetchone()
-            stats["deleted_legacy"] = int(deleted[0]) if deleted else 0
+            # DuckDB : un DELETE ne renvoie pas de lignes de façon portable
+            # (review Kilo #72) — on compte AVANT la suppression.
+            n = con.execute(
+                "SELECT count(*) FROM run_event WHERE run_id = ?", [rid]
+            ).fetchone()[0]
+            con.execute("DELETE FROM run_event WHERE run_id = ?", [rid])
+            stats["deleted_legacy"] += int(n)
 
         for e in to_insert:
             con.execute(

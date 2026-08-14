@@ -752,8 +752,8 @@ odes.py et web_tester.py pour exiger une DÉCLARATION de fonction asynchrone non
 - [x] Étape RBW-7 : Validation — py_compile OK (3 fichiers) + suite pytest complète
   651 passed / 0 failed (616 baseline + 35 nouveaux), 0 régression.
 - [x] Étape RBW-8 : État disque synchronisé (feature_list.json +F-67, contract.md
-  +critères 215-227, plan_usine_logicielle.md P1 case cochée, progress.md, README.md,
- ). Commit + push + PR.
+  +critères 215-227, plan_usine_logicielle.md P1 case cochée, progress.md, README.md).
+  Commit + push + PR.
 
 ## Jalons de l'Itération (cycle Skills à la demande / Coder — F-57 Phase 1, Priorité 10)
 > **Note de pivot (v3)** : le design initial v1 (lazy loading via tool `load_skill`
@@ -874,8 +874,8 @@ LLM confirme) fonctionnent. Le Tier 3 déterministe est validé end-to-end (dét
 bug en 4.5s, ne flaggue pas le corrigé, 0 faux positif). Le Tester LLM applique bien
 le test temporel mais reste limité par son over-exploration (pré-existant). La règle 9
 Coder est appliquée correctement par Qwen3.5-9B.
-- [x] Étape T3-9 : État disque synchronisé (feature_list.json +F-81, progress.md, README.md,
- ). Branche `feat/static-tester-tier3-temporal`. Commit.
+- [x] Étape T3-9 : État disque synchronisé (feature_list.json +F-81, progress.md, README.md).
+  Branche `feat/static-tester-tier3-temporal`. Commit.
 
 ## Jalons de l'Itération (cycle Diff + métriques Judge — F-70, P6-bis)
 - [x] Étape F70-1 : Reconnaissance (2 agents Explore parallèles) — Judge plumbing
