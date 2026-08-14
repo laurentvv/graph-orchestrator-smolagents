@@ -14,6 +14,13 @@ Audit 24 (2026-08-05) :
   - 24 pi                 =  7 entrées (P9 compaction, P6 Judge)
 Audit 26 (2026-08-06) :
   - 26 cloudflare-os      =  3 entrées (P8-bis, P10, P12)
+Audit 45-46 (2026-08-14, procédure PROCEDURE-AUDIT-REFERENCE.md) :
+  - 45 OpenSandbox        = 22 entrées (P8 retry transport, P8-bis lifecycle sandbox, P0 AGENTS.md
+                            hiérarchiques, P11 request-id, P12 tenancy, P3 anti-loop LangGraph)
+  - 46 deepseek-harness   = 24 entrées (P3 anti-loop + ralph, P8 retry durable, P9 compaction 8
+                            sections, P11 event stream typé, P10 skills scopés, P0-bis charte)
+NB : les projets 27-44 ont été ajoutés directement dans inventory.json (fiches 27-44) ; ce script
+les passe à l'identique. projects_audited reflète le total réel.
 
 Corrige aussi les reuse_rating globaux inversés par l'ancienne fiche bâclée :
   - qm : medium -> high   (algorithmes portables : compaction, mémoire, idempotency, queues)
@@ -766,11 +773,186 @@ LEAKS_FILES = [
      "description": "Agent OpenCode."},
 ]
 
+# ---------------------------------------------------------------------------
+# 45 — OpenSandbox : 22 entrées (sandbox platform Apache-2.0 ; Python pur pour
+# le transport/MCP/middlewares, specs OpenAPI pour le lifecycle, Go non portable)
+# ---------------------------------------------------------------------------
+OSB_BASE = "references/OpenSandbox"
+OSB_TRANSPORT = f"{OSB_BASE}/sdks/sandbox/python/src/opensandbox/transport"
+OSB_FILES = [
+    # --- P8 : middleware de retry résilient (Python pur, httpx) ---
+    {"path": f"{OSB_TRANSPORT}/retry.py", "type": "code", "reuse": "high",
+     "key_symbols": ["RetryPolicy", "RetryCause", "RetryEvent", "JitterMode.DECORRELATED"],
+     "description": "Politique de retry complète (frozen dataclass) : max_retries=3, backoff exponentiel x2 plafonné 30s, jitter décorrélé, codes retryables idempotent vs non-idempotent, per_attempt_timeout + overall_deadline, hook on_retry. Design documenté dans oseps/0017. LE middleware P8, copiable tel quel pour llama.cpp/MCP."},
+    {"path": f"{OSB_TRANSPORT}/_classify.py", "type": "code", "reuse": "high",
+     "key_symbols": ["classify_transport_exception", "is_body_replayable"],
+     "description": "Classification pré-send (safe sur toute méthode) vs post-send (idempotents seulement) + test de rejouabilité du body httpx. Découpage propre des responsabilités du retry."},
+    {"path": f"{OSB_TRANSPORT}/_async_retry.py", "type": "code", "reuse": "high",
+     "key_symbols": ["RetryAsyncTransport", "handle_async_request"],
+     "description": "Transport httpx asynchrone avec retry : deadline mur-mur, clamp des timeouts par phase, Retry-After honoré et plafonné, sleep clampé au budget restant, CancelledError jamais avalé, réponse rejetée aclose()d."},
+    # --- P0/P11 : serveur MCP ---
+    {"path": f"{OSB_BASE}/sdks/mcp/sandbox/python/src/opensandbox_mcp/server.py", "type": "code", "reuse": "high",
+     "key_symbols": ["ServerState", "register_tools", "create_server", "_get_or_connect_sandbox"],
+     "description": "Serveur MCP FastMCP complet (20+ outils sandbox/command/file) avec docstrings-contrats, registre de sessions dict+Lock, reconnexion, ctx.report_progress. Modèle direct pour exposer nos outils chrome-devtools/linter via MCP et industrialiser notre client."},
+    # --- P8-bis : spec lifecycle + snapshot/restore ---
+    {"path": f"{OSB_BASE}/specs/sandbox-lifecycle.yml", "type": "spec", "reuse": "high",
+     "key_symbols": ["/sandboxes 202+polling", "renew-expiration", "/snapshots Location", "JSON Merge Patch RFC 7396", "endpoints signés expires=", "/metrics/events"],
+     "description": "Spec OpenAPI (1712 L) du lifecycle sandbox : machine à états Running/Pausing/Paused/Resuming, TTL absolu renouvelable, snapshot asynchrone, restore par snapshotId, télémétrie fire-and-forget (MUST NOT affect usability). Contrat à imiter pour l'exécution isolée/rejouable du code généré."},
+    {"path": f"{OSB_BASE}/server/opensandbox_server/services/snapshot_restore.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["resolve_sandbox_image_from_request", "DEFAULT_SNAPSHOT_RESTORE_ENTRYPOINT"],
+     "description": "Création depuis snapshotId : résout l'image, rejette 409 si SnapshotState != READY, vérifie l'isolation tenant, entrypoint neutre tail -f /dev/null. Sémantique du rejouable (workspace versionné par itération Coder) ; implémentation OCI/K8s non portable."},
+    # --- P10/P6 : skills markdown + registre ---
+    {"path": f"{OSB_BASE}/skills/troubleshoot-sandbox/SKILL.md", "type": "skill", "reuse": "high",
+     "key_symbols": ["frontmatter name/description/user-invocable/argument-hint", "Workflow Step 1-5", "tableau symptôme->vérification->cause"],
+     "description": "Skill de diagnostic : tableau symptôme/cause probable (exit codes 137/126/127, OOMKilled). Gabarit de grounding des findings Judge (P6) + exemple du format SKILL.md attendu par P10."},
+    {"path": f"{OSB_BASE}/cli/src/opensandbox_cli/skill_registry.py", "type": "code", "reuse": "high",
+     "key_symbols": ["SkillSpec", "BUILTIN_SKILLS", "split_frontmatter", "extract_section"],
+     "description": "Registre de skills : spec eager (slug/title/summary/trigger_hint) + corps lazy avec sections extractibles par heading. Exactement la discipline progressive-disclosure de P10, en Python."},
+    # --- P0/P0-bis : AGENTS.md hiérarchiques ---
+    {"path": f"{OSB_BASE}/AGENTS.md", "type": "doc", "reuse": "high",
+     "key_symbols": ["root router", "Prefer the nearest AGENTS.md", "Always / Ask first / Never"],
+     "description": "AGENTS.md racine = routeur (« le plus proche AGENTS.md gagne ») + Repository Map + Guardrails 3 niveaux. Implémentation réelle de la spécialisation par contexte (P0) et des invariants (P0-bis). Compléments : server/AGENTS.md (Key Paths) et specs/AGENTS.md (Contract Map)."},
+    # --- P11/P12 : observabilité + tenancy ---
+    {"path": f"{OSB_BASE}/server/opensandbox_server/middleware/request_id.py", "type": "code", "reuse": "high",
+     "key_symbols": ["request_id_ctx", "RequestIdMiddleware", "RequestIdFilter", "get_request_id"],
+     "description": "Corrélation des logs par ContextVar + Filter qui injecte request_id dans chaque LogRecord (reset du token en finally). ~30 lignes transplantables pour corréler nos logs par run/nœud."},
+    {"path": f"{OSB_BASE}/server/opensandbox_server/tenants/models.py", "type": "code", "reuse": "high",
+     "key_symbols": ["TenantEntry"],
+     "description": "Mapping API key -> namespace (OSEP-0014) : le modèle minimal de cloisonnement multi-utilisateurs, applicable aux scopes DuckDB (P12)."},
+    {"path": f"{OSB_BASE}/server/opensandbox_server/integrations/otel/metrics.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["setup_otel_metrics", "record_sandbox_create_duration"],
+     "description": "Métriques OTEL par durée d'opération — complément télémétrie P11 (la spec impose un canal events fire-and-forget qui ne dégrade jamais l'usabilité)."},
+    # --- P6/P11 : tests E2E ---
+    {"path": f"{OSB_BASE}/tests/python/tests/base_e2e_test.py", "type": "test", "reuse": "medium",
+     "key_symbols": ["create_connection_config", "is_kubernetes_runtime", "OPENSANDBOX_TEST_*"],
+     "description": "Harnais E2E piloté par variables d'environnement — pattern pour nos suites Tester/Judge configurables sans code."},
+    {"path": f"{OSB_BASE}/tests/python/tests/test_sandbox_e2e.py", "type": "test", "reuse": "medium",
+     "key_symbols": ["test_01_sandbox_lifecycle_and_health", "test_04_interrupt_command", "test_07_x_request_id_passthrough_on_server_error"],
+     "description": "22 tests E2E ordonnés et numérotés (lifecycle, command, interrupt, pause/resume, passthrough X-Request-ID). Discipline de scénarios séquentiels reproductibles pour le nœud Tester."},
+    # --- P3 : anti-loop illustrée ---
+    {"path": f"{OSB_BASE}/examples/langgraph/main.py", "type": "code", "reuse": "high",
+     "key_symbols": ["WorkflowState", "max_attempts", "fallback_command", "decide_next", "cleanup_sandbox"],
+     "description": "Anti-loop LangGraph : compteur d'attempts dans l'état TypedDict, arête conditionnelle self-loop bornée, substitution d'une commande de FALLBACK différente à chaque retry, cleanup garanti en finally. Le pattern exact de la boucle Coder->Tester."},
+    {"path": f"{OSB_BASE}/examples/playwright/main.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["Playwright headless", "files.read_bytes"],
+     "description": "Validation visuelle navigateur exécutée DANS le sandbox, screenshot rapatrié par l'API fichiers — horizon de notre chrome-devtools sandboxé."},
+    # --- P8-bis : isolation Go (concept only) ---
+    {"path": f"{OSB_BASE}/components/execd/pkg/isolation/bwrap.go", "type": "code", "reuse": "low",
+     "key_symbols": ["bwrap", "namespaces"],
+     "description": "Isolation de sessions Linux via bubblewrap (+ seccomp_gen.go, isolator.go, probe.go). Concept de frontières d'isolation pour P8-bis ; Go/Linux non portable."},
+    # --- Docs / OSEPs ---
+    {"path": f"{OSB_BASE}/oseps/0017-resilient-sdk-transport.md", "type": "doc", "reuse": "high",
+     "key_symbols": ["taxonomie d'exceptions", "jitter décorrélé", "deadline"],
+     "description": "Design decision complète du transport résilient (l'équivalent de leur F-44 pour le retry). À lire avant de porter le module transport/."},
+    {"path": f"{OSB_BASE}/docs/guides/pause-resume.md", "type": "doc", "reuse": "high",
+     "key_symbols": ["sandboxId stable", "commit rootfs"],
+     "description": "Sémantique pause/resume/snapshot : tableau des états, id stable à travers le cycle, commit du rootfs en image. Base conceptuelle P8-bis."},
+    {"path": f"{OSB_BASE}/docs/guides/multi-tenancy.md", "type": "doc", "reuse": "high",
+     "key_symbols": ["API key -> namespace", "startup guards"],
+     "description": "Guide multi-tenancy (avec oseps/0014) : cloisonnement minimal par clé — matière P12."},
+    {"path": f"{OSB_BASE}/oseps/0013-isolated-execution-api.md", "type": "doc", "reuse": "medium",
+     "key_symbols": ["run_once", "with_session", "bubblewrap"],
+     "description": "API d'exécution isolée par sessions mutuellement exclusives dans un même pod, run_once idempotent — le modèle d'exécution rejouable visé par P8-bis."},
+    {"path": f"{OSB_BASE}/docs/guides/client-pool.md", "type": "doc", "reuse": "medium",
+     "key_symbols": ["pool d'IDs", "pré-chauffage"],
+     "description": "Pool de clients/sandboxes pré-chauffés — pattern transposable à un pool de processus llama.cpp pour supprimer le coût de spawn (P9)."},
+]
+
+# ---------------------------------------------------------------------------
+# 46 — deepseek-harness : 23 entrées (harness d'agent TS/Cordis, MIT ; mécanismes
+# ultra-documentés P3/P8/P9/P10/P11 — porter l'intention, pas la syntaxe)
+# ---------------------------------------------------------------------------
+DSH_BASE = "references/deepseek-harness"
+DSH_FILES = [
+    # --- P3 : anti-loop ---
+    {"path": f"{DSH_BASE}/packages/guard/repeat-tool-reminder/src/index.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["Config.thresholds [3,5,8]", "canonicalize", "sortJsonValue", "Chain", "observe()", "prependContext()"],
+     "description": "Détecteur de répétitions CONSÉCUTIVES d'appels d'outils identiques (clé = nom + arguments canonisés par tri récursif JSON) : escalade douce aux seuils 3/5/8 (rappel générique puis détaillé), injection de contexte sans veto, chaîne par agent (WeakMap), reset sur message utilisateur. Portage Python ~150 lignes — complément doux au LoopGuard F-36."},
+    {"path": f"{DSH_BASE}/packages/workflow/tool-ralph/README.md", "type": "doc", "reuse": "high",
+     "key_symbols": ["ralph(objective, maxRounds)", "handoff status/summary/evidence/nextSteps/blocker", "maxHandoffChars 16384", "no independent evaluator"],
+     "description": "Boucle à agents frais : objectif immuable, contexte remis à zéro chaque round, workspace partagé = mémoire, handoff borné = seul transfert. Contre-mesure radicale P3 ; documente honnêtement la limite « completion is worker self-declaration » (argument P6 pour un judge indépendant)."},
+    {"path": f"{DSH_BASE}/packages/workflow/tool-ralph/src/index.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["maxRounds default 256", "rounds loop", "rapport invalide => échec"],
+     "description": "Implémentation ralph : rounds bornés, rapport structuré validé (un handoff invalide échoue le workflow plutôt que d'être tronqué)."},
+    {"path": f"{DSH_BASE}/packages/subagent/subagent/src/depth.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["delegationDepthOf"],
+     "description": "Profondeur de délégation monotone lue du header de session persistant — un child repris ne peut pas se faire passer pour top-level. Garde anti-récursion triviale à porter (P3/P12)."},
+    # --- P8 : retry durable + parsing tolérant + timeout ---
+    {"path": f"{DSH_BASE}/packages/llm/llm-retry/src/index.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["localDelay", "recover()", "retryPolicyKey()", "cancellableDelay()", "providerRetryAfterMs", "llm/retry events"],
+     "description": "Retry LLM durable : s'accroche sur agent/request-error, backoff exponentiel + jitter, respecte Retry-After du provider ; LE compteur de retries est persisté dans le log de session et relu par findLast → survit à un crash/restart. ~220 lignes lisibles."},
+    {"path": f"{DSH_BASE}/packages/llm/llm/src/assembler.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["BlockAssembler"],
+     "description": "Assemblage streaming tolérant : protocoles delta-only, premiers block-end gagnants, deltas tardifs ignorés. Parsing robuste P8 pour petits modèles locaux."},
+    {"path": f"{DSH_BASE}/packages/guard/timeout-policy/src/index.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["TOOL_TIMEOUT"],
+     "description": "Deadline coopérative sur l'exécution d'outil avec code d'erreur structuré routable par retry — borne les appels MCP pendants (chrome-devtools)."},
+    {"path": f"{DSH_BASE}/docs/tool-execution-pipeline.md", "type": "doc", "reuse": "high",
+     "key_symbols": ["5 waterfalls", "tools/pre-execute", "approval", "tools/execute", "tools/post-execute accept/block/replace/add-contexts"],
+     "description": "Spec (graphe mermaid) des 5 waterfalls d'exécution d'outil : permission, guards monotones, approval, execute (timeout/retry), post-execute. C'est le cahier des charges des middlewares P8."},
+    # --- P9 : compaction ---
+    {"path": f"{DSH_BASE}/packages/compaction/compaction-basic/src/summarizer.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["COMPACTION_INSTRUCTION", "summarizeWithLlm", "frameSummary", "finishError"],
+     "description": "Prompt de checkpoint structuré en 8 sections (Primary Request / Key Concepts / Files and Code / Errors and Fixes / Pending Jobs / Current Work / Next Step / Critical Context + règles « preserve exact paths, error strings »). Rejoue le préfixe identique pour réutiliser le KV cache ; fail-closed si tronqué par max-tokens. La meilleure matière P9 du dossier."},
+    {"path": f"{DSH_BASE}/packages/compaction/compaction-tool-result-pruner/src/index.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["ToolResultPruner", "thresholdChars", "headChars", "tailChars", "PRUNE_MARKER"],
+     "description": "Pruning déterministe head/middle/tail des gros résultats d'outils, model-free, replay-safe — complément structurel gratuit avant toute compaction sémantique."},
+    {"path": f"{DSH_BASE}/packages/compaction/compaction/src/types.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["compaction/start|summary|end|prune", "shadowedRange", "shadowedSeqs", "shadowedTokenCount", "SurfaceOp replace"],
+     "description": "Comptabilité « shadow price » de la compaction : la substitution se fait par SurfaceOp replace dans le log, jamais par destruction — observabilité de ce que la compaction coûte/cache (P9+P11)."},
+    # --- P11 : event stream de session ---
+    {"path": f"{DSH_BASE}/packages/core/session/src/types.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["SessionEventMap", "SessionEvent {type, seq, time, data, ignorable?}", "SurfaceOp", "sourceEventSeqs", "TurnEndReason"],
+     "description": "Event log typé extensible (declaration merging), avec provenance (chaque message cite les chunks consommés) et flag ignorable (un lecteur qui ne connaît pas un type REFUSE au lieu de corrompre). Convention « Model-visible ⟺ logged », invariant vérifié à l'exécution. Modèle direct pour notre DuckDB."},
+    {"path": f"{DSH_BASE}/packages/session/session-telemetry-otel/src/index.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["DISABLED/FEEDBACK_ONLY/FULL", "waterfall de rédaction"],
+     "description": "Télémétrie OTel avec porte de confidentialité (rédaction avant export) — pattern pour notre télémétrie P11."},
+    {"path": f"{DSH_BASE}/packages/session/session-persistence-jsonl/src/index.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["backend JSONL", "même log"],
+     "description": "Deux backends (JSONL + SQLite, voir packages/session/session-persistence-sqlite) du même log de session — valide l'architecture backend-agnostique (DuckDB = 3e backend possible)."},
+    # --- P10/P12 : skills scopés ---
+    {"path": f"{DSH_BASE}/packages/skill/skill/src/index.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["SkillRegistry", "SkillProvider {list, get}", "SkillSummary", "SkillLayer", "ScopedLayers", "renderSkillContent", "SkillInvocationPolicy"],
+     "description": "Registry de skills scopés : catalog/body séparés (progressive disclosure), rank, résolution par nom kebab-case, invalidation par révision, shadowing par scope (le plus proche gagne). Cahier des charges P10 + illustration P12."},
+    # --- P0 : system prompt assemblé + instructions hiérarchiques ---
+    {"path": f"{DSH_BASE}/packages/core/system-prompt/src/index.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["PromptSection {name, order, complete?}", "PromptAssembly", "{{variable}}"],
+     "description": "System prompt assemblé par sections ordonnées (convention : -100 identité, 0 persona, 100-199 guidance outils ; flag complete = remplace tout). Modèle pour des presets de prompt par nœud."},
+    {"path": f"{DSH_BASE}/packages/context/agent-instructions/README.md", "type": "doc", "reuse": "high",
+     "key_symbols": ["AGENTS.md hiérarchiques", "dédup CLAUDE.md", "system-reminder", "maj incrémentale added/updated/removed"],
+     "description": "Chargement hiérarchique d'AGENTS.md (home puis root->cwd), dédup des CLAUDE.md identiques, injection durable, re-scan incrémental après chaque outil fs réussi. Pattern directement transposable à notre F-76 (le détail qui manque : la maj incrémentale)."},
+    # --- P0-bis : charte d'invariants ---
+    {"path": f"{DSH_BASE}/AGENTS.md", "type": "doc", "reuse": "high",
+     "key_symbols": ["Registrations are effects", "Model-visible ⟺ logged", "Plugins, not loop changes", "Misconfiguration fails loud", "waterfalls MUST call next()", "assertNever"],
+     "description": "Charte de dev pour agents : invariants exigés de tout plugin + tags discriminants + assertNever. Source directe pour enrichir UNIVERSAL_INVARIANTS (P0-bis). Chaque package a aussi son invariant.ts exécutable."},
+    {"path": f"{DSH_BASE}/docs/architecture.md", "type": "doc", "reuse": "high",
+     "key_symbols": ["turn flow diagram", "where new behavior goes", "capability seams"],
+     "description": "Architecture Cordis + diagramme du turn flow + table « où ranger un nouveau comportement ». Blueprint de référence de l'orchestrateur — à lire en premier."},
+    # --- P8 : boucle d'agent ---
+    {"path": f"{DSH_BASE}/packages/core/agent-loop/src/agent.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["ReactLoopAgent", "Phase idle/maintenance/running", "Inbox followup/steer/inject/cancel", "agent/pre-step", "agent/turn-stopping"],
+     "description": "Boucle d'agent : turn = 0..n steps, AbortController par activité, inbox de pilotage, points d'extension en waterfall documentés. Spécification à porter comme contrat P8, pas comme code."},
+    # --- Docs sous-systèmes + ADR ---
+    {"path": f"{DSH_BASE}/docs/subsystems/compaction.md", "type": "doc", "reuse": "medium",
+     "key_symbols": ["compaction", "surface"],
+     "description": "Doc sous-système compaction (92 docs bilingues dans docs/subsystems/ : core.md, session.md, llm-streaming.md, scope.md, subagent.md…)."},
+    {"path": f"{DSH_BASE}/.agents/notes/implemented/feature/2026-07-19-fresh-agent-ralph-workflow-tool.md", "type": "doc", "reuse": "medium",
+     "key_symbols": ["Problem/Decision/Deferred"],
+     "description": "ADR de la boucle ralph (parmi ~450 ADRs dans .agents/notes/) — format de design decision à sonder par sujet, pas exhaustivement."},
+    # --- Exclusions documentées ---
+    {"path": f"{DSH_BASE}/python/sdk/src/deepseek_harness/client.py", "type": "code", "reuse": "low",
+     "key_symbols": ["client JSON-RPC stdio"],
+     "description": "Le dossier python/ n'est qu'un simple driver JSON-RPC qui spawn le runtime TS bundlé — AUCUNE logique d'agent Python. Ne pas en espérer de réutilisation directe."},
+    {"path": f"{DSH_BASE}/BENCHMARK.md", "type": "doc", "reuse": "low",
+     "key_symbols": ["renvoie au SDK Python"],
+     "description": "Quasi vide (4 lignes) : pas de méthodologie d'éval dans ce dépôt — P6 non couvert."},
+]
+
 def main() -> None:
     data = json.loads(INVENTORY.read_text(encoding="utf-8"))
 
-    data["projects_audited"] = 29
-    data["audit_date"] = "2026-08-07"
+    data["projects_audited"] = 46
+    data["audit_date"] = "2026-08-14"
 
     updated = []
     seen_ids = set()
@@ -911,6 +1093,24 @@ def main() -> None:
                 "summary": "Framework de mémoire avancée pour agents (L0-L3, Hub, Proxy). Implémente une séparation claire des rôles pour l'extraction (SkillExtractor avec isolation de rôle) et un store multi-versionné pour les Memory Assets (SqliteSkillStore). Excellente source d'inspiration architecturale et de prompting.",
                 "files": TENCENT_FILES,
             }
+        elif pid == "OpenSandbox":
+            project = {
+                "id": "OpenSandbox", "name": "OpenSandbox",
+                "path": "references/OpenSandbox",
+                "category": "sandbox-platform",
+                "reuse_rating": "high",
+                "summary": "Plateforme de sandbox généraliste pour applications IA (ex-Alibaba, CNCF Landscape, Apache-2.0). Complément orthogonal de l'orchestrateur : exécution isolée/timeoutée/snapshotable/rejouable du code généré. Les parties pertinentes sont en Python pur copiable : RetryPolicy/RetryAsyncTransport (transport httpx résilient, OSEP-0017 = LE middleware P8), serveur MCP FastMCP avec docstrings-contrats, middleware request_id ContextVar, TenantEntry (P12). La spec OpenAPI sandbox-lifecycle.yml (202+polling, TTL renew, snapshot/restore, endpoints signés) est le contrat à imiter pour P8-bis. Réserves : runtime Go/K8s non portable (on prend le contrat + le client, pas la plateforme), pas de Judge/TDD, MCP server sans persistance.",
+                "files": OSB_FILES,
+            }
+        elif pid == "deepseek-harness":
+            project = {
+                "id": "deepseek-harness", "name": "deepseek-harness",
+                "path": "references/deepseek-harness",
+                "category": "agent-harness",
+                "reuse_rating": "high",
+                "summary": "Harness d'agent de coding CLI/Web de DeepSeek AI (MIT, developer preview), TypeScript/Cordis « everything is a plugin ». La valeur n'est pas le code (non portable) mais des mécanismes de loop ultra-documentés et invariant-driven (invariant.ts par package, ~450 ADRs, 92 docs sous-systèmes). Meilleure référence de design sur 6 priorités : P3 (repeat-tool-reminder + boucle ralph à agents frais + delegationDepthOf), P8 (llm-retry durable dont le compteur survit à un crash + BlockAssembler tolérant + spec 5 waterfalls d'exécution d'outil), P9 (prompt de checkpoint 8 sections avec KV-cache reuse + pruner déterministe + comptabilité shadow price), P10 (skills lazy scopés), P11 (event log typé extensible avec provenance et flag ignorable — le plus abouti du dossier), P0-bis (charte d'invariants « Model-visible ⟺ logged », « Misconfiguration fails loud »). P6 explicitement absent (self-declaration documentée comme limite). Réserves : developer preview (copier des mécanismes, jamais des formats de sérialisation), biais Node/Cordis, python/ = simple driver sans logique.",
+                "files": DSH_FILES,
+            }
         updated.append(project)
         seen_ids.add(pid)
 
@@ -996,6 +1196,16 @@ def main() -> None:
                         "category": "system-prompts", "reuse_rating": "high",
                         "summary": "Collection massive de prompts de production (Claude Code, Cursor, Gemini, etc.).",
                         "files": LEAKS_FILES})
+    if "OpenSandbox" not in seen_ids:
+        updated.append({"id": "OpenSandbox", "name": "OpenSandbox",
+                        "path": "references/OpenSandbox",
+                        "category": "sandbox-platform", "reuse_rating": "high",
+                        "summary": "(ajouté par update_inventory.py)", "files": OSB_FILES})
+    if "deepseek-harness" not in seen_ids:
+        updated.append({"id": "deepseek-harness", "name": "deepseek-harness",
+                        "path": "references/deepseek-harness",
+                        "category": "agent-harness", "reuse_rating": "high",
+                        "summary": "(ajouté par update_inventory.py)", "files": DSH_FILES})
 
     data["projects"] = updated
 
@@ -1009,7 +1219,7 @@ def main() -> None:
             by_reuse[r] = by_reuse.get(r, 0) + 1
     print(f"OK — {len(data['projects'])} projets, {total} entrées au total.")
     print(f"Répartition : {by_reuse}")
-    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi", "hermes-agent", "cloudflare-os", "browser-use", "TencentDB-Agent-Memory", "system-prompts-leaks"):
+    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi", "hermes-agent", "cloudflare-os", "browser-use", "TencentDB-Agent-Memory", "system-prompts-leaks", "OpenSandbox", "deepseek-harness"):
         proj = next(p for p in data["projects"] if p["id"] == new_id)
         print(f"  {new_id} : {len(proj['files'])} entrées (reuse_rating={proj['reuse_rating']})")
 

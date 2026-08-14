@@ -8,9 +8,9 @@
 
 | Métrique | Valeur |
 |---|---|
-| **Date de l'audit** | 2026-08-12 |
-| **Projets/dossiers audités** | 44 |
-| **Entrées de fichiers inventoriées** | 569 (inventaire machine : [`inventory.json`](./inventory.json)) |
+| **Date de l'audit** | 2026-08-14 |
+| **Projets/dossiers audités** | 46 |
+| **Entrées de fichiers inventoriées** | 615 (inventaire machine : [`inventory.json`](./inventory.json)) |
 | **Fichiers pertinents scannés** (base) | ~11 770 (hors `.git/`, `node_modules/`, médias, fixtures) |
 | **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css`) + JSON/YAML de spec/contrat |
 | **Exclusions** | `.git/` (~730 MB), `node_modules/`, médias (1 293 SVG, 16 mp4…), fixtures de tests, traductions de README (1 conservée/projet) |
@@ -19,7 +19,7 @@
 
 ---
 
-## 🧭 Navigation — les 44 fiches
+## 🧭 Navigation — les 46 fiches
 
 | # | Projet | Réutilisabilité | Fiche | Résumé en 1 ligne |
 |---|---|---|---|---|
@@ -67,6 +67,8 @@
 | 42 | **anydoc** | 🟢 Haute | [42-anydoc](./projects/42-anydoc.md) | Conversion documentaire Rust/Python — LLM Judge pairwise anti-biais (inversion A/B) + skill déclaratif canonique |
 | 43 | **framework** | 🟡 Moyenne | [43-framework](./projects/43-framework.md) | Framework AI-Driven Dev — SDLC orchestré (`01-sdlc`) + revue 3-axes (code/functional/relevancy) + debug 11 étapes par hypothèses |
 | 44 | **sentrux** | 🟡 Moyenne | [44-sentrux](./projects/44-sentrux.md) | Capteur de santé structurelle (5 métriques racines, score 0-10000) + pipeline tree-sitter multi-langage (Rust, à porter) |
+| 45 | **OpenSandbox** | 🟢 Haute | [45-OpenSandbox](./projects/45-OpenSandbox.md) | Plateforme de sandbox pour agents IA (ex-Alibaba) — transport retry Python pur (P8), spec lifecycle snapshot/restore (P8-bis), AGENTS.md hiérarchiques (P0), request-id ContextVar (P11) |
+| 46 | **deepseek-harness** | 🟢 Haute | [46-deepseek-harness](./projects/46-deepseek-harness.md) | Harness d'agent « everything is a plugin » (TS/Cordis, DeepSeek) — anti-loop + boucle ralph (P3), retry durable (P8), compaction checkpoint 8 sections (P9), event stream typé (P11) |
 
 ---
 
@@ -76,7 +78,7 @@
 `aider` (Python, mature), `crush` (Go), `nanocode` (Python, 1 fichier), `opencode` (TS, gigantesque), `openfox` (TS, local-LLM-first). → Valeur : edit-formats robustes (aider), anti-loop (crush), patterns d'outils minimaux (nanocode), specs de protocole (opencode), persistance event-sourcing (openfox).
 
 ### 2. 🔧 Frameworks d'orchestration d'agents (mixte code + docs)
-`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code), `loopx` (control plane — anti-loop déterministe + event sourcing + compaction, stdlib pure), `code-review-graph` (analyse d'impact + risk score composite), `pi` (agent stateful TS), `hermes-agent` (agent auto-amélioré Python Nous Research — compaction + SQLite FTS5 + skills + sécurité + middleware), `cloudflare-os` (architecture Gatekeepers, human in the loop asynchrone), `browser-use` (automatisation web Python). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm, pi, hermes-agent, browser-use)**, **patterns harness Python natifs (learn-claude-code, hermes-agent)**, **anti-loop déterministe + event ledger (loopx)**, **branch summarization (pi)**, **persistance SQLite FTS5 + event-sourcing (hermes-agent)**, **sécurité multi-couches Python pur (hermes-agent)**, **Gatekeepers (cloudflare-os)**, **compaction du DOM et prompts system vision (browser-use)**.
+`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code), `loopx` (control plane — anti-loop déterministe + event sourcing + compaction, stdlib pure), `code-review-graph` (analyse d'impact + risk score composite), `pi` (agent stateful TS), `hermes-agent` (agent auto-amélioré Python Nous Research — compaction + SQLite FTS5 + skills + sécurité + middleware), `cloudflare-os` (architecture Gatekeepers, human in the loop asynchrone), `browser-use` (automatisation web Python), `deepseek-harness` (harness TS/Cordis « everything is a plugin » — anti-loop ralph + retry durable + compaction checkpoint + event log typé), `OpenSandbox` (plateforme de sandbox ex-Alibaba — transport retry Python + spec lifecycle snapshot/restore). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm, pi, hermes-agent, browser-use, deepseek-harness)**, **patterns harness Python natifs (learn-claude-code, hermes-agent)**, **anti-loop déterministe + event ledger (loopx)**, **anti-loop par agents frais + détecteur de répétitions (deepseek-harness)**, **branch summarization (pi)**, **persistance SQLite FTS5 + event-sourcing (hermes-agent)**, **sécurité multi-couches Python pur (hermes-agent)**, **Gatekeepers (cloudflare-os)**, **compaction du DOM et prompts system vision (browser-use)**, **retry transport résilient + lifecycle sandbox rejouable (OpenSandbox)**.
 
 ### 3. 📚 Ressources & outils
 `Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante), `claude-code-unified-agents` (prompts de spécialisation), `system-prompts-and-models-of-ai-tools` (**bibliothèque de system prompts** d'outils commerciaux/open-source), `awesome-claude-skills` (**doctrine du format SKILL.md** + outillage), `davidondrej-skills` (denylist 27 regex + hooks anti-crash), `mattpocock-skills` (**doctrine d'authoring formelle** + engineering skills), `llm-council` (pattern council anonymisé).
@@ -257,6 +259,30 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | `references/hermes-agent/tools/environments/base.py` | `BaseEnvironment` (ABC), `execute`, `_BoundedOutputCollector` (head+tail bounded, spill disk), `touch_activity_if_due` (heartbeat), `_pipe_stdin` (Windows-safe) | **ABC de sandbox** au contrat propre + output collector borné + heartbeat + stdin Windows-safe. Python pur (P1 + P8-bis) |
 | `references/hermes-agent/agent/error_classifier.py` | `FailoverReason`, `ClassifiedError`, `classify_api_error`, `_classify_400`/`_classify_402`/`_classify_by_status`/`_classify_by_message` | **Taxonomie fine d'erreurs API LLM** (400/402/by status/message/error_code) pour diagnostics failover. Python pur portable direct (P8 + P6) |
 
+### Résilience transport & lifecycle sandbox (OpenSandbox)
+> 🛡️ **L'infrastructure d'exécution qui manquait** (ex-Alibaba, Apache-2.0, CNCF Landscape). Python pur copiable pour le transport/MCP/middlewares ; spec OpenAPI pour le contrat du rejouable (P8-bis). Runtime Go/K8s hors scope — on prend le contrat et le client.
+
+| Fichier | Symbole(s) clé(s) | Apport |
+|---|---|---|
+| `references/OpenSandbox/sdks/sandbox/python/src/opensandbox/transport/retry.py` | `RetryPolicy`, `RetryCause`, `JitterMode.DECORRELATED` | **LE middleware P8 en Python pur** : backoff x2 plafonné + jitter décorrélé, codes retryables idempotent vs non-idempotent, `per_attempt_timeout` + `overall_deadline`, hook `on_retry`. Design documenté dans `oseps/0017` |
+| `references/OpenSandbox/sdks/sandbox/python/src/opensandbox/transport/_async_retry.py` | `RetryAsyncTransport.handle_async_request` | Deadline mur-mur, clamp des timeouts par phase, `Retry-After` honoré et plafonné, sleep clampé au budget restant, `CancelledError` jamais avalé |
+| `references/OpenSandbox/sdks/sandbox/python/src/opensandbox/transport/_classify.py` | `classify_transport_exception`, `is_body_replayable` | Classification pré-send (safe sur toute méthode) vs post-send (idempotents seulement) — le cœur sémantique du retry correct |
+| `references/OpenSandbox/specs/sandbox-lifecycle.yml` | `/sandboxes 202+polling`, `renew-expiration`, `/snapshots`, endpoints signés | **Contrat du lifecycle rejouable** (P8-bis) : machine à états, TTL absolu renouvelable, snapshot/restore asynchrones, télémétrie fire-and-forget |
+| `references/OpenSandbox/server/opensandbox_server/middleware/request_id.py` | `request_id_ctx`, `RequestIdMiddleware`, `RequestIdFilter` | Corrélation des logs par ContextVar en ~30 lignes (P11) |
+| `references/OpenSandbox/examples/langgraph/main.py` | `WorkflowState`, `fallback_command`, `decide_next` | Anti-loop illustrée : self-loop bornée + fallback différencié à chaque retry + cleanup en `finally` (P3) |
+
+### Mécanismes de harness : anti-loop, retry durable, compaction, event log (deepseek-harness)
+> 🔁 **La meilleure référence de design sur P3 et P11** (DeepSeek AI, MIT, TS/Cordis « everything is a plugin », invariant-driven). On porte l'intention, pas la syntaxe. P6 explicitement absent (self-declaration documentée).
+
+| Fichier | Symbole(s) clé(s) | Apport |
+|---|---|---|
+| `references/deepseek-harness/packages/guard/repeat-tool-reminder/src/index.ts` | `Config.thresholds [3,5,8]`, `canonicalize`, `Chain`, `observe()`, `prependContext()` | **Détecteur de répétitions consécutives** d'appels d'outils (clé = nom + arguments canonisés) avec escalade douce sans veto — portage Python ~150 lignes, complément doux au LoopGuard F-36 (P3) |
+| `references/deepseek-harness/packages/workflow/tool-ralph/README.md` | `ralph(objective, maxRounds)`, handoff `status/evidence/nextSteps`, `maxHandoffChars` | **Boucle à agents frais** : objectif immuable, contexte remis à zéro chaque round, handoff borné = seul transfert (P3 radical). Documente la limite « no independent evaluator » (P6) |
+| `references/deepseek-harness/packages/llm/llm-retry/src/index.ts` | `localDelay`, `recover()`, `providerRetryAfterMs` | **Retry durable** : compteur persisté dans le log de session → survit à un crash/restart (P8) |
+| `references/deepseek-harness/packages/compaction/compaction-basic/src/summarizer.ts` | `COMPACTION_INSTRUCTION` (8 sections), `summarizeWithLlm`, `finishError` | **Prompt de checkpoint 8 sections** + réutilisation du KV cache (préfixe identique) + fail-closed si tronqué (P9) |
+| `references/deepseek-harness/packages/core/session/src/types.ts` | `SessionEventMap`, `SessionEvent.ignorable?`, `SurfaceOp`, `sourceEventSeqs` | **Event log typé extensible avec provenance** — le plus abouti du dossier ; convention « Model-visible ⟺ logged » (P11) |
+| `references/deepseek-harness/AGENTS.md` | « Registrations are effects », « Model-visible ⟺ logged », « Misconfiguration fails loud » | **Charte d'invariants** exigés de tout plugin — source directe pour enrichir `UNIVERSAL_INVARIANTS` (P0-bis) |
+
 ---
 
 ## 📊 Matrice réutilisabilité croisée
@@ -291,9 +317,11 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | **cloudflare-os** | **0** | **3** | **0** | 🟡 **Moyenne** |
 | **browser-use** | **3** | **3** | **0** | 🟢 **Haute** |
 | **TencentDB-Agent-Memory** | **8** | **5** | **0** | 🟢 **Haute** |
-| **Total** | **224** | **188** | **84** | — |
+| **OpenSandbox** | **14** | **7** | **1** | 🟢 **Haute** |
+| **deepseek-harness** | **13** | **9** | **2** | 🟢 **Haute** |
+| **Total** | **251** | **204** | **87** | — |
 
-> ℹ️ Le total de la matrice (496 = 224+188+84) couvre les entrées classées H/M/L. L'inventaire machine compte 489 entrées au total.
+> ℹ️ Le total de la matrice (542 = 251+204+87) couvre les fiches 01-28 et 45-46. Les fiches 29-44 (ajout en masse du 2026-08-12) n'ont pas été intégrées à la matrice — leurs comptes par projet sont consultables programmatiquement dans [`inventory.json`](./inventory.json), qui fait foi : **615 entrées machine au total (300 H / 226 M / 87 L / 2 non classées)**.
 
 **Constats** :
 - **axon** (23 Haute) et **aider** (17 Haute) restent les mines d'or côté Python.
@@ -313,6 +341,8 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 - **hermes-agent** (15 Haute, 🟢 Haute) : **le dépôt le plus dense et portable du dossier sur 5 axes orthogonaux**. Compaction offline (`trajectory_compressor`) + live avec garde-fous persistés (`context_compressor` cooldown/streak/ineffective), persistence SQLite FTS5 + lineage + event-sourcing subagents, skills agentskills.io avec provenance contextvars + guard + AST audit, **bibliothèque sécurité Python pur copiable quasi telle quelle** (threat patterns + ~260 dangerous commands + SSRF guards + path traversal), contrat middleware 4 kinds avec `next_call` chain + fail-open. Cœur utile concentré dans ~15 fichiers Python (malgré 8487 fichiers au total). Rejoint le peloton de tête avec axon (23 Haute) et aider (17 Haute). Réserves : pas DuckDB (transposer le pattern), adapters LLM cloud massifs non portables, god-files à découper.
 - **cloudflare-os** (3 Moyenne, 🟡 Moyenne) : apporte un excellent pattern architectural de sécurité (**Gatekeepers**, Capability-based access control) et d'approbation asynchrone (human in the loop par simulation). Même si TS, la doctrine inspire fortement la gestion MCP.
 - **TencentDB-Agent-Memory** (8 Haute, 🟢 **Haute** — renotée 2026-08-07) : la fiche initiale était superficielle (4 briques, notée Moyenne). L'audit approfondi des **prompts** révèle un gisement complémentaire à qm pour **P6-ter (F-68)** : là où qm fournit le contrat de persistance scratch/notebook (`recall`/`capture`/`replaceIfRevision`), TencentDB couvre les **3 maillons que qm ne couvre pas** — (a) **extraction L1** d'atomes (3 principes : qualité>quantité, valide hors-contexte, fusion causale ; dualité chat/code), (b) **dédup L1** par `store/skip/update/merge` **supérieure** au `UPDATE/DELETE/ADD` de qm (merge cross-type + many-to-many + bump priorité), (c) **oubli par chaleur** (heat : new=1/update=old+1/merge=sum+1 + `[DELETED]`) qui manque totalement à notre KG. Bonus : **Skill Review gate** 5-critères + 4-dim/100pts (P10/F-87), **context-offload Mermaid scoré** + cognitive tombstones (P9/F-86). Ce sont des **prompts** TypeScript, transposables quasi-directement (pas du code runtime). Les 2 références qm+TencentDB sont **nécessaires ensemble** pour F-68.
+- **OpenSandbox** (14 Haute, 🟢 **Haute** — 2026-08-14) : le **complément d'infrastructure d'exécution** qui manquait au dossier. Ce n'est pas un orchestrateur (pas de Judge/TDD) mais la plateforme qui **exécute** le code généré de façon isolée/timeoutée/snapshotable/rejouable — exactement P8-bis. La pépite : le module `transport/` du SDK Python est **LE middleware P8 en Python pur copiable** (classification pré/post-send, jitter décorrélé, deadline mur-mur, `Retry-After` plafonné — design documenté OSEP-0017). La spec OpenAPI `sandbox-lifecycle.yml` fournit le **contrat** du rejouable (202+polling, TTL renew, snapshot/restore, endpoints signés) quand qm (14) fournissait l'idempotence applicative. Bonus P0 : AGENTS.md hiérarchiques (« le plus proche gagne » + Guardrails Always/Ask-first/Never). Runtime Go/K8s ignoré — on prend le contrat et le client.
+- **deepseek-harness** (13 Haute, 🟢 **Haute** — 2026-08-14) : **la meilleure référence de design sur P3 et P11**. Anti-loop en deux couches complémentaires : `repeat-tool-reminder` (détection douce de répétitions consécutives, escalade sans veto — le complément humain à notre LoopGuard F-36 et au stall detector loopx 19) et la **boucle ralph à agents frais** (contexte remis à zéro chaque round + handoff borné — la contre-mesure radicale). P11 : l'event log de session est **le plus abouti du dossier** (types extensibles par declaration merging, provenance `sourceEventSeqs`, flag `ignorable` = fail-closed sur type inconnu, convention « Model-visible ⟺ logged »). P9 : le prompt de checkpoint **8 sections** avec réutilisation du KV cache. P8 : retry durable **dont le compteur survit à un crash** (persisté dans le log) + spec des 5 waterfalls d'exécution d'outil. TypeScript/Cordis : on porte l'intention, pas la syntaxe ; P6 explicitement absent (self-declaration documentée comme limite — argument de plus pour notre Judge indépendant).
 
 
 ---
@@ -388,6 +418,19 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | Une **taxonomie d'erreurs API LLM** (pour error recovery/escalation) | Fiche **25-hermes-agent** → `agent/error_classifier.py` (`classify_api_error`, `FailoverReason`, `_classify_400`/`_classify_402`) |
 | Une **ABC de sandbox** (contrat execute + output collector borné + heartbeat + stdin Windows-safe) | Fiche **25-hermes-agent** → `tools/environments/base.py` (`BaseEnvironment`, `_BoundedOutputCollector`, `touch_activity_if_due`, `_pipe_stdin`) |
 | Un **pattern de background review** (fork thread + digest + whitelist outils, Judge auto-apprenant) | Fiche **25-hermes-agent** → `agent/background_review.py` (`spawn_background_review_thread`, `_digest_history`, `_bg_review_auto_deny`) |
+| Une **politique de retry résiliente** pour les appels LLM/HTTP/MCP (classification pré/post-send, jitter, deadline) | Fiche **45-OpenSandbox** → `sdks/sandbox/python/src/opensandbox/transport/retry.py` (`RetryPolicy`) + `_classify.py` (`classify_transport_exception`) — Python pur copiable |
+| Un **contrat de lifecycle sandbox rejouable** (TTL renew, snapshot/restore, 202+polling, endpoints signés) | Fiche **45-OpenSandbox** → `specs/sandbox-lifecycle.yml` (spec OpenAPI 1712 L) + `server/.../services/snapshot_restore.py` |
+| Un **modèle de serveur MCP** (docstrings-contrats, registre de sessions, progression) | Fiche **45-OpenSandbox** → `sdks/mcp/sandbox/python/src/opensandbox_mcp/server.py` (`ServerState`, `register_tools`, `create_server`) |
+| Un pattern de **corrélation de logs par ContextVar** (request_id sans plumbing) | Fiche **45-OpenSandbox** → `server/opensandbox_server/middleware/request_id.py` (`request_id_ctx`, `RequestIdFilter`) |
+| Une **anti-loop illustrée en graphe** (self-loop bornée + fallback différencié + cleanup) | Fiche **45-OpenSandbox** → `examples/langgraph/main.py` (`WorkflowState`, `fallback_command`, `decide_next`) |
+| Un modèle minimal de **cloisonnement multi-utilisateurs** (clé → namespace) | Fiche **45-OpenSandbox** → `server/.../tenants/models.py` (`TenantEntry`) + `docs/guides/multi-tenancy.md` |
+| Un **détecteur de répétitions d'appels d'outils** (escalade douce, sans veto) | Fiche **46-deepseek-harness** → `packages/guard/repeat-tool-reminder/src/index.ts` (`thresholds [3,5,8]`, `canonicalize`) — portage Python ~150 lignes |
+| Une **reprise par agents frais** (contexte remis à zéro, handoff borné, objectif immuable) | Fiche **46-deepseek-harness** → `packages/workflow/tool-ralph/README.md` (`ralph`, `maxHandoffChars` 16384) |
+| Un **retry LLM durable** (compteur persisté qui survit à un crash) | Fiche **46-deepseek-harness** → `packages/llm/llm-retry/src/index.ts` (`recover()`, `localDelay`) |
+| Un **prompt de compaction structuré** (checkpoint 8 sections + KV-cache reuse + fail-closed) | Fiche **46-deepseek-harness** → `packages/compaction/compaction-basic/src/summarizer.ts` (`COMPACTION_INSTRUCTION`) |
+| Un **event log typé extensible** (provenance, fail-closed sur type inconnu) | Fiche **46-deepseek-harness** → `packages/core/session/src/types.ts` (`SessionEventMap`, `ignorable?`, `sourceEventSeqs`) |
+| La **spec des middlewares d'exécution d'outil** (5 waterfalls documentés) | Fiche **46-deepseek-harness** → `docs/tool-execution-pipeline.md` + `docs/architecture.md` (turn flow) |
+| Une **charte d'invariants** de développement agentique (fail-loud, « Model-visible ⟺ logged ») | Fiche **46-deepseek-harness** → `AGENTS.md` (racine) — source directe pour `UNIVERSAL_INVARIANTS` (P0-bis) |
 
 ---
 
@@ -397,8 +440,8 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 docs/references-audit/
 ├── README.md              ← Mode d'emploi (start ici)
 ├── INDEX.md               ← CE DOCUMENT (navigation + synthèse + Hall of Fame)
-├── inventory.json         ← Inventaire machine-lisible (489 entrées, filtrable)
-└── projects/              ← 44 fiches détaillées (1 par projet)
+├── inventory.json         ← Inventaire machine-lisible (615 entrées, filtrable)
+└── projects/              ← 46 fiches détaillées (1 par projet)
     ├── 01-prompt-vault.md
     ├── 02-aider.md
     ├── ...
@@ -433,7 +476,9 @@ docs/references-audit/
     ├── 41-stagehand.md
     ├── 42-anydoc.md
     ├── 43-framework.md
-    └── 44-sentrux.md
+    ├── 44-sentrux.md
+    ├── 45-OpenSandbox.md
+    └── 46-deepseek-harness.md
 ```
 
 **Pour recherche programmatique** : `inventory.json` est consommable directement :
