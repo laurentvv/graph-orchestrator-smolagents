@@ -724,14 +724,18 @@
       "name": "Stall Detector — Anti-loop v2 (hash d'output + vocabulaire + stall detector)",
       "description": "Priorité 3-bis du plan usine logicielle. COMPLÉMENT orthogonal de l'Anti-Loop Cryptographique F-36 (loop_guard.py) qui ne hashe que ToolName + Input. F-36 est aveugle à 2 failure modes : (a) un même CONTENU réécrit avec un input cosmétiquement différent (whitespace, ordre des clés) — le hash d'input change donc F-36 ne détecte pas la reproduction ; (b) une série de turns sans livrable matériel nouveau (PROGRESS/IDLE) — F-36 ne voit que les tool calls répétés, pas l'absence de progression. IMPLÉMENTÉ : nouveau module graph_orchestrator/stall_detector.py (~210 lignes, 0 LLM, 100% Python natif, thread-safe) regroupant 3 briques de la référence loopx (fiche 19) conçues pour fonctionner ensemble : (1) VOCABULAIRE DeliveryOutcome (port simplifié de loopx delivery_outcome.py, 3 valeurs ACCOUNTABLE/PROGRESS/IDLE vs 4 chez loopx) + classify_turn(tool_calls) qui classifie un step depuis extract_tool_calls_from_step (réutilise loop_guard.py, pas de duplication) ; (2) HASH D'OUTPUT MATÉRIEL compute_material_fingerprint(tool_name, arguments) (port de loopx pr_monitor_materialization.py _group_fingerprint) qui hashe le CONTENU que l'outil cherche à écrire (content pour write_file/append_file, old+new pour search_replace/edit_file, concaténation pour multi_replace, tronqué à 16 hex chars comme loopx) ; (3) STALL DETECTOR StallDetector(threshold=2, enabled=True) (port de loopx recent_runs.py consecutive_unchanged_monitor_observations + build_monitor_debt_arbitration) qui compte les steps consécutifs 'sans changement matériel' avec table de vérité : ACCOUNTABLE + hash différent → reset (matériel nouveau) ; ACCOUNTABLE + hash identique → incrément (reproduction = stall, le cas F-36 rate) ; PROGRESS/IDLE → incrément (tour gratuit). Seuil 2 = loopx MONITOR_DEBT_UNCHANGED_TURN_THRESHOLD (1 tour gratuit légitime = réflexion/relecture, 2 = stall avéré). DÉCISION DE DESIGN CLÉ (préserve F-36) : module orthogonal, on ne touche PAS à LoopGuard. Le docstring loop_guard.py:10-12 dit explicitement 'on n'inclut pas l'Output' — inverser cette décision casserait la cohérence F-36 ET le test fragile test_valid_final_answer_wins_over_loop_guard (test_coder_hardening.py:289) qui asserte guard.repeated_action() is not None après un return validated. Le stall detector opère à un autre niveau (step/turn) que le LoopGuard (tool call isolé) — gardes complémentaires, pas remplacement. Branchement nodes.py run_with_retry : nouveau param optionnel stall_detector=None (non-cassant). Inséré APRÈS le bloc LoopGuard, AVANT if validated:. Pour chaque step de agent.memory.steps : classify_turn + compute_material_fingerprint + stall_detector.record. Si is_stalled() ET validated is None → message pédagogique ajouté au prompt (comme loop_msg). PRIORITÉ VALIDATED CONSERVÉE : si validated est non-None, succès conservé même si stall signalé (même principe que F-36, log informatif dédié). reset() du stall_detector aligné sur loop_guard.reset() (après agent.memory.steps=[]). Branchement production execute_coder_node : instancie StallDetector(threshold=settings.stall_detector_threshold, enabled=settings.stall_detector_enabled) à côté du LoopGuard et le passe à run_with_retry. Le WebTester hérite du défaut (actif). Judge/Synth/Adversary ne le passent pas (nœuds de raisonnement). Config : stall_detector_enabled (défaut True) + stall_detector_threshold (défaut 2) dans config.py + load_settings via _get_bool/_get_int + .env.example + .env local (AGENTS.md §7). Opt-out STALL_DETECTOR_ENABLED=false. 26 tests PASS (test_stall_detector.py : enum 2, classify_turn 4, compute_material_fingerprint 6, StallDetector 8, thread-safety 1, intégration run_with_retry 3, non-régression F-36 2). Suite pytest complète 714 passed / 12 failed (12 échecs PRÉ-EXISTANTS confirmés via git stash — architect/escalation/guard-timeout/prompt_refiner/read_gate/skill_lazy_loading, AUCUN lié au stall detector), 0 régression. Écart consciencieux vs loopx : loopx hashe un set trié de clés membres (domaine PR lifecycle), on aplatit au cas agent (hash du dernier write du step, le plus représentatif de l'intention de livraison) ; loopx exclude le bookkeeping via classification control plane, notre équivalent = classifier PROGRESS/IDLE via classify_turn.",
       "status": "completed",
-      "dependencies": ["F-36"]
+      "dependencies": [
+        "F-36"
+      ]
     },
     {
       "id": "F-89",
       "name": "Jeux de tests par nœud (Isolation LLM pour debug rapide) — P17 MAX",
       "description": "Priorité 17 du plan usine logicielle (priorité MAX). Sans ça, chaque bug d'un nœud coûte un run E2E complet de 30-40 min. Le post-mortem F-88 (bug du hash CodeAgent vide) a prouvé qu'un défaut reproductible en <1s a mis 1h10 de run E2E + post-mortem manuel à diagnostiquer. IMPLÉMENTÉ : 6 scripts d'isolation qui appellent la VRAIE fonction de production (0 mock, 0 duplication) avec fixtures figées inline. debug/run_router.py (5 prompts Python/React/HTML/Rust/ambigu, valide bug F-56a débordement JS), debug/run_prompt_refiner.py (3 prompts : vagues/déjà structuré/minimaliste), debug/run_architect.py (spec Bubble Sort → ArchitectOutput sous-tâches+stratégie+skills), debug/run_drafter.py (sub_dict Bubble Sort → draft_markdown sauvegardé pour réinjection run_coder.py --draft), debug/run_security.py (4 codes : propre/XSS/eval/pickle → SecurityOutput is_secure+findings), debug/run_judge.py (4 scénarios : correct/bug/nit/fail-closed → CodeJudgeOutput, valide fail-closed security=None sans LLM). debug/run_coder.py (existant, créé fix F-88). debug/run_web_tester_standalone.py (existant F-45). debug/isolation/run_linter.py (existant F-55, déterministe). debug/validate_static_tester_live.py (existant F-54, déterministe). Convention golden files documentée dans debug/fixtures/golden/README.md (nœuds déterministes seulement, LLM = non-golden). debug/isolation/README.md mis à jour (2 familles : méthodologies manuelles F-55 + scripts d'isolation LLM F-89). Dossier debug/ RETIRÉ du .gitignore (37 fichiers d'outillage versionnés : scripts + méthodologies + fixtures ; artefacts régénérables gardés ignorés). py_compile OK (6 scripts), imports OK (3 backends spawn validés), suite pytest 729 passed / 12 échecs pré-existants (confirmés identiques, AUCUN lié à F-89), 0 régression.",
       "status": "completed",
-      "dependencies": ["F-88"]
+      "dependencies": [
+        "F-88"
+      ]
     },
     {
       "id": "F-92",
@@ -745,42 +749,58 @@
       "name": "Architecte-Pilote — Critères de validation générés par l'Architecte",
       "description": "L'Architecte devient le PILOTE UNIQUE des validations : il produit 3 champs de critères spécifiques au cahier des charges (visual_success_criteria pour le Coder, functional_test_criteria pour le Tester, acceptance_rubric pour le Judge), dérivés de sa compréhension de la spec. Remplace les prompts fixes/génériques qui ne savaient pas ce qu'ils validaient (bug canvas 2026-08-08 : le Coder VOYAIT un canvas vide mais l'excusait car le prompt disait 'rendu conforme' sans définir conforme). IMPLÉMENTÉ : (1) models.py +3 champs sur ArchitectTask (défaut vide, rétrocompat checkpoint) ; (2) dspy_nodes.py ArchitectSignature docstring enrichi avec directives anti-biais explicites + exemples concrets (canvas vide = BUG, pas normal) ; (3) validation_criteria.py nouveau module (3 fonctions pures builder, 0 LLM, miroir requirements_checklist.py F-46) ; (4) workflows.py sub_dict +3 clés propagées (OBLIGATOIRE, sinon champ perdu comme tester_skills) ; (5) nodes.py _build_devtools_blocks enrichi du bloc visuel anti-biais (checklist OUI/NON sur screenshot) ; (6) web_tester.py functional_test_criteria remplace F-46 quand non vide (priorité F-47 > F-90 > F-46, préserve tous chemins) ; (7) dspy_nodes.py Judge acceptance_rubric concaténé à task_requirements. Hiérarchie Tester : F-47 (itération>1 targeted) > F-90 (Architecte) > F-46 (regex spec). 25 tests PASS (test_validation_criteria.py), 0 régression (11 échecs pré-existants confirmés sur main). VALIDATION RUN RÉUSSIE (2026-08-11, run #9) : Architecte a produit 6 critères visuels + 7 fonctionnels + rubric CRITICAL/HIGH/MEDIUM/LOW, critères injectés aux 3 nœuds, sous-tâche APPROUVÉE par le Judge au 1er cycle (1ère approbation en 9 runs). La validation F-90 a révélé et corrigé 6 bugs infrastructure annexes (voir F-61 itération : screenshot filePath strip, Tester fallback verdict max_steps, Judge vue deliverable complet, règle CSS height=0 inline, Static Tester settle wait, Tester max_steps=8/timeout 480).",
       "status": "completed",
-      "dependencies": ["F-29", "F-46"]
+      "dependencies": [
+        "F-29",
+        "F-46"
+      ]
     },
     {
       "id": "F-93",
       "name": "Grounding des findings Judge par alignement de tokens (anti-hallucination localisation)",
       "description": "IMPLÉMENTÉ (politique Option 1, 0 régression). Priorité 6 (P6) du plan usine logicielle (audit fiche 39-langextract, 2026-08-12). Le Judge F-44/F-65 exige 'LOCALISATION OBLIGATOIRE : chaque finding DOIT citer ligne/fragment exact'. Aucun garde logiciel ne vérifiait que cette localisation existe RÉELLEMENT dans le code source — un LLM pouvait citer une ligne inexistante ou un fragment inventé (hallucination de localisation) et le finding était accepté tel quel. SOLUTION : module graph_orchestrator/judge_grounding.py (0 LLM, miroir judge_metrics.py F-70) branché en post-LLM dans execute_code_judge_node (fail-open total). Deux signaux complémentaires : (a) line-range check déterministe (file:NN hors-bornes → ungrounded ; NN valide → grounded) ; (b) alignement flou de tokens (port simplifié du WordAligner de langextract). ÉCART CONSCIENT : porte l'algorithme LEGACY _fuzzy_align_extraction (fenêtre glissante difflib, resolver.py:591-715) plutôt que le DP LCS _best_lcs_span — plus simple, et le bornage de fenêtre max_window=2·len(needle) implique une densité ≥ ~0.5 (un seul seuil coverage 0.75 suffit, sans DP tightest-span). Tokenizer word+digit seul (ponctuation = bruit en code, écart vs langextract NLP médical). extract_code_fragments n'extrait QUE du code (spans backtick + identifier chains a.b.c), PAS la prose (anti faux-négatif) ni les filenames (gérés par line-range + _resolve_file). POLITIQUE Option 1 (décision utilisateur, non-destructive) : findings non ancrés rétrogradés d'un cran (critical→high, …, low inchangé) + flagués [ungrounded: <raison>] dans la description ; is_approved JAMAIS changé (calibrage d'abord, taux de faux-positifs mesuré par le Meta-Analyste P15 avant automation du verdict). Data models locaux (FindingGrounding, GroundingReport) — pas de churn models.py. Config judge_grounding_enabled (défaut True, opt-out JUDGE_GROUNDING_ENABLED=false). 34 tests test_judge_grounding.py + 2 intégration test_dspy_nodes.py. Suite pytest 0 régression (8 échecs STRICTEMENT pré-existants confirmés via git stash : read_gate×4 + skill_lazy×3 + guard×1, AUCUN lié au grounding). Script isolation debug/run_judge_grounding.py (déterministe 0 LLM, valide les 4 invariants politique). debug/run_judge.py étendu (affiche le flag ungrounded). Hors-scope : recalcul auto is_approved (Option 2/3, cycle futur après mesure taux faux-positifs). Référence : references/langextract/langextract/resolver.py (`WordAligner`, `_fuzzy_align_extraction`).",
       "status": "completed",
-      "dependencies": ["F-70"]
+      "dependencies": [
+        "F-70"
+      ]
     },
     {
       "id": "F-94",
       "name": "Capteur de santé structurelle du code (feedback loop architectural before/after)",
       "description": "Priorité 6 (P6) / Priorité 15 (P15) du plan usine logicielle (audit fiche 44-sentrux, 2026-08-12). Le Judge actuel ne juge que la conformité au cahier des charges (Spec) et les standards de code (Standards) — il est AVEUGLE à la dégradation architecturale globale : un Coder peut passer le Judge en respectant la spec tout en dégradant la modularité, introduisant des cycles de dépendances, ou augmentant la profondeur de couplage. sentrux (🟢 Haute, mais Rust) calcule 5 métriques racines (modularité, acyclicité, profondeur, égalité, redondance) en un score continu 0-10000 et prend des instantanés avant/après l'intervention de l'agent pour bloquer ou corriger si le score se dégrade. Solution : capteur déterministe (Python, via nos deps existantes libcst F-71 / linter F-30 tree-sitter) qui snapshot 3-5 métriques architecturales avant et après le run Coder, compare, et émet un signal (delta_score) consommable par le Judge (finding automatique si dégradation > seuil) et le Meta-Analyste (P15). Périmètre : initial sur le run courant (dossier runs/) ; pas de KG structural complet (P4 HORS-SCOPE). Référence : references/sentrux/sentrux-core/src/metrics/root_causes.rs + metrics/rules/checks.rs. Priorité : MOYENNE (enrichissement Judge, nécessite de définir les métriques portables Python).",
       "status": "pending",
-      "dependencies": ["F-30"]
+      "dependencies": [
+        "F-30"
+      ]
     },
     {
       "id": "F-95",
       "name": "Robustesse FS — Transactions/Rollbacks hardlinks + Verrous coopératifs + Cloisonnement IO",
       "description": "Priorité 8-bis (P8-bis) du plan usine logicielle (audit fiches 32-OpenKB + 33-room + 36-prime-agent, 2026-08-12). Notre robustesse runtime repose sur un Mutex intra-process (F-20), un bash_guard denylist (F-38), l'idempotence des replays (F-43) et une ReadGate (F-67). Trois angles morts subsistent : (1) aucune annulation des effets PARTIELLEMENT appliqués (un crash en plein multi-fichiers laisse le run dans un état hybride non idempotent) ; (2) les verrous sont intra-process uniquement (pas de protection cross-process si 2 runs concurrents) ; (3) le cloisonnement des chemins est en denylist (bash_guard) alors qu'une allowlist serait plus sûre. openkb (🟢 Haute, Python) apporte : mutation.py (MutationSnapshot, snapshot_paths, _restore_hardlinked_dir — journalisation O(touched) via hardlinks + rollback déterministe), locks.py (kb_lock, _LocalRwLock advisory cross-platform + atomic_write_bytes), agent/tools.py (read_kb_file/write_kb_file limités à une allowlist wiki/output/skills). Solution (3 briques, Python natif, 0 LLM) : (a) transactions FS par hardlinks pour le dossier runs/ (snapshot avant écriture Coder, rollback si crash) — complément à F-43 (replays) par l'annulation des effets partiels ; (b) verrouillage cross-process (advisory lock file) sur le run dir ; (c) allowlist de chemins sur les outils d'écriture (renforce F-67 ReadGate). Compléments à évaluer : room resolveNodeScript (Windows 8191 chars) + prime-agent AgentAutonomousConfig gates + OutputAccumulator (troncature stream-safe spill disque). Références : references/OpenKB/openkb/mutation.py + locks.py + agent/tools.py ; references/room/src/shared/claude-code.ts ; references/prime-agent/packages/coding-agent/src/core/autonomous.ts + tools/output-accumulator.ts. Priorité : MOYENNE (la robustesse actuelle tient ; c'est un durcissement pour runs longs/risqués).",
       "status": "pending",
-      "dependencies": ["F-43", "F-67"]
+      "dependencies": [
+        "F-43",
+        "F-67"
+      ]
     },
     {
       "id": "F-96",
       "name": "Harnais d'évaluation des skills (split train/test + robustesse MCP)",
       "description": "Priorité 10 (P10) / Priorité 6 (P6) du plan usine logicielle (audit fiche 38-skills Anthropic, 2026-08-12). Nos skills (F-11/F-57/F-80/F-92) sont itérés au jugé — aucun harnais d'évaluation ne mesure objectivement si une modification de SKILL.md améliore ou dégrade le comportement de l'agent. Le dépôt skills officiel d'Anthropic (🟢 Haute) fournit deux harnais concrets en Python : skill-creator/scripts/run_loop.py (split_eval_set — split train/test pour skills agentiques, boucle brouillon/test/évaluation) et mcp-builder/scripts/evaluation.py (harnais de robustesse pour serveurs MCP). Solution : un harnais d'évaluation offline (0 impact sur la boucle chaude) qui (a) fige un jeu de prompts de test (Prompt-Vault Easy/Medium), (b) exécute le Coder/Tester avec et sans une modif de skill (A/B), (c) mesure le delta via les métriques Judge (F-70 judge_metrics.py — precision/recall/MRR) + métriques run_analyzer (F-60 — tokens, durée, steps en erreur). Objective l'itération des skills (F-57 v3 budget tokens, F-92 progressive disclosure, F-82 skill finder). Référence : references/skills/skills/skill-creator/scripts/run_loop.py (split_eval_set) + skills/mcp-builder/scripts/evaluation.py. Priorité : MOYENNE (dépend de l'accumulation d'un dataset d'éval ; le squelette peut être posé tôt).",
       "status": "pending",
-      "dependencies": ["F-70", "F-60"]
+      "dependencies": [
+        "F-70",
+        "F-60"
+      ]
     },
     {
       "id": "F-97",
       "name": "Durcir le Tester MA-5 (inline skill resources + normalisation chemins Windows)",
       "description": "Clôture du thread MA-5 révélé par la validation live du fix MA-2 (post-mortem run9 F-90). Deux failure modes DISTINCTS du Web Tester, ancrés dans les logs e2e_f90_validation_run3/4 : (a) le Tester épuise ses 8 steps à lire les 5 resources/*.md de la skill web-tester (progressive disclosure F-92) sans JAMAIS tester (0 navigate_page, 0 assertion, 0 screenshot) — racine double : le stub SKILL.md généré par scripts/refactor_skills.py ordonnait 'You MUST use your view_file tool' alors que view_file N'EXISTE PAS (le Tester a read_file) ET chaque bullet disait 'Read this to understand X' pour CHACUN des 5 resources ; enforce_skill_budget ne comptait que le corps du stub (~530 tokens), pas les resources. (b) le modèle copiait le token file:///D:/... (correct pour navigate_page mais FATAL à read_file/list_directory → [Errno 22] / [WinError 123]) car le prompt lui fournissait partout des URLs file:/// (workspace_url, primary_url, liens markdown de la skill). FIX (doctrine F-33 'un prompt seul ne suffit jamais' → prompt + garde logiciel) : (1) load_skill_body_resolved() dans skills_loader.py résout la progressive disclosure CÔTÉ SERVEUR pour le Tester (inline les resources/*.md dans le bloc injecté, retire la section pointeur F-92 + l'instruction view_file) — l'inline est strictement meilleur pour le Tester one-shot (1× tokens system cached vs N steps + N× tokens dynamique) ; (2) normalize_tool_path() dans path_utils.py (pur chaîne, SANS abspath pour préserver les chemins relatifs et le hashing read_gate) strippe file:/// et résout les préfixes MSYS /d/ → branché dans tools.py read_file + list_directory (défense en profondeur, bénéficie au Coder) ; (3) règle prompt web_tester réécrite (file:/// RÉSERVÉ à navigate_page, read_file/list_directory attendent un chemin simple) ; (4) racine générateur : refactor_skills.py view_file→read_file + 'read on-demand, NOT all upfront' ; (5) hygiène : ressource evaluation_criteria stale '12 max steps' → 'TESTER_MAX_STEPS défaut 8'. Flag TESTER_INLINE_SKILL_RESOURCES (défaut true). 28 nouveaux tests PASS (test_path_utils 19 + test_skill_resolve 7 + test_tools 2). Suite complète 892 passed / 8 failed (les 8 STRICTEMENT pré-existants : read_gate×4 + skill_lazy×3 + guard×1, confirmés identiques via git stash). 0 régression.",
       "status": "completed",
-      "dependencies": ["F-92", "F-33"]
+      "dependencies": [
+        "F-92",
+        "F-33"
+      ]
     },
     {
       "id": "F-98",
@@ -788,6 +808,66 @@
       "description": "Routine d'actualisation périodique de l'infrastructure logicielle pour éviter l'accumulation de dette technique : (1) Script local automatisé (ex: `scripts/upgrade_stack.py`) réalisant `uv lock --upgrade`, `uv sync` et validant la non-régression via `pytest` ; (2) Workflow CI GitHub Actions planifié (hebdomadaire/mensuel) pour tester et créer des PRs automatiques de montée de versions de paquets et de Python ; (3) Veille et validation proactive de compatibilité sur les dépendances critiques (DSPy, smolagents, LiteLLM, FastAPI, WebSockets).",
       "status": "completed",
       "dependencies": []
+    },
+    {
+      "id": "F-99",
+      "name": "Anti-loop comportemental — enforcement de but (qm goal.ts)",
+      "description": "Port du mécanisme qm src/harness/goal.ts : continuation prompt avec discipline d'audit de complétion ('treat completion as unproven', preuve = état autoritaire pas la mémoire), statut blocked accepté seulement après 3 tours de MÊME impasse (GOAL_BLOCKED_MIN_ROUNDS), auto-waiver après 5 rounds de continuation sans aucun tool call (escape anti-deadlock), token cap = wind-down ('un budget épuisé n'est pas une complétion'). Complète les couches déterministes LoopGuard F-36 / stall detector F-88 par une garde comportementale côté prompt pour le Coder (P3). Réf : references/qm/src/harness/goal.ts + grind.ts (GrindBudget floor minTurns/minMs/minTokens/minUsd).",
+      "status": "pending",
+      "dependencies": [
+        "F-36",
+        "F-88"
+      ]
+    },
+    {
+      "id": "F-100",
+      "name": "Recettes de vérification exécutable (hermes-agent verify/)",
+      "description": "Port de references/hermes-agent/agent/verify/ (recipes.py + runner.py + environment.py) : détection statique de la stack (Node/Python-Django-FastAPI/Go/Rust/Makefile/docker-compose) -> commandes bootstrap/build/test/start + port/chemin de readiness, puis boucle de readiness HTTP (timeouts 600s/60s, tail de sortie 2000 chars). Pour notre Static Tester/Tester : 'la page est servie et répond' devient une preuve exécutable au lieu de file:// + console seulement (P6, bonus P8-bis). Python pur, portage direct.",
+      "status": "pending",
+      "dependencies": []
+    },
+    {
+      "id": "F-101",
+      "name": "Compaction v2 — alignée petits modèles + anti-boucle de compaction",
+      "description": "Fusion des 5 évolutions amont (P9+P3) : (1) opencode packages/core/src/session/compaction.ts réécrite POUR PETITS MODÈLES (prompt d'identité simple, règles 'anything you do not carry into the new summary is lost' / 'conversation wins on conflict', frontière d'entrée ENTIÈRE jamais coupée en deux) ; (2) learn-claude-code s08_context_compact réordonné (tool_result_budget batch 200k -> snip_compact avec archive disque .transcripts/*.jsonl + marqueur '[N messages archived]' -> micro_compact réutilisant les chemins persistés -> compact LLM, reactive_compact retry unique) ; (3) pi docs/harness.md §3.9 overflowRecoveryUsed (une seule reprise d'overflow par input utilisateur, sinon failure_drain — invariant anti-boucle de compaction) ; (4) claude-science.md rolling context (le fold nomme ses valeurs porteuses écrites COMME DES SEARCH QUERIES, 'never reconstruct a value from memory', scratchpad frame survivant à la compaction) ; (5) hermes conversation_compression (budget de compression remboursé après progrès réel, re-armé sur usage vérifié).",
+      "status": "pending",
+      "dependencies": []
+    },
+    {
+      "id": "F-102",
+      "name": "Checkpoint git par itération Coder pour le Judge (open-swe turn_checkpoint)",
+      "description": "Port de references/open-swe/agent/utils/turn_checkpoint.py : snapshot git PAR TOUR sans contaminer le worktree — arbre construit via GIT_INDEX_FILE scratch (read-tree + add -A + write-tree), commit-tree + update-ref refs/open-swe/turns/<key> (une REF pas un tree nu : survit à un git gc mi-run), lecture du diff via git diff --numstat + cat-file --batch, tout best-effort (None/status=error si échec). Le Judge relit CE QUE GIT DIT de l'itération au lieu de rejouer les tool-calls (P8-bis idempotence + P6 findings). Complète F-53 (git_snapshot niveau run) au niveau itération + F-70 (judge_diff).",
+      "status": "pending",
+      "dependencies": [
+        "F-53",
+        "F-70"
+      ]
+    },
+    {
+      "id": "F-103",
+      "name": "Linter de prompts + budgets de guidance",
+      "description": "(1) Port du framework prompt-audit d'Anthropic (references/skills/skills/claude-api/shared/prompt-audit.md, ~220 l) : signaux greppables d'anti-patterns datés (langage de pression 'CRITICAL: You MUST' -> sur-déclenchement ; hedges 'try to/if possible' lus comme permission de sous-livrer ; chorégraphies STEP 1/2 et clusters de prohibitions qui ancrent vers l'échec ; 'grader vocabulary' ; tool descriptions = man pages ; 'count the model-call sites') + règle de deletion 'could the model already know this?'. Appliqué à nos 9 ROLE_BLOCKS + docstrings DSPy + skills (P0/P10 — nos petits modèles llama.cpp suivent les instructions plus littéralement, mêmes risques). (2) Budgets soft/hard de taille par fichier de guidance à la deer-flow scripts/check_agent_guidance.py (racine 12/16k, module 24/32k, local 40/48k, chaîne cumulée 80/96k) en gate CI sur prompts.py et skills/.",
+      "status": "pending",
+      "dependencies": [
+        "F-44",
+        "F-56"
+      ]
+    },
+    {
+      "id": "F-104",
+      "name": "Retry LLM v2 — pré-contenu vs mid-stream + MCP non bloquant",
+      "description": "(P8) (1) openfox src/server/chat/agent-loop.ts : échec AVANT tout contenu = retry de la même requête sans rien mettre à l'historique (message.start différé au premier event streamé) ; échec MID-STREAM = bulle partielle conservée (partial:true) + exactement UN prompt de continuation visible ; re-résolution du client LLM à chaque tentative (switch de provider mid-backoff pris en compte). (2) opencode session/retry.ts : jitter 25% (RETRY_JITTER_FACTOR) + RETRY_MAX_RETRIES=5 + cap 30s + respect prioritaire retry-after-ms. (3) crush internal/agent/coordinator.go : init MCP JAMAIS bloquante en interactif (palette construite sur l'état actuel, serveurs lents rattrapés au tour suivant via EventToolsListChanged) + timeout de connexion PAR SERVEUR (un serveur pendu ne bloque pas le run) — applicable à chrome-devtools. (4) Invariant Claude Code v2.1.232 WaitForMcpServers (attendre la connexion MCP au lieu d'échouer) + règle anti 'cross-session permission laundering' (ne jamais redemander via un autre agent/tool une action bloquée). Bonus : fix deer-flow DanglingToolCallMiddleware (ne collecter additional_kwargs.tool_calls que si tool_calls ET invalid_tool_calls sont vides tous les deux — sinon double ToolMessage pour un id = 400 provider).",
+      "status": "pending",
+      "dependencies": []
+    },
+    {
+      "id": "F-105",
+      "name": "Durcissement sécurité — password managers (groupe 10) + redaction secrets",
+      "description": "(P8/P8-bis) (1) Port du NOUVEAU groupe 10 'password managers & OS keychain' de references/davidondrej-skills/hooks/dangerous-patterns.txt (+ test-guard.sh ~40 cas block/allow) : blocage des CLIs bw/bws/lpass/keepassxc-cli/rbw/nordpass, pass/op bloqués avec leurs VRAIS subcommands seulement ('bare op/pass stay unblocked because they are common words' — discipline anti-faux-positifs), security find-generic-password|dump-keychain, gpg --export-secret-keys, ~/.password-store, bundles .app. Nécessite re.M (multiline) pour que ^ matche chaque ligne shell. Enrichit bash_guard.py F-38. (2) Directive 'Redact' de references/mattpocock-skills/skills/engineering/diagnosing-bugs/SKILL.md : secrets <REDACTED> avant de montrer/journaliser commandes/outputs/artifacts (HAR portent des auth headers), loops de repro construites contre des env vars — applicable à la sanitization de nos traces avant Judge/persistance DuckDB.",
+      "status": "pending",
+      "dependencies": [
+        "F-38"
+      ]
     }
   ]
 }

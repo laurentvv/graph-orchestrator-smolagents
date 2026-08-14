@@ -1491,3 +1491,37 @@ Coder est appliquée correctement par Qwen3.5-9B.
 - [x] Étape CSC-3 : Interdiction formelle de naviguer sur des fichiers non-HTML (`.css`, `.js`, etc.) dans `skills/devtools-preview/SKILL.md` et dans le prompt du `coder_frontend`.
 - [x] Étape CSC-4 : Validation en isolation via `debug/run_coder.py` (Qwen 4B) : 3 fichiers générés (`index.html`, `styles.css`, `script.js`), 0 erreur console, rendu visuel validé, fuzzing boutons réussi, sortie propre via `final_answer` à l'étape 14 (sans boucle).
 - [x] Étape CSC-5 : Revue Kilo validée sans réserve ("No Issues Found | Recommendation: Merge"), PR #70 squash-mergée et branche supprimée.
+
+## Jalons de l'Itération (cycle Update References — pull amont 2026-08-14)
+> Workflow `references/PROCEDURE-UPDATE-REFERENCES.md` (5 étapes). Synchronisation périodique
+> des dépôts amont + veille + backlog. AUCUN code de production modifié.
+
+- [x] Étape UR1 : `update_references.py` exécuté — **25 dépôts mis à jour / 19 à jour /
+      1 erreur** (LlamaBot : historique réécrit en amont « forced update » → resynchronisé
+      `git reset --hard origin/main` @884cd2a, fix SSRF page-clone). Rapport
+      `references/update_report.md` régénéré (25 sections, ~5 700 fichiers changés).
+- [x] Étape UR2 : analyse des nouveautés par **3 subagents Explore parallèles** (7 dépôts
+      harness cœur + 7 skills/prompts + 12 frameworks). Faits saillants : qm `goal.ts`
+      (enforcement de but anti faux-« fini »), hermes `verify/` (recettes d'exécution +
+      readiness HTTP), opencode compaction réécrite POUR PETITS MODÈLES, learn-claude-code
+      s08 réordonné (archive disque .transcripts), pi §3.9 `overflowRecoveryUsed`, open-swe
+      `turn_checkpoint.py` (snapshot git PAR TOUR), Anthropic `prompt-audit` (signaux
+      greppables), Claude Code v2.1.224→v2.1.232 (WaitForMcpServers + anti
+      permission-laundering + safety=frontière non retryable), `claude-science.md` (folds =
+      search queries + frame), davidondrej groupe 10 password managers, brooklyn `babysit`,
+      deer-flow budgets AGENTS.md + fix dangling tool calls, crush MCP init gate, openfox
+      retry pré/mid-stream. Fiches déjà auditées : fichiers clés inchangés ou évolutions
+      sans changement de design (qm context-compaction, hermes trajectory_compressor,
+      loopx event_sourced_state).
+- [x] Étape UR3 : `feature_list.json` + **7 features F-99..F-105** (toutes `pending` ;
+      invariant respecté : AUCUNE feature `completed` modifiée). 104 features au total
+      (84 completed / 19 pending / 1 in_progress).
+- [x] Étape UR4 : `plan_usine_logicielle.md` + **10 cases `[ ]` datées « update références
+      2026-08-14 »** (P3 enforcement de but, P6 recettes verify, P8 retry v2, P8-bis
+      checkpoint git/tour + sécurité groupe 10, P9 compaction v2, P0-bis prompt-audit +
+      budgets guidance + invariants CC, P10 routeur skills + skills écrites par l'agent,
+      P11 prompt envelopes + event bus). Invariant respecté : 0 case cochée modifiée
+      (10 insertions pures, vérifiées par `git diff`).
+- [x] Étape UR5 : état disque synchronisé (progress.md ce bloc, log.md) + commit et push
+      sur main via cherry-pick (procédure « branche feature active » — la session était sur
+      `fix/update-llamacpp-asset-matching`).
