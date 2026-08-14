@@ -88,3 +88,5 @@ models/
 # Exclus : *.wal (transitoire après CHECKPOINT) et sauvegardes datées *.bak.*.
 !data/event_stream.duckdb
 !data/graph_orchestrator.db
+data/*.wal
+data/*.bak.*
