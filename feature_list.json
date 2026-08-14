@@ -26,7 +26,7 @@
     {
       "id": "F-04",
       "name": "Mise en place de la boucle d'état sur disque",
-      "description": "Gestion de l'état déterministe via feature_list.json, contract.md, progress.md et log.md.",
+      "description": "Gestion de l'état déterministe via feature_list.json, contract.md et progress.md ; historisation événementielle dans data/event_stream.duckdb (journal plat supprimé, F-106).",
       "status": "completed",
       "dependencies": []
     },
@@ -613,7 +613,7 @@
     {
       "id": "F-74",
       "name": "Historisation Multi-BDD DuckDB et Nettoyage des Logs",
-      "description": "Validation de la Priorité 11 (Event Stream). Création de bases DuckDB dédiées (ex: runs_history.duckdb, event_stream.duckdb) pour isoler les statistiques, suivre la consommation des tokens et remplacer la croissance infinie des fichiers plats (log.md, traces).",
+      "description": "Validation de la Priorité 11 (Event Stream). Bases DuckDB dédiées (event_stream.duckdb existe, runs_history.duckdb prévue) pour isoler les statistiques et suivre la consommation des tokens. PARTIE JOURNAL PLAT CLOSE (F-106, 2026-08-14) : fichier supprimé, historique complet (199 événements datés) récupéré depuis git dans event_stream.duckdb, CLI assistant scripts/log_event.py ouvert. RESTE : instrumentation runtime automatique (workflows → event stream / runs_history pour tokens+durées) et routine de rétention.",
       "status": "pending",
       "dependencies": []
     },
@@ -867,6 +867,24 @@
       "status": "pending",
       "dependencies": [
         "F-38"
+      ]
+    },
+    {
+      "id": "F-106",
+      "name": "Clôture du journal plat — récupération historique git + event stream DuckDB + CLI assistant",
+      "description": "Le journal plat à la racine a été SUPPRIMÉ DÉFINITIVEMENT (décision utilisateur 2026-08-14). Contexte : la migration F-75 (2026-08-05) l'avait déjà vidé/supprimé vers event_stream.duckdb mais avec 2 défauts — (1) les 194 événements migrés avaient perdu leurs dates historiques (created_at = date de migration, bug migrate_log.py : la date d'en-tête était capturée mais jamais utilisée) ; (2) le fichier avait été RE-CRÉÉ à la main le 2026-08-12 et avait repris sa croissance (le flux n'était pas fermé). IMPLÉMENTÉ : (1) scripts/recover_log_history.py — parcours des 47 versions git (les deux ères, --follow traverse la suppression F-75), parsing ## [date] type | titre (regex [\\w-]+), union dédupliquée, import DATÉ dans run_event (run_id='legacy_md', created_at = date d'en-tête, fallback date du commit de première apparition), idempotent (clé event_type+titre), backup base + remplacement documenté des lignes 'legacy' non datées, correction de 3 coquilles source [2026-01-08]→[2026-08-01]. Base finale : 199 événements datés 2026-07-29 → 2026-08-14 (dont le préambule '🔧 INFOS À SAVOIR' et l'entrée P8-bis F-43 absorbée par l'ancienne regex \\w+). (2) scripts/log_event.py — CLI d'historisation pour l'ASSISTANT IA (remplace tout append manuel) : mêmes table/canal que l'outil log_event du graphe, options --run-id/--node/--date. (3) Suppression du fichier + de scripts/migrate_log.py (obsolète). (4) Purge de TOUTES les mentions dans les fichiers opératifs ; AGENTS.md §2D réécrit avec la règle critique « AUCUN JOURNAL PLAT » (ne jamais recréer le fichier, ne jamais journaliser dans un .md — l'historique git reste consultable via git log -p --follow). Tests : tests/test_log_recovery.py (parser, dedup, idempotence, remplacement legacy, git-walk repo tmp, CLI).",
+      "status": "completed",
+      "dependencies": [
+        "F-75"
+      ]
+    },
+    {
+      "id": "F-107",
+      "name": "Migration éventuelle des fichiers de suivi plats vers DuckDB (progress.md en tête)",
+      "description": "Note utilisateur 2026-08-14 (au fil de F-106) : « y'aura peut-être un sujet pour les autres .md de migrer en base, à voir si ça gonfle trop ». CANDIDAT n°1 : progress.md (~1 500 lignes, append-only — chaque cycle ajoute 20-40 lignes de section) — le pattern serait d'archiver les sections d'itérations passées dans event_stream.duckdb (comme F-106 a fait pour le journal plat) et de ne garder en texte que le sprint courant. NON PRIORITAIRES : feature_list.json et contract.md — leur valeur réside dans le diff git lisible (review Kilo) ; une table DuckDB casserait ce confort. DÉCLENCHEUR : taille/bruit excessif constaté (Meta-Analyste P15 peut mesurer la croissance par cycle via l'historique git). Pattern réutilisable tel quel : scripts/recover_log_history.py (parsing + import daté idempotent) + table run_event. Statut : à évaluer, aucune implémentation avant que le seuil de gonflement soit atteint.",
+      "status": "pending",
+      "dependencies": [
+        "F-106"
       ]
     }
   ]

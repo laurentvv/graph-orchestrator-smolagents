@@ -59,21 +59,17 @@ Tu ne dois jamais te fier uniquement à ta fenêtre de contexte pour suivre l'av
     ```
 
 ### D. Historisation Événementielle (DuckDB)
-* **Rôle** : L'ancien fichier `log.md` est supprimé au profit d'une base de données analytique structurée (DuckDB). Cela évite la saturation du contexte et permet des requêtes avancées post-mortem.
-* **Cycle de vie** : À chaque événement majeur (début de tâche, erreur inattendue, validation de sous-tâche), tu DOIS appeler l'outil `log_event` au lieu d'écrire dans un fichier texte.
-* **Usage** : 
-    ```python
-    # Appel d'outil (Python CodeAgent)
-    log_event(
-        event_type="init", # ou "gen", "eval", "fix", "error"
-        details="Initialisation du workspace et négociation du contrat."
-    )
-    ```
+* **Rôle** : Toute la mémoire événementielle de l'usine vit dans `data/event_stream.duckdb` (table `run_event`), JAMAIS dans un fichier texte plat. Cela évite la saturation du contexte et permet des requêtes avancées post-mortem.
+* **Deux canaux d'écriture** :
+    * **Runtime (agents du graphe)** : l'outil `log_event(event_type, details)` exposé au Coder (`tools.py`) écrit dans la base avec le `run_id` courant.
+    * **Assistant IA (ZCode)** : le CLI `uv run python scripts/log_event.py <event_type> "<message>"` (options `--run-id`, `--date YYYY-MM-DD`). C'est LE geste de fin de cycle qui remplace tout journal texte.
+* **RÈGLE CRITIQUE — AUCUN JOURNAL PLAT** : l'ancien fichier journal a été **supprimé le 2026-08-14 (F-106)** après récupération complète de son historique dans la base (199 événements datés, `run_id='legacy_md'`, y compris les 198 entrées antérieures à la migration F-75 dont les dates avaient été perdues). **Ne recrée JAMAIS ce fichier, n'append JAMAIS d'événement dans un `.md`.** L'historique git de l'ancien fichier reste consultable (`git log -p --follow -- log.md`) et ré-importable via `scripts/recover_log_history.py`.
+* **Lecture post-mortem** : requêtes DuckDB directes sur `run_event` ( colonnes `run_id`, `node`, `event_type`, `message`, `created_at`).
 
 ## 3. Directives Opérationnelles pour la Boucle d'Exécution
 
 1. **Phase de Bootstrap** : Avant toute action, vérifie la présence des trois fichiers de suivi (`feature_list.json`, `contract.md`, `progress.md`). S'ils sont absents, crée-les selon les formats ci-dessus. S'ils sont présents, lis-les pour reconstruire ta mémoire immédiate.
-2. **Phase d'Action** : Avant d'exécuter une tâche, enregistre l'événement dans la base de données DuckDB via l'outil `log_event`.
+2. **Phase d'Action** : Avant d'exécuter une tâche, enregistre l'événement dans la base DuckDB (outil `log_event` côté graphe, CLI `scripts/log_event.py` côté assistant).
 3. **Phase de Synchronisation** : Après chaque écriture de fichier ou test, mets à jour le fichier de statut associé (`progress.md` ou `feature_list.json`).
 4. **Gestion des Erreurs** : Si une exception survient ou si le processus s'interrompt, l'état valide est celui extrait du dernier événement enregistré dans DuckDB, combiné aux assertions de `progress.md`.
 5. **Mise à jour du `README.md`** : À chaque fois que tu termines une nouvelle fonctionnalité importante, tu dois impérativement mettre à jour le fichier `README.md` avant de terminer ta tâche.

@@ -27,9 +27,8 @@ venv/
 Thumbs.db
 
 # --- Donnees runtime (bases DuckDB : Knowledge Graph, Event Stream, Runs History) ---
-# data/ regroupe toutes les bases DuckDB du projet (F-75 : migration KG vers data/).
+# data/ regroupe toutes les bases DuckDB du projet (F-75, versionnées depuis F-106).
 # Données runtime régénérables — jamais commitées.
-data/
 *.db
 *.db.wal
 *.duckdb
@@ -83,3 +82,11 @@ models/
 # --- Assistances IA externes ---
 .agents/
 .claude/
+
+# --- data/ versionné (F-106) : mémoire d'agent, ne pas perdre l'historique.
+# Négations APRÈS les patterns *.db/*.duckdb (dernier pattern gagnant).
+# Exclus : *.wal (transitoire après CHECKPOINT) et sauvegardes datées *.bak.*.
+!data/event_stream.duckdb
+!data/graph_orchestrator.db
+data/*.wal
+data/*.bak.*
