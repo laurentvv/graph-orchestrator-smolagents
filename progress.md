@@ -1599,3 +1599,34 @@ Coder est appliquée correctement par Qwen3.5-9B.
 - [x] Étape F99-6 : État disque synchronisé (feature_list F-99 completed, contract
   critères 359-364, plan case P3 cochée, progress ce bloc, événements journalisés
   via scripts/log_event.py run_id f-99 — convention F-106).
+
+## Jalons de l'Itération (runs E2E de validation F-99/F-97/PR#70 — 2026-08-14)
+> Objectif : valider en live les 5 changements comportementaux accumulés depuis le run #9
+> (F-72, F-97, PR #70, F-99, F-106). Prompt canonique Bubble Sort (multifile-v6),
+> WORKFLOW_MODE=coding, spawn backends. 3 runs, dont l'analyse a produit 2 durcissements (PR #74).
+
+- [x] Run #1 (échec infra) : Coder 3/3 tentatives en `exceed_context_size_error` — requests
+  33-39k tokens > n_ctx 32768 du llama-server Qwen. Correctif : FAST_CONTEXT 32768 → 49152
+  (local .env + défaut .env.example). F-99 non en cause (0 déclenchement, mort par 400 serveur).
+- [x] Run #2 (échec révélateur) : final_answer VALIDE + 3 fichiers sur disque au 3e attempt,
+  mais (a) continuation F-99 sur le DERNIER attempt (budget épuisé → échec technique au lieu
+  du Judge) et (b) audit sur mémoire purgée (preuves des tentatives précédentes invisibles).
+  Correctifs PR #74 : waiver dernier attempt + preuves cumulées cross-attempts + reason
+  listant les preuves manquantes.
+- [x] Run #3 (SUCCÈS) : **F-82-ts-01 APPROUVÉ par le Judge** 🚀 (2e approbation du projet).
+  F-99 en action : T1/T2 défiées (le 4B voulait finir SANS AUCUN write — « Je peux maintenant
+  appeler final_answer ») → le modèle a produit les 3 fichiers au fil des tentatives (styles
+  21:57, script 22:05, index 22:08) → T3 même impasse → blocked-waive → Judge a arbitré et
+  approuvé. Chaîne complète : Linter → Static Tester (4.1s) → Tester (fallback verdict) →
+  Security → Judge → consolidation. Métriques attempt réussie : Coder 130.7s/184k tokens,
+  Tester 286s/180k. Signaux validés : PR #70 (0 navigation non-HTML), F-97 (0 erreur de
+  chemin réelle — l'unique grep = le texte du prompt), F-90 (critères présents), F-68
+  (8 leçons rappelées), F-106 (event stream + consolidation OK).
+- [x] Durcissement final (run #3 a révélé le dernier angle mort : la COMPACTION ampute
+  memory.steps — « AUCUN appel d'écriture » alors qu'index.html venait d'être écrit) :
+  preuve par le DISQUE d'abord (création), git status des cibles (correction, source
+  autoritaire F-53), verify-after retiré des bloqueurs (redondant F-50 + Static Tester).
+  28 tests F-99 PASS, 87 guards, py_compile OK.
+- [x] État disque synchronisé : feature_list F-99 (validation E2E consignée), contract
+  critères 365-367, progress ce bloc, événements #398-#402 (run_id e2e-f99-validation),
+  analysis_report.md régénéré.

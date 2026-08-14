@@ -484,16 +484,30 @@ async def run_with_retry(
                     if goal_enforcer is not None:
                         decision = goal_enforcer.enforce(steps)
                         if decision.action == GoalAction.CONTINUE:
-                            print(
-                                f"[!] Goal enforcement (Tentative {attempt + 1}/{max_retries}) : "
-                                f"{decision.reason}"
-                            )
-                            record_run_error(
-                                f"Goal enforcement : complétion non prouvée — {decision.reason}"
-                            )
-                            prompt += f"\n\n{decision.prompt_note}"
-                            validated = None
-                            goal_continued = True
+                            if attempt == max_retries - 1:
+                                # Fix run2 F-99 (2026-08-14) : une continuation
+                                # sur le DERNIER attempt ne pourrait pas être
+                                # honorée (plus de budget node) — elle convertirait
+                                # un final_answer valide en échec technique et
+                                # priverait le Judge de son arbitrage. On waive :
+                                # résultat conservé, la boucle graphe
+                                # (max_iterations) reste l'enceinte externe.
+                                print(
+                                    f"[i] Goal enforcement (dernier attempt) : "
+                                    f"{decision.reason} → résultat conservé, le "
+                                    f"Judge arbitre (pas de budget de continuation)."
+                                )
+                            else:
+                                print(
+                                    f"[!] Goal enforcement (Tentative {attempt + 1}/{max_retries}) : "
+                                    f"{decision.reason}"
+                                )
+                                record_run_error(
+                                    f"Goal enforcement : complétion non prouvée — {decision.reason}"
+                                )
+                                prompt += f"\n\n{decision.prompt_note}"
+                                validated = None
+                                goal_continued = True
                         elif decision.action == GoalAction.WAIVE:
                             print(
                                 f"[i] Goal enforcement : {decision.reason}"
