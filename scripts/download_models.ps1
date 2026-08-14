@@ -3,6 +3,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"  # Évite le goulot d'étranglement de Write-Progress sous Windows PowerShell 5.1
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $ProjectDir = Split-Path -Parent $ScriptDir
 $ModelsDir = Join-Path $ProjectDir "models"
