@@ -1613,7 +1613,8 @@ Coder est appliquée correctement par Qwen3.5-9B.
   du Judge) et (b) audit sur mémoire purgée (preuves des tentatives précédentes invisibles).
   Correctifs PR #74 : waiver dernier attempt + preuves cumulées cross-attempts + reason
   listant les preuves manquantes.
-- [x] Run #3 (SUCCÈS) : **F-82-ts-01 APPROUVÉ par le Judge** 🚀 (2e approbation du projet).
+- [~] Run #3 (approbation Judge = **FAUX POSITIF** — REJETÉ par l'utilisateur en validation manuelle) :
+  F-82-ts-01 APPROUVÉ par le Judge 🚀 (2e approbation du projet).
   F-99 en action : T1/T2 défiées (le 4B voulait finir SANS AUCUN write — « Je peux maintenant
   appeler final_answer ») → le modèle a produit les 3 fichiers au fil des tentatives (styles
   21:57, script 22:05, index 22:08) → T3 même impasse → blocked-waive → Judge a arbitré et
@@ -1622,6 +1623,19 @@ Coder est appliquée correctement par Qwen3.5-9B.
   Tester 286s/180k. Signaux validés : PR #70 (0 navigation non-HTML), F-97 (0 erreur de
   chemin réelle — l'unique grep = le texte du prompt), F-90 (critères présents), F-68
   (8 leçons rappelées), F-106 (event stream + consolidation OK).
+- [ ] **Requalification (2026-08-14 soir, validation manuelle utilisateur)** : le run #3 NE
+  compte PAS comme golden. Bugs constatés à la main dans le livrable : animation instantanée
+  (`await sleep(speed)` avec speed=1-10 **millisecondes**/étape au lieu de ~100-300ms attendus),
+  compteur de comparaisons **jamais incrémenté** (reste 0 à vie — initialisé/affiché mais pas
+  d'incrément dans bubbleSort), rendu buggé (`updateBar` dessine sans effacer → traînées +
+  barres qui restent orange au lieu de restaurer leur couleur). Faits méta : (1) le Tester
+  (fallback max_steps) avait DÉRIVÉ `failure` — BON verdict — et le Judge l'a OUTREPASSE sans
+  persister son raisonnement dans le KG (gap d'observabilité : aucun claim 22:18-22:24) ;
+  (2) F-99 reste valide côté mécanique (continuations/waive ont fonctionné comme conçus) ;
+  (3) pistes de correction proposées à l'utilisateur (AGENTS.md §8, en attente de feu vert) :
+  gate fail-closed du Judge sur test_results=failure, durcissement de l'échelle de vitesse
+  dans le prompt Coder/skill (règle 9 : exiger un delay explicite 50-300ms par étape + test
+  du compteur), persistance du verdict Judge (findings + justification) dans le KG.
 - [x] Durcissement final (run #3 a révélé le dernier angle mort : la COMPACTION ampute
   memory.steps — « AUCUN appel d'écriture » alors qu'index.html venait d'être écrit) :
   preuve par le DISQUE d'abord (création), git status des cibles (correction, source
