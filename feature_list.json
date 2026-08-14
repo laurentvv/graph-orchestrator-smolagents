@@ -877,6 +877,15 @@
       "dependencies": [
         "F-75"
       ]
+    },
+    {
+      "id": "F-107",
+      "name": "Migration éventuelle des fichiers de suivi plats vers DuckDB (progress.md en tête)",
+      "description": "Note utilisateur 2026-08-14 (au fil de F-106) : « y'aura peut-être un sujet pour les autres .md de migrer en base, à voir si ça gonfle trop ». CANDIDAT n°1 : progress.md (~1 500 lignes, append-only — chaque cycle ajoute 20-40 lignes de section) — le pattern serait d'archiver les sections d'itérations passées dans event_stream.duckdb (comme F-106 a fait pour le journal plat) et de ne garder en texte que le sprint courant. NON PRIORITAIRES : feature_list.json et contract.md — leur valeur réside dans le diff git lisible (review Kilo) ; une table DuckDB casserait ce confort. DÉCLENCHEUR : taille/bruit excessif constaté (Meta-Analyste P15 peut mesurer la croissance par cycle via l'historique git). Pattern réutilisable tel quel : scripts/recover_log_history.py (parsing + import daté idempotent) + table run_event. Statut : à évaluer, aucune implémentation avant que le seuil de gonflement soit atteint.",
+      "status": "pending",
+      "dependencies": [
+        "F-106"
+      ]
     }
   ]
 }
