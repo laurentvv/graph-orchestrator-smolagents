@@ -83,7 +83,7 @@ def test_audit_extrait_path_depuis_dict_tca():
 def test_audit_sans_ecriture_preuve_manquante():
     step = _make_step(code_action='print(read_file(path="index.html"))')
     ev = audit_completion([step])
-    assert any("AUCUN appel d'outil d'écriture" in m for m in ev.missing)
+    assert any("AUCUN changement matériel" in m for m in ev.missing)
     assert not ev.proven
 
 
@@ -217,15 +217,17 @@ def test_meme_impasse_3_rounds_blocked(tmp_path):
 
 def test_impasse_differente_reset_le_streak(tmp_path):
     """Une impasse DIFFÉRENTE (autre ensemble de preuves manquantes) remet le
-    compteur à 1 — qm compte la MÊME impasse, pas n'importe quel échec."""
-    ge = _enforcer(target_files=["index.html"], is_web=True, cwd=str(tmp_path))
-    # Round 1 : aucun step → manques = {écriture}.
+    compteur à 1 — qm compte la MÊME impasse, pas n'importe quel échec.
+    (run3 : preuve par le disque — l'écriture du fichier entre 2 rounds change
+    l'impasse.)"""
+    ge = _enforcer(target_files=["styles.css", "index.html"], cwd=str(tmp_path))
+    # Round 1 : les 2 cibles absentes → impasse {styles.css, index.html}.
     d1 = ge.enforce([])
     assert d1.action == GoalAction.CONTINUE
-    # Round 2 : écriture présente mais cible absente du disque + pas de
-    # verify-after → manques DIFFÉRENTS → streak reset à 1.
-    step = _make_step(code_action='write_file(path="autre.html", content=r"""x""")')
-    d2 = ge.enforce([step])
+    # Round 2 : styles.css créé entre-temps → impasse DIFFÉRENTE {index.html}
+    # → streak reset à 1.
+    (tmp_path / "styles.css").write_text("body{}", encoding="utf-8")
+    d2 = ge.enforce([])
     assert d2.action == GoalAction.CONTINUE
     assert ge.blocked_streak == 1, "impasse différente → reset, pas 2"
 
@@ -299,20 +301,65 @@ def test_objectif_tronque_4000():
 
 
 def test_evidence_accumulee_cross_attempts(tmp_path):
-    """Fix run2 F-99 : la mémoire est purgée entre retries, mais un write/verify
-    de la tentative 1 reste une preuve à la tentative 3 (comptes cumulés)."""
-    (tmp_path / "index.html").write_text("<html></html>", encoding="utf-8")
-    ge = _enforcer(cwd=str(tmp_path), is_web=True)
-    # Tentative 1 : écritures présentes, PAS de verify (web) → manques {verify}.
-    write_step = _make_step(code_action='write_file(path="index.html", content=r"""x""")')
-    d1 = ge.enforce([write_step])
+    """Fix run2 F-99 : la mémoire est purgée entre retries, mais un write de la
+    tentative 1 reste une preuve à la tentative 3 (comptes cumulés). Mode
+    correction (itération 3, pas de repo git → repli sur les writes cumulés)."""
+    ge = _enforcer(iteration=3, target_files=["index.html"], cwd=str(tmp_path))
+    # Tentative 1 : rien → manqué {changement matériel}.
+    d1 = ge.enforce([])
     assert d1.action == GoalAction.CONTINUE
-    assert len(ge._last_missing) == 1, "seul le verify-after manque"
-    # Tentative 2 : mémoire purgée (plus de write), MAIS verify présent →
-    # les comptes cumulés gardent le write de la tentative 1 : prouvé.
-    verify_step = _make_step(code_action='print(list_console_messages())')
-    d2 = ge.enforce([verify_step])
-    assert d2.action == GoalAction.ACCEPT, "write(t1) + verify(t2) cumulés = complétion prouvée"
+    # Tentative 2 : mémoire purgée MAIS write présent → cumul > 0 → prouvé.
+    write_step = _make_step(code_action='write_file(path="index.html", content=r"""x""")')
+    d2 = ge.enforce([write_step])
+    assert d2.action == GoalAction.ACCEPT
+
+
+def test_enforcer_preuve_par_disque_memoire_compactee(tmp_path):
+    """Fix run3 F-99 : la compaction ampute memory.steps — le write exécuté
+    n'y figure plus. Le DISQUE est la preuve : fichiers présents + steps
+    vides = complétion PROUVÉE (le faux positif run2/run3 est éliminé)."""
+    for f in ("index.html", "styles.css", "script.js"):
+        (tmp_path / f).write_text("x", encoding="utf-8")
+    ge = _enforcer(cwd=str(tmp_path), is_web=True)  # même sans aucun step
+    d = ge.enforce([])
+    assert d.action == GoalAction.ACCEPT, "le disque prime sur la mémoire compactée"
+
+
+def test_enforcer_verify_after_non_bloquant(tmp_path):
+    """Fix run3 : le verify-after n'est PLUS un bloqueur du GoalEnforcer —
+    redondant avec les gates F-50 (screenshot obligatoire) + Static Tester,
+    et aveuglé par la compaction. (audit_completion one-shot l'exige toujours.)"""
+    (tmp_path / "index.html").write_text("x", encoding="utf-8")
+    ge = _enforcer(cwd=str(tmp_path), is_web=True)
+    d = ge.enforce([])  # aucun check_js_syntax/list_console_messages
+    assert d.action == GoalAction.ACCEPT
+
+
+def test_enforcer_correction_preuve_via_git(tmp_path):
+    """Mode correction : une modification git NON COMMITÉE des cibles = preuve
+    matérielle (source autoritaire indépendante de la mémoire)."""
+    import subprocess as sp
+
+    repo = tmp_path / "run"
+    repo.mkdir()
+    sp.run(["git", "-C", str(repo), "init", "-q", "-b", "main"], check=True, capture_output=True)
+    sp.run(["git", "-C", str(repo), "-c", "user.email=t@t.t", "-c", "user.name=t",
+            "commit", "-q", "--allow-empty", "-m", "init"], check=True, capture_output=True)
+    (repo / "index.html").write_text("v1", encoding="utf-8")
+    sp.run(["git", "-C", str(repo), "add", "-A"], check=True, capture_output=True)
+    sp.run(["git", "-C", str(repo), "-c", "user.email=t@t.t", "-c", "user.name=t",
+            "commit", "-q", "-m", "c1"], check=True, capture_output=True)
+
+    # Propre + aucun write cumulé → non prouvé.
+    ge = _enforcer(iteration=3, cwd=str(repo))
+    d1 = ge.enforce([])
+    assert d1.action == GoalAction.CONTINUE
+
+    # Modification non commitée de la cible → prouvé (même sans write en mémoire).
+    (repo / "index.html").write_text("v2 corrigée", encoding="utf-8")
+    ge2 = _enforcer(iteration=3, cwd=str(repo))
+    d2 = ge2.enforce([])
+    assert d2.action == GoalAction.ACCEPT
 
 
 def test_reason_liste_les_preuves_manquantes():
@@ -320,7 +367,7 @@ def test_reason_liste_les_preuves_manquantes():
     ge = _enforcer()
     d = ge.enforce([])
     assert "preuve(s) manquante(s)" in d.reason
-    assert "écriture" in d.reason or "AUCUN appel" in d.reason
+    assert "ABSENTS du disque" in d.reason
 
 
 # ==========================================

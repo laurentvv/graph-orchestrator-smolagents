@@ -157,6 +157,29 @@ def collect_evidence(steps: Sequence[Any]) -> CompletionEvidence:
     return ev
 
 
+def _disk_change(cwd: Optional[str], target_files: Sequence[str]) -> bool:
+    """Y a-t-il une modification matérielle NON COMMITÉE des cibles (git) ?
+
+    Preuve de changement en mode correction (itération > 1 : les fichiers
+    pré-existent, leur existence ne prouve rien). Source AUTORITAIRE
+    indépendante de la mémoire smolagents — la compaction ampute les vieux
+    steps, le working tree git, jamais (F-53 : le run dir est un repo git).
+    Best-effort : git absent/corrompu → False (fail-open sur l'autre preuve).
+    """
+    import subprocess
+
+    try:
+        base = cwd or os.getcwd()
+        args = ["git", "-C", base, "status", "--porcelain", "--"]
+        args.extend(str(t) for t in target_files) if target_files else None
+        r = subprocess.run(
+            args, capture_output=True, text=True, timeout=10,
+        )
+        return r.returncode == 0 and bool(r.stdout.strip())
+    except Exception:
+        return False
+
+
 def _missing_proofs(
     *,
     write_calls: int,
@@ -165,20 +188,24 @@ def _missing_proofs(
     iteration: int,
     is_web: bool,
     cwd: Optional[str] = None,
+    require_verify: bool = True,
+    disk_change: bool = False,
 ) -> list:
-    """Calcule les labels de preuves manquantes (concrets, actionnables)."""
-    missing: list = []
-    if write_calls == 0:
-        missing.append(
-            "AUCUN appel d'outil d'écriture détecté (write_file / append_file / "
-            "search_replace / multi_replace) — aucune preuve matérielle que tu as "
-            "produit le livrable ce run."
-        )
+    """Calcule les labels de preuves manquantes (concrets, actionnables).
 
-    # Mode création uniquement : le disque est l'état autoritaire. En mode
-    # correction (itération > 1) les fichiers pré-existent, l'exigence se
-    # réduit au changement matériel ci-dessus.
+    Hiérarchie des preuves (fix run3 F-99, 2026-08-14) : la mémoire smolagents
+    est purgée entre retries ET compactée en cours d'attempt — un write exécuté
+    peut ne plus figurer dans les steps. On privilégie donc les sources
+    AUTORITAIRES indépendantes de la mémoire :
+      - création : le DISQUE (fichier cible existant = livrable écrit) ;
+      - correction : le WORKING TREE git (modification non commitée = changement
+        matériel), en secours les write calls cumulés ;
+      - write calls cumulés : preuve de repli quand aucun target n'est connu.
+    """
+    missing: list = []
+
     if iteration <= 1 and target_files:
+        # Mode création : le disque EST la preuve matérielle.
         base = cwd or os.getcwd()
         absent = [
             tf for tf in target_files
@@ -188,12 +215,30 @@ def _missing_proofs(
             missing.append(
                 "fichiers cibles ABSENTS du disque : "
                 + ", ".join(f"`{a}`" for a in absent)
-                + " — vérifie les chemins exacts attendus par la sous-tâche."
+                + " — crée-les AVANT de déclarer la tâche finie."
+            )
+    else:
+        # Mode correction (ou cibles inconnues) : changement matériel =
+        # modification git non commitée OU (repli) write cumulé.
+        if write_calls == 0 and not disk_change:
+            missing.append(
+                "AUCUN changement matériel détecté (ni write_file/append_file/"
+                "search_replace/multi_replace cumulés, ni modification git des "
+                "fichiers cibles) — aucune preuve que tu as produit ou corrigé "
+                "le livrable."
             )
 
-    # Verify-after (web, création) : la doctrine F-51 exige console AVANT
-    # screenshot ; F-50 exige déjà take_screenshot séparément.
-    if is_web and iteration <= 1 and verify_calls == 0:
+    # Verify-after : uniquement en audit one-shot (audit_completion). Le
+    # GoalEnforcer ne l'exige PAS (require_verify=False) : les gates F-50
+    # (screenshot obligatoire) et Static Tester (node --check + console)
+    # couvrent déjà ce maillon, et la compaction rend les appels vérifiables
+    # invisibles (faux positif observé run2/run3).
+    if (
+        require_verify
+        and is_web
+        and iteration <= 1
+        and verify_calls == 0
+    ):
         missing.append(
             "AUCUNE vérification post-écriture dans ton historique (ni "
             "`check_js_syntax` ni `list_console_messages`) — la syntaxe JS et la "
@@ -366,6 +411,12 @@ class GoalEnforcer:
             )
 
         raw = collect_evidence(steps)
+        # Preuve git (mode correction) : calculée HORS lock (subprocess).
+        disk_change = (
+            False
+            if (self.iteration <= 1 and self.target_files)
+            else _disk_change(self.cwd, self.target_files)
+        )
         with self._lock:
             # Preuves CUMULÉES à travers les tentatives (fix run2 F-99
             # 2026-08-14 : la mémoire smolagents est purgée entre retries, mais
@@ -381,6 +432,11 @@ class GoalEnforcer:
                 iteration=self.iteration,
                 is_web=self.is_web,
                 cwd=self.cwd,
+                # Fix run3 F-99 : le bloqueur n'exige PAS le verify-after —
+                # redondant avec les gates F-50 (screenshot) + Static Tester,
+                # et aveuglé par la compaction (faux positifs run2/run3).
+                require_verify=False,
+                disk_change=disk_change,
             )
             proven = not missing
 
@@ -400,8 +456,9 @@ class GoalEnforcer:
                 self.status = "complete"
                 return GoalDecision(
                     GoalAction.ACCEPT,
-                    "complétion prouvée (écritures cumulées + livrables sur disque"
-                    + (" + verify-after" if self.is_web and self.iteration <= 1 else "")
+                    "complétion prouvée ("
+                    + ("livrables sur disque" if self.iteration <= 1 and self.target_files
+                       else "changement matériel (git/write cumulés)")
                     + ")",
                 )
 
