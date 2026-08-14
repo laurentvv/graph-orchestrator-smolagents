@@ -40,7 +40,7 @@ from graph_orchestrator.event_stream import DEFAULT_EVENT_DB_PATH
 RECOMMENDED_TYPES = {
     "init", "gen", "eval", "fix", "error", "doc", "docs", "plan", "merge",
     "pr", "rch", "audit", "diag", "cfg", "run", "sync", "dec", "note",
-    "test", "done", "escalation",
+    "test", "done", "escalation", "feat",
 }
 
 
