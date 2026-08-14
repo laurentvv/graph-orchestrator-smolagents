@@ -798,6 +798,19 @@ async def run_coding_workflow(
                 if m4:
                     sub_metrics.append(m4)
 
+                # Observabilité (post-mortem run #3) : le verdict du Judge est journalisé
+                # dans l'event stream — son raisonnement n'était persisté NULLE PART
+                # (impossible d'auditer pourquoi il avait approuvé malgré le failure).
+                try:
+                    from .event_stream import get_event_db
+                    get_event_db().log_event(
+                        run_id, "judge", "verdict",
+                        f"{subtask.task_id} approved={bool(judge_res and judge_res.is_approved)} | "
+                        f"feedback={(judge_res.final_feedback if judge_res else 'judge system error')[:400]} | "
+                        f"findings={len(judge_res.findings) if judge_res and judge_res.findings else 0}",
+                    )
+                except Exception:
+                    pass
                 if judge_res and judge_res.is_approved:
                     print(f"    [+] {subtask.task_id} APPROUVÉ par le Juge ! 🚀")
                     if obs_id:

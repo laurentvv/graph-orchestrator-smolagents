@@ -338,6 +338,88 @@ def test_empty_target_list(tmp_path):
 
 
 # ==========================================
+# Tier 1c — Smels comportementaux (post-mortem run #3)
+# ==========================================
+from graph_orchestrator.static_tester import _check_behavioral_smells  # noqa: E402
+
+# Le script EXACT du bug run #3 (généré par le Coder, rejeté par l'utilisateur) :
+# compteur affiché jamais incrémenté + await sleep(speed) avec let speed = 5 (5 ms/étape).
+RUN3_BUGGY_JS = """
+const counterEl = document.getElementById('counter');
+let comparisons = 0;
+let speed = 5;
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+async function bubbleSort() {
+    for (let i = 0; i < data.length - 1; i++) {
+        await sleep(speed);
+        if (data[i] > data[i + 1]) { [data[i], data[i+1]] = [data[i+1], data[i]]; }
+    }
+}
+counterEl.textContent = comparisons;
+"""
+
+
+def test_behavioral_run3_both_bugs_caught():
+    """LE test du post-mortem : les 2 bugs du run #3 (compteur mort + animation
+    instantanée 5ms) sont attrapés par le Tier 1c — là où Tier 2/3 étaient aveugles."""
+    errors = _check_behavioral_smells(RUN3_BUGGY_JS)
+    assert any("comparisons" in e and "JAMAIS incrémenté" in e for e in errors)
+    assert any("5 ms par étape" in e for e in errors)
+
+
+def test_behavioral_counter_incremented_clean():
+    js = RUN3_BUGGY_JS.replace(
+        "await sleep(speed);", "await sleep(320 - speed * 28); comparisons++;"
+    )
+    assert _check_behavioral_smells(js) == [], "compteur incrémenté + délai 50-300ms = propre"
+
+
+def test_behavioral_compteur_calcule_non_flagge():
+    """Anti-FP : un compteur recalculé (pas initialisé à 0) n'est pas flaggé."""
+    js = "let total = 0;\ntotal = a + b;\nel.textContent = total;"
+    assert _check_behavioral_smells(js) == []
+
+
+def test_behavioral_template_literal_counter():
+    js = "let swaps = 0;\nel.innerHTML = `Swaps: ${swaps}`;\nloop();"
+    errors = _check_behavioral_smells(js)
+    assert any("swaps" in e for e in errors)
+
+
+def test_behavioral_delays_legitimes():
+    assert _check_behavioral_smells("await sleep(300);") == []
+    assert _check_behavioral_smells("await sleep(50);") == []
+    assert _check_behavioral_smells("setTimeout(fn, 0);") == [], "deferral hors contexte animation = légitime"
+    assert _check_behavioral_smells("await sleep(8);") != [], "sleep littéral < 20ms = instantané"
+
+
+def test_behavioral_settimeout_avec_contexte_animation():
+    js = "function animateStep() { setTimeout(draw, 10); }"
+    assert _check_behavioral_smells(js) != [], "setTimeout 10ms en contexte animation = instantané"
+
+
+def test_behavioral_var_non_numerique_ignoree():
+    assert _check_behavioral_smells("el.textContent = title;") == []
+
+
+def test_static_tester_node_attrape_run3(tmp_path, monkeypatch):
+    """Intégration : le nœud Static Tester rejette le livrable run #3 en Tier 1
+    (0 Chrome) avec les erreurs [behavior] — court-circuite le Tester LLM."""
+    import shutil
+    if shutil.which("node") is None:
+        import pytest
+        pytest.skip("node absent")
+    monkeypatch.setenv("STATIC_TESTER_DEVTOOLS", "0")
+    p = _write(tmp_path, "index.html", "<script>" + RUN3_BUGGY_JS + "</script>")
+    subtask = {"id": "st1c", "target_files": [p]}
+    res, _ = execute_static_tester_node(subtask, settings=None)
+    assert res.status == "failure"
+    assert "[behavior]" in res.details
+    assert "JAMAIS incrémenté" in res.details
+    assert "5 ms par étape" in res.details
+
+
+# ==========================================
 # Tier 2 — Visibilité DOM (skip si Chrome absent)
 # ==========================================
 def test_invisible_bars_height_percent(tmp_path, monkeypatch):

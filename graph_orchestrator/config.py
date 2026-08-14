@@ -312,6 +312,15 @@ class Settings:
     # automation du verdict). Opt-out ``JUDGE_GROUNDING_ENABLED=0`` pour A/B/debug.
     judge_grounding_enabled: bool = True
 
+    # --- Judge fail-closed TEST (post-mortem run #3 / F-99-bis) ---
+    # Un verdict de test FAILURE/timeout/absent ne peut PLUS être approuvé par le
+    # LLM Judge (run #3 2026-08-14 : approbation d'une app à animation instantanée
+    # et compteur mort malgré le verdict failure du Tester — le prompt disait déjà
+    # de sanctionner, le 9B l'a ignoré, doctrine F-33 : gate logicielle). La gate
+    # court-circuite le LLM (is_approved=False + feedback au Coder pour itérer).
+    # Opt-out JUDGE_RESPECT_TEST_FAILURE=false pour A/B/debug.
+    judge_respect_test_failure: bool = True
+
     # --- Consolidation mémoire KG (Priorité 6-ter / F-68 Phase 1) ---
     # Le KG DuckDB grossit indéfiniment : dedup_key ne capte que les doublons
     # EXACTS, et rien n'oublie jamais. La consolidation (LLM-juge qm émettant
@@ -505,6 +514,7 @@ def load_settings() -> Settings:
         goal_waiver_stalled_rounds=_get_int("GOAL_WAIVER_STALLED_ROUNDS", 5),
         goal_token_cap=_get_int("GOAL_TOKEN_CAP", 2_000_000),
         judge_grounding_enabled=_get_bool("JUDGE_GROUNDING_ENABLED", True),
+        judge_respect_test_failure=_get_bool("JUDGE_RESPECT_TEST_FAILURE", True),
         memory_consolidation_enabled=_get_bool("MEMORY_CONSOLIDATION_ENABLED", True),
         memory_consolidation_after=_get_int("MEMORY_CONSOLIDATION_AFTER", 10),
         memory_retention_days=_get_int("MEMORY_RETENTION_DAYS", 30),
