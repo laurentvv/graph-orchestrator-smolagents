@@ -1644,3 +1644,27 @@ Coder est appliquée correctement par Qwen3.5-9B.
 - [x] État disque synchronisé : feature_list F-99 (validation E2E consignée), contract
   critères 365-367, progress ce bloc, événements #398-#402 (run_id e2e-f99-validation),
   analysis_report.md régénéré.
+
+## Jalons de l'Itération (post-mortem run #3 — fail-closed Judge + Tier 1c, F-108, 2026-08-14)
+> Suite au REJET utilisateur du run #3. Diagnostic complet depuis les logs + le code généré,
+> puis correctifs (feu vert utilisateur « corrige le juge ou tester pour trouver le bug »).
+
+- [x] PM-1 Diagnostic (logs en détail) : le Tester a BIEN travaillé (9 steps : navigation,
+  console, 4 clics, 10 evaluate_script) et son fallback a correctement dérivé `failure` ;
+  mais (a) le statut n'était PAS transmis au LLM Judge (seuls les details), (b) le prompt
+  Judge « SANCTIONNE LES ÉCHECS » a été ignoré par le 9B, (c) le Static Tester Tier 3 exigait
+  t1>t0 — le compteur MORT (0→0) rendait l'instantané indétectable (les 2 bugs se camouflaient
+  mutuellement), (d) le verdict Judge n'était persisté nulle part. Bugs du livrable : sleep 5ms
+  (l.89 script.js), comparisons jamais incrémenté (l.18/36), updateBar sans effacement (traînées
+  orange). VERDICT : pas une régression — angle mort latent (Coder 4B + Tier 3 depuis F-54 +
+  Judge jamais gated), révélé par les signaux améliorés F-61/F-99.
+- [x] PM-2 Gate fail-closed TEST (mirror Security F-61) : failure/timeout/absent →
+  is_approved=False SANS appel LLM + finding critical/testing + feedback propagé. Opt-out
+  JUDGE_RESPECT_TEST_FAILURE. + transmission du statut dans test_results.
+- [x] PM-3 Static Tester Tier 1c (_check_behavioral_smells, 0 LLM) : compteur mort + délai
+  < 20ms (garde anti-FP setTimeout). Validé sur le script.js EXACT du run #3 : 2 bugs attrapés,
+  version corrigée 0, cas légitimes 0 FP.
+- [x] PM-4 Persistance verdict Judge dans l'event stream (node=judge, type=verdict) —
+  auditable.
+- [x] PM-5 Validation : 12 tests judge + 8 Tier 1c + suite complète **1052 passed / 0 failed /
+  1 skipped**. py_compile OK. État disque synchronisé (F-108, contract 368-371, ce bloc).

@@ -235,6 +235,93 @@ _PRIMARY_ACTION_RE = re.compile(
 )
 
 
+# Post-mortem run #3 (2026-08-14, rejet utilisateur) : noms de variables typiques
+# d'un compteur affiché à l'utilisateur (comparaisons, échanges, passes...).
+_COUNTER_NAME_RE = re.compile(
+    r"\b\w*(count|counter|comparisons?|comparaisons?|swaps?|moves?|steps?|iterations?|passes?)\b",
+    re.IGNORECASE,
+)
+
+
+def _check_behavioral_smells(js: str) -> List[str]:
+    """Tier 1c — smels comportementaux greppables (0 LLM, 0 Chrome).
+
+    Post-mortem run #3 : le Tier 3 (temporel) était AVEUGLE sur le bug car il
+    exige t1 > t0 (le compteur doit avancer) pour détecter l'animation
+    instantanée — or le compteur était MORT (0→0), les deux bugs se cachaient
+    mutuellement. Ces checks statiques attrapent chaque bug À LA SOURCE, dans
+    le source JS :
+
+    (a) COMPTEUR MORT : variable au nom compteur, initialisée à 0, AFFICHÉE à
+        l'utilisateur (assignation textContent/innerText/innerHTML ou template
+        `${var}`), mais JAMAIS incrémentée (`x++` / `x +=` / `x = x +`).
+        → run3 : `let comparisons = 0` affiché mais aucun `comparisons++`.
+    (b) ANIMATION INSTANTANÉE : délai par étape résoluble à < 20 ms —
+        `sleep(N)` / `setTimeout(fn, N)` où N est un littéral < 20, OU un
+        identifiant dont la déclaration `let x = N` vaut < 20 (run3 :
+        `await sleep(speed)` avec `let speed = 5` → 5 ms/étape au lieu de
+        50-300 ms). Pour setTimeout, on ne flague qu'en présence d'un mot-clé
+        d'animation (animate/sort/step/frame/speed) — un `setTimeout(fn, 0)`
+        de deferral reste légitime hors contexte d'animation.
+    """
+    errors: List[str] = []
+    if not js:
+        return errors
+
+    # --- (a) compteur mort ---
+    displayed: set = set()
+    for m in re.finditer(
+        r"(?:textContent|innerText|innerHTML)\s*=\s*[`\"']?[^`\"';]*?\b([A-Za-z_$][\w$]*)\b", js
+    ):
+        if _COUNTER_NAME_RE.search(m.group(1)):
+            displayed.add(m.group(1))
+    for m in re.finditer(r"\$\{\s*([A-Za-z_$][\w$]*)\s*\}", js):
+        if _COUNTER_NAME_RE.search(m.group(1)):
+            displayed.add(m.group(1))
+    for name in displayed:
+        incremented = re.search(
+            rf"\b{re.escape(name)}\s*(?:\+\+|\+=|=\s*{re.escape(name)}\s*\+)", js
+        )
+        starts_at_zero = re.search(rf"\b{re.escape(name)}\s*=\s*0\b", js)
+        if starts_at_zero and not incremented:
+            errors.append(
+                f"[behavior] Compteur '{name}' affiché à l'utilisateur mais JAMAIS "
+                f"incrémenté dans le code (initialisé à 0, aucun `{name}++`/`{name} += 1`). "
+                f"Le compteur restera à 0 à vie — incrémente-le à chaque comparaison/"
+                f"échange/étape de l'algorithme."
+            )
+
+    # --- (b) animation instantanée ---
+    has_animation_kw = bool(
+        re.search(r"\b(animate|animation|sort|step|frame|speed)\w*\b", js, re.I)
+    )
+    delay_args: list = []
+    for m in re.finditer(r"\b(?:await\s+)?sleep\(\s*([^),]+)\)", js):
+        delay_args.append((m.group(1).strip(), "sleep"))
+    for m in re.finditer(r"setTimeout\(\s*[^,]+,\s*([^),]+)\)", js):
+        delay_args.append((m.group(1).strip(), "setTimeout"))
+    for arg, kind in delay_args:
+        value = None
+        if re.fullmatch(r"\d+", arg):
+            value = int(arg)
+        else:
+            dm = re.search(rf"\b(?:let|var|const)\s+{re.escape(arg)}\s*=\s*(\d+)\b", js)
+            if dm:
+                value = int(dm.group(1))
+        if value is None:
+            continue
+        if kind == "sleep" or has_animation_kw:
+            if value < 20:
+                errors.append(
+                    f"[behavior] Délai d'animation de {value} ms par étape "
+                    f"(`{kind}({arg})`) — l'animation entière est QUASI INSTANTANÉE "
+                    f"(des centaines d'étapes × {value} ms < 2 s). Un pas d'animation "
+                    f"visible demande 50-300 ms : mappe le slider sur une échelle "
+                    f"adéquate (ex: `const delay = 320 - speed * 28;`)."
+                )
+    return errors
+
+
 def _discover_visibility_targets(html: str, js: str) -> List[str]:
     """Découvre les sélecteurs CSS candidats à vérifier pour la visibilité."""
     targets: List[str] = []
@@ -710,6 +797,9 @@ def static_check_html(
     # --- Tier 1 (toujours, statique pur) ---
     errors.extend(_check_js_syntax(js))
     errors.extend(_check_event_wiring(html, js))
+    # Tier 1c (post-mortem run #3) : smels comportementaux — compteur mort +
+    # délai d'animation instantané (les 2 bugs du run #3 que Tier 2/3 ont ratés).
+    errors.extend(_check_behavioral_smells(js))
     tier = "tier1"
 
     # Décision : si Tier 1 a déjà trouvé un bug SYNTAXE (page blanche garantie),

@@ -338,3 +338,91 @@ def test_execute_code_judge_node_blocks_when_security_unavailable(mock_cot, mock
     assert metrics is not None
     assert metrics.input_tokens == 0  # aucun appel LLM
 
+
+@patch("graph_orchestrator.dspy_nodes._configure_dspy")
+@patch("graph_orchestrator.dspy_nodes.dspy.ChainOfThought")
+def test_execute_code_judge_node_blocks_on_test_failure(mock_cot, mock_configure, mock_settings):
+    """Fail-closed TEST (post-mortem run #3, 2026-08-14 — rejet utilisateur) :
+    verdict Tester failure → approbation bloquée SANS appel LLM. Le 9B avait
+    approuvé une app à animation instantanée + compteur mort malgré le failure
+    du Tester (le prompt Judge disait déjà de sanctionner — doctrine F-33)."""
+    from graph_orchestrator.models import CoderOutput
+    subtask_dict = {"id": "T3", "target_files": []}
+    security_res = SecurityOutput(task_id="T3", is_secure=True, vulnerabilities=[])
+    test_res = CoderOutput(
+        task_id="T3", status="failure",
+        details="Tester (max_steps fallback) : assertion en échec — counter stays 0",
+    )
+
+    output, metrics = asyncio.run(execute_code_judge_node(
+        subtask_dict, test_res, security_res,
+        mock_settings.reasoning_model_id, mock_settings,
+    ))
+
+    assert output is not None
+    assert output.is_approved is False
+    assert any(f.severity == "critical" and f.category == "testing" for f in output.findings)
+    # Le feedback du Tester est propagé au Coder (il guide l'itération suivante).
+    assert "counter stays 0" in output.final_feedback
+    # Hard block : pas d'appel LLM.
+    mock_cot.assert_not_called()
+    assert metrics is not None and metrics.input_tokens == 0
+
+
+@patch("graph_orchestrator.dspy_nodes._configure_dspy")
+@patch("graph_orchestrator.dspy_nodes.dspy.ChainOfThought")
+def test_execute_code_judge_node_blocks_on_test_timeout_and_missing(mock_cot, mock_configure, mock_settings):
+    """Fail-closed TEST : timeout (str) et absence de verdict (None) bloquent
+    aussi l'approbation — un string benign (« TESTS: SUCCESS ») passe, lui,
+    vers le LLM (rétrocompat tests existants)."""
+    subtask_dict = {"id": "T3", "target_files": []}
+    security_res = SecurityOutput(task_id="T3", is_secure=True, vulnerabilities=[])
+
+    out_timeout, _ = asyncio.run(execute_code_judge_node(
+        subtask_dict, "TIMEOUT ERROR: L'exécution du testeur a dépassé le délai", security_res,
+        mock_settings.reasoning_model_id, mock_settings,
+    ))
+    assert out_timeout.is_approved is False
+    assert "TIMEOUT" in out_timeout.final_feedback
+
+    out_missing, _ = asyncio.run(execute_code_judge_node(
+        subtask_dict, None, security_res,
+        mock_settings.reasoning_model_id, mock_settings,
+    ))
+    assert out_missing.is_approved is False
+    assert "AUCUN verdict" in out_missing.final_feedback
+    mock_cot.assert_not_called()
+
+
+@patch("graph_orchestrator.dspy_nodes._configure_dspy")
+@patch("graph_orchestrator.dspy_nodes.dspy.ChainOfThought")
+def test_execute_code_judge_node_test_failure_opt_out(mock_cot, mock_configure, mock_settings):
+    """Opt-out JUDGE_RESPECT_TEST_FAILURE=false : la gate se désactive, le LLM
+    Judge retrouve la main (A/B/debug)."""
+    from graph_orchestrator.models import CoderOutput
+    mock_settings.judge_respect_test_failure = False
+
+    mock_instance = MagicMock()
+    mock_prediction = MagicMock()
+    mock_prediction.output = CodeJudgeOutput(
+        task_id="T3", is_approved=True, final_feedback="ok malgré l'échec"
+    )
+    mock_instance.return_value = mock_prediction
+    mock_cot.return_value = mock_instance
+
+    subtask_dict = {"id": "T3", "target_files": []}
+    security_res = SecurityOutput(task_id="T3", is_secure=True, vulnerabilities=[])
+    test_res = CoderOutput(task_id="T3", status="failure", details="échec")
+
+    output, _ = asyncio.run(execute_code_judge_node(
+        subtask_dict, test_res, security_res,
+        mock_settings.reasoning_model_id, mock_settings,
+    ))
+    assert output.is_approved is True, "opt-out : le verdict LLM prime"
+    mock_cot.assert_called_once()
+    # Le statut est désormais TRANSMIS au LLM (post-mortem run #3 : avant, seuls
+    # les details passaient — le Judge ne voyait jamais le mot failure).
+    code_arg = mock_instance.call_args.kwargs.get("code") or ""
+    tests_arg = mock_instance.call_args.kwargs.get("test_results", "")
+    assert "status=failure" in tests_arg
+

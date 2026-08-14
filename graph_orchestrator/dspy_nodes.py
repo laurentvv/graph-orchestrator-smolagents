@@ -1011,14 +1011,72 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
         )
         return blocked, metrics
 
+    # Fail-closed TEST (post-mortem run #3, 2026-08-14 — rejet utilisateur) : un
+    # verdict de test FAILURE ne peut PLUS être approuvé par le LLM Judge. Le run #3
+    # a montré le 9B approuver une app dont le Tester avait (correctement) dérivé
+    # failure (animation instantanée sleep 5ms + compteur jamais incrémenté) — alors
+    # que le prompt Judge disait DÉJÀ « SANCTIONNE LES ÉCHECS DE TEST ». Doctrine
+    # F-33 : un prompt seul ne suffit jamais → gate LOGICIELLE, mirror du fail-closed
+    # Security. failure/timeout/absence de verdict → is_approved=False SANS appel
+    # LLM (le feedback va au Coder pour l'itération suivante ; à max_iterations,
+    # l'escalation prend le relais). Opt-out : JUDGE_RESPECT_TEST_FAILURE=false.
+    if getattr(settings, "judge_respect_test_failure", True):
+        test_status = None
+        test_details = ""
+        if test_res is None:
+            test_status = "missing"
+        elif isinstance(test_res, str):
+            if "TIMEOUT" in test_res.upper():
+                test_status = "timeout"
+                test_details = test_res
+        elif hasattr(test_res, "status"):
+            test_status = str(getattr(test_res, "status") or "").lower() or None
+            test_details = str(getattr(test_res, "details") or "")
+        if test_status in ("failure", "timeout", "missing"):
+            reason = {
+                "failure": "le nœud Tester a rapporté un ÉCHEC fonctionnel",
+                "timeout": "le nœud Tester a subi un TIMEOUT",
+                "missing": "le nœud Tester n'a produit AUCUN verdict",
+            }[test_status]
+            print(f"[!] Test {test_status} pour {subtask.get('id')} — Judge SKIPPÉ (fail-closed), approbation bloquée.")
+            blocked = CodeJudgeOutput(
+                task_id=subtask.get("id", "unknown"),
+                is_approved=False,
+                final_feedback=(
+                    f"APPROBATION BLOQUÉE (fail-closed test) : {reason}. "
+                    f"Détails du Tester : {test_details[:500] or '(aucun)'} "
+                    "Corrige les échecs listés — l'approbation est impossible tant que "
+                    "les tests fonctionnels échouent."
+                ),
+                findings=[Finding(
+                    severity="critical",
+                    category="testing",
+                    location="(verdict Tester)",
+                    description=f"Verdict Tester = {test_status} : {test_details[:300] or 'aucun détail'}",
+                    suggestion="Corriger les échecs fonctionnels signalés par le Tester, puis relancer l'itération.",
+                )],
+            )
+            metrics = NodeMetrics(
+                node="code_judge_dspy",
+                model=settings.no_think_spec.model,
+                duration_s=0.0,
+                input_tokens=0,
+                output_tokens=0,
+            )
+            return blocked, metrics
+
     vulns = security_res.vulnerabilities if security_res.vulnerabilities else ["Aucune vulnérabilité critique détectée."]
     
     tests = "Résultats non disponibles"
     if test_res:
         if isinstance(test_res, dict):
-            tests = str(test_res.get("details", test_res))
+            tests = f"status={test_res.get('status', '?')} | {test_res.get('details', test_res)}"
         else:
-            tests = getattr(test_res, "details", str(test_res))
+            _st = getattr(test_res, "status", None)
+            # Post-mortem run #3 : le STATUS doit être explicite dans test_results
+            # (avant, seuls les details passaient — le Judge LLM ne voyait jamais
+            # le mot failure).
+            tests = (f"status={_st} | " if _st else "") + str(getattr(test_res, "details", str(test_res)))
     tests = truncate_output(tests, head_lines=settings.stderr_head_lines, tail_lines=settings.stderr_tail_lines, max_chars=settings.feedback_max_chars)
 
     start_time = time.time()

@@ -886,6 +886,17 @@
       "dependencies": [
         "F-106"
       ]
+    },
+    {
+      "id": "F-108",
+      "name": "Fail-closed Judge sur échec de test + Static Tester Tier 1c comportemental + persistance verdict",
+      "description": "Post-mortem run #3 (2026-08-14, REJET utilisateur) : le Judge (Ornith 9B) avait APPROUVÉ une app dont le Tester avait correctement dérivé failure (animation instantanée await sleep(5ms), compteur de comparaisons jamais incrémenté, rendu buggé). Diagnostic : (1) le prompt Judge disait déjà « SANCTIONNE LES ÉCHECS DE TEST » — le 9B l'a ignoré (doctrine F-33 : un prompt seul ne suffit jamais) ; (2) le STATUT du verdict Tester n'était même pas transmis au LLM (seuls les details passaient) ; (3) le Static Tester Tier 3 était aveugle : il exige t1>t0 (le compteur doit avancer) pour détecter l'animation instantanée — or un compteur MORT (0→0) rend l'instantané indétectable, les 2 bugs se camouflaient mutuellement ; (4) le verdict du Judge n'était persisté NULLE PART (aucun claim dans le KG, impossible d'auditer la décision). IMPLÉMENTÉ : (a) GATE FAIL-CLOSED TEST dans execute_code_judge_node (mirror du fail-closed Security F-61) : test_res en failure/timeout/absent → is_approved=False SANS appel LLM, finding critical/testing, feedback du Tester propagé au Coder pour l'itération ; opt-out JUDGE_RESPECT_TEST_FAILURE=false. (b) TRANSMISSION DU STATUT : test_results inclut désormais « status=X | details » (le Judge LLM voit le mot failure). (c) STATIC TESTER TIER 1c _check_behavioral_smells (0 LLM, 0 Chrome, greppable) : compteur mort (variable nom compteur initialisée à 0, affichée via textContent/template literal, JAMAIS incrémentée) + délai d'animation < 20ms (sleep(N)/setTimeout(fn,N) littéral ou via identifiant dont la déclaration vaut < 20 — garde anti-FP : setTimeout exige un mot-clé d'animation, un deferral setTimeout(fn,0) hors contexte reste légitime). Valide sur le script.js EXACT du run #3 : 2 bugs attrapés, version corrigée propre, 0 faux positif sur les cas légitimes. (d) PERSISTANCE DU VERDICT JUDGE dans l'event stream (run_event, node=judge, type=verdict) — le raisonnement devient auditable. Tests : 12 judge (3 gate : failure bloqué SANS LLM, timeout+missing bloqués, opt-out + statut transmis) + 8 Tier 1c (run3 fixture, contre-épreuve corrigée, anti-FP, intégration nœud). Suite complète 1052 passed / 0 failed / 1 skipped. NB : ce n'est PAS une régression — angle mort latent de bout en bout (Coder 4B médiocre + Tier 3 depuis F-54 + Judge jamais gated), révélé par les signaux améliorés de F-61/F-99.",
+      "status": "completed",
+      "dependencies": [
+        "F-99",
+        "F-54",
+        "F-61"
+      ]
     }
   ]
 }
