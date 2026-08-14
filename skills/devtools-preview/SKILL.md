@@ -51,6 +51,8 @@ Tester, qui échouera → cycle de correction long. Le preview court-circuite ç
   pas pour tout re-vérifier from scratch.
 
 ## Pièges à éviter
+- **Navigation HTML ONLY (RÈGLE ABSOLUE)** : Ne passe **JAMAIS** une URL se terminant par `.css` ou `.js` à `navigate_page()` ! Chrome affiche ces fichiers en texte brut sans DOM ni rendu CSS, ce qui fait échouer `evaluate_script` et provoque des boucles infinies. Pour vérifier `styles.css` ou `script.js`, navigue **TOUJOURS** vers la page HTML parente (ex: `index.html`).
+- **Condition d'arrêt (Stop Condition)** : Dès que tes fichiers cibles sont écrits et qu'un seul screenshot confirme que l'affichage est bon et sans erreur console, appelle **IMMÉDIATEMENT** `final_answer`. Il est STRICTEMENT INTERDIT d'enchaîner des screenshots ou navigations si aucun fichier n'a été modifié entre-temps.
 - **URL relative** : `navigate_page(url="index.html")` ne marche pas. Toujours `file:///` absolu.
 - **Page dans un sous-dossier** : si ta page est `landing_page/index.html`, l'URL est
   `file:///.../landing_page/index.html`, PAS `file:///.../index.html` (sinon 404 / page racine).

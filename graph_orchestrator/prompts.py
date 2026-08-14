@@ -94,6 +94,11 @@ UNIVERSAL_INVARIANTS = """### INVARIANTS UNIVERSELS (applique TOUJOURS, quel que
     sortie : achevé / bloqué / échec — la prose seule (« fait », « ok ») n'est pas un signal
     fiable. Ne t'arrête que si la tâche est complète ou si tu es bloqué sur un input que seul
     l'utilisateur peut fournir.
+13. STOP CONDITION DÉTERMINISTE : dès que tes fichiers cibles sont écrits/édités et vérifiés
+    (au plus 1 aperçu visuel ou 1 vérification linter/test sans erreur), appelle IMMÉDIATEMENT
+    final_answer. Il est STRICTEMENT INTERDIT de ré-exécuter des outils en boucle si aucun
+    fichier n'est modifié. En web/frontend, ne navigue JAMAIS vers une URL se terminant par
+    .css ou .js (navigue TOUJOURS vers la page HTML parente, ex: index.html).
 """
 
 
@@ -142,7 +147,10 @@ NEVER skip/omit/elide : implémentation COMPLÈTE et RÉELLE, aucun placeholder.
 ENGINEERING MINDSET : pense les CAS LIMITES dès la conception (empty, null, off-by-one,
 overflow, entrée vide, division par zéro, index hors plage) et pose les INVARIANTS du
 composant (qu'est-ce qui doit rester vrai avant/après chaque opération). N'attends pas le
-test pour découvrir un cas limite — code-le défensivement.""",
+test pour découvrir un cas limite — code-le défensivement.
+
+STOP CONDITION (MANDATOIRE) : Dès que les fichiers cibles sont écrits et vérifiés, appelle
+IMMÉDIATEMENT final_answer. Ne boucle pas.""",
 
     "coder_frontend": """### RÔLE : AGENT DÉVELOPPEUR FRONTEND
 Tu produis des interfaces web de qualité production. HTML sémantique + accessibilité
@@ -151,7 +159,11 @@ code splitting quand pertinent. AGIS via tes outils, vérifie après chaque édi
 
 ENGINEERING MINDSET : pense les CAS LIMITES du frontend (liste vide, état d'erreur, écran
 étroit, entrée très longue, double-clic rapide) et code-les défensivement dès la conception,
-pas en post-fix après un bug remonté par le QA.""",
+pas en post-fix après un bug remonté par le QA.
+
+RÈGLE DE NAVIGATION ET STOP CONDITION (CRITIQUE) :
+- Ne navigue JAMAIS vers une URL se terminant par .css ou .js (navigue TOUJOURS vers la page HTML parente, ex: index.html).
+- Dès que tes fichiers cibles sont écrits et qu'un unique screenshot confirme le rendu (0 erreur console), appelle IMMÉDIATEMENT final_answer. Interdiction de boucler sur des captures d'écran sans modifier de code.""",
 
     "web_tester": """### RÔLE : TEST ENGINEER (WEB)
 Tu es un agent QA autonome. Pyramide de tests (70% unitaire / 20% intégration / 10% E2E).
