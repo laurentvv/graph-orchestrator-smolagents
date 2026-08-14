@@ -373,7 +373,7 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 
 ## Jalons bootstrap (faits)
 - [x] Création agent.md (specs gestion d'état).
-- [x] Initialisation feature_list.json, contract.md, progress.md, log.md.
+- [x] Initialisation feature_list.json, contract.md, progress.md.
 
 ## Jalons de l'Itération (cycle CodeAgent — Priorité 0, transition ToolCallingAgent→CodeAgent)
 - [x] Étape CA-1 : Analyse codebase (7 ToolCallingAgent + 1 CodeAgent mort). Seul le
@@ -387,7 +387,7 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [ ] Étape CA-6 : Vérification imports + syntaxe (py_compile).
 - [x] Étape CA-7 : Runs comparatifs (TCA puis CodeAgent) — TERMINÉ. Les 2 réussissent
   sur Bubble Sort (borné). CodeAgent gagne sur tokens IN (-63%) et durée (-19%).
-  Résultats consignés dans log.md.
+  Résultats consignés dans le journal d'événements (migré DuckDB).
 - [ ] Étape CA-8 : Décision : migrer execute_coder_node vers CodeAgent (si gain prouvé)
   OU garder TCA (si CodeAgent n'apporte rien). Création feature F-XX le cas échéant.
   → EN ATTENTE : un 2e test sur contenu plus lourd (multi-fichiers / HTML 3000+
@@ -398,7 +398,7 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape 1 : Analyse des audits LlamaBot, Deer Flow, Crush, OpenCode, Aider.
 - [x] Étape 2 : Création de l'artefact Implementation Plan soumis pour validation.
 - [x] Étape 3 : Application des modifications au plan_usine_logicielle.md.
-- [x] Étape 4 : Mise à jour de log.md, progress.md, et feature_list.json.
+- [x] Étape 4 : Mise à jour de progress.md et feature_list.json.
 
 ## Jalons de l'Itération (Output daté par run — F-40, Priorité 13)
 - [x] Étape OD-1 : Exploration points d'insertion (KG instantiation, checkpoint, run_id critique,
@@ -414,11 +414,11 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
   (module source, pas workflows).
 - [x] Étape OD-6 : Suite pytest complète → 394 passed / 0 failed (381 + 13). 0 régression.
 - [x] Étape OD-7 : État disque synchronisé (contract.md +9 critères 105-113, feature_list.json
-  +F-40, progress.md, plan_usine_logicielle.md case P13 cochée, .gitignore runs/, log.md).
+  +F-40, progress.md, plan_usine_logicielle.md case P13 cochée, .gitignore runs/).
 
 ## Jalons de l'Itération (nœud PromptRefiner — F-39, meta-prompt avant l'Architect)
 - [x] Étape PR-1 : Exploration (Router/Architect DSPy, checkpoint, test patterns) + recherche web
-  Kilo Code/Cline "Enhance Prompt" (sources consignées log.md). Plan approuvé (Phase 1 seule ;
+  Kilo Code/Cline "Enhance Prompt" (sources consignées). Plan approuvé (Phase 1 seule ;
   Phase 2 MIPROv2 écartée — signal biaisé mono-modèle 6 Go VRAM).
 - [x] Étape PR-2 : models.py PromptRefinerOutput (refined_prompt + ambiguities_detected).
 - [x] Étape PR-3 : dspy_nodes.py — PromptRefinerSignature (2 inputs, docstring pipeline aligné
@@ -435,7 +435,7 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape PR-7 : Suite pytest complète → 379 passed / 0 failed (371 avant + 8 nouveaux). 0 régression.
 - [x] Étape PR-8 : État disque synchronisé (contract.md +9 critères 96-104, feature_list.json
   +F-39, progress.md, plan_usine_logicielle.md +Priorité 12 +Phase 2 chantier futur, README.md,
-  .env.example, log.md). Commit + push + PR.
+  .env.example). Commit + push + PR.
 
 ## Jalons de l'Itération (cycle 3 tâches rapides : Anti-Loop P3 + Nettoyage DOM P6 + Guard bash P8-bis)
 - [x] Étape TR-1 : Sélection des 2 tâches les plus rapides et isolées du plan (P3 ligne 73
@@ -454,7 +454,7 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape TR-5 : Suite pytest complète → 305 passed / 0 failed (271 avant + 34 nouveaux).
   0 régression. Seuls warnings = DeprecationWarning DSPy (préexistants, hors périmètre).
 - [x] Étape TR-6 : État disque synchronisé (contract.md +16 critères 72-87, feature_list.json
-  +F-36/F-37, progress.md, plan_usine_logicielle.md, .env.example, log.md).
+  +F-36/F-37, progress.md, plan_usine_logicielle.md, .env.example).
 - [x] Étape TR-7 (Tâche 3 — Guard bash denylist, F-38, P8-bis) : bash_guard.py
   (check_bash_command, denylist regex case-insensitive Unix+Windows+cross, message
   pédagogique jamais d'exception). Branché dans tools.py bash_command AVANT subprocess.run.
@@ -464,7 +464,7 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
   0 régression.
 - [x] Étape TR-9 : État disque synchronisé (contract.md +8 critères 88-95, feature_list.json
   +F-38, progress.md, plan_usine_logicielle.md P8-bis ❌→🟡 + sous-case guard, README.md,
-  .env.example, log.md). Commit + push + PR.
+  .env.example). Commit + push + PR.
 
 ## Jalons de l'Itération (cycle 2 tâches rapides : Anti-Loop P3 + Nettoyage DOM P6)
 - [x] Étape TR-1 : Sélection des 2 tâches les plus rapides et isolées du plan (P3 ligne 73
@@ -483,7 +483,7 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape TR-5 : Suite pytest complète → 305 passed / 0 failed (271 avant + 34 nouveaux).
   0 régression. Seuls warnings = DeprecationWarning DSPy (préexistants, hors périmètre).
 - [x] Étape TR-6 : État disque synchronisé (contract.md +16 critères 72-87, feature_list.json
-  +F-36/F-37, progress.md, plan_usine_logicielle.md, .env.example, log.md).
+  +F-36/F-37, progress.md, plan_usine_logicielle.md, .env.example).
 
 ## Jalons de l'Itération (P8 — Orphan Repair, anti-corruption d'historique, F-41)
 - [x] Étape OP-1 : Contexte — P8 du plan (ligne 129), blueprint s08_context_compact, structure smolagents memory.steps/ActionStep lue.
@@ -491,7 +491,7 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape OP-3 : `orphan_repair.py` — niveau steps (`repair_orphan_steps` : ActionStep avec tool_calls sans observations/error/is_final_answer → observations=FAKE_INTERRUPTED).
 - [x] Étape OP-4 : Intégration défensive (`try/except Exception: pass`) dans `nodes.run_with_retry` (bloc P8, ~lignes 174-189) AVANT chaque `agent.run`.
 - [x] Étape OP-5 : Tests — `tests/test_orphan_repair.py` 11 tests ; vérif `orphan+guard+loop_guard` = 35 passed ; suite complète = 405 passed / 0 failed (0 régression).
-- [x] Étape OP-6 : État disque synchronisé — feature_list.json +F-41, contract.md +critères 114-121, plan_usine_logicielle.md P8 [x], progress.md, README.md, log.md.
+- [x] Étape OP-6 : État disque synchronisé — feature_list.json +F-41, contract.md +critères 114-121, plan_usine_logicielle.md P8 [x], progress.md, README.md.
 
 ## Jalons de l'Itération (P8 — Sanitizer, Auto-typage des arguments d'outil, F-42)
 - [x] Étape SZ-1 : Contexte — petit LLM émet des args malformés (offset="1, 80", replace_all="true") → TypeError validation smolagents → retries gaspillés. Flux de validation tracé (agents.py:1476 validate_tool_arguments). Chemin CodeAgent confirmé : executor local expose les outils et les appelle via `__call__` directement (PAS execute_tool_call/validate_tool_arguments) → proxy `__call__` intercepte avant `forward`.
@@ -501,7 +501,7 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape SZ-5 : Branchement `nodes.execute_coder_node` + `execute_architect_node` via `sanitize_tools(..., enabled=settings.sanitizer_enabled)`.
 - [x] Étape SZ-6 : Tests — `tests/test_sanitizer.py` 23 tests (coercion 13 + sanitize 4 + proxy 3 + wrap 3) ; 23/23 PASS.
 - [x] Étape SZ-7 : Suite pytest complète → 417 passed / 0 failed (394 baseline + 23 nouveaux), 0 régression. web_tester_functional désélectionné (nécessite Chrome/npx).
-- [x] Étape SZ-8 : État disque synchronisé — feature_list.json +F-42, contract.md +critères 122-129, progress.md, README.md, log.md.
+- [x] Étape SZ-8 : État disque synchronisé — feature_list.json +F-42, contract.md +critères 122-129, progress.md, README.md.
 
 ## Jalons de l'Itération (P8-bis — Idempotence des effets de bord, F-43)
 - [x] Étape ID-1 : Contexte — replays de checkpoint réappliquent les effets de bord non-idempotents (append_file, pip install). Référence qm idempotency-store.ts (once(key, fn), inflight + done + backing + rétention 14j). Mécanisme de replay tracé (save_coding_state granularité début d'itération → Coder rejoue).
@@ -511,7 +511,7 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape ID-5 : Branchement `workflows.py` — store créé après kg+run_id+checkpoint, corps wrappé `with _scoped_chdir(...), _scoped_idempotency(_idem_store):` (composition sans réindentation). `clear_idempotency(run_id)` aux 2 sites `clear_checkpoint` (FRESH_START + fin de run).
 - [x] Étape ID-6 : Branchement `tools.py` (`append_file` via `once` + `_do_append` closure, write_file NON wrappé) + `python_tester.py` (`_install_module` via `_install_module_or_raise`/`_InstallFailed`, échec non marqué done).
 - [x] Étape ID-7 : Tests — `tests/test_idempotency.py` 25 tests (store 10 + KG 4 + scoped 3 + make_op_key 4 + intégration append 2 + intégration pip 2) ; 25/25 PASS.
-- [x] Étape ID-8 : Suite pytest complète → 442 passed / 0 failed (417 baseline + 25 nouveaux), 0 régression. web_tester_functional désélectionné (nécessite Chrome/npx). État disque synchronisé (feature_list.json +F-43, contract.md +critères 130-140, plan_usine_logicielle.md P8-bis [x], progress.md, README.md, log.md).
+- [x] Étape ID-8 : Suite pytest complète → 442 passed / 0 failed (417 baseline + 25 nouveaux), 0 régression. web_tester_functional désélectionné (nécessite Chrome/npx). État disque synchronisé (feature_list.json +F-43, contract.md +critères 130-140, plan_usine_logicielle.md P8-bis [x], progress.md, README.md).
 
 ## Jalons de l'Itération (cycle Refonte Prompts — P0 + P0-bis + P6, F-44)
 - [x] Étape RP-1 : Cartographie prompts actuels (6 nœuds DSPy docstring + 2 smolagents f-string + 1 déterministe sans prompt ; aucun préfixe commun). Lecture fiches audit 15/16/17 (invariants universels, prompts purs par rôle, prompts open-source citables).
@@ -523,7 +523,7 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
 - [x] Étape RP-7 : Suppression ~180 lignes de nœuds smolagents DÉPRÉCIÉS dans `nodes.py` (versions mortes execute_router_node/execute_architect_node/execute_security_reviewer_node/execute_code_judge_node — jamais appelées par run_coding_workflow qui importe les versions DSPy) + imports morts nettoyés (RouterOutput/ArchitectOutput/SecurityOutput/CodeJudgeOutput retirés de l'import nodes.py). Préalable requis par le plan (ligne 42).
 - [x] Étape RP-8 : Tests — `tests/test_prompts.py` 40 tests (invariants 2 + rôles paramétrés 17 + build_role_header 3 + with_invariants 2 + signatures DSPy paramétrées 6 + rubric markers 3 + Finding/models 7) ; 40/40 PASS.
 - [x] Étape RP-9 : Suite pytest complète → 482 passed / 0 failed (442 baseline + 40 nouveaux), 0 régression. web_tester_functional désélectionné (nécessite Chrome/npx).
-- [x] Étape RP-10 : État disque synchronisé (feature_list.json +F-44, contract.md +critères 141-149, plan_usine_logicielle.md P0+P0-bis+P6 cochés, progress.md, README.md, log.md).
+- [x] Étape RP-10 : État disque synchronisé (feature_list.json +F-44, contract.md +critères 141-149, plan_usine_logicielle.md P0+P0-bis+P6 cochés, progress.md, README.md).
 
 ## Jalons de l'Itération (requête utilisateur)
 - [x] Clonage du dépôt awesome-claude-skills dans references/.
@@ -559,7 +559,7 @@ P1-P3 = finaliser (P4 = optimisations secondaires, hors périmètre immédiat).
   (tester_max_steps défaut+override).
 - [x] Étape F45-6 (Suite) : pytest 487 passed / 0 failed (482 baseline + 5 nouveaux).
 - [x] Étape F45-7 (État disque) : debug/TIMINGS_ANALYSE.md (ACTION CORRIGÉE + recommandations
-  statutées), feature_list.json +F-45, contract.md +critères 150-155, progress.md, log.md.
+  statutées), feature_list.json +F-45, contract.md +critères 150-155, progress.md.
 
 ## Jalons de l'Itération (cycle Fix bug visuel Coder + Judge hang — F-46/F-47)
 - [x] Étape F46-1 : Diagnostic bug visuel — lecture log F-45 prouve que le Coder applique
@@ -721,7 +721,7 @@ odes.py et web_tester.py.
 - [x] Étape RAA-3 : Remplacement du write_file par multi_replace_file_content validé et acté (F-59) pour le Coder.
 - [x] Étape RAA-4 : Application en direct (F-61) d'un deuxième correctif : le run E2E a crashé sur le Web Tester à cause de la règle "IIFE" passée au MCP chrome-devtools. Analyse + correction de 
 odes.py et web_tester.py pour exiger une DÉCLARATION de fonction asynchrone non invoquée (sync () => { await ... }) à la place de l'IIFE.
-- [x] Étape RAA-5 : Mise à jour exhaustive des documents de suivi (eature_list.json, plan_usine_logicielle.md, README.md, progress.md, log.md).
+- [x] Étape RAA-5 : Mise à jour exhaustive des documents de suivi (eature_list.json, plan_usine_logicielle.md, README.md, progress.md).
 - [ ] Étape RAA-6 : Attente de la fin du run E2E, analyse post-mortem finale avec un_analyzer.py, rapport de validation, et préparation pour commit/PR.
 
 ## Jalons de l'Itération (cycle Audit cohérence INDEX références — enrichissement plan)
@@ -729,7 +729,7 @@ odes.py et web_tester.py pour exiger une DÉCLARATION de fonction asynchrone non
 - [x] Étape ACI-2 : Audit de cohérence exhaustif (agent Explore) — Hall of Fame INDEX croisé contre plan_usine_logicielle.md. 18 écarts identifiés, gisement principal = qm (4 briques 🟢 Haute sur 9 oubliées).
 - [x] Étape ACI-3 : Enrichissement plan_usine_logicielle.md (cases `[ ]` uniquement, 0 code modifié) — P3-bis (+2), P6-bis (+2), P6-ter NOUVELLE sous-section (+1 bloc), P9 (+1 case + garde), P1 (+1 case + précision source), P2 (+1 case), P10 (+2 cases), tableau état avancement mis à jour.
 - [x] Étape ACI-4 : feature_list.json +4 features pending (F-68 mémoire KG qm, F-69 budget+queue qm, F-70 diff+métriques Judge, F-71 skeleton libcst). 72 features total. JSON validé.
-- [x] Étape ACI-5 : log.md + progress.md synchronisés. Périmètre = travail documentaire uniquement (aucun code de production modifié, aucun test impacté).
+- [x] Étape ACI-5 : progress.md synchronisé (journal migré DuckDB). Périmètre = travail documentaire uniquement (aucun code de production modifié, aucun test impacté).
 
 ## Jalons de l'Itération (cycle Read-Before-Write Gate — F-67, Priorité 1)
 - [x] Étape RBW-1 : Exploration (2 agents parallèles) — design Deer Flow lu (issue #3857,
@@ -753,7 +753,7 @@ odes.py et web_tester.py pour exiger une DÉCLARATION de fonction asynchrone non
   651 passed / 0 failed (616 baseline + 35 nouveaux), 0 régression.
 - [x] Étape RBW-8 : État disque synchronisé (feature_list.json +F-67, contract.md
   +critères 215-227, plan_usine_logicielle.md P1 case cochée, progress.md, README.md,
-  log.md). Commit + push + PR.
+ ). Commit + push + PR.
 
 ## Jalons de l'Itération (cycle Skills à la demande / Coder — F-57 Phase 1, Priorité 10)
 > **Note de pivot (v3)** : le design initial v1 (lazy loading via tool `load_skill`
@@ -803,7 +803,7 @@ odes.py et web_tester.py pour exiger une DÉCLARATION de fonction asynchrone non
   11 deselected (test_web_tester_functional). 0 régression.
 - [x] Étape F57-8 : État disque synchronisé (feature_list.json F-57 pending→completed,
   contract.md +critères 228-237, plan_usine_logicielle.md P10 PARTIEL + case cochée,
-  progress.md, README.md section Coder, log.md). ATTENTE commit/PR.
+  progress.md, README.md section Coder). ATTENTE commit/PR.
 - [ ] Étape F57-9 : Run de validation Bubble Sort. Critères v3 : HTML complet +
   l'Architect sélectionne `subtask.skills` + `enforce_skill_budget` plafonne la
   sélection + le Coder reçoit les corps complets (plus de dépendance à un appel
@@ -875,7 +875,7 @@ bug en 4.5s, ne flaggue pas le corrigé, 0 faux positif). Le Tester LLM applique
 le test temporel mais reste limité par son over-exploration (pré-existant). La règle 9
 Coder est appliquée correctement par Qwen3.5-9B.
 - [x] Étape T3-9 : État disque synchronisé (feature_list.json +F-81, progress.md, README.md,
-  log.md). Branche `feat/static-tester-tier3-temporal`. Commit.
+ ). Branche `feat/static-tester-tier3-temporal`. Commit.
 
 ## Jalons de l'Itération (cycle Diff + métriques Judge — F-70, P6-bis)
 - [x] Étape F70-1 : Reconnaissance (2 agents Explore parallèles) — Judge plumbing
@@ -1080,7 +1080,7 @@ Coder est appliquée correctement par Qwen3.5-9B.
   0 régression. py_compile OK (stall_detector.py + nodes.py + config.py).
 - [x] Étape SD-9 : État disque synchronisé (feature_list.json +F-88 completed deps [F-36],
   contract.md +critères 255-267, plan_usine_logicielle.md P3-bis 3 cases cochées + écarts
-  justifiés, progress.md, log.md). Branche `feat/stall-detector-p3bis`.
+  justifiés, progress.md). Branche `feat/stall-detector-p3bis`.
 
 > **Décision clé** : module orthogonal (LoopGuard intact) plutôt qu'extension de LoopGuard.
 > La case P3-bis "Hash d'output matériel" disait "Étendre notre LoopGuard (F-36)" — décision
@@ -1522,6 +1522,49 @@ Coder est appliquée correctement par Qwen3.5-9B.
       budgets guidance + invariants CC, P10 routeur skills + skills écrites par l'agent,
       P11 prompt envelopes + event bus). Invariant respecté : 0 case cochée modifiée
       (10 insertions pures, vérifiées par `git diff`).
-- [x] Étape UR5 : état disque synchronisé (progress.md ce bloc, log.md) + commit et push
+- [x] Étape UR5 : état disque synchronisé (progress.md ce bloc) + commit et push
       sur main via cherry-pick (procédure « branche feature active » — la session était sur
       `fix/update-llamacpp-asset-matching`).
+
+## Jalons de l'Itération (cycle F-106 — clôture du journal plat, 2026-08-14)
+> Décision utilisateur : « toute mention du journal plat doit disparaître, ainsi que le
+> fichier à la fin, pour ne plus jamais l'utiliser ». Diagnostic préalable (réponse à la
+> question « pourquoi écrit-on encore dedans ? ») : l'écrivain était l'ASSISTANT en fin
+> de cycle (convention héritée), pas le code de production ; et la migration F-75 avait
+> perdu les dates historiques (194 événements tous horodatés à la date de migration —
+> bug migrate_log.py : la date d'en-tête était capturée mais jamais utilisée) avant que
+> le fichier ne soit supprimé PUIS re-créé à la main le 2026-08-12.
+
+- [x] Étape F106-1 : Diagnostic — base event_stream.duckdb dormante (dernier write
+  2026-08-05 : seul le Coder 4B pouvait l'alimenter de sa propre initiative via l'outil
+  log_event ; aucun nœud du graphe n'émet d'événement lifecycle) tandis que le fichier
+  plat reprenait sa croissance à chaque cycle docs.
+- [x] Étape F106-2 : `scripts/recover_log_history.py` — récupération depuis git (47
+  versions, les deux ères du fichier via --follow, pic 198 entrées avant la suppression
+  F-75), parsing `## [date] type | titre` (regex `[\w-]+` corrigeant l'absorption de
+  `P8-bis` par l'ancienne regex), union dédupliquée par (date, type, titre), sous-titres
+  non datés rattachés au corps, import DATÉ (created_at = date d'en-tête, fallback date
+  du commit de première apparition), idempotent (clé event_type+titre), backup base +
+  remplacement documenté des 194 lignes 'legacy' non datées.
+- [x] Étape F106-3 : Migration exécutée — base finale 199 événements datés
+  (2026-07-29 → 2026-08-14, run_id legacy_md) ; 3 coquilles source corrigées
+  ([2026-01-08] → 2026-08-01 pour F-41/F-42/F-43) ; entrée P8-bis F-43 récupérée ;
+  préambule « 🔧 INFOS À SAVOIR » préservé.
+- [x] Étape F106-4 : `scripts/log_event.py` — CLI d'historisation pour l'ASSISTANT
+  (même table/canal que l'outil du graphe ; options --run-id/--node/--date). Dogfoodé
+  immédiatement (événements #394 diag + #395 done, run_id f-106).
+- [x] Étape F106-5 : Suppression définitive (git rm) du fichier journal et de
+  `scripts/migrate_log.py` (obsolète). Purge de TOUTES les mentions : AGENTS.md §2D
+  réécrit (règle critique « AUCUN JOURNAL PLAT », interdiction de recréation, deux
+  canaux runtime/assistant documentés), progress.md 21→0, contract.md (Critère 4
+  réécrit + section F-106 critères 354-358), feature_list.json (F-04/F-74 réécrits,
+  +F-106), plan_usine §P11 annoté FAIT-partie-plate, references_audit.md, commentaire
+  nodes.py, docstrings log_event.py. Tombstones assumées (3) : la règle d'interdiction
+  AGENTS.md, le script de récupération (qui doit nommer le chemin git), l'audit du
+  dépôt externe opencode (fichiers du tiers).
+- [x] Étape F106-6 : Validation — 13 tests PASS (`tests/test_log_recovery.py` : parser
+  6, created_at fallbacks 1, dedup multi-versions 1, insertion remplacement legacy +
+  idempotence + dry-run 3, git-walk réel sur repo tmp 1, CLI 2). py_compile OK.
+  Sanity 43/43 (test_guard + test_stall_detector, import nodes.py). Sweep grep final
+  vérifié. F-74 reste pending pour la part runtime (instrumentation workflows +
+  runs_history + rétention).

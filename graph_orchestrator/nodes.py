@@ -814,8 +814,9 @@ async def execute_coder_node(
         # ne savent pas émettre de tool_call JSON fiable (tool_calls=None, finish_reason=
         # 'stop' — le modèle "parle" de l'action au lieu de l'exécuter). CodeAgent génère
         # du PYTHON qui appelle les outils (write_file(path=..., content=...)) — beaucoup
-        # plus naturel. Preuves empiriques : cf. log.md (3 comparatifs, CodeAgent produit
-        # jusqu'à 91× plus de contenu que le TCA sur une même tâche).
+        # plus naturel. Preuves empiriques : 3 comparatifs (consignés dans le
+        # journal d'événements DuckDB) — CodeAgent produit
+        # jusqu'à 91× plus de contenu que le TCA sur une même tâche.
         # final_answer s'appelle maintenant en SYNTAXE PYTHON : final_answer({...}) ou
         # final_answer("texte"), pas en JSON. extract_and_validate gère les 2 (dict + str).
         # L'instanciation de local_coder a été déplacée plus bas, à l'intérieur du bloc `with model_lifecycle`.

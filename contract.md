@@ -4,7 +4,7 @@
 - [ ] Critère 1 : Le fichier `feature_list.json` existe et respecte le schéma JSON attendu.
 - [ ] Critère 2 : Le fichier `contract.md` est présent à la racine.
 - [ ] Critère 3 : Le fichier `progress.md` liste les jalons du sprint courant.
-- [ ] Critère 4 : Le fichier `log.md` respecte le format d'ajout continu avec horodatage.
+- [x] Critère 4 : L'historisation événementielle vit dans `data/event_stream.duckdb` (table `run_event`) — le journal plat est supprimé (F-106 : historique complet récupéré depuis git et ré-importé daté).
 - [ ] Critère 5 : Les tests pytest s'exécutent sans erreur.
 
 ## Critères de Validation du Coding Workflow (objectif sprint)
@@ -130,7 +130,7 @@
 - [ ] Critère 100 : Branchement dans `run_coding_workflow` — le nœud s'exécute APRÈS le calcul du `run_id` (l.221, hash du prompt BRUT → stable) et AVANT le Router. Si succès → `task_content = refined.refined_prompt` muté dans `seed_tasks[0]['content']` (propagé à Router/Architect/Tester/Judge) ; si échec/None → repli prompt brut.
 - [ ] Critère 101 : Persistance checkpoint — `refined_prompt` est sauvegardé dans le payload (`save_coding_state`) et hydraté à la reprise : si `checkpoint["refined_prompt"]` existe, le nœud LLM est SKIPPÉ (économie, même logique que `architect_result`).
 - [ ] Critère 102 : Opt-out `PROMPT_REFINER_ENABLED=false` → le nœud n'est jamais appelé, l'Architect reçoit le prompt brut (comportement historique). Défaut `True` dans la dataclass (ne casse pas les `Settings(...)` positionnels en test).
-- [ ] Critère 102-bis : Setting `PROMPT_REFINER_MODEL_ID` — si vide (défaut), le nœud utilise `reasoning_model_id` (gemma-12B, ~5min/prompt) ; si setté, il utilise ce modèle dédié (recommandation : gemma-4-E4B, ~8× plus rapide pour qualité équivalente — test comparatif réel dans log.md). `_configure_dspy` reçoit le modèle dédié et la métrique `model` reflète le modèle réellement utilisé. Fallback transparent sur `reasoning_model_id` si vide (rétro-compatibilité).
+- [ ] Critère 102-bis : Setting `PROMPT_REFINER_MODEL_ID` — si vide (défaut), le nœud utilise `reasoning_model_id` (gemma-12B, ~5min/prompt) ; si setté, il utilise ce modèle dédié (recommandation : gemma-4-E4B, ~8× plus rapide pour qualité équivalente — test comparatif réel (consigné dans l'historique des événements DuckDB)). `_configure_dspy` reçoit le modèle dédié et la métrique `model` reflète le modèle réellement utilisé. Fallback transparent sur `reasoning_model_id` si vide (rétro-compatibilité).
 - [ ] Critère 103 : Context7 est CITÉ seulement dans le catalogue (statut dispo), JAMAIS consommé par le PromptRefiner — l'Architect fait déjà le pré-fetch en `dspy_nodes.py:225` (pas de duplication d'appel).
 - [ ] Critère 104 : La suite pytest complète passe (0 régression, nouveaux tests `test_prompt_refiner.py` inclus : exécuteur mock LLM + available_capabilities propagé, dégradation gracieuse, helper capabilities avec/sans clé/repli, E2E toggle off, E2E toggle on + propagation Architect, E2E checkpoint skip). Les 3 helpers E2E existants (`test_escalation`/`test_checkpoint`/`test_feedback_integration`) mockent `execute_prompt_refiner_node` pour éviter un appel LLM réel en test.
 
@@ -436,6 +436,13 @@
 - [x] Critère 351 : Tests — `tests/test_judge_grounding.py` (34 tests : normalize 4, fragment_is_grounded 8 dont scattered-rejete, extract 6 dont filename-exclu, read/resolve 7, ground_finding 6, ground_findings 2, apply_grounding 4) + 2 intégration `test_dspy_nodes.py` (`test_execute_code_judge_node_grounds_ungrounded_finding` downgrade critical→high+flag is_approved inchangé ; `test_execute_code_judge_node_grounding_opt_out` finding inchangé). 36 nouveaux tests PASS.
 - [x] Critère 352 : Scripts isolation — `debug/run_judge_grounding.py` (déterministe 0 LLM, 3 scénarios ancré/inventé/prose-only sur HTML Bubble Sort, valide les 4 invariants politique Option 1) + `debug/run_judge.py` étendu (affiche le flag `⚠️[ungrounded-rétrogradé]` sur les findings).
 - [x] Critère 353 : Non-régression — suite pytest ciblée Judge 75/75 PASS. Suite complète 979 passed / 9 failed dont 8 STRICTEMENT pré-existants confirmés identiques via `git stash` (read_gate×4 + skill_lazy×3 + guard×1, AUCUN lié au grounding — modules non touchés) + 1 flaky non reproduit en isolation. py_compile OK (3 fichiers prod + 1 debug). 0 régression F-93.
+
+### F-106 — Clôture du journal plat (récupération historique git → event stream DuckDB)
+- [x] Critère 354 : `scripts/recover_log_history.py` — parcours de TOUTES les versions git du journal (47 commits, les deux ères du fichier via `--follow`), parsing `## [date] type | titre` (regex `[\w-]+` capte aussi `P8-bis`), union dédupliquée par (date, type, titre), sous-titres `##` non datés rattachés au corps de l'entrée courante, préambule capturé comme entrée `doc`.
+- [x] Critère 355 : Import daté dans `run_event` (`run_id='legacy_md'`) avec `created_at` = date de l'en-tête (fallback : date du commit de première apparition) — CORRIGE la perte de dates de la migration F-75 (194 lignes toutes horodatées 2026-08-05) et 3 coquilles source `[2026-01-08]` → `2026-08-01`. Idempotent (clé event_type+titre), backup de la base avant mutation, remplacement documenté des lignes `legacy` non datées.
+- [x] Critère 356 : `scripts/log_event.py` — CLI d'historisation assistant (`<event_type> "<message>"`, options `--run-id/--node/--date/--db`), même canal/table que l'outil `log_event` du graphe, vocabulaire recommandé non bloquant.
+- [x] Critère 357 : Suppression définitive du journal plat (fichier + `scripts/migrate_log.py` obsolète) et purge de toutes les mentions dans les fichiers opératifs (AGENTS.md §2D réécrit avec règle « AUCUN JOURNAL PLAT » + interdiction de recréation, plan, contract, progress, feature_list, references_audit, nodes.py, log_event.py). Seules pierres tombales : AGENTS.md §2D, F-106, et recover_log_history.py (l'outil qui lit l'historique git).
+- [x] Critère 358 : Validation — base finale 199 événements datés (2026-07-29 → 2026-08-14) ; grep final 0 mention hors tombstones ; py_compile OK ; tests `tests/test_log_recovery.py` PASS (parser, dedup multi-versions, insertion idempotente, remplacement legacy, git-walk sur repo tmp, CLI).
 
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.

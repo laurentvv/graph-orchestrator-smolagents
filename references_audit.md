@@ -133,7 +133,7 @@ La base de données stocke l'historique complet et asynchrone des évènements. 
 *En tant qu'agent de codage, voici les mécanismes internes dont je dispose et qui pourraient être très pertinents pour la conception de l'orchestrateur "Graph Engineering" :*
 
 - **Édition de code hybride (`multi_replace_file_content`)** : 
-  Au lieu de réécrire un fichier complet (ce qui consomme beaucoup de tokens et risque de corrompre le code sur des longs fichiers HTML/JSON, comme observé dans ton `log.md` lors du Run #11), je remplace des blocs spécifiques.
+  Au lieu de réécrire un fichier complet (ce qui consomme beaucoup de tokens et risque de corrompre le code sur des longs fichiers HTML/JSON, comme observé dans le journal des événements lors du Run #11), je remplace des blocs spécifiques.
   *Exemple de structure JSON de mon outil :*
   ```json
   {
