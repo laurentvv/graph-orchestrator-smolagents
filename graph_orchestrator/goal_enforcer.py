@@ -137,19 +137,13 @@ class GoalDecision:
     prompt_note: str = ""
 
 
-def audit_completion(
-    steps: Sequence[Any],
-    *,
-    target_files: Optional[Sequence[str]] = None,
-    iteration: int = 1,
-    is_web: bool = False,
-    cwd: Optional[str] = None,
-) -> CompletionEvidence:
-    """Audit déterministe (0 LLM) des preuves de complétion d'un run.
+def collect_evidence(steps: Sequence[Any]) -> CompletionEvidence:
+    """Collecte BRUTE des preuves d'un historique de steps (sans jugement).
 
-    Source de vérité DOUBLE : l'historique des steps (appels d'outils réels)
-    et le DISQUE (existence des fichiers cibles). Pure fonction — réutilisable
-    en isolation (debug) comme en production.
+    Séparée de `audit_completion` car le GoalEnforcer ACCUMULE ces comptes à
+    travers les tentatives : la mémoire smolagents est purgée entre retries,
+    mais un write/verify de la tentative 1 reste une preuve matérielle valide
+    à la tentative 3 (seul le disque et les compteurs cumulés font foi).
     """
     ev = CompletionEvidence()
     for step in steps or []:
@@ -160,9 +154,22 @@ def audit_completion(
                 ev.written_basenames.add(_norm_basename(_extract_path(args)))
             elif tool_name in VERIFY_TOOLS:
                 ev.verify_calls += 1
+    return ev
 
-    if ev.write_calls == 0:
-        ev.missing.append(
+
+def _missing_proofs(
+    *,
+    write_calls: int,
+    verify_calls: int,
+    target_files: Optional[Sequence[str]],
+    iteration: int,
+    is_web: bool,
+    cwd: Optional[str] = None,
+) -> list:
+    """Calcule les labels de preuves manquantes (concrets, actionnables)."""
+    missing: list = []
+    if write_calls == 0:
+        missing.append(
             "AUCUN appel d'outil d'écriture détecté (write_file / append_file / "
             "search_replace / multi_replace) — aucune preuve matérielle que tu as "
             "produit le livrable ce run."
@@ -178,7 +185,7 @@ def audit_completion(
             if not os.path.exists(os.path.join(base, str(tf)))
         ]
         if absent:
-            ev.missing.append(
+            missing.append(
                 "fichiers cibles ABSENTS du disque : "
                 + ", ".join(f"`{a}`" for a in absent)
                 + " — vérifie les chemins exacts attendus par la sous-tâche."
@@ -186,13 +193,38 @@ def audit_completion(
 
     # Verify-after (web, création) : la doctrine F-51 exige console AVANT
     # screenshot ; F-50 exige déjà take_screenshot séparément.
-    if is_web and iteration <= 1 and ev.verify_calls == 0:
-        ev.missing.append(
+    if is_web and iteration <= 1 and verify_calls == 0:
+        missing.append(
             "AUCUNE vérification post-écriture dans ton historique (ni "
             "`check_js_syntax` ni `list_console_messages`) — la syntaxe JS et la "
             "console n'ont pas été contrôlées avant de déclarer fin."
         )
+    return missing
 
+
+def audit_completion(
+    steps: Sequence[Any],
+    *,
+    target_files: Optional[Sequence[str]] = None,
+    iteration: int = 1,
+    is_web: bool = False,
+    cwd: Optional[str] = None,
+) -> CompletionEvidence:
+    """Audit déterministe (0 LLM) des preuves de complétion d'un run.
+
+    Source de vérité DOUBLE : l'historique des steps (appels d'outils réels)
+    et le DISQUE (existence des fichiers cibles). Pure fonction — réutilisable
+    en isolation (debug) comme en production.
+    """
+    ev = collect_evidence(steps)
+    ev.missing = _missing_proofs(
+        write_calls=ev.write_calls,
+        verify_calls=ev.verify_calls,
+        target_files=target_files,
+        iteration=iteration,
+        is_web=is_web,
+        cwd=cwd,
+    )
     return ev
 
 
@@ -303,6 +335,9 @@ class GoalEnforcer:
         self.tokens_used = 0
         self._cap_notice_sent = False
         self._last_missing: tuple = ()
+        # Preuves cumulées cross-attempts (mémoire purgée entre retries).
+        self._acc_writes = 0
+        self._acc_verify = 0
         self._lock = threading.RLock()
 
     # ------------------------------------------------------------- métriques
@@ -330,31 +365,42 @@ class GoalEnforcer:
                 GoalAction.ACCEPT, "goal enforcement désactivé (opt-out config)"
             )
 
-        evidence = audit_completion(
-            steps,
-            target_files=self.target_files,
-            iteration=self.iteration,
-            is_web=self.is_web,
-            cwd=self.cwd,
-        )
+        raw = collect_evidence(steps)
+        with self._lock:
+            # Preuves CUMULÉES à travers les tentatives (fix run2 F-99
+            # 2026-08-14 : la mémoire smolagents est purgée entre retries, mais
+            # un write/verify de la tentative 1 reste une preuve matérielle
+            # valide à la tentative 3 — seul un compte cumulé évite les faux
+            # « preuves manquantes » sur un historique amputé).
+            self._acc_writes += raw.write_calls
+            self._acc_verify += raw.verify_calls
+            missing = _missing_proofs(
+                write_calls=self._acc_writes,
+                verify_calls=self._acc_verify,
+                target_files=self.target_files,
+                iteration=self.iteration,
+                is_web=self.is_web,
+                cwd=self.cwd,
+            )
+            proven = not missing
 
         with self._lock:
             self.continuation_rounds += 1
             # qm : stalledRounds = rounds de continuation sans NOUVEAU tool
             # call. Notre mémoire est purgée entre retries → le delta se
             # réduit à « CE run a-t-il produit ≥1 tool call ».
-            if evidence.total_calls > 0:
+            if raw.total_calls > 0:
                 self.stalled_rounds = 0
             else:
                 self.stalled_rounds += 1
 
-            if evidence.proven:
+            if proven:
                 self._last_missing = ()
                 self.blocked_streak = 0
                 self.status = "complete"
                 return GoalDecision(
                     GoalAction.ACCEPT,
-                    "complétion prouvée (écritures + livrables sur disque"
+                    "complétion prouvée (écritures cumulées + livrables sur disque"
                     + (" + verify-after" if self.is_web and self.iteration <= 1 else "")
                     + ")",
                 )
@@ -381,7 +427,7 @@ class GoalEnforcer:
                     f"accepté, le verdict passe au Judge.",
                 )
 
-            missing_key = tuple(evidence.missing)
+            missing_key = tuple(missing)
             if missing_key == self._last_missing:
                 self.blocked_streak += 1
             else:
@@ -409,12 +455,13 @@ class GoalEnforcer:
                     ),
                 )
 
+            # Observabilité (fix run2 F-99) : le reason liste les preuves
+            # manquantes (tronqué) — sans ça, le log ne dit PAS quoi corriger.
+            labels = " | ".join(m.split("—")[0].strip()[:80] for m in missing)
             return GoalDecision(
                 GoalAction.CONTINUE,
-                f"complétion non prouvée : {len(evidence.missing)} preuve(s) "
-                f"manquante(s) (round {self.continuation_rounds}, streak "
+                f"complétion non prouvée : {len(missing)} preuve(s) manquante(s) "
+                f"[{labels}] (round {self.continuation_rounds}, streak "
                 f"{self.blocked_streak}/{self.blocked_min_rounds})",
-                prompt_note=goal_continuation_prompt(
-                    self.objective, evidence.missing
-                ),
+                prompt_note=goal_continuation_prompt(self.objective, missing),
             )

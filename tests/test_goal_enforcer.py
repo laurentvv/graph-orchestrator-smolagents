@@ -298,6 +298,31 @@ def test_objectif_tronque_4000():
     assert len(ge.objective) == 4000
 
 
+def test_evidence_accumulee_cross_attempts(tmp_path):
+    """Fix run2 F-99 : la mémoire est purgée entre retries, mais un write/verify
+    de la tentative 1 reste une preuve à la tentative 3 (comptes cumulés)."""
+    (tmp_path / "index.html").write_text("<html></html>", encoding="utf-8")
+    ge = _enforcer(cwd=str(tmp_path), is_web=True)
+    # Tentative 1 : écritures présentes, PAS de verify (web) → manques {verify}.
+    write_step = _make_step(code_action='write_file(path="index.html", content=r"""x""")')
+    d1 = ge.enforce([write_step])
+    assert d1.action == GoalAction.CONTINUE
+    assert len(ge._last_missing) == 1, "seul le verify-after manque"
+    # Tentative 2 : mémoire purgée (plus de write), MAIS verify présent →
+    # les comptes cumulés gardent le write de la tentative 1 : prouvé.
+    verify_step = _make_step(code_action='print(list_console_messages())')
+    d2 = ge.enforce([verify_step])
+    assert d2.action == GoalAction.ACCEPT, "write(t1) + verify(t2) cumulés = complétion prouvée"
+
+
+def test_reason_liste_les_preuves_manquantes():
+    """Observabilité (fix run2) : le reason CONTINUE cite les preuves manquantes."""
+    ge = _enforcer()
+    d = ge.enforce([])
+    assert "preuve(s) manquante(s)" in d.reason
+    assert "écriture" in d.reason or "AUCUN appel" in d.reason
+
+
 # ==========================================
 # Intégration run_with_retry
 # ==========================================
@@ -400,3 +425,40 @@ async def test_run_with_retry_noop_sans_enforcer():
 
     assert result is valid_output
     assert calls["n"] == 1, "sans enforcer, comportement inchangé (rétrocompat)"
+
+
+@pytest.mark.anyio
+async def test_run_with_retry_dernier_attempt_waive():
+    """Fix run2 F-99 : une continuation sur le DERNIER attempt est convertie en
+    waiver — le final_answer valide part au Judge au lieu de finir en échec
+    technique (la boucle graphe max_iterations reste l'enceinte externe)."""
+    from graph_orchestrator.nodes import run_with_retry
+
+    agent = _make_agent([])
+    valid_output = CoderOutput(
+        task_id="ts-001", status="success", details="ok", linter_ok=True, vision_ok=False,
+    )
+    rr = _run_result(valid_output)
+    calls = {"n": 0}
+
+    async def counting_to_thread(*a, **kw):
+        calls["n"] += 1
+        return rr
+
+    ge = _enforcer(blocked_min_rounds=3)
+
+    with patch("graph_orchestrator.nodes.asyncio.to_thread", new=counting_to_thread), \
+         patch(
+             "graph_orchestrator.nodes.extract_and_validate",
+             side_effect=[None, None, valid_output],  # final_answer valide SEULEMENT au 3e attempt
+         ), \
+         patch("builtins.print") as mock_print:
+        result, _metrics = await run_with_retry(
+            agent, "PROMPT", CoderOutput, max_retries=3, goal_enforcer=ge,
+        )
+
+    assert result is valid_output, "dernier attempt : waiver → résultat conservé pour le Judge"
+    assert calls["n"] == 3
+    printed = " ".join(str(c) for c in mock_print.call_args_list)
+    assert "dernier attempt" in printed
+    assert "Judge arbitre" in printed
