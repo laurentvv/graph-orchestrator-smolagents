@@ -7,19 +7,19 @@
   pour Windows x64 + CUDA 13.x, l'extrait dans vendor/llamacpp-cuda13/ (gitignoré).
 
   Télécharge DEUX assets par release :
-    1. llama-b<TAG>-bin-win-cuda-13.x-x64.zip   → binaires (llama-server.exe, ggml*.dll...)
-    2. cudart-llama-bin-win-cuda-13.x-x64.zip    → DLLs runtime CUDA (cublasLt64_13.dll...)
+    1. llama-b<TAG>-bin-win-cuda-13.x-x64.zip   -> binaires (llama-server.exe, ggml*.dll...)
+    2. cudart-llama-bin-win-cuda-13.x-x64.zip    -> DLLs runtime CUDA (cublasLt64_13.dll...)
 
   Le swap est atomique (backup .bak, extraction validée, then cleanup) : si le
   téléchargement ou l'extraction échoue en cours de route, l'ancien build est
   restauré intact.
 
   DÉCOUVERTE AUTOMATIQUE : llama_server.py détecte le GPU NVIDIA (via nvidia-smi) et
-  choisit le dossier vendor dans cet ordre : llamacpp-cuda13 (préféré) → llamacpp-cuda
-  (repli legacy CUDA 12) → PATH système (Vulkan/CPU fallback). Sur une machine sans
+  choisit le dossier vendor dans cet ordre : llamacpp-cuda13 (préféré) -> llamacpp-cuda
+  (repli legacy CUDA 12) -> PATH système (Vulkan/CPU fallback). Sur une machine sans
   GPU NVIDIA, les dossiers CUDA sont ignorés (sinon llama-server crash sur ggml-cuda.dll).
 
-  ⚠️  NE PAS LANCER PENDANT UN RUN du graphe (agent_graph.py) — le binaire
+  ⚠️  NE PAS LANCER PENDANT UN RUN du graphe (agent_graph.py) - le binaire
   llama-server.exe est verrouillé par le process et ne peut pas être remplacé.
   Le script détecte un llama-server en cours d'exécution et refuse de continuer.
 
@@ -40,6 +40,7 @@ param (
 )
 
 $ErrorActionPreference = "Stop"
+$ProgressPreference = "SilentlyContinue"  # Évite le goulot d'étranglement de Write-Progress sous Windows PowerShell 5.1
 
 # --- Localisation (fonctionne quel que soit le cwd de l'appelant) ---
 $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Definition
@@ -67,7 +68,7 @@ if ($running) {
 # --- Lecture de la version locale installée ---
 # Source de vérité prioritaire : le fichier marqueur .llamacpp-version (écrit par ce
 # script à chaque mise à jour réussie). Repli : on interroge directement le binaire
-# (llama-server affiche "version: NNNNN (sha)" au démarrage — fiable, pas de drift).
+# (llama-server affiche "version: NNNNN (sha)" au démarrage - fiable, pas de drift).
 $VersionFile = Join-Path $TargetDir ".llamacpp-version"
 $LocalVersion = $null
 if (Test-Path $VersionFile) {
@@ -78,7 +79,7 @@ if (Test-Path $VersionFile) {
 if (-not $LocalVersion) {
     $localServer = Join-Path $TargetDir "llama-server.exe"
     if (Test-Path $localServer) {
-        Write-Host "[*] Pas de marqueur .llamacpp-version → interrogation du binaire..." -ForegroundColor DarkGray
+        Write-Host "[*] Pas de marqueur .llamacpp-version -> interrogation du binaire..." -ForegroundColor DarkGray
         try {
             # llama-server --version renvoie "version: NNNNN (sha)" puis démarre un serveur.
             # On ne capture que la 1re ligne et on kill immédiatement. Timeout 10s de sécurité.
@@ -118,15 +119,16 @@ if ($LocalVersion -and ($LocalVersion -eq $LatestTag) -and -not $Force) {
 }
 
 if ($LocalVersion) {
-    Write-Host "[*] Version locale actuelle : $LocalVersion → mise à jour vers $LatestTag`n" -ForegroundColor Yellow
+    Write-Host "[*] Version locale actuelle : $LocalVersion -> mise à jour vers $LatestTag`n" -ForegroundColor Yellow
 } else {
-    Write-Host "[*] Aucune version locale détectée → installation fraîche de $LatestTag`n" -ForegroundColor Yellow
+    Write-Host "[*] Aucune version locale détectée -> installation fraîche de $LatestTag`n" -ForegroundColor Yellow
 }
 
 # --- Sélection des assets CUDA 13 ---
 # On matche le pattern "bin-win-cuda-13" (regex) pour rester insensible à la
 # mineure (13.0, 13.3, 13.4...). Les assets cu12 ne doivent PAS matcher.
-$binAsset    = $release.assets | Where-Object { $_.name -match "bin-win-cuda-13\.[0-9]+-x64\.zip$" } | Select-Object -First 1
+# Important : $binAsset doit commencer par "llama-" pour ne pas matcher "cudart-llama-..."
+$binAsset    = $release.assets | Where-Object { $_.name -match "^llama-.*bin-win-cuda-13\.[0-9]+-x64\.zip$" } | Select-Object -First 1
 $cudartAsset = $release.assets | Where-Object { $_.name -match "^cudart-.*bin-win-cuda-13\.[0-9]+-x64\.zip$" } | Select-Object -First 1
 
 if (-not $binAsset) {
@@ -174,7 +176,7 @@ try {
     # --- Validation : llama-server.exe doit être présent dans l'extraction ---
     $extractedServer = Get-ChildItem -Path $ExtractDir -Recurse -Filter "llama-server.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
     if (-not $extractedServer) {
-        Write-Host "[ERROR] 'llama-server.exe' absent de l'archive extraite — build inattendu, abort." -ForegroundColor Red
+        Write-Host "[ERROR] 'llama-server.exe' absent de l'archive extraite - build inattendu, abort." -ForegroundColor Red
         & $cleanupTemp
         exit 1
     }
@@ -188,7 +190,7 @@ try {
     if (Test-Path $TargetDir) {
         if (Test-Path $BackupDir) { Remove-Item -Recurse -Force $BackupDir }
         Rename-Item -Path $TargetDir -NewName (Split-Path -Leaf $BackupDir)
-        Write-Host "[+] Ancien build sauvegardé → $BackupDir" -ForegroundColor DarkGray
+        Write-Host "[+] Ancien build sauvegardé -> $BackupDir" -ForegroundColor DarkGray
     }
 
     # --- Installation du nouveau build ---
@@ -244,4 +246,4 @@ Write-Host ""
 Write-Host "Découverte : llama_server.py détecte le GPU NVIDIA (nvidia-smi) et choisit" -ForegroundColor DarkGray
 Write-Host "vendor/llamacpp-cuda13/ en priorité, puis vendor/llamacpp-cuda/ (legacy CUDA 12)," -ForegroundColor DarkGray
 Write-Host "puis le PATH système (Vulkan/CPU). Sur machine NVIDIA récente, ce dossier est" -ForegroundColor DarkGray
-Write-Host "celui utilisé automatiquement — rien à configurer." -ForegroundColor DarkGray
+Write-Host "celui utilisé automatiquement - rien à configurer." -ForegroundColor DarkGray
