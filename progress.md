@@ -1568,3 +1568,34 @@ Coder est appliquée correctement par Qwen3.5-9B.
   Sanity 43/43 (test_guard + test_stall_detector, import nodes.py). Sweep grep final
   vérifié. F-74 reste pending pour la part runtime (instrumentation workflows +
   runs_history + rétention).
+
+## Jalons de l'Itération (cycle F-99 — Goal Enforcement, P3, 2026-08-14)
+> 1re feature du backlog F-99..F-105 (update références 2026-08-14). Prolonge le fil
+> anti-loop signature (F-36 LoopGuard → F-88 StallDetector → F-99 garde comportementale
+> du faux « j'ai fini »). Rebasée sur main post-merge F-106 (4227b55).
+
+- [x] Étape F99-1 : Exploration qm (`src/harness/goal.ts` + `grind.ts`) + points
+  d'insertion (`run_with_retry` où F-36/F-88 sont déjà branchés, `execute_coder_node`,
+  config). Design : audit de complétion DÉTERMINISTE (le disque = état autoritaire)
+  + prompt de continuation qm + bornes (impasse/deadlock/cap).
+- [x] Étape F99-2 : Module `graph_orchestrator/goal_enforcer.py` — 4 mécanismes qm
+  (continuation prompt « NON PROUVÉE » avec preuves manquantes concrètes, blocked
+  après 3 MÊME impasse, auto-waiver après 5 rounds sans tool call, token cap 2M =
+  wind-down unique). Audit mode-aware (création stricte / correction allégée).
+  Objectif échappé HTML + encapsulé <objectif> (anti-injection, miroir qm).
+- [x] Étape F99-3 : Branchement — `run_with_retry` (param `goal_enforcer`, metering
+  par attempt, RAPPEL générique supprimé sur les rounds de continuation) +
+  `execute_coder_node` (GoalEnforcer depuis task content/target_files/iteration/
+  _is_web_task) + config (4 settings) + .env.example + .env.
+- [x] Étape F99-4 : Tests — 22 PASS. BUG D'INTÉGRATION découvert et corrigé :
+  `loop_guard.known_tools` (F-36) ignorait multi_replace/check_js_syntax/outils
+  DevTools → aucune preuve verify-after visible en chemin CodeAgent (l'audit
+  web échouait systématiquement). Liste étendue (13 outils), exemptés
+  observationnels préservés dans record().
+- [x] Étape F99-5 : Validation — suite complète **1035 passed / 0 failed / 1 skipped**
+  (+22 vs baseline 1013), py_compile OK. Écarts consciencieux vs qm documentés
+  (boucle bornée max_retries, delta tool calls adapté à la purge mémoire, pas
+  d'outil update_goal, objectif tronqué 4000).
+- [x] Étape F99-6 : État disque synchronisé (feature_list F-99 completed, contract
+  critères 359-364, plan case P3 cochée, progress ce bloc, événements journalisés
+  via scripts/log_event.py run_id f-99 — convention F-106).

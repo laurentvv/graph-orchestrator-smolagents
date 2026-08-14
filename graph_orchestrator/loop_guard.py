@@ -176,9 +176,16 @@ def extract_tool_calls_from_step(step) -> list[tuple[str, Any]]:
         src = str(code_action)
         # Les outils exposés au Coder (cf. nodes.py coder_tools). On évite une
         # dépendance circulaire en durant la liste courte des outils d'action.
+        # F-99 : complétée avec les outils ajoutés après F-36 (multi_replace
+        # F-59, check_js_syntax F-72, outils DevTools F-50) — sans eux, le goal
+        # enforcer ne voyait aucune preuve verify-after en chemin CodeAgent.
+        # (Les outils purement observationnels restent exemptés du comptage
+        # LoopGuard via la liste EXEMPT de record().)
         known_tools = (
             "write_file", "append_file", "edit_file", "search_replace",
-            "read_file", "list_directory", "bash_command",
+            "multi_replace", "read_file", "list_directory", "bash_command",
+            "check_js_syntax", "list_console_messages", "take_screenshot",
+            "navigate_page", "evaluate_script",
         )
         for line in src.splitlines():
             stripped = line.strip()

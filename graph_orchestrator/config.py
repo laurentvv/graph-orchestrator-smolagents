@@ -287,6 +287,21 @@ class Settings:
     stall_detector_enabled: bool = True
     stall_detector_threshold: int = 2
 
+    # --- Goal Enforcement (Priorité 3-ter / F-99) ---
+    # Garde comportementale du faux « j'ai fini » (qm goal.ts) : un final_answer
+    # valide est audité contre l'état autoritaire (écritures + livrables sur
+    # disque + verify-after web). Non prouvé → prompt de continuation (« treat
+    # completion as unproven ») ; MÊME impasse `goal_blocked_min_rounds` rounds
+    # → statut blocked accepté (le Judge arbitre — calibré sur worker_max_retries=3,
+    # miroir du GOAL_BLOCKED_MIN_ROUNDS=3 de qm) ; `goal_waiver_stalled_rounds`
+    # rounds de continuation sans AUCUN tool call → auto-waiver anti-deadlock ;
+    # `goal_token_cap` tokens cumulés (in+out) → wind-down unique, jamais fausse
+    # complétion (0 = désactivé). Opt-out `GOAL_ENFORCEMENT_ENABLED=0`.
+    goal_enforcement_enabled: bool = True
+    goal_blocked_min_rounds: int = 3
+    goal_waiver_stalled_rounds: int = 5
+    goal_token_cap: int = 2_000_000
+
     # --- Judge Grounding (Priorité 6 / F-93) ---
     # Anti-hallucination de localisation : après le verdict LLM, chaque finding est
     # ancré dans le code source (alignement flou de tokens, port simplifié du
@@ -485,6 +500,10 @@ def load_settings() -> Settings:
         loop_guard_threshold=_get_int("LOOP_GUARD_THRESHOLD", 3),
         stall_detector_enabled=_get_bool("STALL_DETECTOR_ENABLED", True),
         stall_detector_threshold=_get_int("STALL_DETECTOR_THRESHOLD", 2),
+        goal_enforcement_enabled=_get_bool("GOAL_ENFORCEMENT_ENABLED", True),
+        goal_blocked_min_rounds=_get_int("GOAL_BLOCKED_MIN_ROUNDS", 3),
+        goal_waiver_stalled_rounds=_get_int("GOAL_WAIVER_STALLED_ROUNDS", 5),
+        goal_token_cap=_get_int("GOAL_TOKEN_CAP", 2_000_000),
         judge_grounding_enabled=_get_bool("JUDGE_GROUNDING_ENABLED", True),
         memory_consolidation_enabled=_get_bool("MEMORY_CONSOLIDATION_ENABLED", True),
         memory_consolidation_after=_get_int("MEMORY_CONSOLIDATION_AFTER", 10),
