@@ -1707,3 +1707,15 @@ Coder est appliquée correctement par Qwen3.5-9B.
   (variance : run #6 avait convergé en 13 steps, run #7 a thrashé à max_steps sur toutes les tentatives).
 - [x] Décision ouverte (utilisateur) : relancer plus tard (variance du 4B), ou basculer le Coder sur le
   modèle 9B (REASONING en FAST — plus lent/step, convergence bien plus fiable), ou stopper.
+
+## Verdict Coder Ultra après test live (run #8, 2026-08-15 nuit — coupé sur décision utilisateur)
+- Run #8 : l'escalade à signaux a fonctionné à la lettre (it.1 4B → rejet statique → it.2 [⚡ULTRA] →
+  rejet statique 5ms+console → it.3 [⚡ULTRA] dernière chance).
+- L'Ultra (Ornith-9B no-think) a corrigé 3 classes de bugs en it.2 (compteur rafraîchi DANS la boucle,
+  draw() rappelé, canvas pur sans divs) — mais a laissé le délai 5 ms et son rythme est rédhibitoire :
+  3,8 t/s (5x le 4B), méga-blocs de 1800+ tokens qui dépassent le timeout client 600 s → 2 tentatives
+  mortes en boucle, ~67 min sur la seule itération 3, run coupé à ~2 h sans conclusion.
+- DÉCISION UTILISATEUR : « pas convaincu de l'ultra codeur (trop lourd pour cette tâche) » →
+  CODER_ULTRA_CORRECTION=false par défaut (feature conservée en opt-in pour tâches lourdes).
+- Leçon consolidée : sur cette classe de tâches, la voie gagnante = 4B + gardes déterministes aux
+  feedbacks EXACTS (runs #6 it.2 et boucle Coder 2 ont convergé en 8-13 min ainsi).
