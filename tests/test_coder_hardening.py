@@ -438,3 +438,92 @@ class TestTesterMaxStepsFallback:
         assert result.task_id == "ts-e2e"
         # 1er attempt seulement (le fallback évite les retries).
         assert call_count["n"] == 1
+
+
+# ==========================================
+# F-111 — Coder Ultra (tiering création 4B / correction 9B no-think)
+# ==========================================
+
+class TestCoderUltra:
+    """F-111 : échelle d'escalade à signaux (l'exécution réelle fait foi).
+
+    - it.1 création → fast ; it.2 après rejet qualitatif → fast (le 4B suffit) ;
+    - it.2 après rejet DÉTERMINISTE → Ultra ; Coder mort avant → Ultra ;
+    - it.3 (dernière chance) → Ultra toujours ; opt-out/sans spec → fast.
+    """
+
+    def _settings(self, ultra=True, with_no_think=True):
+        from types import SimpleNamespace
+        fast = SimpleNamespace(model="qwen-4b.gguf", context=49152)
+        no_think = SimpleNamespace(model="ornith-9b.gguf", context=49152) if with_no_think else SimpleNamespace(model="")
+        return SimpleNamespace(
+            fast_spec=fast, no_think_spec=no_think,
+            coder_ultra_correction=ultra,
+            fast_max_tokens=4000, reasoning_max_tokens=8192,
+        )
+
+    def test_creation_iteration1_fast(self):
+        from graph_orchestrator.nodes import _select_coder_spec
+        spec, mt, is_ultra = _select_coder_spec({"iteration": 1}, self._settings())
+        assert is_ultra is False and spec.model == "qwen-4b.gguf" and mt == 4000
+
+    def test_correction_rejet_qualitatif_reste_fast(self):
+        """Run #6 : rejet qualitatif (Tester/Judge) + feedback précis → le 4B
+        a su corriger. Pas d'Ultragasillage."""
+        from graph_orchestrator.nodes import _select_coder_spec
+        spec, _, is_ultra = _select_coder_spec(
+            {"iteration": 2, "prev_deterministic_reject": False, "prev_coder_died": False},
+            self._settings(),
+        )
+        assert is_ultra is False and spec.model == "qwen-4b.gguf"
+
+    def test_correction_rejet_deterministepasse_ultra(self):
+        """Run #7 : rejet par garde déterministe (linter/static_tester) → le 4B
+        reproduit le bug → Ultra."""
+        from graph_orchestrator.nodes import _select_coder_spec
+        spec, mt, is_ultra = _select_coder_spec(
+            {"iteration": 2, "prev_deterministic_reject": True},
+            self._settings(),
+        )
+        assert is_ultra is True and spec.model == "ornith-9b.gguf" and mt == 8192
+
+    def test_coder_mort_avant_passe_ultra(self):
+        """Runs #4/#7 : thrash à max_steps sans verdict → Ultra."""
+        from graph_orchestrator.nodes import _select_coder_spec
+        spec, _, is_ultra = _select_coder_spec(
+            {"iteration": 2, "prev_coder_died": True},
+            self._settings(),
+        )
+        assert is_ultra is True
+
+    def test_iteration3_derniere_chance_ultra(self):
+        from graph_orchestrator.nodes import _select_coder_spec
+        spec, _, is_ultra = _select_coder_spec(
+            {"iteration": 3, "prev_deterministic_reject": False},
+            self._settings(),
+        )
+        assert is_ultra is True
+
+    def test_signal_deterministeseul_sans_iteration2_reste_fast(self):
+        """Le signal ne vaut que POUR une correction (it. > 1) — en it. 1 il
+        n'existe de toute façon pas (première passe)."""
+        from graph_orchestrator.nodes import _select_coder_spec
+        spec, _, is_ultra = _select_coder_spec(
+            {"iteration": 1, "prev_deterministic_reject": True},
+            self._settings(),
+        )
+        assert is_ultra is False
+
+    def test_opt_out_desactive_ultra(self):
+        from graph_orchestrator.nodes import _select_coder_spec
+        spec, _, is_ultra = _select_coder_spec(
+            {"iteration": 3, "prev_coder_died": True}, self._settings(ultra=False)
+        )
+        assert is_ultra is False and spec.model == "qwen-4b.gguf"
+
+    def test_sans_spec_no_think_repli_fast(self):
+        from graph_orchestrator.nodes import _select_coder_spec
+        spec, _, is_ultra = _select_coder_spec(
+            {"iteration": 3}, self._settings(with_no_think=False)
+        )
+        assert is_ultra is False and spec.model == "qwen-4b.gguf"
