@@ -519,6 +519,12 @@ async def run_coding_workflow(
 
             max_iter = settings.max_iterations  # avant : codé en dur à 3 (ignorait la config)
 
+            # F-111 : signaux d'escalade Coder Ultra — l'état DOIT survivre aux
+            # itérations de cette sous-tâche (posés en fin d'itération N, lus au
+            # début de l'itération N+1 dans sub_dict, puis remis à zéro). Aussi
+            # initialisés AVANT la boucle, pas dedans.
+            ultra_signals = {"deterministic_reject": False, "coder_died": False}
+
             for iteration in range(start_iteration, max_iter + 1):
                 # Checkpoint au DÉBUT de chaque itération (point de sauvegarde sûr).
                 save_coding_state(coding_state["current_subtask_idx"], iteration)
@@ -591,7 +597,17 @@ async def run_coding_workflow(
                     # les sous-tâches/itérations du run. Bloc vide si recall désactivé/KG vide
                     # → le Coder tourne sans mémoire (rétrocompat stricte).
                     "lessons": lessons_block,
+                    # F-111 Coder Ultra — signaux d'escalade lus puis remis à zéro :
+                    # un rejet DÉTERMINISTE (linter/static_tester) ou un Coder mort
+                    # techniquement à l'itération précédente déclenche le gros modèle
+                    # no-think pour LA correction (le 4B reproduit les mêmes bugs face
+                    # aux gardes déterministes — run #7 ; il suffit pour les rejets
+                    # qualitatifs — run #6).
+                    "prev_deterministic_reject": ultra_signals["deterministic_reject"],
+                    "prev_coder_died": ultra_signals["coder_died"],
                 }
+                ultra_signals["deterministic_reject"] = False
+                ultra_signals["coder_died"] = False
 
                 # 0. Drafter (iteration 1 uniquement)
                 if iteration == 1:
@@ -649,6 +665,7 @@ async def run_coding_workflow(
                     sub_metrics.append(m1)
 
                 if not coder_res or coder_res.status == "failure":
+                    ultra_signals["coder_died"] = True
                     print(f"    [-] Le Coder a échoué techniquement sur {subtask.task_id}.")
                     return {"status": "failure", "reason": "Coder crash"}, sub_metrics
 
@@ -688,6 +705,8 @@ async def run_coding_workflow(
                 if lint_res and lint_res.status == "failure":
                     print(f"    [⚠] Linter a détecté des erreurs de syntaxe sur {subtask.task_id} — "
                           f"court-circuit du Tester (Shift Left).")
+                    # F-111 : rejet déterministe → Coder Ultra à la correction suivante.
+                    ultra_signals["deterministic_reject"] = True
                     if obs_id:
                         kg.mark_status(obs_id, "rejected")
                     # Le feedback du Linter devient une réfutation (lu par le Coder à l'itération suivante
@@ -742,6 +761,8 @@ async def run_coding_workflow(
                     )
                     if ref_id and obs_id:
                         kg.add_edge(ref_id, obs_id, "REFUTES")
+                    # F-111 : rejet déterministe → Coder Ultra à la correction suivante.
+                    ultra_signals["deterministic_reject"] = True
                     # On passe à l'itération suivante SANS Tester/Judge LLM.
                     continue
 

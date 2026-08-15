@@ -223,6 +223,38 @@ def _visual_checklist_error(criteria_count):
 
 
 
+def _select_coder_spec(task: dict, settings) -> tuple:
+    """F-111 : escalade à signaux du Coder — l'exécution réelle fait foi.
+
+    Échelle (calée sur les preuves des runs #6/#7) :
+      - itération 1 (création) → fast 4B (run #6 : convergence en 13 steps) ;
+      - correction après rejet QUALITATIF (Tester/Judge LLM) → fast 4B (run #6 :
+        le 4B a corrigé l'incrément avec le feedback précis) ;
+      - correction après rejet DÉTERMINISTE (linter/static_tester) → Ultra
+        (run #7 : le 4B a reproduit 3× le même bug face aux gardes) ;
+      - Coder mort techniquement à l'itération précédente → Ultra (thrash
+        constaté runs #4/#7 : max_steps sans final_answer) ;
+      - itération ≥ 3 (dernière chance avant escalade) → Ultra toujours.
+
+    Retourne (spec, max_tokens, is_ultra). L'Ultra = no_think_spec (gros modèle
+    sans thinking, REASONING_NO_THINK_*) si configurée, sinon repli fast.
+    """
+    iteration = int(task.get("iteration", 1) or 1)
+    no_think_model = str(getattr(getattr(settings, "no_think_spec", None), "model", "") or "")
+    ultra_ok = (
+        getattr(settings, "coder_ultra_correction", False)
+        and bool(no_think_model)
+        and (
+            iteration >= 3
+            or bool(task.get("prev_coder_died"))
+            or (iteration > 1 and bool(task.get("prev_deterministic_reject")))
+        )
+    )
+    if ultra_ok:
+        return settings.no_think_spec, settings.reasoning_max_tokens, True
+    return settings.fast_spec, settings.fast_max_tokens, False
+
+
 def _tester_max_steps_fallback(steps, prompt: str):
     """Verdict de secours quand le Tester atteint max_steps sans final_answer propre.
 
@@ -1233,12 +1265,25 @@ Code prêt pour la production, respectant les conventions du langage.
         )
         # max_retries can be slightly higher for coding since it involves tool use steps
         # max_retries can be slightly higher for coding since it involves tool use steps
-        with model_lifecycle(settings.fast_spec) as srv:
+        # F-111 CODER ULTRA : la CORRECTION (itération > 1) mérite le gros modèle
+        # sans thinking. Constat run #7 : le 4B a reproduit le même bug (compteur
+        # jamais incrémenté) sur 3 itérations en thrashant à max_steps — il exécute
+        # mais ne CORRIGE pas. L'Ultra (Ornith-9B, reasoning=off) prend le relais
+        # dès la 1re itération corrective ; la création (it. 1) reste sur le 4B
+        # rapide. Opt-out CODER_ULTRA_CORRECTION=false.
+        coder_spec, coder_max_tokens, _is_ultra = _select_coder_spec(task, settings)
+        if _is_ultra:
+            print(
+                f"[⚡] CODER ULTRA (correction, itération {task.get('iteration', 1)}) : "
+                f"{os.path.basename(coder_spec.model or '?')} (gros modèle no-think) "
+                f"au lieu du 4B rapide."
+            )
+        with model_lifecycle(coder_spec) as srv:
             dynamic_fast_model = OpenAIServerModel(
                 model_id=srv.model_id or settings.fast_model_id,
                 api_base=srv.api_base or settings.local_api_base,
                 api_key=srv.api_key or settings.local_api_key,
-                max_tokens=settings.fast_max_tokens,
+                max_tokens=coder_max_tokens,
                 temperature=settings.coder_temperature,
                 client_kwargs={"timeout": settings.llm_timeout_s},
             )
