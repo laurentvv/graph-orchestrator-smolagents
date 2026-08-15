@@ -897,6 +897,17 @@
         "F-54",
         "F-61"
       ]
+    },
+    {
+      "id": "F-109",
+      "name": "Audit visuel matérialisé (visual_check) + Tier 4 console — le Coder doit DÉMONTRER, pas déclarer",
+      "description": "Post-mortem boucle Coder isolée (2026-08-15, suite au rejet run #3 et au crash run #4/#5) : le 4B exécute le pipeline visuel (navigate/screenshot/fuzz/console) mais déclare « all N criteria verified » sans JAMAIS écrire l'analyse, et un run thrashant meurt à max_steps sans atteindre le final_answer (boucle 1 : 60 steps, 0 appel, 0 conclusion). IMPLÉMENTÉ : (1) outil visual_check(criterion_number, verdict, observation) matérialisant l'audit critère par critère (pattern « evidence exigée », fiche 46) ; (2) enforcement dans run_with_retry : final_answer BLOQUÉ si checklist incomplète / verdict False / observation creuse (_visual_checklist_error, gate après le check vision F-50) ; (3) F-109-bis : RAPPEL INJECTÉ au boundary d'attempt avec décompte exact des critères manquants — l'exigence atteint le modèle même sans final_answer ; (4) prompt critères : CHECKLIST OBLIGATOIRE explicite (validation_criteria.py) ; (5) Static Tester TIER 4 console : rechargement frais + clic action primaire + lecture console, toute exception JS runtime = échec (validé LIVE sur le crash run #4 « Uncaught TypeError reading 'sorted' » → is_valid False ; vrai négatif sur run #5 corrigé) — attrape les crashs null/undefined indétectables par les Tiers 1-3 ; (6) config VISUAL_AUDIT_ENABLED (défaut true) ; run_coder.py isolation étendu aux 6 critères exacts du run #5. VALIDATION (boucle Coder seule, objectif utilisateur) : boucle 2 = 6/6 visual_check avec observations + final_answer success en UNE tentative (13 steps, 503s, 303k tokens) ; livrable vérifié en direct : 0 erreur console, compteur de comparaisons incrémenté (0→15, ~500ms/step), slider 100-2000ms, 50 barres proportionnelles, thème sombre. Tests : test_visual_audit.py 8 PASS (store, helper 4 cas, enforcement blocage/acceptation, injection boundary) + guards/coder/tools 35 PASS.",
+      "status": "completed",
+      "dependencies": [
+        "F-90",
+        "F-50",
+        "F-108"
+      ]
     }
   ]
 }

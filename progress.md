@@ -1668,3 +1668,22 @@ Coder est appliquée correctement par Qwen3.5-9B.
   auditable.
 - [x] PM-5 Validation : 12 tests judge + 8 Tier 1c + suite complète **1052 passed / 0 failed /
   1 skipped**. py_compile OK. État disque synchronisé (F-108, contract 368-371, ce bloc).
+
+## Jalons de l'Itération (F-109 — audit visuel matérialisé + Tier 4 console, boucle Coder, 2026-08-15)
+> Objectif utilisateur : le Coder doit VOIR ses erreurs et corriger — boucle sur le Coder seul
+> (debug/run_coder.py) avec les 6 critères exacts du run #5. Coupe/fix/relance en cas d'erreur.
+
+- [x] B1 : boucle 1 (constat) — 60 steps : 4 screenshots, 2 fuzz, 6 console, 4 edits, MAIS 0 visual_check
+  et 0 final_answer (tentative 1 morte à max_steps 40). Diagnostic : l'exigence de checklist n'est que
+  dans le prompt initial + au final_answer jamais atteint → le modèle ne la voit jamais réaffirmée.
+- [x] B2 : correctifs (commit fa4c8d9) — outil visual_check (audit matérialisé, pattern evidence exigée),
+  enforcement final_answer (_visual_checklist_error : incomplet/False/creux = blocage), CHECKLIST
+  OBLIGATOIRE dans le prompt critères, injection RAPPEL au boundary d'attempt (F-109-bis, décompte exact),
+  Static Tester TIER 4 console (crash runtime : validé LIVE sur run #4 « Uncaught TypeError reading
+  'sorted' » → False ; vrai négatif run #5), config VISUAL_AUDIT_ENABLED.
+- [x] B3 : boucle 2 (preuve) — **6/6 visual_check matérialisés avec observations** + final_answer
+  success en UNE tentative (13 steps, 503 s, 303k tokens — vs 2×40 steps sans conclusion).
+- [x] B4 : vérification DIRECTE du livrable par l'assistant : 0 erreur console, compteur de
+  comparaisons incrémenté (0→15 à ~2/s = 500 ms/step conformes au slider 100-2000ms), 50 barres
+  proportionnelles (DOM), permutations visibles, thème sombre, boutons fonctionnels (capture prise).
+- [x] B5 : état disque synchronisé (F-109, contract 372-377, événements run_id f-109).
