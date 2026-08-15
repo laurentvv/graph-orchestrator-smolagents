@@ -908,6 +908,16 @@
         "F-50",
         "F-108"
       ]
+    },
+    {
+      "id": "F-110",
+      "name": "Gardes compteur-rafraîchi + canvas-child + patron canonique d'animation (post-mortem run #6)",
+      "description": "Post-mortem run #6 (2026-08-15) : le Judge avait APPROUVÉ une app à animation INVISIBLE — le tri s'exécutait de façon headless (draw() jamais rappelé dans la boucle, 30 divs appendChild'd DANS le <canvas> où les enfants ne s'affichent jamais) et le compteur était incrémenté mais JAMAIS réaffiché (textContent assigné une seule fois avant la boucle). Vérification directe utilisateur/assistant : compteur figé à 0, canvas identique avant/après clic. IMPLÉMENTÉ : (1) Tier 1c-(c) compteur-rafraîchi — un compteur AFFICHÉ quelque part et incrémenté doit avoir un rafraîchi d'affichage (textContent/innerText/innerHTML/template) dans les 400 chars suivant l'incrément, sinon flag (compteur interne jamais affiché = hors périmètre, anti-FP) ; (2) _check_canvas_children — appendChild dans un <canvas id=X> = flag (croisé HTML+JS ; canvas OU div, jamais les deux mêlés) ; (3) skill coding règle 5 : BOUCLE D'ANIMATION CANONIQUE avec exemple complet (draw() + counterEl.textContent DANS la boucle + sleep 50-300ms + interdiction de mêler canvas et divs). VALIDATION : run6 → 2 flags exacts, livrable sain loop2 → 0 flag ; suite 1065 passed / 0 failed. Run #7 E2E : les gardes + gate F-108 ont rejeté les 3 itérations (le 4B a reproduit le bug du compteur mort à chaque itération) → ESCALADE avec diagnostic correct (« comparisons initialisé à 0 mais jamais incrémenté »). Le système refuse désormais tout code défaillant — plus AUCUN faux positif d'approbation ; le goulot restant est la convergence du modèle 4B (variance élevée : run #6 avait convergé en 13 steps, run #7 a thrashé à max_steps sur toutes les tentatives).",
+      "status": "completed",
+      "dependencies": [
+        "F-108",
+        "F-109"
+      ]
     }
   ]
 }

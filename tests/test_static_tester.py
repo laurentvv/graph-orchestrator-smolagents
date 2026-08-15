@@ -610,3 +610,61 @@ def test_temporal_no_progress_signal_skip():
     errs = st._evaluate_temporal([], "file:///dummy", "startBtn")
     assert errs == [], "Sans DevTools ou signal, le Tier 3 doit skip sans flaguer."
 
+
+
+# ==========================================
+# F-110 — compteur rafraîchi + canvas-child (post-mortem run #6)
+# ==========================================
+RUN6_BUGGY_REFRESH = """
+let comparisons = 0;
+counterDisplay.textContent = comparisons;   // init UNE fois AVANT la boucle
+async function bubbleSort() {
+    for (let i = 0; i < data.length - 1; i++) {
+        comparisons++;
+        if (data[i] > data[i + 1]) { swap(i, i + 1); }
+    }
+}
+"""
+
+RUN6_CANVAS_HTML = '<canvas id="chart" width="800" height="400"></canvas>'
+RUN6_CANVAS_JS = """
+for (let i = 0; i < 30; i++) {
+    const bar = document.createElement('div');
+    document.getElementById('chart').appendChild(bar);
+}
+"""
+
+
+def test_behavioral_run6_counter_never_refreshed():
+    """Post-mortem run #6 : l'incrément existe (Tier 1c historique passe) mais
+    l'affichage n'est JAMAIS rafraîchi dans la boucle → compteur figé à 0."""
+    errors = _check_behavioral_smells(RUN6_BUGGY_REFRESH)
+    assert any("comparisons" in e and "JAMAIS rafraîchi" in e for e in errors)
+
+
+def test_behavioral_counter_refreshed_in_loop_clean():
+    js = RUN6_BUGGY_REFRESH.replace(
+        "comparisons++;",
+        "comparisons++; counterEl.textContent = comparisons;",
+    )
+    assert _check_behavioral_smells(js) == []
+
+
+def test_canvas_children_anti_pattern():
+    """Post-mortem run #6 : appendChild DANS un <canvas> — jamais rendu."""
+    from graph_orchestrator.static_tester import _check_canvas_children
+    errors = _check_canvas_children(RUN6_CANVAS_HTML, RUN6_CANVAS_JS)
+    assert len(errors) == 1 and "chart" in errors[0] and "JAMAIS" in errors[0]
+
+
+def test_canvas_children_clean_when_div_container():
+    from graph_orchestrator.static_tester import _check_canvas_children
+    html = '<div id="viz"></div>'
+    js = RUN6_CANVAS_JS.replace("'chart'", "'viz'")
+    assert _check_canvas_children(html, js) == []
+
+
+def test_canvas_children_clean_when_ctx_drawing():
+    from graph_orchestrator.static_tester import _check_canvas_children
+    js = "const ctx = canvas.getContext('2d'); ctx.fillRect(0, 0, 10, 10);"
+    assert _check_canvas_children(RUN6_CANVAS_HTML, js) == []

@@ -35,6 +35,26 @@ négociables. Les resources ci-dessous donnent le détail, mais la règle ci-des
 4. **Animations = 1 itération par frame** (requestAnimationFrame/setTimeout) : NE JAMAIS
    mettre la boucle complète de l'algorithme dans une seule fonction appelée par frame.
 
+5. **BOUCLE D'ANIMATION CANONIQUE — rends et rafraîchis TOUT à CHAQUE étape** (visualiseurs) :
+   - **Canvas OU div, JAMAIS les deux mêlés** : les enfants d'un `<canvas>` ne s'affichent
+     JAMAIS → n'appendChild PAS de divs dans un canvas. Canvas = `ctx.fillRect` uniquement ;
+     div = `style.height` uniquement.
+   - Le rendu DOIT être rappelé DANS la boucle (sinon l'animation est invisible) :
+     ```js
+     async function bubbleSort() {
+         for (let i = 0; i < data.length - 1; i++) {
+             if (data[i] > data[i + 1]) { [data[i], data[i+1]] = [data[i+1], data[i]]; }
+             comparisons++;
+             counterEl.textContent = comparisons;   // RAFRAÎCHIR le compteur DANS la boucle
+             draw();                                 // REDESSINER le canvas DANS la boucle
+             await sleep(delay);                     // delay = 50-300 ms par étape
+         }
+     }
+     ```
+   - ❌ Incrémenter `comparisons` sans réassigner `counterEl.textContent` après → compteur
+     affiché figé à 0. ❌ `draw()` appelé seulement à l'init → le tri s'exécute de façon
+     INVISIBLE (le canvas montre éternellement les barres initiales).
+
 
 ## Dynamic Resources (Progressive Disclosure)
 

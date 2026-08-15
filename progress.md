@@ -1687,3 +1687,23 @@ Coder est appliquée correctement par Qwen3.5-9B.
   comparaisons incrémenté (0→15 à ~2/s = 500 ms/step conformes au slider 100-2000ms), 50 barres
   proportionnelles (DOM), permutations visibles, thème sombre, boutons fonctionnels (capture prise).
 - [x] B5 : état disque synchronisé (F-109, contract 372-377, événements run_id f-109).
+
+## Jalons de l'Itération (F-110 + runs E2E #6/#7 — clôture 2026-08-15 soir)
+> Objectif : run E2E complet jusqu'à Judge APPROUVÉ avec toute la chaîne (F-108/F-109/Tier 4).
+
+- [x] Run #6 : chaîne complète OBSERVÉE pour la 1re fois — it.1 : 6/6 visual_check MAIS Tier 1c attrape le
+  compteur non incrémenté → court-circuit Tester LLM → gate F-108 APPROBATION BLOQUÉE → rejet → it.2 corrige
+  (comparisons++ ajouté) → Judge APPROUVÉ. Apparence de succès MAIS vérification directe = FAUX POSITIF
+  résiduel : animation INVISIBLE (draw() jamais rappelé, 30 divs DANS le canvas) + compteur incrémenté mais
+  jamais réaffiché. Compteur figé à 0 à l'écran, canvas statique — 0 erreur console (bug d'omission, pas de crash).
+- [x] F-110 (commit 532b255) : gardes (c) compteur-rafraîchi (seulement si affiché ; rafraîchi requis dans les
+  400 chars après l'incrément) + `_check_canvas_children` (appendChild dans <canvas> = jamais rendu) + skill
+  coding règle 5 (boucle d'animation canonique avec exemple complet). Validation : run6 → 2 flags exacts,
+  loop2 sain → 0, suite 1065/0.
+- [x] Run #7 : le système a fonctionné EXACTEMENT comme conçu — 3 itérations toutes REJETÉES (le 4B a
+  reproduit le bug du compteur mort à chaque itération ; injection boundary F-109-bis a joué 2×), escalade
+  finale avec diagnostic correct (« comparisons initialisé à 0 mais jamais incrémenté »). PLUS AUCUN faux
+  positif d'approbation ne passe. En contrepartie : pas d'approbation ce run — goulot = convergence du 4B
+  (variance : run #6 avait convergé en 13 steps, run #7 a thrashé à max_steps sur toutes les tentatives).
+- [x] Décision ouverte (utilisateur) : relancer plus tard (variance du 4B), ou basculer le Coder sur le
+  modèle 9B (REASONING en FAST — plus lent/step, convergence bien plus fiable), ou stopper.

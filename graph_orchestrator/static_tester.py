@@ -319,6 +319,64 @@ def _check_behavioral_smells(js: str) -> List[str]:
                     f"visible demande 50-300 ms : mappe le slider sur une échelle "
                     f"adéquate (ex: `const delay = 320 - speed * 28;`)."
                 )
+
+    # --- (c) compteur incrémenté mais jamais RAFRAÎCHI à l'écran (post-mortem
+    # run #6, F-110) : le 4B incrémente la variable (Tier 1c passe) mais
+    # n'assigne le textContent qu'une fois AVANT la boucle — le compteur reste
+    # visuellement à 0. On exige un rafraîchi d'affichage DANS la boucle,
+    # c'est-à-dire après l'incrément.
+    for m in re.finditer(
+        r"\b(\w*(?:count|counter|comparisons?|comparaisons?|swaps?|moves?|steps?|iterations?|passes?)\w*)\+\+",
+        js,
+        re.IGNORECASE,
+    ):
+        name = m.group(1)
+        # Uniquement si ce compteur est AFFICHÉ quelque part (variable
+        # user-facing) — un compteur interne jamais affiché est hors périmètre
+        # (le check (a) couvre déjà « affiché mais jamais incrémenté »).
+        displayed_somewhere = re.search(
+            r"(?:textContent|innerText|innerHTML)\s*=\s*[^;\n]{0,80}\b" + re.escape(name) + r"\b",
+            js,
+        ) or re.search(r"\$\{[^}]{0,40}\b" + re.escape(name) + r"\b", js)
+        if not displayed_somewhere:
+            continue
+        loop_tail = js[m.start():m.start() + 400]
+        refreshed = re.search(
+            r"textContent\s*=|innerText\s*=|innerHTML\s*=", loop_tail
+        )
+        if not refreshed:
+            errors.append(
+                f"[behavior] Compteur '{name}' incrémenté mais son affichage n'est "
+                f"JAMAIS rafraîchi dans la boucle (l'assignation textContent doit "
+                f"suivre l'incrément, ex: `{name}++; counterEl.textContent = {name};`). "
+                f"Sans ça, le compteur affiché reste figé à sa valeur initiale."
+            )
+    return errors
+
+
+def _check_canvas_children(html: str, js: str) -> List[str]:
+    """F-110 (post-mortem run #6) : des éléments DOM ajoutés DANS un <canvas>.
+
+    Les enfants d'un <canvas> ne sont JAMAIS rendus (le canvas ne dessine que
+    via son contexte 2D). Le run #6 a produit 30 divs appendChild'd dans le
+    canvas : le tri s'exécutait, mettait à jour des hauteurs... invisibles,
+    et le canvas n'était jamais redessiné — animation fantôme, approbation
+    Judge indue. Détection croisée HTML (id du canvas) + JS (appendChild).
+    """
+    errors: List[str] = []
+    for cid in re.findall(r"<canvas[^>]*\bid=\"([\w-]+)\"", html):
+        if re.search(
+            r"getElementById\(\s*['\"]" + re.escape(cid) + r"['\"]\s*\)\s*\.\s*appendChild",
+            js,
+        ):
+            errors.append(
+                f"[behavior] Des éléments DOM sont ajoutés DANS le <canvas id=\"{cid}\"> "
+                f"(appendChild) — les enfants d'un canvas ne s'affichent JAMAIS. "
+                f"Deux choix exclusifs : (a) dessiner les barres via le contexte 2D "
+                f"(ctx.fillRect) et rappeler draw() à CHAQUE étape de l'animation, "
+                f"ou (b) utiliser un <div> conteneur pour les barres DOM. "
+                f"Ne mélange jamais les deux."
+            )
     return errors
 
 
@@ -854,6 +912,9 @@ def static_check_html(
     # Tier 1c (post-mortem run #3) : smels comportementaux — compteur mort +
     # délai d'animation instantané (les 2 bugs du run #3 que Tier 2/3 ont ratés).
     errors.extend(_check_behavioral_smells(js))
+    # F-110 (post-mortem run #6) : éléments DOM ajoutés dans un <canvas> —
+    # jamais rendus (anti-pattern canvas/DOM mêlés, animation fantôme).
+    errors.extend(_check_canvas_children(html, js))
     tier = "tier1"
 
     # Décision : si Tier 1 a déjà trouvé un bug SYNTAXE (page blanche garantie),
