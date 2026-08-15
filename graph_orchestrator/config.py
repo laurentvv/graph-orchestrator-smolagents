@@ -321,6 +321,14 @@ class Settings:
     # Opt-out JUDGE_RESPECT_TEST_FAILURE=false pour A/B/debug.
     judge_respect_test_failure: bool = True
 
+    # --- Visual Audit matérialisé (F-109, post-mortem run #5) ---
+    # Le 4B déclarait « all N criteria verified » sans écrire l'analyse, puis le
+    # Tester trouvait un crash. L'outil visual_check matérialise l'audit critère
+    # par critère et final_answer est BLOQUÉ si la checklist est incomplète,
+    # contient un verdict False, ou des observations creuses. Opt-out
+    # VISUAL_AUDIT_ENABLED=false (et 0 critère F-90 = gate inactive).
+    visual_audit_enabled: bool = True
+
     # --- Consolidation mémoire KG (Priorité 6-ter / F-68 Phase 1) ---
     # Le KG DuckDB grossit indéfiniment : dedup_key ne capte que les doublons
     # EXACTS, et rien n'oublie jamais. La consolidation (LLM-juge qm émettant
@@ -515,6 +523,7 @@ def load_settings() -> Settings:
         goal_token_cap=_get_int("GOAL_TOKEN_CAP", 2_000_000),
         judge_grounding_enabled=_get_bool("JUDGE_GROUNDING_ENABLED", True),
         judge_respect_test_failure=_get_bool("JUDGE_RESPECT_TEST_FAILURE", True),
+        visual_audit_enabled=_get_bool("VISUAL_AUDIT_ENABLED", True),
         memory_consolidation_enabled=_get_bool("MEMORY_CONSOLIDATION_ENABLED", True),
         memory_consolidation_after=_get_int("MEMORY_CONSOLIDATION_AFTER", 10),
         memory_retention_days=_get_int("MEMORY_RETENTION_DAYS", 30),

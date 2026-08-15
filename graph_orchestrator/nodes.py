@@ -26,7 +26,7 @@ from .models import (
     CoderOutput,
     extract_and_validate,
 )
-from .tools import record_run_error, _RUN_ERRORS
+from .tools import record_run_error, _RUN_ERRORS, reset_visual_audit, get_visual_audit
 from .skills_loader import (
     build_conditional_skills_block,
     enforce_skill_budget,
@@ -182,6 +182,47 @@ _TESTER_FAIL_MARKERS = (
 _TESTER_PASS_MARKERS = ('"pass"', "'pass'", ": pass", "pass:", "true", "vrai")
 
 
+def _visual_checklist_error(criteria_count):
+    """F-109 : évalue l'audit visuel matérialisé (outils ``visual_check``).
+
+    Post-mortem run #5 : le 4B déclarait « all 6 criteria verified » sans RIEN
+    écrire, puis le Tester trouvait un crash. L'audit doit être MATÉRIALISÉ
+    par un appel visual_check par critère (verdict + observation factuelle).
+    Retourne un message bloquant si checklist incomplète / verdict False /
+    observations creuses, sinon None.
+    """
+    from .tools import get_visual_audit
+    audit = get_visual_audit()
+    audited = {a.get("criterion_number") for a in audit}
+    missing = sorted(set(range(1, criteria_count + 1)) - audited)
+    if missing:
+        return (
+            "ERREUR FATALE: checklist visuelle INCOMPLÈTE — critère(s) non audité(s) : "
+            + str(missing)
+            + ". Tu dois appeler visual_check(criterion_number=i, verdict=True|False, "
+              "observation=\"ce que tu vois\") pour CHAQUE critère (1 à " + str(criteria_count)
+            + ") APRÈS le screenshot, puis final_answer. Une déclaration globale ne suffit plus."
+        )
+    failed = sorted({a.get("criterion_number") for a in audit if not a.get("verdict")})
+    if failed:
+        return (
+            "ERREUR FATALE: critère(s) visuel(s) en ÉCHEC (verdict=False) : " + str(failed)
+            + ". Corrige le code via search_replace, re-navigue, re-capture "
+              "(take_screenshot), puis ré-audite ces critères avec visual_check AVANT final_answer."
+        )
+    weak = sorted({a.get("criterion_number") for a in audit
+                   if len(str(a.get("observation", ""))) < 10})
+    if weak:
+        return (
+            "ERREUR FATALE: observation(s) vide(s) ou trop courte(s) pour les critères "
+            + str(weak)
+            + " — décris ce que tu VOIS concrètement sur la capture "
+              "(ex: \"30 barres grises visibles dans le canvas\"), pas une généralité."
+        )
+    return None
+
+
+
 def _tester_max_steps_fallback(steps, prompt: str):
     """Verdict de secours quand le Tester atteint max_steps sans final_answer propre.
 
@@ -295,6 +336,7 @@ async def run_with_retry(
     idle_breaker_threshold: int = 3,
     stall_detector: Optional["StallDetector"] = None,
     goal_enforcer: Optional["GoalEnforcer"] = None,
+    visual_criteria_count: int = 0,
 ) -> Tuple[Optional[object], Optional[NodeMetrics]]:
     """Exécute un agent avec retry. Retourne (données_validées, métriques).
 
@@ -469,6 +511,12 @@ async def run_with_retry(
                                 break
                         if not used_vision:
                             error_msg = "ERREUR FATALE: Tu as déclaré la tâche terminée mais tu n'as PAS utilisé 'take_screenshot' pour vérifier visuellement ton UI. C'est OBLIGATOIRE. Recommence, navigue sur la page, prends le screenshot, et vérifie que ça marche vraiment."
+                        elif visual_criteria_count > 0:
+                            # F-109 : l'audit visuel doit être MATÉRIALISÉ — le
+                            # « all N criteria verified » déclaratif du 4B (run #5)
+                            # ne suffit plus : chaque critère doit avoir un appel
+                            # visual_check avec verdict + observation factuelle.
+                            error_msg = _visual_checklist_error(visual_criteria_count)
                 
                 if error_msg:
                     print(f"[-] Checklist échouée : {error_msg}")
@@ -628,6 +676,30 @@ async def run_with_retry(
                     "\n\nATTENTION : ton dernier bloc de code Python a échoué (syntaxe invalide : "
                     "string non fermée, parenthèse manquante...). NE RECOMMENCE PAS le même gros "
                     "payload — DÉCOUPE en plus petits append_file, chaque bloc syntaxiquement complet."
+                )
+
+        # F-109-bis : rappel de checklist au BOUNDARY d'attempt. Constat de la
+        # boucle Coder isolée (2026-08-15, 60 steps, 0 appel) : le 4B exécute le
+        # pipeline visuel (screenshot/fuzz/console) mais n'appelle JAMAIS
+        # visual_check tant que l'exigence ne lui est pas RÉINJECTÉE — elle
+        # n'était que dans le prompt initial + au final_answer qu'un run
+        # thrashant n'atteint jamais (mort à max_steps). On réinjecte le décompte
+        # exact à chaque fin de tentative sans verdict.
+        if visual_criteria_count > 0:
+            _audited = {a.get("criterion_number") for a in get_visual_audit()}
+            _missing_vc = sorted(set(range(1, visual_criteria_count + 1)) - _audited)
+            if _missing_vc:
+                prompt += (
+                    f"\n\nCHECKLIST VISUELLE INCOMPLÈTE ({visual_criteria_count - len(_missing_vc)}/"
+                    f"{visual_criteria_count} critères audités — manquants : {_missing_vc}). "
+                    f"Avant final_answer tu DOIS appeler visual_check(criterion_number=i, "
+                    f"verdict=True|False, observation=\"ce que tu vois\") pour CHAQUE critère "
+                    f"manquant, après un take_screenshot frais. final_answer sera REFUSÉ sans "
+                    f"checklist complète."
+                )
+                print(
+                    f"[!] Visual audit : {len(_missing_vc)}/{visual_criteria_count} critère(s) "
+                    f"non audité(s) → rappel checklist injecté au retry."
                 )
 
         # FIX TOKEN EXPLOSION: Si on est arrivé ici (erreur ou JSON invalide),
@@ -830,9 +902,10 @@ async def execute_coder_node(
         from .tools import (
             read_file, write_file, append_file, list_directory,
             search_replace, multi_replace, edit_file,
-            read_python_skeleton, check_js_syntax, check_run_state, log_event
+            read_python_skeleton, check_js_syntax, check_run_state, log_event,
+            visual_check
         )
-        coder_tools = [list_directory, read_file, read_python_skeleton, check_js_syntax, write_file, append_file, edit_file, search_replace, multi_replace, check_run_state, log_event, DuckDuckGoSearchTool()]
+        coder_tools = [list_directory, read_file, read_python_skeleton, check_js_syntax, write_file, append_file, edit_file, search_replace, multi_replace, check_run_state, log_event, visual_check, DuckDuckGoSearchTool()]
         coder_tools.extend(c7_tools)
         # On redonne tous les outils web au coder, incluant vision (DevTools ON par
         # défaut — le feedback console est critique pour que le Coder corrige ses
@@ -1150,6 +1223,14 @@ Code prêt pour la production, respectant les conventions du langage.
             token_cap=settings.goal_token_cap,
             enabled=settings.goal_enforcement_enabled,
         )
+        # F-109 : audit visuel matérialisé — reset pour CE run du nœud, et
+        # comptage des critères F-90 que l'enforcement va exiger (0 = gate
+        # inactive, ex. opt-out config ou tâche sans critères).
+        reset_visual_audit()
+        _vc = task.get("visual_success_criteria") or []
+        visual_criteria_count = (
+            len([c for c in _vc if str(c).strip()]) if settings.visual_audit_enabled else 0
+        )
         # max_retries can be slightly higher for coding since it involves tool use steps
         # max_retries can be slightly higher for coding since it involves tool use steps
         with model_lifecycle(settings.fast_spec) as srv:
@@ -1180,6 +1261,7 @@ Code prêt pour la production, respectant les conventions du langage.
                 idle_breaker_threshold=settings.idle_breaker_threshold,
                 stall_detector=stall,
                 goal_enforcer=goal,
+                visual_criteria_count=visual_criteria_count,
             )
 
 

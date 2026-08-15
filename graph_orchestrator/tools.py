@@ -49,6 +49,48 @@ def check_run_state() -> str:
     report += "final_answer({'task_id': 'ton_task_id', 'status': 'success', 'details': 'Fichiers récupérés intacts après crash du LLM.'})"
     return report
 
+
+# F-109 : audit visuel MATÉRIALISÉ — le Coder doit appeler visual_check pour
+# CHAQUE critère de validation visuelle après le screenshot. Sans appel,
+# final_answer est bloqué logiciellement (nodes.py) : fini le « all criteria
+# verified » déclaratif du 4B (run #5 : il déclarait 6/6 puis le Tester
+# trouvait un crash). Pattern « evidence exigée » (fiche 46, tool-ralph).
+_VISUAL_AUDIT: list[dict] = []
+
+
+def reset_visual_audit() -> None:
+    """Réinitialise l'audit visuel (une exécution de nœud Coder = un audit)."""
+    _VISUAL_AUDIT.clear()
+
+
+def get_visual_audit() -> list[dict]:
+    """Copie de l'audit visuel courant (consommé par l'enforcement nodes.py)."""
+    return list(_VISUAL_AUDIT)
+
+
+@tool
+def visual_check(criterion_number: int, verdict: bool, observation: str) -> str:
+    """À appeler pour CHAQUE critère de validation visuelle, APRÈS le screenshot.
+
+    Matérialise ton audit critère par critère : sans ces appels, final_answer
+    sera REFUSÉ (checklist incomplète). Chaque observation doit dire ce que tu
+    VOIS concrètement sur la capture — pas une généralité.
+
+    Args:
+        criterion_number: le numéro du critère dans la liste (1, 2, 3...).
+        verdict: True si le critère est VÉRIFIÉ sur ta capture, False sinon.
+        observation: ce que tu vois concrètement (1 phrase factuelle).
+    """
+    entry = {
+        "criterion_number": int(criterion_number),
+        "verdict": bool(verdict),
+        "observation": str(observation or "").strip(),
+    }
+    _VISUAL_AUDIT.append(entry)
+    etat = "VÉRIFIÉ ✓" if entry["verdict"] else "ÉCHEC ✗ — corrige le code puis ré-audite ce critère"
+    return f"[visual_check {entry['criterion_number']}/{len(_VISUAL_AUDIT)}] {etat} : {entry['observation'][:120]}"
+
+
 def _file_lock(path: str) -> threading.Lock:
     """Renvoie (et crée si besoin) le verrou associé à un chemin de fichier normalisé."""
     norm = os.path.normpath(os.path.abspath(path))
