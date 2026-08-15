@@ -329,6 +329,14 @@ class Settings:
     # VISUAL_AUDIT_ENABLED=false (et 0 critère F-90 = gate inactive).
     visual_audit_enabled: bool = True
 
+    # --- Coder Ultra (F-111, post-mortem run #7) ---
+    # La CORRECTION (itération > 1) utilise le gros modèle SANS thinking
+    # (no_think_spec = Ornith-9B) au lieu du 4B rapide : le 4B exécute mais ne
+    # corrige pas (run #7 : 3 itérations mortes à max_steps sur le même bug de
+    # compteur). La création (it. 1) reste sur le 4B. Opt-out
+    # CODER_ULTRA_CORRECTION=false pour A/B/debug.
+    coder_ultra_correction: bool = True
+
     # --- Consolidation mémoire KG (Priorité 6-ter / F-68 Phase 1) ---
     # Le KG DuckDB grossit indéfiniment : dedup_key ne capte que les doublons
     # EXACTS, et rien n'oublie jamais. La consolidation (LLM-juge qm émettant
@@ -524,6 +532,7 @@ def load_settings() -> Settings:
         judge_grounding_enabled=_get_bool("JUDGE_GROUNDING_ENABLED", True),
         judge_respect_test_failure=_get_bool("JUDGE_RESPECT_TEST_FAILURE", True),
         visual_audit_enabled=_get_bool("VISUAL_AUDIT_ENABLED", True),
+        coder_ultra_correction=_get_bool("CODER_ULTRA_CORRECTION", True),
         memory_consolidation_enabled=_get_bool("MEMORY_CONSOLIDATION_ENABLED", True),
         memory_consolidation_after=_get_int("MEMORY_CONSOLIDATION_AFTER", 10),
         memory_retention_days=_get_int("MEMORY_RETENTION_DAYS", 30),
