@@ -33,7 +33,7 @@ Say goodbye to web interfaces with invisible buttons or overlapping divs. Our ag
 Instead of letting the AI invent imaginary methods, our factory is hooked up in real-time to the **Context7** documentation network. As soon as the agent detects it needs a specific framework, it automatically pre-fetches the latest official documentation.
 
 ### 5. 🛡️ Bulletproof Guardrails
-We don't waste expensive AI cycles verifying simple typos. Before any file is validated, strict guardrails instantly scan syntax, test web mechanics, detect infinite loops, and guarantee no file is written before it has been read.
+We don't waste expensive AI cycles verifying simple typos. Before any file is validated, strict guardrails instantly scan syntax, test web mechanics, detect infinite loops, and guarantee no file is written before it has been read. Context is treated as a scarce resource too: a deterministic budget gate (`uv run python scripts/check_agent_guidance.py`, port of deer-flow's CI check) bounds the size of every guidance file injected into the small local models — root/module/skill tiers plus the cumulative Coder chain — so prompt bloat fails fast in CI instead of killing a 40-minute GPU run with a context overflow.
 
 ### 6. 🗄️ Ironclad Memory: The Knowledge Graph
 These AIs don't share a fragile history prompt that fades over time. They communicate and persist their knowledge inside a **local relational database (DuckDB)**. When a Coder fails, the reason is etched into the Knowledge Graph, guaranteeing the system **never produces a regression**.
