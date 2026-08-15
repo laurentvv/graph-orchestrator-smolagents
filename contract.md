@@ -471,6 +471,11 @@
 - [x] Critère 376 : Static Tester TIER 4 console (`_check_console_errors`) : navigate frais + clic primaire + `list_console_messages`, regex `Uncaught|TypeError|ReferenceError|...` → réfutation `[console]`. Validé LIVE : crash run #4 attrapé (is_valid False), run #5 corrigé = vrai négatif. Wire dans `static_check_html` (session DevTools partagée).
 - [x] Critère 377 : Validation boucle Coder isolée — boucle 1 (avant fix-bis) : 0/6 audits, 2×40 steps sans conclusion ; boucle 2 : **6/6 audits + final_answer success en 1 tentative (503s)** ; livrable vérifié en direct (0 erreur console, compteur 0→15, 500ms/step, 50 barres, thème sombre). Tests 8 + 35 PASS.
 
+### F-110 — Gardes compteur-rafraîchi + canvas-child + patron canonique (post-mortem run #6)
+- [x] Critère 378 : Tier 1c-(c) `_check_behavioral_smells` — compteur affiché (assignment textContent/template existant) ET incrémenté (`X++`) mais sans rafraîchi d'affichage dans les 400 chars suivant l'incrément → flag `[behavior]` actionnable (compteur interne jamais affiché = hors périmètre). Testé sur fixture run #6 + contre-épreuve rafraîchie.
+- [x] Critère 379 : `_check_canvas_children(html, js)` — `appendChild` sur un `getElementById` correspondant à un `<canvas id>` du HTML → flag (les enfants d'un canvas ne s'affichent JAMAIS ; canvas OU div, jamais les deux). Wire dans `static_check_html` Tier 1. Testé (anti-pattern / div-conteneur propre / ctx-drawing propre).
+- [x] Critère 380 : Skill `coding` règle 5 (eager) — boucle d'animation CANONIQUE : exemple complet `comparisons++; counterEl.textContent = comparisons; draw(); await sleep(delay);` avec les contre-exemples ❌ (incrément sans rafraîchi, draw() seulement à l'init, divs dans canvas). Validation réelle : run6 → 2 flags exacts, loop2 sain → 0, suite complète 1065/0 ; run #7 : 3 rejets justifiés + escalade au diagnostic correct.
+
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.
 * Validation process : `uv run python -m graph_orchestrator.workflows` (WORKFLOW_MODE=coding) →
