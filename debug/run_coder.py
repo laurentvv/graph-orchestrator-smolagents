@@ -142,10 +142,22 @@ async def main():
 
     # Le dict de tâche reproduit exactement sub_dict du workflow.
     # target_files pointe dans NOTRE dossier dédié (chemins relatifs au cwd = out_dir).
+    # F-109 : visual_success_criteria = les 6 critères EXACTS produits par
+    # l'Architecte du run #5 (extraits du log) — déclenche la checklist
+    # visual_check + l'enforcement final_answer (comportement production).
     task = {
         "id": "coder_isolation",
         "content": task_desc,
         "target_files": DEFAULT_TARGET_FILES,
+        "original_content": task_desc,
+        "visual_success_criteria": [
+            "Au chargement de la page, au moins 1 barre colorée VISIBLE dans le canvas",
+            "Le compteur de comparaisons affiche '0' au chargement",
+            "Les boutons Démarrer/Réinitialiser sont visibles et cliquables",
+            "Le slider de vitesse est visible avec une valeur par défaut",
+            "Le thème sombre est appliqué (fond sombre, texte clair)",
+            "Les barres ont des hauteurs proportionnelles aux valeurs",
+        ],
     }
 
     # 🔒 chdir vers out_dir AVANT execute_coder_node (comme _scoped_chdir en prod,

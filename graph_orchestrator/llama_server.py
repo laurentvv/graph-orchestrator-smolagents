@@ -200,6 +200,13 @@ def _spawn(spec: ModelSpec) -> Optional[_SpawnedServer]:
         # Flash Attention : accélère le préfill des longs contextes (Architect).
         # Configurable via <PREFIX>_FLASH_ATTN (défaut "auto").
         "--flash-attn", spec.flash_attn or "auto",
+        # Post-mortem run #4 (2026-08-15) : SANS ce flag, llama-server default à
+        # n_slots=4 et réserve 4×n_ctx de KV cache (4×49152 = ~196k tokens pour
+        # un 4B) — pression VRAM massive qui a fini en Connection error après un
+        # marathon Coder de 35 steps × ~135 s de préfill. On ne fait JAMAIS de
+        # requêtes concurrentes vers un serveur spawné (AUDIT_PARALLEL=false,
+        # nœuds séquentiels, 1 agent par serveur) → 1 seul slot suffit (KV ÷ 4).
+        "--parallel", "1",
     ]
     # -ngl : AUTO-FIT si gpu_layers=0 (défaut, façon Ollama — s'adapte à la VRAM sans
     # OOM). Sinon force le nombre de layers (override : REASONING_NGL=32 optimal sur

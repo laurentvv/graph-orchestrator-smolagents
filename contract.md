@@ -463,6 +463,14 @@
 - [x] Critère 370 : Static Tester Tier 1c `_check_behavioral_smells` (Tier 1, 0 LLM, 0 Chrome) — (a) compteur mort : variable au nom compteur initialisée à 0, affichée (textContent/innerHTML/template `${var}`), jamais incrémentée (`x++`/`x +=`/`x = x +`) → erreur [behavior] actionnable ; (b) animation instantanée : délai résoluble < 20 ms (`sleep(N)` toujours ; `setTimeout(fn, N)` seulement avec mot-clé d'animation — anti-FP deferral). Branché dans `static_check_html` Tier 1 (court-circuite le Tester LLM sur ces bugs, < 1s).
 - [x] Critère 371 : Persistance du verdict Judge — `workflows.py` journalise chaque verdict dans l'event stream (`run_event`, node=judge, type=verdict, approved + feedback + nb findings), fail-safe try/except. Validation : le script.js EXACT du run #3 → 2 bugs Tier 1c attrapés ; version corrigée → 0 ; 12 tests judge + 8 Tier 1c ; suite complète 1052/0/1.
 
+### F-109 — Audit visuel matérialisé + Tier 4 console (boucle Coder isolée)
+- [x] Critère 372 : Outil `visual_check(criterion_number, verdict, observation)` (tools.py) + store module-level (`_VISUAL_AUDIT`/reset/get) — matérialise l'audit critère par critère après le screenshot.
+- [x] Critère 373 : Enforcement `run_with_retry` (param `visual_criteria_count`) — après le check vision F-50, final_answer BLOQUÉ si checklist incomplète / verdict False / observation < 10 chars (`_visual_checklist_error`, messages actionnables). Branché `execute_coder_node` (reset + comptage des critères F-90, gated `visual_audit_enabled`).
+- [x] Critère 374 : F-109-bis — RAPPEL INJECTÉ au boundary d'attempt (décompte exact des manquants) quand une tentative finit sans verdict et checklist incomplète. Testé (impression + prompt).
+- [x] Critère 375 : Prompt — CHECKLIST OBLIGATOIRE explicite dans `build_visual_criteria_block` (numéros 1..N, refus si incomplet/False/creuse).
+- [x] Critère 376 : Static Tester TIER 4 console (`_check_console_errors`) : navigate frais + clic primaire + `list_console_messages`, regex `Uncaught|TypeError|ReferenceError|...` → réfutation `[console]`. Validé LIVE : crash run #4 attrapé (is_valid False), run #5 corrigé = vrai négatif. Wire dans `static_check_html` (session DevTools partagée).
+- [x] Critère 377 : Validation boucle Coder isolée — boucle 1 (avant fix-bis) : 0/6 audits, 2×40 steps sans conclusion ; boucle 2 : **6/6 audits + final_answer success en 1 tentative (503s)** ; livrable vérifié en direct (0 erreur console, compteur 0→15, 500ms/step, 50 barres, thème sombre). Tests 8 + 35 PASS.
+
 ## Protocole d'Évaluation
 * Tests unitaires : `uv run pytest tests/ -v` → zéro échec.
 * Validation process : `uv run python -m graph_orchestrator.workflows` (WORKFLOW_MODE=coding) →

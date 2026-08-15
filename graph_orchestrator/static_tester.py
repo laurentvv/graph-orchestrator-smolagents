@@ -577,6 +577,60 @@ _TIER3_OBSERVE_MS = 400
 _TIER3_STABILIZATION_MS = 50
 
 
+
+
+# Post-mortem run #5 (F-109) : exceptions JS runtime = crash déterministe.
+_CONSOLE_ERROR_RE = re.compile(
+    r"Uncaught|\b(TypeError|ReferenceError|SyntaxError|RangeError|URIError|ImportError)\b"
+)
+
+
+def _check_console_errors(devtools_tools, url, primary_action_id=None):
+    """Tier 4 : charge la page à frais, déclenche l'action primaire, lit la console.
+
+    Toute exception JS non interceptée (ex: le null textContent du run #5) est
+    un crash RUNTIME avéré — indétectable par les checks statiques (syntaxe et
+    wiring corrects). Best-effort : DevTools indisponible → [] (jamais de FP).
+    """
+    if not devtools_tools:
+        return []
+    by_name = {getattr(t, "name", str(t)): t for t in devtools_tools}
+    navigate = by_name.get("navigate_page") or by_name.get("navigate")
+    evaluate = by_name.get("evaluate_script") or by_name.get("evaluate")
+    console = by_name.get("list_console_messages") or by_name.get("console")
+    if not (navigate and console):
+        return []
+    try:
+        nav_kwargs = {"url": url}
+        if "url" not in (getattr(navigate, "inputs", {}) or {}):
+            nav_kwargs = {}
+        navigate(**nav_kwargs)
+        # Déclenche l'action primaire (les crashes onClick ne se voient pas au
+        # seul chargement) — best-effort, l'absence de bouton n'est pas un échec.
+        if primary_action_id and evaluate:
+            try:
+                inputs = getattr(evaluate, "inputs", {}) or {}
+                kwargs = {"function": f"() => {{ const b = document.getElementById('{primary_action_id}'); if (b) b.click(); return 'clicked'; }}"}
+                if "function" not in inputs and "script" in inputs:
+                    kwargs = {"script": kwargs["function"]}
+                evaluate(**kwargs)
+            except Exception:
+                pass
+        raw = console()
+        text = str(raw or "")
+        errs = [l.strip() for l in text.splitlines() if _CONSOLE_ERROR_RE.search(l)]
+        if errs:
+            return [
+                "[console] Erreur(s) JS RUNTIME après chargement + clic : "
+                + " | ".join(e[:170] for e in errs[:3])
+                + " — crash avéré (ex: lecture d'une propriété sur null). Corrige "
+                  "AVANT final_answer : l'élément ciblé n'existe pas au moment de l'accès."
+            ]
+        return []
+    except Exception as e:
+        logger.debug("Static Tester Tier 4 console skip (%s).", e)
+        return []
+
 def _evaluate_temporal(
     devtools_tools: list, url: str, primary_action_id: Optional[str] = None
 ) -> List[str]:
@@ -835,6 +889,19 @@ def static_check_html(
                         tier3_errors = _evaluate_temporal(cdt, url, primary_id)
                         errors.extend(tier3_errors)
                         tier = "tier3"
+
+                    # --- Tier 4 : console runtime (post-mortem run #5, F-109) ---
+                    # Le crash « Cannot read properties of null (reading
+                    # 'textContent') » était invisible des Tiers 1-3 (syntaxe OK,
+                    # wiring OK, animation non mesurable car page morte). La
+                    # CONSOLE est la preuve déterministe : rechargement frais +
+                    # clic action primaire + lecture console — toute exception JS
+                    # non interceptée = échec court-circuité (réfutation
+                    # static_tester, le Coder corrige avant le Tester LLM).
+                    console_errors = _check_console_errors(cdt, url, primary_id)
+                    errors.extend(console_errors)
+                    if console_errors:
+                        tier = "tier4"
                 else:
                     tier = "tier1"  # Chrome absent → on reste au Tier 1
         except Exception as e:

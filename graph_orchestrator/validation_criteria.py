@@ -66,6 +66,15 @@ Pour CHAQUE critère ci-dessous, confirme OUI/NON ce que tu vois RÉELLEMENT sur
 
 {items}
 
+CHECKLIST OBLIGATOIRE (F-109 — audit matérialisé) : après ta capture, appelle
+`visual_check(criterion_number=i, verdict=True|False, observation="ce que tu vois")`
+pour CHAQUE critère, de 1 à {n}. final_answer sera REFUSÉ si :
+- un critère n'a pas été audité (checklist incomplète),
+- un verdict est False (corrige le code via search_replace, re-navigue,
+  re-capture, puis ré-audite),
+- une observation est vide ou générique (dis ce que tu VOIS : « 30 barres
+  grises visibles dans le canvas », pas « ça marche »).
+
 RÈGLE DE DÉCISION :
 - Si UN seul critère = NON (élément non visible/absent) → status "failure", CORRIGE.
 - final_answer(status="success") uniquement si TOUS les critères = OUI (vérifiés sur
