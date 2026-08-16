@@ -126,6 +126,7 @@ def init_run_git(repo_path: Optional[str] = None) -> bool:
                 _resolved_toplevel(repo_path),
             )
             return False
+        _ensure_run_gitignore(repo_path)
         return True
     code, _ = _run_git(["init", "--quiet"], cwd=_cwd_for(repo_path))
     if code != 0:
@@ -148,7 +149,32 @@ def init_run_git(repo_path: Optional[str] = None) -> bool:
             _resolved_toplevel(repo_path),
         )
         return False
+    # F-95 : exclure le namespace transactionnel des snapshots git (cf. helper).
+    _ensure_run_gitignore(repo_path)
     return True
+
+
+def _ensure_run_gitignore(repo_path: Optional[str] = None) -> None:
+    """Exclut ``.fs_tx/`` des snapshots git du run (F-95), idempotent, best-effort.
+
+    Écrit dans ``.git/info/exclude`` (exclusions LOCALES au repo, conçues pour
+    ça) et PAS dans un ``.gitignore`` du worktree : un fichier .gitignore
+    apparaîtrait lui-même comme un fichier « ajouté » dans le 1er commit F-53
+    et le manifeste turn-diff F-102 du Judge (bruit, pas du code généré) —
+    c'est exactement ce qu'on veut éviter pour ``.fs_tx/dir.lock``.
+    """
+    exclude_path = os.path.join(_git_dirpath(repo_path), "info", "exclude")
+    try:
+        os.makedirs(os.path.dirname(exclude_path), exist_ok=True)
+        existing = ""
+        if os.path.isfile(exclude_path):
+            with open(exclude_path, "r", encoding="utf-8") as f:
+                existing = f.read()
+        if ".fs_tx/" not in existing:
+            with open(exclude_path, "a", encoding="utf-8") as f:
+                f.write(("\n" if existing and not existing.endswith("\n") else "") + ".fs_tx/\n")
+    except OSError as exc:
+        logger.debug("_ensure_run_gitignore: exclude du run non écrit (%s) — sans conséquence.", exc)
 
 
 def commit_iteration(iteration: int, message: str = "", repo_path: Optional[str] = None) -> bool:
