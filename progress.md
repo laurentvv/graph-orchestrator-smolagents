@@ -38,6 +38,57 @@
       web-tester). Implémentation TERMINÉE (42 tests sur les 3 zones, 692 passed / 7
       pré-existants non liés).
 
+## Jalons de l'Itération (cycle F-104 — Retry LLM v2 + init MCP non bloquante)
+> Priorité 8 (update références 2026-08-14, fiches openfox/opencode/crush/deer-flow).
+> Diagnostic d'entrée : AUCUN retry transport n'existait — un « Connection error »
+> transitoire remontait à run_with_retry qui purgeait TOUTE la mémoire du nœud
+> pour relancer (très coûteux), ou tuait définitivement un nœud DSPy ; l'init
+> MCP bloquait 30 s thread + event loop par défaut mcpadapt ; un serveur
+> llama-server mort mid-run (VRAM, post-mortem run #4) n'était jamais détecté.
+
+- [x] F104-1 : Exploration (2 subagents parallèles) — cartographie run_with_retry
+  (retry niveau nœud, sans backoff, purge mémoire), LoggedOpenAIServerModel
+  (log tokens seulement), _configure_dspy (0 num_retries), llama_server (aucune
+  supervision mid-run), chrome_devtools/context7/web_tester (from_mcp nu),
+  orphan_repair (aveugle à la forme top-level OpenAI).
+- [x] F104-2 : Module `graph_orchestrator/llm_retry.py` (Python pur, 0 LLM) —
+  RetryPolicy (5 essais, base 1s, cap 30s, jitter décorrelé 25%, retry-after
+  prioritaire clampé), classify_llm_error (fatal 4xx AVANT retryable réseau,
+  regex à frontières de mots : un code HTTP ne matche jamais un port ;
+  inconnu = fatal fail-fast), extract_retry_after_ms (headers + message),
+  with_llm_retry (sémantique openfox PRÉ-CONTENU : même requête rejouée,
+  rien à l'historique, between_attempts best-effort).
+- [x] F104-3 : Branchement smolagents — LoggedOpenAIServerModel.__call__ wrappé
+  (kwarg revive= optionnel), _between_attempts = re-résolution du client
+  (revive → NOUVEL api_base → create_client()) ; retry SDK openai désactivé
+  (max_retries: 0 aux 4 sites de construction) → RetryPolicy autorité unique ;
+  sites dynamiques Coder/Tester migrés vers LoggedOpenAIServerModel avec
+  revive=srv.revive. DSPy : num_retries litellm natif dans _configure_dspy.
+- [x] F104-4 : `model_lifecycle.revive()` + sonde _port_healthy 2s (llama_server.py)
+  — serveur spawné mort/wedged mid-run → stop + respawn complet sous _spawn_lock
+  (nouveau port), attrs mis à jour ; sain → no-op (blip) ; external → api_base.
+- [x] F104-5 : Module `graph_orchestrator/mcp_connect.py` (crush : timeout PAR
+  SERVEUR) — open_mcp_with_timeout : connexion en thread DAEMON bornée, retourne
+  (cm, tools) déjà ouvert ou (None, []) au timeout (dégradation, thread zombie
+  daemon documenté) ; branché chrome_devtools_tools (25s), context7_tools +
+  fetch_context7_brief (15s), bloc Puppeteer web_tester (25s, ExitStack +
+  callback __exit__ — DevTools prend le relais si Puppeteer pendu).
+- [x] F104-6 : Leçon deer-flow dans orphan_repair.py — repair_orphan_tool_results
+  voit la forme top-level message["tool_calls"] (réponse role=tool insérée après
+  l'assistant, indices décroissants préservant l'ordre c1→c2) + réponses
+  role=tool existantes collectées + dédup STRICTE par id entre les deux formes.
+- [x] F104-7 : Config — LLM_RETRY_ENABLED/LLM_TRANSPORT_RETRIES/LLM_RETRY_BASE_
+  DELAY_S/LLM_RETRY_MAX_DELAY_S/LLM_RETRY_JITTER + CHROME_DEVTOOLS_CONNECT_
+  TIMEOUT_S/CONTEXT7_CONNECT_TIMEOUT_S/PUPPETEER_CONNECT_TIMEOUT_S (.env.example
+  + .env local).
+- [x] F104-8 : Validation — **43 tests nouveaux PASS** (test_llm_retry 23,
+  test_mcp_connect 9, test_llm_model_retry 6, orphan_repair +5) ; suite complète
+  **1315 passed / 0 régression** + 11 live test_web_tester_functional PASS ;
+  1 flaky minute-boundary pré-existant documenté (passe isolément) ; py_compile
+  10 fichiers. Tests MCP existants re-patchés vers mcp_connect.ToolCollection
+  (le vrai point d'entrée réseau post-refactor). État disque synchronisé
+  (feature_list F-104 completed, contract C401-C408, plan case P8 cochée).
+
 ## Jalons de l'Itération (cycle F-102 — Checkpoint git par itération pour le Judge)
 > Priorité 8-bis (update références 2026-08-14, fiche 09-open-swe). Le Judge relit
 > CE QUE GIT DIT de l'itération (diff structuré par fichier) au lieu de rejouer les

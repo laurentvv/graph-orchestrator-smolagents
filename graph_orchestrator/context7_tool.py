@@ -25,8 +25,6 @@ import re
 from contextlib import contextmanager
 from typing import Optional
 
-from smolagents import ToolCollection
-
 # Réutilise la config MCP existante (URL, transport, header d'auth).
 # Import local pour éviter un cycle d'import au chargement du package.
 logger = logging.getLogger(__name__)
@@ -60,6 +58,9 @@ def context7_tools():
             agent = ToolCallingAgent(tools=[read_file, write_file, *c7], ...)
             agent.run(prompt)
     """
+    from .config import settings as _settings
+    from .mcp_connect import open_mcp_with_timeout
+
     params = _build_params()
     if params is None:
         # Pas de clé API : Context7 désactivé. Ce n'est pas une erreur — c'est le
@@ -67,16 +68,28 @@ def context7_tools():
         yield []
         return
 
+    # F-104 (crush) : attente de connexion BORNÉE par serveur — l'API distante
+    # streamable-http ne doit pas figer le nœud ; timeout → yield [].
     try:
-        with ToolCollection.from_mcp(params, trust_remote_code=True) as tool_collection:
-            tools = list(tool_collection.tools)
-            logger.debug("Context7 connecté : %d outil(s).", len(tools))
-            yield tools
+        cm, tools = open_mcp_with_timeout(
+            params, _settings.context7_connect_timeout_s, "context7"
+        )
     except Exception as e:
         # Connexion échouée (réseau, serveur down, timeout). On prévient mais on
         # ne fait pas planter le nœud : le Coder/tester tourne sans doc.
         logger.warning("Context7 indisponible (%s) — poursuite sans doc.", e)
         yield []
+        return
+    if cm is None:
+        yield []
+        return
+    try:
+        yield tools
+    except BaseException as be:
+        cm.__exit__(type(be), be, be.__traceback__)
+        raise
+    else:
+        cm.__exit__(None, None, None)
 
 
 def fetch_context7_brief(query: str, top_k: int = 3) -> str:
@@ -98,9 +111,20 @@ def fetch_context7_brief(query: str, top_k: int = 3) -> str:
     if params is None:
         return ""
 
+    # F-104 (crush) : même pré-fetch Architect borné — l'API distante ne doit
+    # pas figer la planification ; timeout → "" (dégradation existante).
+    from .config import settings as _settings
+    from .mcp_connect import open_mcp_with_timeout
+
     try:
-        with ToolCollection.from_mcp(params, trust_remote_code=True) as tool_collection:
-            tools_by_name = {t.name: t for t in tool_collection.tools}
+        cm, _tools = open_mcp_with_timeout(
+            params, _settings.context7_connect_timeout_s, "context7-brief"
+        )
+        if cm is None:
+            return ""
+        try:
+            tool_collection = _tools
+            tools_by_name = {t.name: t for t in tool_collection}
             resolver = tools_by_name.get("resolve_library_id")
             doc_tool = tools_by_name.get("query_docs")
             if resolver is None or doc_tool is None:
@@ -142,6 +166,9 @@ def fetch_context7_brief(query: str, top_k: int = 3) -> str:
                 f"## 📚 Documentation à jour (Context7) — lib {library_id}\n"
                 f"{brief}\n"
             )
+        finally:
+            # CM déjà ouvert par open_mcp_with_timeout : fermeture directe.
+            cm.__exit__(None, None, None)
     except Exception as e:
         # Timeout réseau, API down, parsing inattendu : on ne plante jamais
         # l'Architect. Le brief vide = l'Architect planifie sans doc, comme avant.

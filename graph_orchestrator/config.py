@@ -346,6 +346,30 @@ class Settings:
     # TURN_CHECKPOINT_ENABLED=false (retour au comportement F-53 seul).
     turn_checkpoint_enabled: bool = True
 
+    # --- Retry transport LLM v2 (Priorité 8 / F-104) ---
+    # Retry PRÉ-CONTENU au niveau de l'APPEL LLM (openfox) : un « Connection
+    # error » transitoire est rejoué à l'identique, de façon transparente pour
+    # l'agent (rien n'entre dans l'historique — vs run_with_retry qui purge
+    # toute la mémoire du nœud). Backoff exponentiel + jitter 25 % + cap 30 s
+    # + retry-after prioritaire (opencode). `llm_transport_retries` sert
+    # AUSSI de num_retries litellm côté nœuds DSPy. Si le serveur spawné est
+    # mort mid-run (crash VRAM), il est re-spawné entre 2 tentatives (revive).
+    # Opt-out LLM_RETRY_ENABLED=0 (retour : exception → run_with_retry seul).
+    llm_retry_enabled: bool = True
+    llm_transport_retries: int = 5
+    llm_retry_base_delay_s: float = 1.0
+    llm_retry_max_delay_s: float = 30.0
+    llm_retry_jitter: float = 0.25
+
+    # --- Init MCP non bloquante (Priorité 8 / F-104, crush) ---
+    # Timeout de connexion PAR SERVEUR (un serveur npx pendu ne bloque jamais
+    # le run) : chrome-devtools / context7 / puppeteer. Timeout → dégradation
+    # gracieuse (le nœud tourne sans ces outils). Défauts calés sous le
+    # connect_timeout=30 de mcpadapt pour rester l'autorité de borne.
+    chrome_devtools_connect_timeout_s: float = 25.0
+    context7_connect_timeout_s: float = 15.0
+    puppeteer_connect_timeout_s: float = 25.0
+
     # --- Consolidation mémoire KG (Priorité 6-ter / F-68 Phase 1) ---
     # Le KG DuckDB grossit indéfiniment : dedup_key ne capte que les doublons
     # EXACTS, et rien n'oublie jamais. La consolidation (LLM-juge qm émettant
@@ -552,6 +576,14 @@ def load_settings() -> Settings:
         visual_audit_enabled=_get_bool("VISUAL_AUDIT_ENABLED", True),
         coder_ultra_correction=_get_bool("CODER_ULTRA_CORRECTION", True),
         turn_checkpoint_enabled=_get_bool("TURN_CHECKPOINT_ENABLED", True),
+        llm_retry_enabled=_get_bool("LLM_RETRY_ENABLED", True),
+        llm_transport_retries=_get_int("LLM_TRANSPORT_RETRIES", 5),
+        llm_retry_base_delay_s=_get_float("LLM_RETRY_BASE_DELAY_S", 1.0),
+        llm_retry_max_delay_s=_get_float("LLM_RETRY_MAX_DELAY_S", 30.0),
+        llm_retry_jitter=_get_float("LLM_RETRY_JITTER", 0.25),
+        chrome_devtools_connect_timeout_s=_get_float("CHROME_DEVTOOLS_CONNECT_TIMEOUT_S", 25.0),
+        context7_connect_timeout_s=_get_float("CONTEXT7_CONNECT_TIMEOUT_S", 15.0),
+        puppeteer_connect_timeout_s=_get_float("PUPPETEER_CONNECT_TIMEOUT_S", 25.0),
         memory_consolidation_enabled=_get_bool("MEMORY_CONSOLIDATION_ENABLED", True),
         memory_consolidation_after=_get_int("MEMORY_CONSOLIDATION_AFTER", 10),
         memory_retention_days=_get_int("MEMORY_RETENTION_DAYS", 30),

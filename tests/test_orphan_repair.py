@@ -149,3 +149,118 @@ def test_final_answer_step_not_touched():
     """Étape finale (is_final_answer) sans observation => non considérée orpheline."""
     steps = [_step(tool_calls=[object()], is_final_answer=True)]  # noqa: F401
     assert repair_orphan_steps(steps) == 0
+
+
+# ==========================================
+# Niveau 1-bis : forme top-level OpenAI tool_calls (F-104, leçon deer-flow)
+# ==========================================
+def test_top_level_tool_calls_orphelins_replies_par_message_tool():
+    """F-104 : smolagents/OpenAI sérialisent les appels au niveau du message
+    (``tool_calls``), pas en blocs de content. Un orphelin dans cette forme
+    reçoit un message ``role=tool`` inséré juste après le message assistant."""
+    messages = [
+        {"role": "user", "content": "fais le tri"},
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "call_1", "type": "function",
+                 "function": {"name": "write_file", "arguments": "{}"}},
+                {"id": "call_2", "type": "function",
+                 "function": {"name": "read_file", "arguments": "{}"}},
+            ],
+        },
+        {"role": "tool", "tool_call_id": "call_1", "content": "ok"},
+    ]
+    _, n = repair_orphan_tool_results(messages)
+    assert n == 1  # call_2 orphelin seulement
+    # Le message tool injecté est juste après l'assistant (ordre de conversation).
+    assert messages[2]["role"] == "tool"
+    assert messages[2]["tool_call_id"] == "call_2"
+    assert messages[2]["content"] == FAKE_INTERRUPTED
+    assert len(messages) == 4
+
+
+def test_top_level_deux_orphelins_ordre_stable():
+    """Deux orphelins top-level : les 2 messages tool sont insérés à la suite,
+    indices décroissants (chaque insertion préserve les positions)."""
+    messages = [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "c1", "type": "function", "function": {"name": "a", "arguments": "{}"}},
+                {"id": "c2", "type": "function", "function": {"name": "b", "arguments": "{}"}},
+            ],
+        },
+        {"role": "user", "content": "suite"},
+    ]
+    _, n = repair_orphan_tool_results(messages)
+    assert n == 2
+    roles = [m.get("role") for m in messages]
+    # assistant, tool(c2), tool(c1), user — les insertions descendantes
+    # préservent l'ordre d'appel c1 puis c2.
+    assert roles == ["assistant", "tool", "tool", "user"]
+    assert messages[1]["tool_call_id"] == "c1"
+    assert messages[2]["tool_call_id"] == "c2"
+
+
+def test_id_unique_meme_id_dans_les_deux_formes_une_seule_reponse():
+    """Leçon deer-flow (DanglingToolCallMiddleware) : un appel visible dans les
+    DEUX formes (bloc content + top-level) reçoit EXACTEMENT UNE réponse —
+    jamais de double ToolMessage pour un même id (= 400 provider)."""
+    messages = [
+        {
+            "role": "assistant",
+            "content": [{"type": "tool_use", "id": "dup1", "name": "write_file"}],
+            "tool_calls": [
+                {"id": "dup1", "type": "function",
+                 "function": {"name": "write_file", "arguments": "{}"}},
+            ],
+        },
+    ]
+    _, n = repair_orphan_tool_results(messages)
+    assert n == 1
+    # 1 tool_result en content, 0 message tool dupliqué.
+    tool_results = [b for b in messages[0]["content"] if b.get("type") == "tool_result"]
+    assert len(tool_results) == 1
+    tool_msgs = [m for m in messages if m.get("role") == "tool"]
+    assert tool_msgs == []
+
+
+def test_top_level_entree_invalide_ignoree():
+    """Entrées top-level sans id ou sans nom de fonction : ignorées (on ne peut
+    pas répondre à un appel sans identifiant)."""
+    messages = [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"type": "function", "function": {"name": "a", "arguments": "{}"}},  # pas d'id
+                {"id": "x1", "type": "function", "function": {"arguments": "{}"}},   # pas de nom
+                "pas-un-dict",
+            ],
+        },
+    ]
+    _, n = repair_orphan_tool_results(messages)
+    assert n == 0
+    assert len(messages) == 1
+
+
+def test_top_level_idempotent():
+    """Deuxième passe : les messages tool injectés marquent les appels répondus."""
+    messages = [
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [
+                {"id": "k1", "type": "function",
+                 "function": {"name": "search_replace", "arguments": "{}"}},
+            ],
+        },
+    ]
+    _, n1 = repair_orphan_tool_results(messages)
+    _, n2 = repair_orphan_tool_results(messages)
+    assert n1 == 1
+    assert n2 == 0
+    assert len(messages) == 2

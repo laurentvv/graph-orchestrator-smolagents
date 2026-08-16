@@ -152,6 +152,23 @@ def _wait_for_health(port: int, timeout: float = 300.0) -> bool:
     return False
 
 
+def _port_healthy(port: int, timeout: float = 2.0) -> bool:
+    """F-104 : sonde /health rapide (2 s) — le serveur est-il VIVANT là, maintenant ?
+
+    Utilisé par ``model_lifecycle.revive()`` depuis la boucle de retry transport
+    (llm_retry.py) : distingue un serveur sain (simple blip transitoire → retry
+    sec) d'un serveur mort/wedged (process crashé sous pression VRAM, port
+    fermé → respawn avant de rejouer la requête). Court par construction : on
+    est sur le chemin d'un retry, pas au boot.
+    """
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=timeout) as r:
+            return r.status == 200
+    except Exception:
+        return False
+
+
 class _SpawnedServer:
     """Un process llama-server lancé à la volée. Tué via stop() → VRAM libérée par l'OS."""
 
@@ -329,3 +346,47 @@ class model_lifecycle:
             self._server.stop()
             self._server = None
         return False
+
+    def revive(self) -> Optional[str]:
+        """F-104 (P8) : ranime le serveur spawné s'il est mort — retourne l'api_base.
+
+        Appelé par la boucle de retry transport (llm_retry.with_llm_retry →
+        LoggedOpenAIServerModel) UNIQUEMENT après l'échec d'un appel LLM, donc
+        jamais avec une requête en cours. Sémantique :
+
+        - backend != spawn (external/none) : no-op, retourne l'api_base courante
+          (le retry simple + re-création du client suffit — openfox « re-résolution
+          du client à chaque tentative ») ;
+        - serveur spawné encore SAIN (/health répond) : blip transitoire, rien à
+          faire — on retourne l'api_base courante ;
+        - serveur spawné MORT/WEDGED (crash VRAM observé en prod, post-mortem run
+          #4 : « Connection error après un marathon Coder de 35 steps ») : stop des
+          restes + respawn complet (nouveau port) + mise à jour des attrs exposés.
+          Le client LLM sera re-créé sur le NOUVEL api_base par l'appelant.
+
+        Retourne le nouvel api_base (str), l'api_base inchangé, ou None si le
+        respawn a échoué (auquel cas le retry continuera vers le serveur mort
+          et s'épuisera proprement).
+        """
+        if self._server is None:
+            # Backend external/none ou spawn raté à l'entrée : rien à ranimer,
+            # le caller retente sur la base actuelle.
+            return self.api_base or None
+        if _port_healthy(self._server.port):
+            return self.api_base
+        logger.warning(
+            "[llama-server] serveur port %s (%s) mort/wedged mid-run — respawn (F-104)",
+            self._server.port, self._server.model_id,
+        )
+        print(f"[!] llama-server : serveur port {self._server.port} mort mid-run — respawn...")
+        self._server.stop()
+        with _spawn_lock:
+            self._server = _spawn(self._spec)
+        if self._server is None:
+            self.api_base = ""
+            return None
+        self.api_base = self._server.api_base
+        self.model_id = self._server.model_id
+        self.api_key = "sk-local"
+        print(f"[*] llama-server : ranimé (nouveau port {self._server.port})")
+        return self.api_base

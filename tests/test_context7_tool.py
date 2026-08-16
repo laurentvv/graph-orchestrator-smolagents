@@ -11,6 +11,7 @@ from unittest.mock import MagicMock
 
 from graph_orchestrator import context7_tool
 from graph_orchestrator import skills_loader
+from graph_orchestrator import mcp_connect
 
 
 # ==========================================
@@ -64,7 +65,7 @@ class TestGetToolsMocked:
         def fake_from_mcp(params, **kwargs):
             yield fake_collection
 
-        monkeypatch.setattr(context7_tool, "ToolCollection", MagicMock(from_mcp=fake_from_mcp))
+        monkeypatch.setattr(mcp_connect, "ToolCollection", MagicMock(from_mcp=fake_from_mcp))
 
         with context7_tool.context7_tools() as tools:
             assert len(tools) == 2
@@ -74,7 +75,7 @@ class TestGetToolsMocked:
         """Si from_mcp lève (réseau down), context7_tools() yield [] (pas de crash)."""
         monkeypatch.setattr(context7_tool, "_build_params", lambda: {"url": "http://x"})
         monkeypatch.setattr(
-            context7_tool, "ToolCollection",
+            mcp_connect, "ToolCollection",
             MagicMock(from_mcp=MagicMock(side_effect=ConnectionError("network down"))),
         )
         with context7_tool.context7_tools() as tools:
@@ -113,7 +114,7 @@ class TestFetchBriefMocked:
         def fake_from_mcp(params, **kwargs):
             yield fake_collection
 
-        monkeypatch.setattr(context7_tool, "ToolCollection", MagicMock(from_mcp=fake_from_mcp))
+        monkeypatch.setattr(mcp_connect, "ToolCollection", MagicMock(from_mcp=fake_from_mcp))
         return fake_collection
 
     def test_brief_succes_assemble_resume(self, monkeypatch):

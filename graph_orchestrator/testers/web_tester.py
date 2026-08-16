@@ -34,10 +34,9 @@ class WebTestRunner:
         # importable même si l'environnement web (Chrome/npx) n'est pas dispo
         # (ex: le runner Python n'en a pas besoin).
         from mcp import StdioServerParameters
-        from smolagents import ToolCollection, OpenAIServerModel
         from graph_orchestrator.compaction import CompactingCodeAgent
 
-        from ..nodes import run_with_retry, resolve_verbosity
+        from ..nodes import run_with_retry, resolve_verbosity, LoggedOpenAIServerModel
         from ..skills_loader import load_skill_body, load_skill_body_resolved
         from ..loop_guard import LoopGuard
 
@@ -50,8 +49,23 @@ class WebTestRunner:
             env=env,
         )
 
-        # Le context manager assure la fermeture propre du serveur MCP après le run.
-        with ToolCollection.from_mcp(server_parameters, trust_remote_code=True) as tool_collection:
+        # F-104 (crush, P8) : init MCP Puppeteer BORNÉE par serveur — un npx
+        # pendu (téléchargement à froid) ne fige plus le nœud 30 s ni l'event
+        # loop. Timeout → DÉGRADATION : le tester tourne avec Chrome DevTools
+        # (pilote primaire de fait, cf. F-72) + outils de lecture ; warning
+        # loggué. Le CM est déjà ouvert par le helper : fermeture par callback
+        # direct __exit__ (pas de `with` — déjà consommé).
+        from ..mcp_connect import open_mcp_with_timeout
+        from contextlib import ExitStack
+
+        puppeteer_cm, puppeteer_tools = open_mcp_with_timeout(
+            server_parameters, settings.puppeteer_connect_timeout_s, "puppeteer"
+        )
+        if puppeteer_cm is None:
+            puppeteer_tools = []
+        with ExitStack() as _mcp_stack:
+            if puppeteer_cm is not None:
+                _mcp_stack.callback(puppeteer_cm.__exit__, None, None, None)
             # Outils Chrome DevTools (navigation, clics, console...) + Context7
             # (doc de libs à jour). context7_tools() → [] si pas de clé
             # (backward-compat : le tester tourne sans Context7). Imbriqué dans un
@@ -64,7 +78,7 @@ class WebTestRunner:
                 # F-45 : on cumule Puppeteer (skill dédié, assertions puppeteer_evaluate)
                 # ET Chrome DevTools (console structurée avec source maps, Lighthouse,
                 # take_snapshot a11y). Les deux pilotes cohabitent (profils isolés).
-                tester_tools = [*tool_collection.tools]
+                tester_tools = [*puppeteer_tools]
                 tester_tools.extend(c7_tools)
                 tester_tools.extend(cdt_tools)
                 # read_file + list_directory : le Tester (CodeAgent) a légitimement
@@ -330,12 +344,17 @@ final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Un r�
                 )
                 with model_lifecycle(settings.no_think_spec) as srv:
                     _mid = srv.model_id or settings.reasoning_no_think_model_id or settings.reasoning_model_id
-                    dynamic_tester_model = OpenAIServerModel(
+                    # F-104 : LoggedOpenAIServerModel (retry transport pré-contenu,
+                    # openfox+opencode) + revive=srv.revive (serveur spawné mort
+                    # mid-run → respawn entre 2 tentatives, mémoire agent préservée).
+                    # max_retries=0 : retry SDK openai désactivé, autorité = F-104.
+                    dynamic_tester_model = LoggedOpenAIServerModel(
                         model_id=_mid,
                         api_base=srv.api_base or settings.local_reasoning_api_base,
                         api_key=srv.api_key or settings.local_api_key,
                         max_tokens=settings.reasoning_max_tokens,
-                        client_kwargs={"timeout": settings.llm_timeout_s},
+                        client_kwargs={"timeout": settings.llm_timeout_s, "max_retries": 0},
+                        revive=srv.revive,
                     )
                     local_tester = CompactingCodeAgent(
                         tools=tester_tools,
