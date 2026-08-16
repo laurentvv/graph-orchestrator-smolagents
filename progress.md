@@ -1767,3 +1767,14 @@ Coder est appliquée correctement par Qwen3.5-9B.
 - [x] F103-7 : État disque synchronisé (feature_list F-103 completed, contract critères
       381-385, plan case cochée + note FAIT, README §Guardrails, ce bloc, événements
       DuckDB run_id f-103).
+- [x] F103-8 (follow-up user, même PR) : **AGENTS.md réduit sous budget** — 22 308 → 13 583
+      octets normalisés (13,3 Ko < hard 16 384 ; ~1,3 Ko au-dessus du soft 12 288 = warning
+      non bloquant assumé, marge de croissance ~2,7 Ko). Méthode : TOUTES les règles et
+      interdictions conservées (INTERDICTION DE SUPPRESSION, or git, bootstrap/sync/erreurs,
+      canaux DuckDB, piège filePath, tiering) ; compressés les récits historiques et détails
+      dupliqués ailleurs (métriques Golden Run, descriptions Static Tester/vision_callback →
+      couvertes par README §Node Graph + feature_list) ; blocs de format JSON/MD → signatures
+      compactes ; numérotation §1-11 préservée (références croisées §7/§8 intactes).
+      + section 1-bis AJOUTÉE (demande user) : anti-confusion Usine (ce dépôt) ≠ Produits
+      de l'Usine (runs/) + distinction de contexte AGENTS.md (assistant dev) vs prompts.py+skills
+      (runtime nœuds). Gate mode local APRÈS réduction : 0 error, 1 warning soft, exit 0.
