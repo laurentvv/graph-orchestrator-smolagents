@@ -74,17 +74,46 @@ def _tool_result_call_id(block: dict) -> str | None:
     cid = block.get("tool_use_id") or block.get("tool_call_id") or block.get("id")
     return str(cid) if cid is not None else None
 
+
+def _top_level_tool_call_id(entry: Any) -> str | None:
+    """F-104 (leçon deer-flow) : id d'une entrée top-level ``message["tool_calls"]``.
+
+    OpenAI/smolagents sérialisent aussi les appels d'outil au niveau du MESSAGE
+    (pas en blocs de content) : ``{"id": ..., "type": "function", "function":
+    {"name": ..., "arguments": ...}}``. Le niveau 1 doit les voir aussi — sinon
+    un historique dans cette forme (celle de smolagents ``to_messages``)
+    garderait ses orphelins.
+    """
+    if not isinstance(entry, dict):
+        return None
+    cid = entry.get("id")
+    function = entry.get("function")
+    has_name = entry.get("name") is not None or (
+        isinstance(function, dict) and function.get("name") is not None
+    )
+    if cid is None or not has_name:
+        return None
+    return str(cid)
+
+
 def repair_orphan_tool_results(messages: List[dict]) -> Tuple[List[dict], int]:
     """Répare les appels d'outil sans réponse dans une liste de messages.
 
-    Scan les blocs `tool_result` pour construire l'ensemble des appels déjà
-    répondus, puis injecte une fausse réponse `FAKE_INTERRUPTED` pour chaque bloc
-    `tool_use` sans réponse associée (directement dans la même liste `content`
-    du message, pour conserver l'ordre de conversation).
+    Détecte les appels sous DEUX formes (une seule passe, dédup par id —
+    leçon deer-flow DanglingToolCallMiddleware : ne JAMAIS émettre deux
+    réponses pour un même id, quelle que soit la source de détection) :
+    - blocs de content ``tool_use`` (Anthropic) / ``function`` (sérialisée) ;
+    - entrées top-level ``message["tool_calls"]`` (OpenAI / smolagents).
 
-    Mutates et renvoie `(messages, nb_reparations)`. Idempotent et déterministe.
+    Collecte les ids déjà répondus (blocs ``tool_result`` ET messages
+    ``role="tool"``), puis injecte une fausse réponse ``FAKE_INTERRUPTED`` pour
+    chaque appel orphelin : bloc ``tool_result`` dans le même content pour la
+    forme bloc ; message ``{"role": "tool", "tool_call_id": ...}`` inséré juste
+    après le message assistant pour la forme top-level.
+
+    Mutates et renvoie ``(messages, nb_reparations)``. Idempotent et déterministe.
     """
-    # 1. Collecte des appels déjà répondus.
+    # 1. Collecte des appels déjà répondus (blocs tool_result + messages role=tool).
     answered: set[str] = set()
     for msg in messages:
         for block in _as_blocks(msg.get("content")):
@@ -92,28 +121,63 @@ def repair_orphan_tool_results(messages: List[dict]) -> Tuple[List[dict], int]:
                 cid = _tool_result_call_id(block)
                 if cid:
                     answered.add(cid)
+        if msg.get("role") == "tool":
+            cid = msg.get("tool_call_id")
+            if cid is not None:
+                answered.add(str(cid))
 
-    # 2. Injection d'une fausse réponse pour chaque appel orphelin.
+    # 2. Injection d'une fausse réponse pour chaque appel orphelin. Les ids
+    # réparés entrent immédiatement dans `answered` : un appel présent dans les
+    # DEUX formes ne reçoit qu'UNE seule réponse (leçon deer-flow).
     repaired = 0
-    for msg in messages:
+    insertions: List[Tuple[int, int, dict]] = []  # (index d'insertion, séq, message tool)
+    seq = 0
+    for msg_index, msg in enumerate(messages):
         blocks = msg.get("content")
-        if not isinstance(blocks, list):
-            continue
-        for block in blocks:
-            if not isinstance(block, dict) or not _is_tool_use_block(block):
-                continue
-            cid = block.get("id")
-            if cid is None or str(cid) in answered:
-                continue
-            blocks.append(
-                {
-                    "type": "tool_result",
-                    "tool_use_id": cid,
-                    "content": FAKE_INTERRUPTED,
-                }
-            )
-            answered.add(str(cid))
-            repaired += 1
+        if isinstance(blocks, list):
+            for block in blocks:
+                if not isinstance(block, dict) or not _is_tool_use_block(block):
+                    continue
+                cid = block.get("id")
+                if cid is None or str(cid) in answered:
+                    continue
+                blocks.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": cid,
+                        "content": FAKE_INTERRUPTED,
+                    }
+                )
+                answered.add(str(cid))
+                repaired += 1
+        # Forme top-level OpenAI : réponse = message role=tool séparé, inséré
+        # juste après le message assistant porteur (ordre de conversation).
+        top_calls = msg.get("tool_calls")
+        if isinstance(top_calls, list):
+            for entry in top_calls:
+                cid = _top_level_tool_call_id(entry)
+                if cid is None or cid in answered:
+                    continue
+                insertions.append(
+                    (
+                        msg_index + 1,
+                        seq,
+                        {
+                            "role": "tool",
+                            "tool_call_id": cid,
+                            "content": FAKE_INTERRUPTED,
+                        },
+                    )
+                )
+                seq += 1
+                answered.add(cid)
+                repaired += 1
+
+    # Application des insertions en indice DÉCROISSANT, et en séquence
+    # DÉCROISSANTE à indice égal : insérer c2 puis c1 au même indice préserve
+    # l'ordre d'appel c1→c2 malgré les décalages induits par chaque insertion.
+    for index, _seq, tool_msg in sorted(insertions, key=lambda t: (-t[0], -t[1])):
+        messages.insert(index, tool_msg)
 
     return messages, repaired
 

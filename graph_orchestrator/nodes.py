@@ -41,6 +41,7 @@ from .llama_server import model_lifecycle
 from .orphan_repair import repair_orphan_steps
 from .sanitizer import sanitize_tools
 from .prompts import build_role_header
+from .llm_retry import RetryPolicy, with_llm_retry
 
 @tool
 def query_duckdb_knowledge_graph(sql_query: str) -> str:
@@ -74,8 +75,69 @@ def query_duckdb_knowledge_graph(sql_query: str) -> str:
 # ==========================================
 
 class LoggedOpenAIServerModel(OpenAIServerModel):
+    """OpenAIServerModel + log tokens + retry transport F-104 (P8).
+
+    F-104 (openfox + opencode, cf. llm_retry.py) : un « Connection error »
+    transitoire (llama-server mort sous pression VRAM, endpoint en pause)
+    est retryé AU NIVEAU DE L'APPEL — de façon transparente pour l'agent
+    (pré-contenu : rien n'entre dans l'historique, aucun step gaspillé).
+    Avant, l'exception remontait jusqu'à run_with_retry qui purgeait toute
+    la mémoire de l'agent pour relancer le nœud complet (très coûteux).
+
+    ``revive`` (optionnel) : callback ``model_lifecycle.revive`` passé par
+    les nœuds qui spawnent leur serveur (Coder/Tester). Si le serveur local
+    est mort mid-run, il est re-spawné sur un NOUVEAU port entre deux
+    tentatives, puis le client OpenAI est re-créé dessus (openfox :
+    « re-résolution du client LLM à chaque tentative »).
+
+    NB : les constructions via ce wrapper mettent ``max_retries=0`` dans
+    client_kwargs — le retry interne du SDK openai est DÉSACTIVÉ pour que
+    RetryPolicy (délais/jitter/cap observables) soit l'unique autorité.
+    """
+
+    def __init__(self, *args, revive=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._llm_revive = revive
+
+    def _between_attempts(self) -> None:
+        """openfox : re-résolution du client entre deux tentatives de retry."""
+        if self._llm_revive is not None:
+            new_base = self._llm_revive()
+            if new_base and new_base != self.client_kwargs.get("base_url"):
+                self.client_kwargs["base_url"] = new_base
+        # Client OpenAI re-créé : un pool de connexions pointant vers un
+        # serveur mort/respawné ne doit pas empoisonner la tentative suivante.
+        try:
+            self.client = self.create_client()
+        except Exception:
+            pass
+
     def __call__(self, *args, **kwargs):
-        res = super().__call__(*args, **kwargs)
+        from .config import settings as _settings
+
+        if not _settings.llm_retry_enabled:
+            res = super().__call__(*args, **kwargs)
+        else:
+            def _call():
+                return super(LoggedOpenAIServerModel, self).__call__(*args, **kwargs)
+
+            def _on_retry(n: int, delay_s: float, exc: BaseException) -> None:
+                print(
+                    f"\033[33m[LLM Retry F-104] tentative {n} dans {delay_s:.1f}s "
+                    f"après : {type(exc).__name__}: {str(exc)[:120]}\033[0m"
+                )
+
+            res = with_llm_retry(
+                _call,
+                policy=RetryPolicy(
+                    max_retries=_settings.llm_transport_retries,
+                    base_delay_s=_settings.llm_retry_base_delay_s,
+                    max_delay_s=_settings.llm_retry_max_delay_s,
+                    jitter_factor=_settings.llm_retry_jitter,
+                ),
+                on_retry=_on_retry,
+                between_attempts=self._between_attempts,
+            )
         if hasattr(res, "token_usage") and res.token_usage:
             # Affichage clair du VRAI contexte envoyé au LLM
             print(f"\033[96m[LLM Local] Contexte réel de ce step : {res.token_usage.input_tokens} tokens\033[0m")
@@ -100,7 +162,8 @@ def build_fast_model(settings: Settings) -> OpenAIServerModel:
         api_key=settings.local_api_key,
         max_tokens=settings.fast_max_tokens,
         temperature=settings.coder_temperature,
-        client_kwargs={"timeout": settings.llm_timeout_s},
+        # max_retries=0 : retry SDK openai désactivé, l'autorité = RetryPolicy F-104.
+        client_kwargs={"timeout": settings.llm_timeout_s, "max_retries": 0},
     )
 
 
@@ -112,7 +175,8 @@ def build_reasoning_model(settings: Settings) -> OpenAIServerModel:
         api_base=settings.local_reasoning_api_base,
         api_key=settings.local_api_key,
         max_tokens=settings.reasoning_max_tokens,
-        client_kwargs={"timeout": settings.llm_timeout_s},
+        # max_retries=0 : retry SDK openai désactivé, l'autorité = RetryPolicy F-104.
+        client_kwargs={"timeout": settings.llm_timeout_s, "max_retries": 0},
     )
 
 
@@ -1279,13 +1343,20 @@ Code prêt pour la production, respectant les conventions du langage.
                 f"au lieu du 4B rapide."
             )
         with model_lifecycle(coder_spec) as srv:
-            dynamic_fast_model = OpenAIServerModel(
+            # F-104 : LoggedOpenAIServerModel (retry transport pré-contenu) +
+            # revive=srv.revive — si le serveur spawné meurt mid-run (crash VRAM
+            # observé run #4), il est re-spawné entre deux tentatives et le
+            # client re-créé sur le nouveau port, SANS perdre la mémoire agent
+            # (contrairement au retry de run_with_retry qui purge tout).
+            dynamic_fast_model = LoggedOpenAIServerModel(
                 model_id=srv.model_id or settings.fast_model_id,
                 api_base=srv.api_base or settings.local_api_base,
                 api_key=srv.api_key or settings.local_api_key,
                 max_tokens=coder_max_tokens,
                 temperature=settings.coder_temperature,
-                client_kwargs={"timeout": settings.llm_timeout_s},
+                # max_retries=0 : retry SDK openai désactivé, autorité = F-104.
+                client_kwargs={"timeout": settings.llm_timeout_s, "max_retries": 0},
+                revive=srv.revive,
             )
             from .compaction import CompactingCodeAgent
             local_coder = CompactingCodeAgent(

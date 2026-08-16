@@ -15,7 +15,8 @@ from unittest.mock import MagicMock
 
 from PIL import Image
 
-from graph_orchestrator import chrome_devtools_tool, vision_callback
+from graph_orchestrator import chrome_devtools_tool
+from graph_orchestrator import mcp_connect, vision_callback
 from agent_server import mcp as mcp_module
 
 
@@ -91,7 +92,7 @@ class TestChromeDevtoolsToolsDegration:
         """from_mcp lève (réseau down / Chrome absent) → yield [] (pas de crash)."""
         monkeypatch.setattr(chrome_devtools_tool, "_build_params", lambda: {"fake": True})
         monkeypatch.setattr(
-            chrome_devtools_tool, "ToolCollection",
+            mcp_connect, "ToolCollection",
             MagicMock(from_mcp=MagicMock(side_effect=ConnectionError("chrome not found"))),
         )
         with chrome_devtools_tool.chrome_devtools_tools() as tools:
@@ -114,7 +115,7 @@ class TestChromeDevtoolsToolsMocked:
         def fake_from_mcp(params, **kwargs):
             yield fake_collection
 
-        monkeypatch.setattr(chrome_devtools_tool, "ToolCollection", MagicMock(from_mcp=fake_from_mcp))
+        monkeypatch.setattr(mcp_connect, "ToolCollection", MagicMock(from_mcp=fake_from_mcp))
 
         with chrome_devtools_tool.chrome_devtools_tools() as tools:
             assert len(tools) == 2
@@ -142,7 +143,7 @@ class TestChromeDevtoolsToolsMocked:
         def fake_from_mcp(params, **kwargs):
             yield fake_collection
 
-        monkeypatch.setattr(chrome_devtools_tool, "ToolCollection", MagicMock(from_mcp=fake_from_mcp))
+        monkeypatch.setattr(mcp_connect, "ToolCollection", MagicMock(from_mcp=fake_from_mcp))
 
         with chrome_devtools_tool.chrome_devtools_tools() as tools:
             names = {t.name for t in tools}

@@ -26,8 +26,6 @@ import logging
 from contextlib import contextmanager
 from typing import Any, Optional
 
-from smolagents import ToolCollection
-
 logger = logging.getLogger(__name__)
 
 
@@ -74,21 +72,36 @@ def chrome_devtools_tools():
             agent = CodeAgent(tools=[write_file, read_file, *cdt], ...)
             agent.run(prompt)
     """
+    from .config import settings as _settings
+    from .mcp_connect import open_mcp_with_timeout
+
     params = _build_params()
     if params is None:
         # Désactivé (opt-out ou mcp non installé). Mode silencieux comme Context7.
         yield []
         return
 
+    # F-104 (crush) : attente de connexion BORNÉE par serveur — un npx pendu
+    # (téléchargement à froid de chrome-devtools-mcp@latest) ne fige plus le
+    # nœud 30 s : timeout → dégradation (yield []), le run continue.
     try:
-        with ToolCollection.from_mcp(params, trust_remote_code=True) as tool_collection:
-            # Plus de filtrage strict : on garde tous les outils DevTools
-            tools = list(tool_collection.tools)
-            logger.debug("Chrome DevTools connecté : %d outil(s) (non filtrés).", len(tools))
-            yield tools
+        cm, tools = open_mcp_with_timeout(
+            params, _settings.chrome_devtools_connect_timeout_s, "chrome-devtools"
+        )
     except Exception as e:
         # Connexion échouée (npx absent, Chrome non trouvé, port occupé...). On
         # prévient mais on ne fait pas planter le nœud : le Coder/tester tourne
         # sans preview visuel, comme avant la feature F-45.
         logger.warning("Chrome DevTools indisponible (%s) — poursuite sans preview.", e)
         yield []
+        return
+    if cm is None:
+        yield []
+        return
+    try:
+        yield tools
+    except BaseException as be:
+        cm.__exit__(type(be), be, be.__traceback__)
+        raise
+    else:
+        cm.__exit__(None, None, None)

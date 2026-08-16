@@ -490,6 +490,12 @@ def _configure_dspy(settings: Settings, model_id: str, think: bool = False,
         max_tokens=8192,
         temperature=0.3,
         timeout=settings.llm_timeout_s,
+        # F-104 (P8) : retry transport litellm natif (backoff+jitter internes,
+        # honorant retry-after). Un blip transitoire ne tuait plus le nœud DSPy
+        # (avant : except Exception → None, None → dégradation immédiate).
+        # Autorité unique côté smolagents = RetryPolicy (llm_retry.py) ; côté
+        # DSPy/litellm on réutilise le même budget de tentatives.
+        num_retries=settings.llm_transport_retries if settings.llm_retry_enabled else 0,
     )
     return lm
 
