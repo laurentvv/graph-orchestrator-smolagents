@@ -115,6 +115,9 @@ Les nœuds **déterministes** (Linter, Static Tester) peuvent être validés par
 appelle la vraie fonction de production (0 LLM, assertion binaire possible) :
 - `run_linter.py` (ce dossier) — 7 scénarios buggés/corrects, validé 7/7 ✅ en millisecondes.
 - `debug/validate_static_tester_live.py` (F-54) — pattern original.
+- `debug/run_verify.py` (F-100) — vérification exécutable d'un dossier : recette détectée
+  (static-web / Node / Python / …) + start sur port libre + sonde readiness HTTP + teardown ;
+  `--full` pour lancer aussi bootstrap/build/test. Validé LIVE sur le golden run (HTTP 200).
 
 Les nœuds **LLM** (Router, Architect, Drafter, Security, Judge, Coder, Tester) ont un
 script d'isolation F-89 qui appelle la vraie fonction (comportement réel) mais sans

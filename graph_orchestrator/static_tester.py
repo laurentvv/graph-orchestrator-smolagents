@@ -23,6 +23,15 @@ DEUX ÉTAGES (fail-fast) :
         JS mais invisibles (bug CSS height:% sur conteneur sans hauteur).
         C'est LE check qui a attrapé les barres invisibles que le LLM a ratées.
 
+  Tier HTTP (F-100, niveau nœud, après les Tiers 1-4 propres) :
+    preuve exécutable de service (port hermes-agent verify/) : recette
+    détectée au niveau du dossier (static-web http.server par défaut, ou la
+    commande start du projet si package.json/pyproject/Makefile…), start sur
+    un port LIBRE, sonde readiness HTTP, teardown de l'arbre de process.
+    « La page est servie et répond » au lieu de file:// seul. Readiness KO =
+    réfutation SAUF recette static-web (notre infra, pas le code du modèle →
+    note). STATIC_TESTER_HTTP=0 pour désactiver.
+
 GÉNÉRIQUE : le Static Tester ne connaît PAS la demande à l'avance. Il analyse
 le HTML/JS réellement produit par le Coder (découvre les contrôles, les
 sélecteurs, extrait le JS). Il marche sur n'importe quelle page web, pas
@@ -42,7 +51,9 @@ from __future__ import annotations
 import logging
 import os
 import re
+import socket
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import List, Optional, Tuple
 
 # F-72 (Prompt Offloading) : _run_node_check et la constante _MAX_JS_CHARS sont
@@ -977,6 +988,60 @@ def static_check_html(
     )
 
 
+def _find_free_port() -> Optional[int]:
+    """Port TCP libre sur 127.0.0.1 (bind 0 puis relâche) — anti-collision."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(("127.0.0.1", 0))
+            return s.getsockname()[1]
+        except OSError:
+            return None
+
+
+def _run_http_readiness_tier(html_targets: List[str]) -> Tuple[List[str], List[str]]:
+    """Tier HTTP du Static Tester (F-100) : preuve exécutable de service.
+
+    Port hermes-agent verify/ : détection d'une recette au niveau du DOSSIER
+    du livrable (manifeste ``.verify/environment.json`` ou détection statique),
+    start sur un port libre, sonde readiness HTTP, teardown de l'arbre.
+    « La page est servie et répond » au lieu de ``file://`` seul (les scripts
+    ES-module et fetch sont bloqués par CORS en file://).
+
+    Retourne ``(errors, notes)`` :
+      - recette **static-web** (notre propre ``http.server``) : readiness KO =
+        problème d'infrastructure locale, PAS un bug du code généré → note.
+      - autre recette (commande start du PROJET GÉNÉRÉ, ex. ``npm run dev``) :
+        readiness KO = bug réel → error (réfutation, le Coder corrige).
+    """
+    from graph_orchestrator.verify.environment import load_or_detect
+    from graph_orchestrator.verify.runner import run_verify
+
+    root = Path(os.path.dirname(os.path.abspath(html_targets[0]))) or Path.cwd()
+    recipe, source = load_or_detect(root)
+    if recipe is None or not recipe.start:
+        return [], []
+
+    port = _find_free_port()
+    ready_timeout = float(os.getenv("STATIC_TESTER_HTTP_TIMEOUT", "10"))
+    result = run_verify(root, recipe, phases=(), ready_timeout=ready_timeout, port_override=port)
+
+    readiness = result.readiness
+    if readiness is None:
+        return [], []
+    if readiness.ready:
+        note = (f"[http] Page servie : {readiness.url} → HTTP {readiness.status_code} "
+                f"(recette {recipe.kind}/{source}, {readiness.duration:.1f}s).")
+        return [], [note]
+    if recipe.kind == "static-web":
+        return [], [f"[http] Readiness KO ignorée (infrastructure locale) : "
+                    f"{readiness.error or 'inconnue'}."]
+    detail = (f"[http] Le serveur de l'application (recette {recipe.kind}, commande "
+              f"« {recipe.start} ») n'a jamais répondu sur {readiness.url} en "
+              f"{ready_timeout:.0f}s (erreur : {readiness.error or 'inconnue'} ; "
+              f"sortie serveur : {readiness.output_tail[-300:]})")
+    return [detail], []
+
+
 def execute_static_tester_node(
     subtask: dict, settings
 ) -> Tuple[Optional[CoderOutput], Optional[NodeMetrics]]:
@@ -1032,11 +1097,27 @@ def execute_static_tester_node(
             all_errors.extend(f"  - {e}" for e in res.errors)
         tiers_reached.append(res.tier_reached)
 
+    # --- Tier HTTP (F-100) : « la page est servie et répond » ---------------
+    # Ne tourne QUE si les tiers 1-4 sont propres (un bug détecté avant = le
+    # Coder doit corriger d'abord, la preuve HTTP attendra). Opt-out
+    # STATIC_TESTER_HTTP=0 ; dégradation gracieuse totale (cf. ADR-0002).
+    http_notes: List[str] = []
+    run_http = os.getenv("STATIC_TESTER_HTTP", "1").strip().lower() not in {"0", "false", "no", "off"}
+    if run_http and not all_errors:
+        try:
+            http_errors, http_notes = _run_http_readiness_tier(html_targets)
+            all_errors.extend(http_errors)
+        except Exception as e:
+            logger.debug("Static Tester Tier HTTP indisponible (%s).", e)
+            http_notes = []
+
     if not all_errors:
         tier_summary = max(tiers_reached) if tiers_reached else "skipped"  # tier3 > tier2 > tier1
+        details = f"OK — checks statiques web valides ({tier_summary})."
+        if http_notes:
+            details += " " + " ".join(http_notes)
         return (
-            CoderOutput(task_id=task_id, status="success",
-                        details=f"OK — checks statiques web valides ({tier_summary})."),
+            CoderOutput(task_id=task_id, status="success", details=details),
             NodeMetrics(node="static_tester", model="static-tester",
                         duration_s=time.time() - start, input_tokens=0, output_tokens=0),
         )

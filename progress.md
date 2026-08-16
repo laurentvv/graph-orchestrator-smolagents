@@ -38,6 +38,40 @@
       web-tester). Implémentation TERMINÉE (42 tests sur les 3 zones, 692 passed / 7
       pré-existants non liés).
 
+## Jalons de l'Itération (cycle F-100 — Recettes de vérification exécutable)
+> Priorité 6 (update références 2026-08-14, fiche 25-hermes-agent). « La page est
+> servie et répond » devient une preuve exécutable au lieu de `file://` + console
+> seule (les scripts ES-module et fetch sont bloqués par CORS en file://).
+
+- [x] F100-1 : Package `graph_orchestrator/verify/` (Python pur, 0 LLM) — port
+      quasi 1:1 de `references/hermes-agent/agent/verify/` : `recipes.py`
+      (détection grok ordre préservé : Node/frameworks/lockfiles, Python
+      Django/FastAPI/Flask/générique, Go/Rust/Maven/Gradle/Make/compose),
+      `runner.py` (phases → start arrière-plan → boucle readiness HTTP →
+      teardown), `environment.py` (manifeste `.verify/environment.json` qui
+      PRIME sur la détection, corrompu → détection fraîche).
+- [x] F100-2 : Écarts consciencieux documentés — détecteur **static-web** en
+      dernier recours (cas Prompt-Vault vanilla : `http.server {port} --bind
+      127.0.0.1`, anti popup firewall Windows) ; `phases=None` vs `()` + start
+      piloté par `skip_start` (référence rendait « start seul » inexprimable) ;
+      substitution `{port}` (port libre dynamique) ; teardown Windows
+      `taskkill /F /T` (kill de l'ARBRE — `terminate()` laisserait le serveur
+      orphelin derrière cmd.exe) ; sonde readiness sans proxy (127.0.0.1 hors
+      HTTP_PROXY).
+- [x] F100-3 : Tier HTTP dans `execute_static_tester_node` — après Tiers 1-4
+      PROPRES seulement ; recette au dossier du 1er target HTML ; preuve
+      `[http] Page servie → HTTP 200 (kind/source, Xs)` dans le details
+      success ; readiness KO = RÉFUTATION sauf recette static-web (notre
+      infra, pas le code du modèle → note). Fail-open total (ADR-0002).
+- [x] F100-4 : Config `STATIC_TESTER_HTTP` (défaut 1) + `STATIC_TESTER_HTTP_TIMEOUT`
+      (défaut 10s) dans `.env.example` + `.env` local. Script isolation
+      `debug/run_verify.py` (déterministe, convention F-89).
+- [x] F100-5 : Validation — **52 tests PASS** (dont VRAI http.server servi +
+      readiness 200 + port re-bindable après teardown) ; suite complète
+      **1250 passed / 0 failed / 1 skipped** (1198 baseline, 0 régression) ;
+      LIVE `debug/run_verify.py` sur golden run Bubble Sort : static-web
+      détectée, servie HTTP 200 en 1.1s sur port libre, teardown propre.
+
 ## Jalons de l'Itération (cycle F-72 — Prompt Offloading)
 > Priorité 10 du plan usine logicielle (volet Prompt Offloading). Encapsuler la complexité
 > (snippets JS, algorithmes) dans des OUTILS Python dédiés au lieu de l'injecter en texte
