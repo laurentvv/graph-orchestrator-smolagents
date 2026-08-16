@@ -1719,3 +1719,62 @@ Coder est appliquée correctement par Qwen3.5-9B.
   CODER_ULTRA_CORRECTION=false par défaut (feature conservée en opt-in pour tâches lourdes).
 - Leçon consolidée : sur cette classe de tâches, la voie gagnante = 4B + gardes déterministes aux
   feedbacks EXACTS (runs #6 it.2 et boucle Coder 2 ont convergé en 8-13 min ainsi).
+
+## Jalons de l'Itération (cycle F-103 — budgets de guidance + signaux prompt-audit, 2026-08-16)
+> P0-bis du plan (case « Linter de prompts + budgets de guidance »). Rationale : la leçon
+> consolidée des runs #1 (exceed_context_size_error) / F-57 (15k chars de skills eager par step)
+> / #7 (thrash du 4B) désigne la discipline de contexte comme goulot — or RIEN ne bornait la
+> taille de la guidance (cliquet additif F-44/F-56/F-65/F-109). Gate déterministe 0-LLM, port
+> du CI check deer-flow (production ByteDance).
+
+- [x] F103-1 : Exploration — lecture intégrale de la référence deer-flow
+      (scripts/check_agent_guidance.py : tiers root/module/local + chaîne cumulée, sémantique
+      incrémentale base/head « au-dessus du hard sans croissance = warning », annotations
+      GitHub, exit codes) + du framework prompt-audit Anthropic (~220 l : signaux greppables
+      groupe 1a/1c, règle « could the model already know this? », keep-list explicite).
+- [x] F103-2 : Mesure à chaud des surfaces réelles — AGENTS.md 20.1 Ko, prompts.py 17.3 Ko,
+      skills ≤ 8.3 Ko (max frontend-design-anthropic), chaîne Coder (prompts.py + 4 eager)
+      30.7 Ko, densité de pression max 1.6 occ/Ko (coding, devtools-preview).
+- [x] F103-3 : scripts/check_agent_guidance.py — port fidèle ADAPTÉ aux surfaces du repo :
+      racine AGENTS.md (12/16 Ko soft/hard), module graph_orchestrator/prompts.py (24/32),
+      local skills/*/SKILL.md (40/48), CHAÎNE CODER cumulée (80/96) composée dynamiquement
+      depuis ALWAYS_SKILLS_CODER (import skills_loader = source de vérité unique, PAS une
+      copie — la chaîne suit les futures évolutions du socle eager). Limitation documentée :
+      le bloc prompt inline de nodes.py n'est pas mesurable statiquement, hors chaîne.
+      Durcissement vs référence : repo sans commit → repli sur non-trackés (deer-flow
+      planterait sur `git diff HEAD`).
+- [x] F103-4 : Volet prompt-audit (a) en opt-in --audit-signals — AG101 densité de pression
+      (seuil 4 occ/Ko, calibré sur l'état réel max ~1.6 = silencieux aujourd'hui, attrape le
+      bloat futur) + AG102 hedges agrégés par fichier. CAVEAT systématique dans chaque
+      message : la pression est LÉGITIME pour nos 4B/9B sous-déclencheurs — signaux pensés
+      pour modèles très littéraux, jugement requis. Décision de cadrage : le volet LLM-jugé
+      complet (audit/suppression) est REPORTÉ — la pression est load-bearing sur petits
+      modèles, un audit de suppression prématuré ferait des dégâts (le doc Anthropic
+      lui-même : « Older, less steerable models genuinely needed forcefulness »).
+- [x] F103-5 : tests/test_agent_guidance.py — 37 tests (normalisation CRLF 3, tiers 4,
+      guidance_paths 1, sémantique budget 7 branches, chaîne 3, analyze 8, signaux 5,
+      exit codes 4 avec git init réel en basetemp, intégration repo réel read-only 2).
+      2 bugs d'implémentation attrapés pendant le dev : budget chaîne mathématiquement
+      impossible (chaque fichier sous son soft → somme max 64 Ko < hard 96 : recomposé
+      2 skills + module) + mkdir .git factice (git ls-files échoue sans vrai init).
+- [x] F103-6 : Validation — 37/37 PASS, py_compile OK, suite complète **1110 passed /
+      0 failed / 1 skipped** (0 régression). Run LIVE : mode local = 29 surfaces,
+      1 error AG001 AGENTS.md 20 433 o > hard 16 384 (VRAI SIGNAL — croissance continue
+      du fichier plat, candidate F-107 ; réduction NON exécutée, décision utilisateur) ;
+      mode incrémental --base-ref origin/main = 0 error 0 warning exit 0 (sémantique
+      d'adoption prouvée : la gate ne bloque pas les PR qui ne font pas grossir) ;
+      --audit-signals = 1 warning hedge (frontend-design-anthropic, « try to »).
+- [x] F103-7 : État disque synchronisé (feature_list F-103 completed, contract critères
+      381-385, plan case cochée + note FAIT, README §Guardrails, ce bloc, événements
+      DuckDB run_id f-103).
+- [x] F103-8 (follow-up user, même PR) : **AGENTS.md réduit sous budget** — 22 308 → 13 583
+      octets normalisés (13,3 Ko < hard 16 384 ; ~1,3 Ko au-dessus du soft 12 288 = warning
+      non bloquant assumé, marge de croissance ~2,7 Ko). Méthode : TOUTES les règles et
+      interdictions conservées (INTERDICTION DE SUPPRESSION, or git, bootstrap/sync/erreurs,
+      canaux DuckDB, piège filePath, tiering) ; compressés les récits historiques et détails
+      dupliqués ailleurs (métriques Golden Run, descriptions Static Tester/vision_callback →
+      couvertes par README §Node Graph + feature_list) ; blocs de format JSON/MD → signatures
+      compactes ; numérotation §1-11 préservée (références croisées §7/§8 intactes).
+      + section 1-bis AJOUTÉE (demande user) : anti-confusion Usine (ce dépôt) ≠ Produits
+      de l'Usine (runs/) + distinction de contexte AGENTS.md (assistant dev) vs prompts.py+skills
+      (runtime nœuds). Gate mode local APRÈS réduction : 0 error, 1 warning soft, exit 0.

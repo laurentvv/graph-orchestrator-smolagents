@@ -3,187 +3,114 @@
 # PARTIE 1 : DIRECTIVES POUR L'AGENT (PROMPT)
 
 ## 1. Principe Fondamental
-Tu ne dois jamais te fier uniquement à ta fenêtre de contexte pour suivre l'avancement du projet. Le contexte s'altère, se compresse et s'efface. L'unique source de vérité concernant l'état du système réside dans trois fichiers de suivi stockés à la racine du projet, ainsi que dans la base d'historisation DuckDB. À chaque initialisation, plantage ou redémarrage, tu dois lire ces fichiers et interroger l'historique pour reconstruire ton état de manière déterministe.
+Ne te fie jamais uniquement à ta fenêtre de contexte pour suivre l'avancement : elle s'altère, se compresse et s'efface. L'unique source de vérité = les trois fichiers de suivi à la racine + la base d'historisation DuckDB. À chaque initialisation, plantage ou redémarrage, lis-les et interroge l'historique pour reconstruire ton état de manière déterministe.
+
+## 1-bis. Périmètre : l'Usine (ce dépôt) ≠ les Produits de l'Usine (`runs/`)
+> ⚠️ **Avertissement anti-confusion pour les agents de codage** (assistants type ZCode) : ce projet
+> contient DEUX niveaux de « code » qui ne doivent JAMAIS être confondus :
+> 1. **LE GRAPHE — l'usine elle-même**, le programme que TU maintiens : `graph_orchestrator/` (nœuds,
+>    prompts, gardes), `testers/`, `tests/`, `scripts/`, `skills/`, `debug/`, `prompts/`, fichiers
+>    d'état (`feature_list.json`, `progress.md`, `contract.md`), `data/event_stream.duckdb`. Tout
+>    cycle de développement (branche → tests → PR) s'applique À CE NIVEAU uniquement.
+> 2. **LES LIVRABLES DU GRAPHE — les programmes que l'usine fabrique** lors de ses runs :
+>    `runs/<dated>_<slug>/` (ex. visualiseur Bubble Sort : `index.html`, `styles.css`, `script.js`).
+>    Ces artefacts sont la SORTIE de l'usine (gitignorés) — ce ne sont PAS les fichiers du projet.
+>
+> Conséquences opérationnelles :
+> * Un bug constaté dans un livrable `runs/` est un **symptôme du comportement d'un nœud du graphe**
+>   (prompt, skill, garde, modèle) : on diagnostique et on corrige L'USINE. On ne « répare » jamais un
+>   livrable en place, sauf phase de validation/debug explicite (ex. boucle Coder isolée F-109).
+> * Les commits/branches/PR ne concernent JAMAIS le contenu de `runs/` (gitignoré) — uniquement
+>   l'usine et sa documentation.
+> * **Distinction de contexte** : ce fichier `AGENTS.md` guide l'assistant de développement qui
+>   travaille SUR l'usine ; il n'est PAS injecté aux nœuds LLM pendant les runs. La guidance runtime
+>   des nœuds vit dans `graph_orchestrator/prompts.py` + `skills/` (budgétée par le gate F-103
+>   `scripts/check_agent_guidance.py`). Ne justifie jamais d'une règle AGENTS.md un effet supposé sur
+>   les runs du graphe, ni l'inverse.
 
 ## 2. Architecture des Fichiers à Initialiser
 
 ### A. `feature_list.json`
-* **Rôle** : Cartographie complète et structurée des fonctionnalités du projet.
-* **Cycle de vie** : Généré lors de la planification initiale, mis à jour dès qu'une fonctionnalité change de statut.
-* **Format strict** :
-    ```json
-    {
-      "features": [
-        {
-          "id": "F-01",
-          "name": "Nom de la fonctionnalité",
-          "description": "Description claire et périmètre technique",
-          "status": "pending | in_progress | completed",
-          "dependencies": []
-        }
-      ]
-    }
-    ```
+* **Rôle** : cartographie complète des fonctionnalités. **Cycle de vie** : générée à la planification initiale, mise à jour dès qu'une fonctionnalité change de statut.
+* **Format strict** : `{"features": [{"id": "F-01", "name": "…", "description": "périmètre technique", "status": "pending | in_progress | completed", "dependencies": []}]}`
 
 ### B. `contract.md`
-* **Rôle** : Le contrat de validation technique négocié entre la planification et l'évaluation. Il contient la liste d'assertions strictes et testables (viser entre 15 et 30 critères pour une couverture robuste).
-* **Cycle de vie** : Figé juste avant l'écriture de la première ligne de code. Ne peut plus être modifié par le générateur.
-* **Format strict** :
-    ```markdown
-    # Contrat de Validation
-
-    ## Critères d'Acceptation Automatisés
-    - [ ] Critère 1 : Le point de terminaison retourne un code 200.
-    - [ ] Critère 2 : La validation du schéma JSON rejette les entrées malformées.
-    - [ ] Critère 3 : Les variables d'environnement requises sont validées au démarrage.
-
-    ## Protocole d'Évaluation
-    * Commande d'exécution des tests : `pytest` / `npm test`
-    * Comportement attendu : Zéro avertissement, zéro échec.
-    ```
+* **Rôle** : contrat de validation technique négocié entre planification et évaluation — assertions strictes et testables (viser 15-30 critères). **Cycle de vie** : figé juste avant la première ligne de code, plus modifiable par le générateur.
+* **Format** : « Critères d'Acceptation Automatisés » (cases `- [ ]` numérotées) + « Protocole d'Évaluation » (commande `pytest`, zéro avertissement, zéro échec).
 
 ### C. `progress.md`
-* **Rôle** : Tableau de bord macroscopique du sprint en cours. Permet à l'agent de savoir instantanément ce qu'il est en train de faire s'il doit redémarrer.
-* **Cycle de vie** : Mis à jour à la fin de chaque itération de la boucle.
-* **Format strict** :
-    ```markdown
-    # État d'Avancement du Sprint
-
-    ## Objectif Actuel
-    - [ ] Implémentation du module de validation des contrats.
-
-    ## Jalons de l'Itération
-    - [x] Étape 1 : Définition des interfaces et types.
-    - [ ] Étape 2 : Écriture des tests unitaires (TDD).
-    - [ ] Étape 3 : Écriture du code logique.
-    ```
+* **Rôle** : tableau de bord macroscopique du sprint — savoir instantanément ce qui est en cours après un redémarrage. **Cycle de vie** : mis à jour à la fin de chaque itération.
+* **Format** : « Objectif Actuel » (cases à cocher) + « Jalons de l'Itération » (étapes cochées).
 
 ### D. Historisation Événementielle (DuckDB)
-* **Rôle** : Toute la mémoire événementielle de l'usine vit dans `data/event_stream.duckdb` (table `run_event`), JAMAIS dans un fichier texte plat. Cela évite la saturation du contexte et permet des requêtes avancées post-mortem.
-* **Deux canaux d'écriture** :
-    * **Runtime (agents du graphe)** : l'outil `log_event(event_type, details)` exposé au Coder (`tools.py`) écrit dans la base avec le `run_id` courant.
-    * **Assistant IA (ZCode)** : le CLI `uv run python scripts/log_event.py <event_type> "<message>"` (options `--run-id`, `--date YYYY-MM-DD`). C'est LE geste de fin de cycle qui remplace tout journal texte.
-* **RÈGLE CRITIQUE — AUCUN JOURNAL PLAT** : l'ancien fichier journal a été **supprimé le 2026-08-14 (F-106)** après récupération complète de son historique dans la base (199 événements datés, `run_id='legacy_md'`, y compris les 198 entrées antérieures à la migration F-75 dont les dates avaient été perdues). **Ne recrée JAMAIS ce fichier, n'append JAMAIS d'événement dans un `.md`.** L'historique git de l'ancien fichier reste consultable (`git log -p --follow -- log.md`) et ré-importable via `scripts/recover_log_history.py`.
-* **Lecture post-mortem** : requêtes DuckDB directes sur `run_event` ( colonnes `run_id`, `node`, `event_type`, `message`, `created_at`).
+* **Rôle** : toute la mémoire événementielle de l'usine vit dans `data/event_stream.duckdb` (table `run_event`), JAMAIS dans un fichier texte plat (contexte préservé, requêtes post-mortem avancées).
+* **Deux canaux d'écriture** : runtime (agents du graphe) = outil `log_event(event_type, details)` du Coder (`tools.py`, run_id courant) ; assistant IA (ZCode) = CLI `uv run python scripts/log_event.py <event_type> "<message>"` (options `--run-id`, `--date`). C'est LE geste de fin de cycle.
+* **RÈGLE CRITIQUE — AUCUN JOURNAL PLAT** : l'ancien journal a été supprimé le 2026-08-14 (F-106), historique intégralement récupéré en base (199 événements datés, `run_id='legacy_md'`). Ne recrée JAMAIS ce fichier, n'append JAMAIS d'événement dans un `.md`. Historique git consultable (`git log -p --follow -- log.md`), ré-importable via `scripts/recover_log_history.py`.
+* **Lecture post-mortem** : requêtes DuckDB directes sur `run_event` (colonnes `run_id`, `node`, `event_type`, `message`, `created_at`).
 
 ## 3. Directives Opérationnelles pour la Boucle d'Exécution
-
-1. **Phase de Bootstrap** : Avant toute action, vérifie la présence des trois fichiers de suivi (`feature_list.json`, `contract.md`, `progress.md`). S'ils sont absents, crée-les selon les formats ci-dessus. S'ils sont présents, lis-les pour reconstruire ta mémoire immédiate.
-2. **Phase d'Action** : Avant d'exécuter une tâche, enregistre l'événement dans la base DuckDB (outil `log_event` côté graphe, CLI `scripts/log_event.py` côté assistant).
-3. **Phase de Synchronisation** : Après chaque écriture de fichier ou test, mets à jour le fichier de statut associé (`progress.md` ou `feature_list.json`).
-4. **Gestion des Erreurs** : Si une exception survient ou si le processus s'interrompt, l'état valide est celui extrait du dernier événement enregistré dans DuckDB, combiné aux assertions de `progress.md`.
-5. **Mise à jour du `README.md`** : À chaque fois que tu termines une nouvelle fonctionnalité importante, tu dois impérativement mettre à jour le fichier `README.md` avant de terminer ta tâche.
-6. **INTERDICTION DE SUPPRESSION (RÈGLE CRITIQUE)** : Tu ne dois **JAMAIS** supprimer ou vider les fichiers `progress.md`, `feature_list.json` et `contract.md`, ni altérer/supprimer les bases de données du dossier `data/` (ex: DuckDB, SQLite). Même si l'utilisateur te demande un "full run de 0" pour l'orchestrateur, ces fichiers et bases de données constituent ta propre mémoire d'agent et l'historique d'exécution ; ils n'ont aucun rapport avec les fichiers générés par l'orchestrateur.
+1. **Bootstrap** : vérifie les trois fichiers de suivi ; absents → crée-les selon les formats ci-dessus ; présents → lis-les pour reconstruire ta mémoire immédiate.
+2. **Action** : avant d'exécuter une tâche, enregistre l'événement dans DuckDB (outil `log_event` côté graphe, CLI `scripts/log_event.py` côté assistant).
+3. **Synchronisation** : après chaque écriture de fichier ou test, mets à jour le fichier de statut associé (`progress.md` ou `feature_list.json`).
+4. **Gestion des erreurs** : si exception ou interruption, l'état valide = dernier événement enregistré dans DuckDB + assertions de `progress.md`.
+5. **README** : mets à jour `README.md` à chaque nouvelle fonctionnalité importante terminée, avant de clore la tâche.
+6. **INTERDICTION DE SUPPRESSION (RÈGLE CRITIQUE)** : ne **JAMAIS** supprimer ou vider `progress.md`, `feature_list.json`, `contract.md`, ni altérer/supprimer les bases du dossier `data/` (DuckDB, SQLite). Même si l'utilisateur demande un « full run de 0 » : ces fichiers/bases constituent ta mémoire d'agent et l'historique d'exécution ; ils n'ont aucun rapport avec les fichiers générés par l'orchestrateur.
 
 # PARTIE 2 : GUIDE D'UTILISATION POUR LE DÉVELOPPEUR
 
 ## 4. Banque de Prompts de Test (Prompt-Vault)
-
-**Où trouver les prompts** : `references/Prompt-Vault/` (sous-module git). Classés par difficulté :
-- `Easy/` — Bubble_Sort_Visualizer, Color_Palette_Generator, ToDo_List
-- `Medium/` — Sorting_Visualization, Pixel_Art_Editor
-- `Hard/` — Kanban_Board, Markdown_Editor_Desktop, Local_OCR
-- `Advanced/` — LLM_Speedometer, Feed_Aggregator, Hantavirus_Simulation, File_Listing
-
-Chaque `.md` est un cahier des charges structuré (souvent "1 fichier `index.html`, HTML+CSS+JS vanilla"). Voir `references/Prompt-Vault/README.md` pour le tableau récapitulatif.
+Prompts de test classés par difficulté dans `references/Prompt-Vault/` (sous-module git) : `Easy/` (Bubble_Sort_Visualizer, Color_Palette_Generator, ToDo_List), `Medium/` (Sorting_Visualization, Pixel_Art_Editor), `Hard/` (Kanban_Board, Markdown_Editor_Desktop, Local_OCR), `Advanced/` (LLM_Speedometer, Feed_Aggregator, Hantavirus_Simulation, File_Listing). Chaque `.md` = un cahier des charges structuré (souvent « 1 fichier `index.html`, HTML+CSS+JS vanilla »). Tableau récapitulatif : `references/Prompt-Vault/README.md`.
 
 ## 5. Projets de Référence
-**Code et audits** : Consulter `docs/references-audit/` (lié au code GitHub stocké dans `references/`). C'est une véritable mine d'or d'implémentations déjà faites, fiables et prêtes à l'emploi. N'hésitez pas à y piocher du code et à vous inspirer de ces solutions existantes plutôt que de tout réinventer.
+* **Code et audits** : `docs/references-audit/` (lié au code GitHub stocké dans `references/`) — implémentations production-éprouvées à réutiliser plutôt que de réinventer.
+* **Cartographie Nœuds & Skills** : `docs/NODES_AND_SKILLS.md` — system prompts forcés par nœud, 11 skills, modes eager/lazy (F-57). À consulter pour savoir ce que voit chaque agent LLM à l'exécution.
+* **Refactoring automatique des skills (F-92)** : `scripts/refactor_skills.py` découpe les `SKILL.md` > 80 lignes (sections secondaires → `resources/`, chargement lazy via `view_file`). À exécuter dès qu'un skill devient volumineux.
 
-**Cartographie Nœuds & Skills** : [`docs/NODES_AND_SKILLS.md`](./docs/NODES_AND_SKILLS.md) — inventaire complet des system prompts forcés par nœud (rôles, invariants, docstrings DSPy), des 11 skills et de leur mode de chargement (eager vs lazy F-57). À consulter pour savoir ce que voit chaque agent LLM à l'exécution, ou pour ajouter/modifier un skill.
-
-**Refactoring Automatique des Skills (Progressive Disclosure - F-92)** : Le script `scripts/refactor_skills.py` permet de restructurer automatiquement les compétences complexes. Il découpe les longs fichiers `SKILL.md` (plus de 80 lignes) en extrayant les sections secondaires vers un sous-dossier `resources/`, et met à jour le `SKILL.md` original pour forcer l'agent à les lire à la demande (lazy loading) via l'outil `view_file`. À exécuter dès qu'un nouveau skill ajouté au dossier `skills/` devient trop volumineux.
 ## 6. Git & GitHub
-- **Règle d'or Git** : Ne JAMAIS travailler ou pousser directement sur `main`. Avant toute modification, tu DOIS créer une nouvelle branche (ex: `feat/...` ou `fix/...`).
-- **Kilo Code Review** : L'agent GitHub doit approuver la PR avant le merge. *(Note pour l'agent IA : une fois la PR soumise, arrête-toi. Ne reste pas en boucle d'attente. Tu seras réveillé une fois la review validée pour supprimer la branche et retourner sur `main`).*
+* **Règle d'or Git** : ne JAMAIS travailler ou pousser directement sur `main`. Crée une branche (`feat/...` ou `fix/...`) avant toute modification.
+* **Kilo Code Review** : l'agent GitHub doit approuver la PR avant le merge. Une fois la PR soumise, ARRÊTE-TOI (pas de boucle d'attente) — tu seras réveillé après validation pour supprimer la branche et revenir sur `main`.
 
 ## 7. Tests du Graphe (Workflow Coding)
-0. **Préparation des modèles** : Utiliser le script `powershell .\scripts\download_models.ps1` pour télécharger automatiquement les fichiers `.gguf` requis (Qwen et Ornith) depuis Hugging Face vers le dossier `models/`.
-1. **Préparation du prompt** : Copier un prompt depuis `references/Prompt-Vault/`. Le coller dans `tasks.json` (`coding.content`) et adapter `target_files`.
-2. **Configuration** : `WORKFLOW_MODE=coding` dans `.env`. Vérifier que les chemins GGUF (`FAST_MODEL`, `REASONING_MODEL`) pointent bien vers les fichiers locaux du dossier `models/` téléchargés à l'étape 0. S'assurer que `FAST_BACKEND=spawn` et `REASONING_BACKEND=spawn` sont définis dans le `.env`.
+0. **Modèles** : `powershell .\scripts\download_models.ps1` télécharge les `.gguf` requis (Qwen, Ornith) vers `models/`.
+1. **Prompt** : copier un prompt de `references/Prompt-Vault/` dans `tasks.json` (`coding.content`) et adapter `target_files`.
+2. **Config** : `WORKFLOW_MODE=coding` dans `.env` ; chemins GGUF (`FAST_MODEL`, `REASONING_MODEL`) pointant vers `models/` ; `FAST_BACKEND=spawn` et `REASONING_BACKEND=spawn`.
 3. **Exécution** : `uv run agent_graph.py` (ajouter `PYTHONUNBUFFERED=1` si pipe).
-4. **Déroulement** : voir le diagramme complet du graphe (nœuds, modèles LLM, flux de données) dans `README.md` § « Node Graph & Data Flow ». En résumé : PromptRefiner → Router → Architect → (Coder → Linter → **Static Tester** → Tester+Security → Judge, max 3 itérations par sous-tâche) → Escalation si circuit breaker. Logs : `CODING WORKFLOW` (succès) ou `Fan-out asynchrone` (one-shot).
-   - **Static Tester (F-49, 0 LLM, web-only)** : inséré entre Linter et Tester LLM. Implémente la méthodologie `debug/MANUAL_TESTER_METHODOLOGY.md` — `node --check` sur le JS inline (attrape TS-in-vanilla = page blanche), wiring `addEventListener` (attrape contrôle non branché, indétectable par screenshot), visibilité DOM DevTools (attrape éléments invisibles = bug CSS height:%). Court-circuite le Tester LLM (25 min) sur les bugs évidents en <6s. Dégradation gracieuse si `node`/Chrome absents. Opt-out `STATIC_TESTER_ENABLED=0` / `STATIC_TESTER_DEVTOOLS=0`.
-   - **Tiering modèles** : `fast_model` (Qwen3.5-4B) → Coder, Router. `reasoning_model` (Ornith-1.0-9B) → PromptRefiner, Architect, Drafter, Tester, Security, Judge, Escalation. Les deux sont multimodaux (vision).
-   - **Audits séquentiels sur GPU local** : `AUDIT_PARALLEL=false` (défaut) lance Tester PUIS Security (pas en parallèle) pour éviter la saturation VRAM.
-   - **Validation visuelle Coder (F-50/F-90) — piège `filePath`** : le Coder (Qwen 4B) a tendance à appeler `take_screenshot(filePath="screenshot.png")`. Or chrome-devtools-mcp lancé en `--isolated` n'a **aucun workspace root configuré** → toute écriture `filePath` est rejetée (`Access denied: ... is not within configured workspace roots`) → l'outil échoue AVANT de retourner l'image → la callback vision ne capture rien → le Coder boucle (run 2026-08-11 : 36 erreurs, 25 steps / 510k tokens gaspillés). **FIX applicatif (vision_callback.py)** : `_ScreenshotCapturingTool.forward()` strippe silencieusement le kwarg `filePath` avant de déléguer — l'image revient via `observations_images` (make_screenshot_callback), l'écriture disque est inutile. Complété par une règle anti-`filePath` dans `skills/devtools-preview/SKILL.md`. Si une boucle de screenshots réapparaît, vérifier en premier lieu ce chemin (grep `Access denied` dans le log).
+4. **Déroulement** (diagramme complet : `README.md` § « Node Graph & Data Flow ») : PromptRefiner → Router → Architect → (Coder → Linter → Static Tester → Tester+Security → Judge, max 3 itérations par sous-tâche) → Escalation si circuit breaker.
+* **Tiering modèles** (tous multimodaux) : `fast_model` (Qwen3.5-4B) → Coder, Router ; `reasoning_model` (Ornith-1.0-9B) → PromptRefiner, Architect, Drafter, Tester, Security, Judge, Escalation.
+* **Audits séquentiels GPU-local** : `AUDIT_PARALLEL=false` (défaut) — Tester PUIS Security, sinon saturation VRAM.
+* **Piège `filePath` screenshots (F-50/F-90)** : le Coder tend à appeler `take_screenshot(filePath=…)` → rejeté par chrome-devtools-mcp `--isolated` (aucun workspace root) → boucle de screenshots. FIX applicatif : `vision_callback.py` strippe `filePath` avant de déléguer (l'image revient via `observations_images`). Si une boucle de screenshots réapparaît : grep `Access denied` dans le log.
+* Notes : valider le graphe avec **Bubble_Sort_Visualizer** (Easy, 1 fichier, borné). Toute modif de `.env.example` → reporter les ajouts dans `.env` local (sans toucher au contenu secret).
 
-*Notes* : 
-- Pour valider le graphe, commencer par **Bubble_Sort_Visualizer** (Easy, 1 fichier, borné).
-- **En cas de modification `.env.example`** : il faut reporter les ajouts dans `.env` local (sans toucher au contenu "secret").
-## 8. Amélioration Continue (Le Rôle du Meta-Analyste)
-Pour assurer l'amélioration continue de l'usine logicielle (Feature F-61), nous ne comptons pas sur un agent local autonome, mais sur une boucle de feedback hybride Humain + IA.
-
-**Directives pour l'Assistant IA :**
-1. **Exécution Autonome** : C'est **toi (l'assistant)** qui dois lancer le script `uv run python scripts/run_analyzer.py` via ton terminal (soit après un run E2E complet, soit à la demande de l'utilisateur au début d'une session). Chaque run est désormais **journalisé automatiquement** dans `logs/run-<timestamp>-<mode>.log` (Tee posé sur stdout+stderr dans `workflows.main()`) ; le script y découvre le plus récent log de lui-même (cross-plateforme, via `$LOGS_DIR`). Fini la dépendance au chemin de l'Antigravity CLI.
-2. **Analyse** : Tu dois lire la sortie du script et repérer les problèmes récurrents (ex: erreurs de parsing Pydantic, syntaxe invalide comme le top-level `await`, ou crashes d'outils MCP).
-3. **Validation Humaine** : Tu ne dois **jamais** modifier les règles à l'aveugle. Tu dois faire un résumé clair à l'utilisateur des problèmes trouvés, lui proposer une solution (ex: "Je propose d'ajouter cette règle stricte dans `nodes.py`"), et attendre son feu vert ("Go").
-4. **Application** : Une fois la validation obtenue, interviens directement dans le code source pour durcir les prompts ou les skills.
-
-*Exemple réel 1 : L'interdiction du top-level await dans Puppeteer et l'obligation d'utiliser des déclarations de fonction pour `evaluate_script` ont été diagnostiquées via l'analyse des crashes et fixées en direct dans les prompts des nœuds.*
-*Exemple réel 2 : Pour stabiliser le petit modèle 4B, l'obligation d'utiliser des triples quotes `r\"\"\"...\"\"\"` dans les appels d'outils et l'intégration du "Monkey Testing" (clic automatique des boutons dans `evaluate_script`) ont été ajoutées dans `nodes.py`.*
+## 8. Amélioration Continue (Le Rôle du Meta-Analyste, F-61)
+Boucle de feedback hybride Humain + IA (pas d'agent local autonome) :
+1. **Exécution autonome** : c'est TOI (l'assistant) qui lances `uv run python scripts/run_analyzer.py` après un run E2E ou à la demande (chaque run est journalisé dans `logs/run-<timestamp>-<mode>.log`).
+2. **Analyse** : lire la sortie, repérer les problèmes récurrents (ex. parsing Pydantic, top-level `await`, crashes d'outils MCP).
+3. **Validation humaine** : JAMAIS modifier les règles à l'aveugle — résumé clair + solution proposée (ex. « durcir cette règle dans `nodes.py` »), attendre le feu vert.
+4. **Application** : intervenir dans le code source pour durcir prompts ou skills.
+*Exemples réels* : interdiction du top-level `await` Puppeteer + déclarations de fonction pour `evaluate_script` ; triples quotes `r"""…"""` + Monkey Testing pour stabiliser le 4B.
 
 ## 9. Tests Rapides par Nœud (Isolation LLM — F-89)
+Un run E2E complet dure 30-40 min GPU-local ; valider la modif d'UN seul nœud (prompt, skill, config, logique) se fait en **secondes/minutes** via le script d'isolation du dossier `debug/` : chacun appelle la VRAIE fonction de production (0 mock) avec des entrées figées. C'est la boucle de debug itérative recommandée, AVANT tout run E2E. Convention complète : `debug/isolation/README.md`.
 
-**Problème** : Un run E2E complet (`uv run agent_graph.py`, §7) dure 30-40 min en GPU-local. Quand on modifie le prompt, un skill ou la logique d'**un seul nœud**, relancer tout le graphe pour valider la modification est un gaspillage massif — 95% du temps est passé à valider des nœuds non modifiés.
+| Script | Nœud testé | Commande |
+|---|---|---|
+| `debug/run_router.py` | Router (classification langage) | `uv run python debug/run_router.py` |
+| `debug/run_prompt_refiner.py` | PromptRefiner (meta-prompt) | `uv run python debug/run_prompt_refiner.py` |
+| `debug/run_architect.py` | Architect (découpage + stratégie) | `uv run python debug/run_architect.py` |
+| `debug/run_drafter.py` | Drafter (logique pure) | `uv run python debug/run_drafter.py` |
+| `debug/run_security.py` | Security (audit OWASP) | `uv run python debug/run_security.py` |
+| `debug/run_judge.py` | Judge (verdict final) | `uv run python debug/run_judge.py` |
+| `debug/run_coder.py` | Coder (génération code) | `uv run python debug/run_coder.py` |
+| `debug/run_web_tester_standalone.py` | Web Tester (assertions) | `uv run python debug/run_web_tester_standalone.py` |
+| `debug/isolation/run_linter.py` | Linter (déterministe, 0 LLM) | `uv run python debug/isolation/run_linter.py` |
+| `debug/validate_static_tester_live.py` | Static Tester (déterministe) | `uv run python debug/validate_static_tester_live.py` |
 
-**Solution** : Le dossier `debug/` contient un **script d'isolation par nœud LLM** (Feature F-89). Chaque script appelle la **vraie fonction de production** (0 mock, 0 duplication) avec des **entrées figées** (fixtures), ce qui permet de couper, corriger, relancer en **secondes/minutes** au lieu de dizaines de minutes.
-
-**Quand l'utiliser** : à chaque fois qu'une modification impacte un ou plusieurs nœuds (changement de prompt, de skill, de config, de logique), **avant** de lancer le run E2E complet. C'est la boucle de debug itérative recommandée.
-
-### Scripts disponibles
-
-| Script | Nœud testé | Commande | Usage type |
-|---|---|---|---|
-| `debug/run_router.py` | Router (classification langage) | `uv run python debug/run_router.py` | Valider qu'un prompt Python ne déborde pas vers JS (bug F-56a). Jeu de 5 prompts (Python/React/HTML/Rust/ambigu). |
-| `debug/run_prompt_refiner.py` | PromptRefiner (meta-prompt) | `uv run python debug/run_prompt_refiner.py` | Valider la détection de termes vagues sans inventer de scope. 3 prompts (vagues/structuré/minimaliste). |
-| `debug/run_architect.py` | Architect (découpage + stratégie) | `uv run python debug/run_architect.py` | Valider le découpage (1 fichier = 1 sous-tâche, stratégie techno-driven). Spec Bubble Sort par défaut. |
-| `debug/run_drafter.py` | Drafter (logique pure) | `uv run python debug/run_drafter.py` | Valider la qualité du draft de logique. Sauvegarde le draft pour réinjection dans le Coder. |
-| `debug/run_security.py` | Security (audit OWASP) | `uv run python debug/run_security.py` | Valider la détection XSS/eval/pickle sans faux positifs. 4 codes (propre/XSS/eval/pickle). |
-| `debug/run_judge.py` | Judge (verdict final) | `uv run python debug/run_judge.py` | Valider le verdict + le fail-closed (security=None sans LLM). 4 scénarios (correct/bug/nit/fail-closed). |
-| `debug/run_coder.py` | Coder (génération code) | `uv run python debug/run_coder.py` | Valider le code produit (3 fichiers). Draft optionnel : `--draft debug/drafter_isolation_out/draft_isolation.md`. |
-| `debug/run_web_tester_standalone.py` | Web Tester (assertions) | `uv run python debug/run_web_tester_standalone.py` | Valider les assertions fonctionnelles sur un HTML donné. |
-| `debug/isolation/run_linter.py` | Linter (déterministe, 0 LLM) | `uv run python debug/isolation/run_linter.py` | Valider le gatekeeper syntaxe (7 scénarios buggés/corrects, millisecondes). |
-| `debug/validate_static_tester_live.py` | Static Tester (déterministe) | `uv run python debug/validate_static_tester_live.py` | Valider le gatekeeper DOM + wiring (2 scénarios, <6s). |
-
-### Boucle de debug recommandée
-
-1. **Identifier le nœud impacté** par ta modification (ex: tu as changé le prompt du Judge dans `dspy_nodes.py`).
-2. **Lancer son script d'isolation** : `uv run python debug/run_judge.py`.
-3. **Observer le verdict** : le script affiche le contrat (modèle, durée) + la sortie (verdict, findings, métriques).
-4. **Couper si erreur**, corriger le prompt/code, relancer (la boucle prend des secondes à minutes, pas 30 min).
-5. **Input ad hoc** : pour tester un cas spécifique sans modifier le script, passe l'input en CLI — `uv run python debug/run_judge.py bug` (scénario nommé) ou `uv run python debug/run_router.py "ma description de tâche"` (prompt unique), ou `@fichier` pour charger depuis un fichier.
-6. **Une fois le nœud validé isolément**, relancer le run E2E complet (§7) pour valider l'intégration de bout en bout.
-
-### Détail technique important
-
-Tous les nœuds DSPy (Router/PromptRefiner/Architect/Drafter/Security/Judge) **ignorent** le paramètre `*_model` qu'on leur passe — le vrai modèle vient de `_run_dspy_node → model_lifecycle(spec)` qui spawn son propre llama-server. Les scripts d'isolation reproduisent donc fidèlement le comportement production (prompts F-44/F-56/F-65, DSPy, model_lifecycle), en sautant juste le reste du graphe.
-
-Voir [`debug/isolation/README.md`](./debug/isolation/README.md) pour la convention complète (méthodologies manuelles F-55 + scripts d'isolation LLM F-89 + golden files pour les nœuds déterministes).
+Boucle : identifier le nœud impacté → lancer son script → observer le verdict → couper si erreur, corriger, relancer. Input ad hoc : scénario nommé (`debug/run_judge.py bug`), prompt en CLI (`debug/run_router.py "ma description"`), ou `@fichier`. Une fois le nœud validé isolément, relancer l'E2E complet (§7). Détail technique : les nœuds DSPy ignorent le paramètre `*_model` — le vrai modèle vient de `_run_dspy_node → model_lifecycle(spec)` qui spawn son propre llama-server ; les scripts reproduisent fidèlement ce comportement.
 
 ## 10. Run de Référence (Golden Run)
+Run E2E parfait sauvegardé définitivement : `debug/reference_run_qwen4b_bubble_sort/` — fichiers générés complets, draft de l'Architecte, journal d'exécution (`run_full.log`) avec tableau d'observabilité. Métriques clés : 1768 s (~29,5 min) GPU local ; 648 748 tokens ; Coder 2 itérations (la 1ère corrigée par les gardes, la 2e validée par la boucle F-45) ; Qwen-4B (Coder) + Ornith-9B (Architect/Judge). Étalon-or prouvant que petits modèles + Monkey Testing + guardrails syntaxiques produisent des apps Vanilla JS complexes de manière fiable.
 
-Pour toute vérification, un "Golden Run" (run E2E parfait ayant généré le code et passé tous les tests visuels, linting et validations du Juge) a été sauvegardé définitivement.
-
-**Emplacement :** `debug/reference_run_qwen4b_bubble_sort/`
-**Contenu :**
-- Fichiers générés complets (`index.html`, `styles.css`, `script.js`)
-- Le brouillon de l'Architecte (`draft_bubble_sort_viz_001.md`)
-- Le journal d'exécution E2E (`run_full.log`) avec le tableau d'observabilité.
-
-**Métriques clés de ce run de référence (Bubble Sort) :**
-- **Durée Totale :** 1768.1 secondes (environ 29.5 minutes) sur GPU local.
-- **Jetons (Tokens) :** 648 748 tokens traités au total.
-- **Itérations du Coder :** Le Coder a généré le code 2 fois. La première itération comportait une erreur interceptée par les gardiens (Static Tester / Juge). La boucle d'auto-correction (F-45) l'a relancé avec le bon contexte, et la 2ème passe a été validée avec succès.
-- **Modèles :** Qwen-4B (Coder) et Ornith-9B (Architect/Judge).
-
-Ce run sert d'étalon-or pour prouver que l'orchestrateur, le *Monkey Testing* (Fuzzing UI) et les *Guardrails* syntaxiques (triples quotes) permettent à des petits modèles (4B) de réaliser des applications Vanilla JS complexes de manière fiable.
-
-## 11. Maintenance Régulière des Dépendances et de Python (Feature F-98)
-Pour éviter l'accumulation de dette technique et garantir la compatibilité continue de l'infrastructure logicielle, la maintenance de la stack (version de Python et paquets `uv`) est confiée à l'Assistant IA (Pair Programmer).
-
-**Directives pour l'Assistant IA :**
-1. **Exécution de la Mise à Niveau** : À la demande de l'utilisateur ou lors des cycles de maintenance, c'est **toi (l'assistant)** qui as la charge d'exécuter la montée de version des dépendances via `uv lock --upgrade` et `uv sync` (ou via le script `scripts/upgrade_stack.py`).
-2. **Validation Immédiate par Tests (Non-Régression)** : Après toute mise à niveau, tu dois impérativement lancer la suite de tests (`pytest`), diagnostiquer les éventuels conflits d'API ou ruptures de signatures et adapter les tests/middlewares en conséquence.
-3. **Validation E2E & Rapport** : Confirmer la stabilité via un run d'isolation ou de test du graphe, présenter à l'utilisateur la synthèse des montées de versions majeures/mineures et préparer la Pull Request dédiée.
-
+## 11. Maintenance Régulière des Dépendances et de Python (F-98)
+1. **Exécution** : à la demande de l'utilisateur ou lors des cycles de maintenance, monter les dépendances via `uv lock --upgrade` + `uv sync` (ou `scripts/upgrade_stack.py`).
+2. **Validation immédiate (non-régression)** : lancer `pytest` après toute mise à niveau, diagnostiquer conflits d'API/ruptures de signatures, adapter tests/middlewares.
+3. **Validation E2E + rapport** : confirmer la stabilité via un run d'isolation ou de graphe, présenter la synthèse des montées majeures/mineures, préparer la PR dédiée.
