@@ -659,6 +659,21 @@ async def run_coding_workflow(
                                 + gate.warnings_block
                             )
 
+                # F-102 : snapshot git du worktree SANS contamination (scratch index
+                # + update-ref refs/graph-orchestrator/turns/<key>) au DÉBUT de
+                # l'itération, APRÈS le Drafter (le draft_*.md ne doit pas compter
+                # comme changement de code du tour). Base stable du « ce que git
+                # dit » pour le Judge — survit à un git gc mi-run, fonctionne même
+                # si commit_iteration (F-53) échoue, et dès l'itération 1 (base
+                # pré-Coder, même vide). Reprise après crash : une ref existante
+                # n'est JAMAIS avancée (le premier snapshot est le vrai départ du
+                # tour). Best-effort : None silencieux si git indisponible.
+                if git_ok and settings.turn_checkpoint_enabled:
+                    from .turn_checkpoint import record_turn_checkpoint
+                    sub_dict["turn_ref"] = record_turn_checkpoint(
+                        f"{subtask.task_id}-iter{iteration}", repo_path=run_output_dir
+                    )
+
                 # 1. Coder (smolagents, modèle FAST)
                 coder_res, m1 = await execute_coder_node(sub_dict, fast_model, settings)
                 if m1:
@@ -677,6 +692,21 @@ async def run_coding_workflow(
                     from .git_snapshot import commit_iteration, get_last_diff
                     commit_iteration(iteration, repo_path=run_output_dir)
                     sub_dict["git_diff"] = get_last_diff(repo_path=run_output_dir)
+                    # F-102 : diff STRUCTURÉ lu depuis la ref du tour (base =
+                    # snapshot pré-Coder). Le Judge consomme le résumé compact
+                    # (statut +ajouts/-suppressions par fichier) — pas les
+                    # contenus, il a déjà les fichiers complets. Best-effort :
+                    # résumé vide si le diff n'est pas ready, jamais bloquant.
+                    turn_ref = sub_dict.get("turn_ref")
+                    if turn_ref and settings.turn_checkpoint_enabled:
+                        from .turn_checkpoint import read_turn_diff, summarize_turn_diff
+                        sub_dict["turn_diff_summary"] = summarize_turn_diff(
+                            read_turn_diff(
+                                turn_ref,
+                                repo_path=run_output_dir,
+                                include_contents=False,
+                            )
+                        )
 
                 print("    [>] Coder terminé. Déclenchement des Audits parallèles (Tester & Sécurité)...")
 

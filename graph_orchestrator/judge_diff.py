@@ -19,6 +19,12 @@ COMPORTEMENT DIFFÉRENCIÉ :
   IN-DIFF ONLY) + full-file tronqué (contexte secondaire pour vérifier que le
   diff ne casse pas une exigence existante).
 
+F-102 (turn checkpoint) : ``turn_diff_files`` (résumé structuré lu depuis la ref
+``refs/graph-orchestrator/turns/<key>``) préfixe un bloc « CE QUE GIT DIT » —
+statut + ajouts/suppressions PAR FICHIER, disponible dès l'itération 1 (là où le
+diff texte F-53 est vide, <2 commits). Absent/vide → comportement inchangé
+(rétrocompat stricte).
+
 Miroir du pattern ``targeted_retest.build_targeted_retest_block`` (F-52/F-53) qui
 injecte le diff dans un bloc prompt plutôt qu'en nouveau champ DSPy → cohérence
 + zéro drift sur les tests Judge existants.
@@ -26,9 +32,23 @@ injecte le diff dans un bloc prompt plutôt qu'en nouveau champ DSPy → cohére
 
 from __future__ import annotations
 
-from typing import List
+from typing import List, Optional
 
 from .feedback_utils import truncate_output
+
+
+def _render_turn_summary(files: List[dict]) -> str:
+    """Rend le résumé F-102 en lignes compactes ``- [status] path (+A/-D)``."""
+    lines = []
+    for f in files:
+        additions, deletions = f.get("additions"), f.get("deletions")
+        if additions is None or deletions is None:
+            counts = "binaire"
+        else:
+            counts = f"+{additions}/-{deletions}"
+        marker = " (binaire)" if f.get("unrenderable") else ""
+        lines.append(f"- [{f.get('status', 'modified')}] {f.get('path', '')} ({counts}){marker}")
+    return "\n".join(lines)
 
 
 def build_judge_code_block(
@@ -36,6 +56,7 @@ def build_judge_code_block(
     git_diff: str,
     *,
     full_max_chars: int = 6000,
+    turn_diff_files: Optional[List[dict]] = None,
 ) -> str:
     """Construit le contenu du champ ``code`` du Judge, ancré IN-DIFF ONLY.
 
@@ -54,6 +75,10 @@ def build_judge_code_block(
             le diff porte l'essentiel ; le full-file devient contexte secondaire
             pour la vérification des exigences, donc tronqué pour économiser le
             budget tokens du LLM.
+        turn_diff_files: Résumé structuré F-102 (``turn_checkpoint.summarize_turn_diff``,
+            propagé dans ``subtask["turn_diff_summary"]``) — ``None``/vide = pas de
+            bloc (rétrocompat). Préfixe « CE QUE GIT DIT » quelle que soit
+            l'itération (dès la 1re : manifeste des fichiers créés).
 
     Returns:
         Le bloc texte à passer au champ ``code`` de ``CodeJudgeSignature``.
@@ -68,10 +93,21 @@ def build_judge_code_block(
         except Exception:
             pass
 
+    # F-102 : résumé structuré « ce que git dit » (par fichier). En tête, quelle
+    # que soit l'itération — c'est le manifeste des fichiers touchés par le tour.
+    turn_block = ""
+    if turn_diff_files:
+        turn_block = (
+            "=== CE QUE GIT DIT (turn checkpoint F-102) ===\n"
+            "Fichiers touchés par le Coder à CETTE itération (statut git, "
+            "+ajouts/-suppressions) :\n"
+            f"{_render_turn_summary(turn_diff_files)}\n\n"
+        )
+
     # Itération 1 (ou git indisponible) : pas de diff, tout est nouveau.
     # Rétrocompatibilité stricte avec le comportement historique (full-file).
     if not git_diff or not git_diff.strip():
-        return full_code or "Code manquant"
+        return turn_block + (full_code or "Code manquant")
 
     # Itération >1 : diff présent → on l'injecte en tête (doctrine IN-DIFF ONLY),
     # suivi du code complet tronqué (contexte pour la vérification des exigences).
@@ -83,7 +119,8 @@ def build_judge_code_block(
     ) or "Code complet indisponible (fichiers illisibles)."
 
     return (
-        "=== DIFF MODIFIÉ (à juger EN PRIORITÉ — doctrine IN-DIFF ONLY) ===\n"
+        turn_block
+        + "=== DIFF MODIFIÉ (à juger EN PRIORITÉ — doctrine IN-DIFF ONLY) ===\n"
         "Les lignes ci-dessous sont EXACTEMENT ce que le Coder a touché depuis la "
         "itération précédente. Juge en priorité ces modifications ; les zones NON "
         "listées ici marchaient déjà à l'itération précédente (ne les re-juge pas "

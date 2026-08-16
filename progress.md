@@ -38,6 +38,47 @@
       web-tester). Implémentation TERMINÉE (42 tests sur les 3 zones, 692 passed / 7
       pré-existants non liés).
 
+## Jalons de l'Itération (cycle F-102 — Checkpoint git par itération pour le Judge)
+> Priorité 8-bis (update références 2026-08-14, fiche 09-open-swe). Le Judge relit
+> CE QUE GIT DIT de l'itération (diff structuré par fichier) au lieu de rejouer les
+> tool-calls — complément de F-53 (git_snapshot) et F-70 (judge_diff), disponible
+> DÈS l'itération 1 (le diff texte F-53 y est vide, <2 commits).
+
+- [x] F102-1 : Module `graph_orchestrator/turn_checkpoint.py` (port Windows natif
+      de `references/open-swe/agent/utils/turn_checkpoint.py`, 0 LLM, 0 shell
+      POSIX) — `record_turn_checkpoint` : snapshot du worktree SANS contaminer
+      HEAD/index/worktree (index scratch `GIT_INDEX_FILE` tempfile → read-tree →
+      add -A → write-tree → commit-tree → update-ref
+      `refs/graph-orchestrator/turns/<key>` ; une REF survit à un git gc mi-run) ;
+      `read_turn_diff` : diff structuré `{status, files, truncated}` (numstat +
+      name-status + contenus base/head via `cat-file --batch` natif, blob >400 Ko
+      unrenderable, cap 200 fichiers) ; parseurs purs ports fidèles.
+- [x] F102-2 : Écarts consciencieux documentés — invariant « earliest wins » de
+      merge_checkpoint encodé au niveau de la REF (jamais avancée : une reprise
+      après crash ne fait pas glisser la base du tour) ; garde d'isolation F-53
+      réutilisée (refus de toute écriture de ref vers un repo parent) ; blobs
+      octets bruts (pas de base64 sandbox) ; param `include_contents` ajouté
+      (runtime Judge = résumé seul, saute cat-file).
+- [x] F102-3 : Intégration `workflows.py` — snapshot `<task_id>-iter<N>` au DÉBUT
+      de chaque itération (APRÈS le Drafter : le draft ne compte pas comme
+      changement de code) ; post-Coder `read_turn_diff(include_contents=False)` →
+      `summarize_turn_diff` → `sub_dict["turn_diff_summary"]` (best-effort).
+- [x] F102-4 : Intégration `judge_diff.py` — `build_judge_code_block(...,
+      turn_diff_files=)` préfixe « CE QUE GIT DIT (turn checkpoint F-102) » :
+      manifeste par fichier (statut, +ajouts/-suppressions, binaire), devant le
+      bloc diff texte IN-DIFF en iter >1 ; absent = comportement F-70 pur.
+      Appel Judge (dspy_nodes.py) alimenté depuis `subtask["turn_diff_summary"]`.
+- [x] F102-5 : Config `TURN_CHECKPOINT_ENABLED` (défaut true) + `.env.example` +
+      `.env`. Script isolation `debug/run_turn_checkpoint.py` (convention F-89).
+- [x] F102-6 : Validation — **34 tests nouveaux PASS** (29 module : non-
+      contamination HEAD/index, reprise earliest-wins, anti-pollution parent,
+      binaire/gros blob/truncated 201 fichiers, séquence prod exacte ; +4
+      judge_diff ; +1 config) ; suite complète **1284 passed / 0 failed /
+      1 skipped** (1250 baseline, 0 régression) ; LIVE isolation **8/8
+      invariants** (résumé iter 1 = 2 fichiers added alors que diff texte F-53 =
+      0 char). État disque synchronisé (feature_list F-102 completed, contract
+      C396-C400, plan case P8-bis cochée, progress).
+
 ## Jalons de l'Itération (cycle F-100 — Recettes de vérification exécutable)
 > Priorité 6 (update références 2026-08-14, fiche 25-hermes-agent). « La page est
 > servie et répond » devient une preuve exécutable au lieu de `file://` + console

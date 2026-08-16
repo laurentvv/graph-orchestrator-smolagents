@@ -105,6 +105,7 @@ Un run E2E complet dure 30-40 min GPU-local ; valider la modif d'UN seul nœud (
 | `debug/isolation/run_linter.py` | Linter (déterministe, 0 LLM) | `uv run python debug/isolation/run_linter.py` |
 | `debug/validate_static_tester_live.py` | Static Tester (déterministe) | `uv run python debug/validate_static_tester_live.py` |
 | `debug/run_verify.py` | Vérif exécutable F-100 (recette + readiness HTTP, 0 LLM) | `uv run python debug/run_verify.py [dossier]` |
+| `debug/run_turn_checkpoint.py` | Checkpoint git par itération F-102 (snapshot sans contamination, 0 LLM) | `uv run python debug/run_turn_checkpoint.py` |
 
 Boucle : identifier le nœud impacté → lancer son script → observer le verdict → couper si erreur, corriger, relancer. Input ad hoc : scénario nommé (`debug/run_judge.py bug`), prompt en CLI (`debug/run_router.py "ma description"`), ou `@fichier`. Une fois le nœud validé isolément, relancer l'E2E complet (§7). Détail technique : les nœuds DSPy ignorent le paramètre `*_model` — le vrai modèle vient de `_run_dspy_node → model_lifecycle(spec)` qui spawn son propre llama-server ; les scripts reproduisent fidèlement ce comportement.
 

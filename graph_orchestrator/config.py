@@ -337,6 +337,15 @@ class Settings:
     # CODER_ULTRA_CORRECTION=false pour A/B/debug.
     coder_ultra_correction: bool = True
 
+    # --- Checkpoint git par itération (F-102, port open-swe turn_checkpoint) ---
+    # Snapshot du worktree au DÉBUT de chaque itération Coder SANS contaminer
+    # HEAD/index/worktree (GIT_INDEX_FILE scratch + update-ref refs/graph-
+    # orchestrator/turns/<key>). Le Judge reçoit un résumé structuré « ce que
+    # git dit » (statut +ajouts/-suppressions par fichier), complément du diff
+    # texte F-53 — et disponible dès l'itération 1. Opt-out
+    # TURN_CHECKPOINT_ENABLED=false (retour au comportement F-53 seul).
+    turn_checkpoint_enabled: bool = True
+
     # --- Consolidation mémoire KG (Priorité 6-ter / F-68 Phase 1) ---
     # Le KG DuckDB grossit indéfiniment : dedup_key ne capte que les doublons
     # EXACTS, et rien n'oublie jamais. La consolidation (LLM-juge qm émettant
@@ -542,6 +551,7 @@ def load_settings() -> Settings:
         judge_respect_test_failure=_get_bool("JUDGE_RESPECT_TEST_FAILURE", True),
         visual_audit_enabled=_get_bool("VISUAL_AUDIT_ENABLED", True),
         coder_ultra_correction=_get_bool("CODER_ULTRA_CORRECTION", True),
+        turn_checkpoint_enabled=_get_bool("TURN_CHECKPOINT_ENABLED", True),
         memory_consolidation_enabled=_get_bool("MEMORY_CONSOLIDATION_ENABLED", True),
         memory_consolidation_after=_get_int("MEMORY_CONSOLIDATION_AFTER", 10),
         memory_retention_days=_get_int("MEMORY_RETENTION_DAYS", 30),

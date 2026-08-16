@@ -156,3 +156,51 @@ class TestJudgeDeliverableFiles:
         monkeypatch.chdir(tmp_path)
         r = _judge_deliverable_files({"target_files": []})
         assert r == ["index.html"]
+
+
+# ==========================================
+# F-102 — bloc « CE QUE GIT DIT » (turn checkpoint)
+# ==========================================
+
+class TestTurnDiffBlock:
+    TURN_FILES = [
+        {"path": "index.html", "status": "modified", "additions": 8, "deletions": 3, "unrenderable": False},
+        {"path": "styles.css", "status": "added", "additions": 120, "deletions": 0, "unrenderable": False},
+        {"path": "old.js", "status": "removed", "additions": 0, "deletions": 45, "unrenderable": False},
+    ]
+
+    def test_resume_present_des_l_iter1(self, tmp_path):
+        """Iter 1 (diff texte vide) : le manifeste F-102 préfixe le full-file."""
+        f = tmp_path / "index.html"
+        f.write_text("<html></html>", encoding="utf-8")
+        result = build_judge_code_block([str(f)], "", turn_diff_files=self.TURN_FILES)
+        assert "CE QUE GIT DIT" in result
+        assert "[modified] index.html (+8/-3)" in result
+        assert "[added] styles.css (+120/-0)" in result
+        assert "[removed] old.js (+0/-45)" in result
+        # Le full-file historique reste présent après le manifeste.
+        assert "<html></html>" in result
+
+    def test_resume_devant_le_diff_texte_iter_superieure(self, tmp_path):
+        """Iter >1 : manifeste F-102 PUIS diff texte IN-DIFF PUIS code complet."""
+        f = tmp_path / "index.html"
+        f.write_text("v2", encoding="utf-8")
+        result = build_judge_code_block(
+            [str(f)], "+v2", turn_diff_files=self.TURN_FILES[:1]
+        )
+        assert result.index("CE QUE GIT DIT") < result.index("DIFF MODIFIÉ") < result.index("CODE COMPLET")
+
+    def test_binaire_rendu_explicite(self, tmp_path):
+        files = [{"path": "img.png", "status": "modified", "additions": None, "deletions": None, "unrenderable": True}]
+        result = build_judge_code_block([], "+x", turn_diff_files=files)
+        assert "[modified] img.png (binaire) (binaire)" in result
+
+    def test_retrocompat_sans_resume(self, tmp_path):
+        """turn_diff_files absent/vide → AUCUN marqueur F-102 (comportement F-70 pur)."""
+        f = tmp_path / "a.py"
+        f.write_text("a = 1", encoding="utf-8")
+        for files in (None, []):
+            result = build_judge_code_block([str(f)], "", turn_diff_files=files)
+            assert "CE QUE GIT DIT" not in result
+            result2 = build_judge_code_block([str(f)], "+a = 2", turn_diff_files=files)
+            assert "CE QUE GIT DIT" not in result2
