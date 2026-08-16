@@ -12,11 +12,18 @@ Python ET du log console web) : on garde la "tête" (l'erreur, en haut) et la
 
 La troncature s'applique **à la lecture** (injection au LLM), jamais à l'écriture
 en base (DuckDB garde le contenu intégral pour ne pas casser la dédup par hash).
+
+F-105 : `truncate_output` est aussi le point de branchement de la REDACTION de
+secrets (redaction.py, directive « Redact » mattpocock) — tout ce qui transite
+vers le LLM passe par ici (Tester→Judge, Judge→Coder, bash_command).
 """
 
 from __future__ import annotations
 
 from typing import List, Optional
+
+from .config import settings
+from .redaction import redact_secrets
 
 
 # Tronçon inséré entre tête et queue quand on coupe. Le compte de lignes coupées
@@ -50,6 +57,14 @@ def truncate_output(
     """
     if not text:
         return ""
+
+    # F-105 : redaction de secrets AVANT tout autre traitement (y compris le
+    # cas "court" qui retourne le texte tel quel) — un secret dans une sortie
+    # courte doit être masqué exactement comme dans une sortie longue. Opt-out
+    # REDACTION_ENABLED (défaut True). Doctrine : à la lecture (LLM/logs),
+    # DuckDB conserve l'intégral.
+    if settings.redaction_enabled:
+        text = redact_secrets(text)
 
     # Garde-fou : si la chaîne dépasse max_chars même après découpage ligne par
     # ligne, on borne aussi en caractères. On traite d'abord le cas "court".
