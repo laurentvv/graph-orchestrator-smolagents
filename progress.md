@@ -38,6 +38,48 @@
       web-tester). Implémentation TERMINÉE (42 tests sur les 3 zones, 692 passed / 7
       pré-existants non liés).
 
+## Jalons de l'Itération (cycle F-101 — Compaction v2 : petits modèles + anti-boucle)
+> Priorité 9 (update références 2026-08-14, fiches opencode/learn-claude-code/pi/
+> claude-science/hermes-agent). La compaction déterministe 5 couches reste la
+> défaut ; ce cycle lui ajoute l'archive disque perte-zéro, la garde overflow
+> à usage unique, et prépare (testé, dormant) le volet sémantique LLM opt-in.
+
+- [x] F101-1 : Exploration (2 subagents parallèles) — opencode compaction.ts
+  (SUMMARY_TEMPLATE 5 sections, UPDATE_INSTRUCTIONS verbatim, select() entrée
+  entière, chaînage {summary,recent}), s08 (ordre tool_result_budget → snip
+  archive .transcripts → micro réutilise les chemins → compact LLM, marqueur
+  "[N messages archived at]", bloc <persisted-output>, retry réactif unique),
+  pi §3.9 (overflowRecoveryUsed/failure_drain), claude-science (fold keys =
+  search queries, never reconstruct, frame scratchpad), hermes (budget
+  remboursé sur usage provider vérifié, latch verdict unique).
+- [x] F101-2 : Module dormant `compaction_prompts.py` (0 LLM) — prompts
+  opencode petits modèles + règles fold claude-science + build_summary_prompt
+  (ordre fidèle) + select_head_recent (entrée ENTIÈRE jamais coupée).
+- [x] F101-3 : Module `compaction_guards.py` (0 LLM) — OverflowGuard (pi :
+  décision atomique armer/récupérer, drain au 2e overflow, réarmement par
+  nouvel input uniquement) + CompactionBudget (hermes simplifié : verdict par
+  usage provider réel, remboursement, breaker ; écarts DB/probation
+  documentés) + is_context_overflow_error (patterns provider, tolérant).
+- [x] F101-4 : `compaction.py` v2 — archive_steps (JSONL uuid, open("x"),
+  sérialisation défensive) + apply_snip_compact (marqueur s08 exact,
+  chaînage "Earlier archives kept:", FRAME) + persist_large_output
+  (<persisted-output> + Full output/Preview, safe_id, jamais réécrit) +
+  tool_result_budget persiste AVANT de tronquer (remplacement seulement s'il
+  réduit) + micro_compact réutilise les chemins persistés + context_frame
+  sur l'agent + snip déplacé EN TÊTE (archive aux contenus originaux).
+- [x] F101-5 : Branchement `run_with_retry` — OverflowGuard par exécution de
+  nœud : 1er overflow → récupération (purge mémoire + message d'action
+  directe), 2e → failure_drain (return None immédiat, le graphe continue).
+  Cohérent F-104 : l'overflow est fatal-4xx au transport → remonte au nœud.
+- [x] F101-6 : Config COMPACTION_ARCHIVE_ENABLED / COMPACTION_OVERFLOW_GUARD
+  (défauts true) + .env.example + .env local.
+- [x] F101-7 : Validation — **63 tests nouveaux PASS** (test_compaction_v2.py)
+  ; suite complète **1390 passed / 0 failed / 1 skipped** (1315 baseline +
+  ~12 live, 0 régression ; flaky minute-boundary pré-existant documenté) ;
+  py_compile 5 fichiers ; smoke live du snip archivé avant les tests. État
+  disque synchronisé (feature_list F-101 completed, contract C409-C414, plan
+  case P9 cochée, progress).
+
 ## Jalons de l'Itération (cycle F-104 — Retry LLM v2 + init MCP non bloquante)
 > Priorité 8 (update références 2026-08-14, fiches openfox/opencode/crush/deer-flow).
 > Diagnostic d'entrée : AUCUN retry transport n'existait — un « Connection error »

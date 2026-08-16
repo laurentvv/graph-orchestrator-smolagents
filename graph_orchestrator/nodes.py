@@ -37,6 +37,7 @@ from .skills_loader import load_skill_body
 from .loop_guard import LoopGuard, extract_tool_calls_from_step
 from .stall_detector import StallDetector, classify_turn, dominant_material_hash
 from .goal_enforcer import GoalAction, GoalEnforcer
+from .compaction_guards import OverflowGuard, is_context_overflow_error
 from .llama_server import model_lifecycle
 from .orphan_repair import repair_orphan_steps
 from .sanitizer import sanitize_tools
@@ -476,6 +477,23 @@ async def run_with_retry(
     # définitif propre) au lieu de brûler des retries vains. Un run productif reset.
     consecutive_idle = 0
 
+    # F-101 (pi §3.9 overflowRecoveryUsed) : UNE SEULE récupération d'overflow
+    # par exécution de nœud. Un dépassement de contexte est classé fatal par
+    # le retry transport (F-104) et remonte ici ; la purge mémoire (fin de
+    # boucle) est notre récupération. Si la requête recompactée déborde
+    # ENCORE, c'est que le prompt système + tâche est incompressible →
+    # échec propre immédiat (failure_drain pi), plus de retries brûlés.
+    # Un appel run_with_retry = un tour utilisateur logique → garde locale,
+    # réarmée naturellement à l'appel suivant.
+    overflow_guard: Optional[OverflowGuard] = None
+    try:
+        from .config import settings as _settings
+
+        if _settings.compaction_overflow_guard:
+            overflow_guard = OverflowGuard()
+    except Exception:
+        overflow_guard = OverflowGuard()
+
     # Réinitialise les erreurs enregistrées pour ce nouveau run du nœud
     _RUN_ERRORS.clear()
 
@@ -750,6 +768,40 @@ async def run_with_retry(
             msg = str(e)
             print(f"[-] Erreur interne (Tentative {attempt + 1}/{max_retries}): {msg}")
             record_run_error(f"Tentative {attempt + 1} échouée (Exception Interne Python/LLM) : {msg}")
+            # F-101 (pi §3.9) : dépassement de contexte → UNE SEULE récupération.
+            # La purge mémoire de fin de boucle est la compaction de récupération ;
+            # si ça déborde encore après elle, la requête est incompressible
+            # (system prompt + tools schemas + tâche) → failure_drain : échec
+            # propre immédiat, le graphe continue (Judge/itération suivante).
+            if is_context_overflow_error(e):
+                if overflow_guard is None or overflow_guard.on_overflow():
+                    print(
+                        "[!] Overflow recovery (F-101) : contexte débordé → mémoire "
+                        "purgée, tentative compactée. Un second overflow interrompra "
+                        "définitivement ce nœud."
+                    )
+                    record_run_error(
+                        "Overflow recovery : contexte débordé, récupération unique engagée "
+                        "(purge mémoire + retry compacté)."
+                    )
+                    prompt += (
+                        "\n\nATTENTION : ta dernière exécution a fait DÉBORDE la fenêtre "
+                        "de contexte. La mémoire de l'historique a été purgée. Reprends "
+                        "DIRECTEMENT l'action utile suivante, SANS relire ni réexpliquer "
+                        "l'historique."
+                    )
+                else:
+                    print(
+                        f"[-] Failure drain (F-101, pi §3.9) : {overflow_guard.failure} "
+                        f"→ échec définitif propre, plus de retry (le prompt système/"
+                        f"tâche dépasse la fenêtre)."
+                    )
+                    record_run_error(
+                        f"Failure drain overflow : {overflow_guard.failure} — la requête "
+                        f"reste incompressible après récupération unique, abort du nœud "
+                        f"pour économiser le budget."
+                    )
+                    return None, last_metrics
             # Post-mortem run coding_d72dc8e36445c4b6 (F-61) : failure mode récurrent n°1, le modèle
             # ferme search_replace(..., new_string="<JS>{...}") par `}}}` au lieu de `)`. La règle
             # prompt n°8 existe mais ne suffit pas sous charge (leçon F-33 : un prompt seul ne suffit
