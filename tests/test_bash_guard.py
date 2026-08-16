@@ -307,3 +307,141 @@ def test_bash_command_opt_out_runs_subprocess():
             bash_command("rm -rf /")
     # Avec l'opt-out, le guard est contourné → subprocess est bien appelé.
     mock_run.assert_called_once()
+
+
+# ==========================================
+# F-105 — Groupe 10 : password managers & OS keychain (davidondrej)
+# Transpilation fidèle de hooks/dangerous-patterns.txt l.54-65 + cas
+# hooks/test-guard.sh. Doctrine : CLIs distinctifs bloqués d'office ;
+# "op"/"pass" (mots courants) bloqués avec leurs VRAIS subcommands seulement.
+# ==========================================
+@pytest.mark.parametrize("cmd", [
+    "bw get password github",
+    "bw list items",
+    "bw export --format json",
+    "bw unlock --raw",
+    "bws secret get abc123",
+    "cd /tmp && bw export",
+    "lpass show --password github",
+    "lpass export",
+    "keepassxc-cli show vault.kdbx github",
+    "keepassxc-cli export vault.kdbx",
+    "rbw get github",
+    "nordpass get \"GitHub\"",
+    "nordpass export",
+])
+def test_blocks_password_manager_clis(cmd):
+    """CLIs distinctifs de password managers → bloqués d'office."""
+    assert _blocked(cmd)
+
+
+@pytest.mark.parametrize("cmd", [
+    "pass show prod/aws",
+    "pass prod/aws",
+    "pass -c github",
+    "pass grep api_key",
+    "pass insert prod/aws",
+])
+def test_blocks_pass_with_subcommand(cmd):
+    """pass <subcommand/argument> en position de commande → bloqué."""
+    assert _blocked(cmd)
+
+
+@pytest.mark.parametrize("cmd", [
+    "cd /tmp && pass show prod/aws",
+    "echo ok; pass show prod/aws",
+    "true | pass insert prod/aws",
+    "   pass show prod/aws",
+    "cd /tmp\npass show prod/aws",
+])
+def test_blocks_pass_command_position(cmd):
+    """pass détecté en position de commande : après ;&|, en tête (même strippée),
+    ou en début de 2e ligne d'une commande multiligne (re.M)."""
+    assert _blocked(cmd)
+
+
+@pytest.mark.parametrize("cmd", [
+    "op read op://Private/GitHub/token",
+    "op item get GitHub --fields password",
+    "op run -- printenv",
+    "op inject -i .env.tpl -o .env",
+    "op document get \"SSH Key\"",
+    "op signin",
+])
+def test_blocks_op_real_subcommands(cmd):
+    """op (1Password CLI) avec ses vrais subcommands → bloqué."""
+    assert _blocked(cmd)
+
+
+@pytest.mark.parametrize("cmd", [
+    "security find-generic-password -w -s myservice",
+    "security find-internet-password -g -s example.com",
+    "security dump-keychain -d login.keychain-db",
+    "security -q find-generic-password -s x",
+])
+def test_blocks_macos_keychain(cmd):
+    """security find-*-password / dump-keychain (flags avant subcommand inclus) → bloqué."""
+    assert _blocked(cmd)
+
+
+@pytest.mark.parametrize("cmd", [
+    "gpg --export-secret-keys --armor ABC123",
+    "gpg --export-secret-key ABC123",
+    "gpg --export-secret-subkeys ABC123",
+])
+def test_blocks_gpg_private_key_export(cmd):
+    """gpg --export-secret-key(s|subkeys) : export de clés privées → bloqué."""
+    assert _blocked(cmd)
+
+
+@pytest.mark.parametrize("cmd", [
+    "rm -rf /Applications/1Password.app",
+    "open -a NordPass",
+    "open -a \"1Password\"",
+    "brew uninstall --cask nordpass",
+    "brew uninstall bitwarden-cli",
+    "cat ~/.password-store/github.gpg",
+    "ls $HOME/.password-store",
+    "ls ${HOME}/.password-store",
+])
+def test_blocks_pm_artifacts(cmd):
+    """Bundles .app, open -a, brew uninstall d'un PM, coffre ~/.password-store → bloqués."""
+    assert _blocked(cmd)
+
+
+@pytest.mark.parametrize("cmd", [
+    # "pass" mot courant : argument, identifiant, sous-chaîne — PAS une commande
+    "echo \"please pass the token\"",
+    "node <<'NODE'\nconst pass = getPassword();\nNODE",
+    "npm run pass-tests",
+    "grep -R bypass src/",
+    "pass",  # bare pass sans argument (wordcount Python légitime)
+    # "op" : subcommands anodins
+    "op --version",
+    "op whoami",
+    "op signout",
+    "op account list",
+    "git commit -m \"no op needed\"",
+    # security : sous-commandes non-secrètes
+    "security list-keychains",
+    "security find-certificate -a",
+    # gpg : exports PUBLICS / listing
+    "gpg --export --armor ABC123",
+    "gpg --list-secret-keys",
+    # brew : install autorisé, désinstallation d'un non-PM autorisée
+    "brew install nordpass-cli",
+    "brew uninstall wget",
+    # open non-PM, grep prose
+    "open -a Safari",
+    "grep -rn \"password-store\" docs/",
+])
+def test_allows_legitimate_pass_op_etc(cmd):
+    """Faux positifs de la référence (portés de test-guard.sh) → autorisés."""
+    allowed, reason = check_bash_command(cmd)
+    assert allowed, f"La commande légitime ne doit PAS être bloquée : {cmd!r} ({reason})"
+
+
+def test_block_reason_mentions_password_manager():
+    """Le message pédagogique cite les coffres de mots de passe (orientation du LLM)."""
+    reason = _reason("pass show prod/aws")
+    assert "mots de passe" in reason.lower()

@@ -408,6 +408,15 @@ class Settings:
     # Valeur par défaut True : on sécurise par défaut (fail-safe).
     bash_guard_enabled: bool = True
 
+    # --- Redaction de secrets (F-105, P8-bis) ---
+    # Remplace les secrets reconnaissables (API keys, tokens, passwords littéraux,
+    # clés privées PEM) par <REDACTED> dans le feedback injecté au LLM (point de
+    # branchement : feedback_utils.truncate_output, même doctrine que F-21 : la
+    # redaction s'applique à la LECTURE, DuckDB garde l'intégral pour l'audit).
+    # Fail-open documenté : un secret non reconnu passe ; du code n'est jamais
+    # corrompu. Opt-out pour diagnostiquer un feedback "masqué".
+    redaction_enabled: bool = True
+
     # --- DevTools Coder (F-90, séparation Coder/Test) ---
     # Le Coder dispose par défaut de Chrome DevTools pour son auto-validation
     # (F-45) : navigate_page + list_console_messages lui donnent un feedback
@@ -548,6 +557,7 @@ def load_settings() -> Settings:
             "vercel-labs,microsoft,google-labs-code,clerk,greensock",
         ),
         bash_guard_enabled=_get_bool("BASH_GUARD_ENABLED", True),
+        redaction_enabled=_get_bool("REDACTION_ENABLED", True),
         coder_devtools_enabled=_get_bool("CODER_DEVTOOLS_ENABLED", True),
         prompt_refiner_enabled=_get_bool("PROMPT_REFINER_ENABLED", True),
         prompt_refiner_model_id=_get_str("PROMPT_REFINER_MODEL_ID", ""),

@@ -10,6 +10,12 @@ PORTÉE : DENYLIST (pas sandbox Docker — trop lourde pour ce cycle). C'est le
 premier pas concret vers la robustesse runtime (P8-bis) ; la sandbox complète
 (Docker exec / process cloisonné) reste un chantier séparé.
 
+Enrichissement F-105 (P8-bis) : groupe 10 « password managers & OS keychain »
+porté de references/davidondrej-skills/hooks/dangerous-patterns.txt. Doctrine
+anti-faux-positifs de la référence : les CLIs distinctifs (bw, lpass, rbw...)
+sont bloqués d'office ; « op » et « pass » sont des mots courants, ils ne sont
+bloqués qu'avec leurs VRAIS subcommands en position de commande.
+
 Approche : regex sur la commande normalisée (case-insensitive). On couvre les
 deux familles destructrices car l'environnement cible est Windows (cmd.exe via
 shell=True) mais le projet peut aussi tourner sous Git Bash / WSL :
@@ -36,6 +42,12 @@ from typing import Tuple
 # anodin (ex: "/format/mon rapport.txt" ne doit pas déclencher le `format` Windows).
 # On accepte un séparateur explicite (espace, ;, &, |, début) avant le mot-clé.
 _SEP = r"(?:^|[\s;&|]+)"  # début ou séparateur de commande
+# Position de commande STRICTE (F-105, groupe 10) : début de ligne ou après un
+# séparateur ;&| — PAS après un simple espace. Indispensable pour `pass` : dans
+# `echo "please pass the token"` ou `const pass = getPassword()`, le mot est un
+# argument/identifiant, pas une commande. re.M fait matcher `^` sur CHAQUE ligne
+# shell (une commande multiligne `cd /tmp\npass show` doit être bloquée).
+_SEP_CMD = r"(?:^|[;&|]+\s*)"
 
 _DENY_PATTERNS: list[Tuple[re.Pattern, str]] = [
     # --- Unix : suppressions racines / force ---
@@ -101,6 +113,41 @@ _DENY_PATTERNS: list[Tuple[re.Pattern, str]] = [
     # curl/wget pipé dans sh/bash (exécution de code distant sans inspection).
     (re.compile(rf"{_SEP}(?:curl|wget)\s[^\n|]*\|\s*(?:sh|bash|zsh|python3?|perl)(?:\s|$)", re.IGNORECASE),
      "curl/wget | sh : exécution de code distant non inspecté"),
+
+    # --- F-105 (groupe 10) : password managers & OS keychain ---
+    # Port de references/davidondrej-skills/hooks/dangerous-patterns.txt l.54-65.
+    # Un agent ne doit JAMAIS toucher aux coffres de mots de passe : une lecture
+    # `pass show` exfiltre un secret en clair dans la sortie du subprocess.
+    # CLIs distinctifs → bloqués d'office (aucun usage légitime pour l'agent).
+    (re.compile(rf"{_SEP}(?:bws|bw|lpass|keepassxc-cli|rbw|nordpass)(?:\s|$)", re.IGNORECASE | re.M),
+     "CLI de password manager (Bitwarden/lpass/KeePassXC/rbw/NordPass) : les coffres de mots de passe sont interdits à l'agent"),
+    # `pass` (password-store) : mot courant → bloqué UNIQUEMENT en position de
+    # commande avec un argument/subcommand (`pass show`, `pass -c`, `pass toto`).
+    # Bare `pass` (sans argument) reste autorisé (wordcount Python, prose).
+    (re.compile(rf"{_SEP_CMD}pass\s+\S", re.IGNORECASE | re.M),
+     "pass (password-store) : accès au coffre de mots de passe"),
+    # `op` (1Password CLI) : mot courant → bloqué avec ses VRAIS subcommands
+    # seulement (`op --version`, `op whoami`, `op account list` restent libres).
+    (re.compile(rf"{_SEP}op\s+(?:read|run|inject|item|document|vault|connect|service-account|events-api|signin)(?:\s|$)", re.IGNORECASE | re.M),
+     "1Password CLI (op) : lecture/injection de secrets du coffre"),
+    # macOS keychain : extraction de secrets (flags avant subcommand gérés).
+    (re.compile(rf"{_SEP}security\s+(?:-[a-zA-Z]+\s+|--[a-z-]+\s+)*(?:find-generic-password|find-internet-password|dump-keychain)(?:\s|$)", re.IGNORECASE | re.M),
+     "macOS keychain (security) : extraction de secrets système"),
+    # Apps password managers macOS (suppression / manipulation du bundle .app).
+    (re.compile(r"(?:1Password|Bitwarden|NordPass|KeePassXC)\.app", re.IGNORECASE),
+     "application de password manager (.app) : interdite à l'agent"),
+    # Coffre pass sur disque (~/.password-store, $HOME/.password-store, /Users/x/.password-store).
+    (re.compile(r"(?:~|\$HOME|\$\{HOME\}|/Users/[^/\s\"']+)/\.password-store", re.IGNORECASE),
+     "coffre pass sur disque (~/.password-store) : lecture interdite"),
+    # Ouverture d'une app de password manager (macOS open -a).
+    (re.compile(rf"{_SEP}open\s+-a\s+[\"']?(?:1password|bitwarden|nordpass|keepass)", re.IGNORECASE | re.M),
+     "ouverture d'une app de password manager (open -a)"),
+    # Désinstallation brew d'un password manager (install reste autorisé).
+    (re.compile(rf"{_SEP}brew\s+(?:uninstall|remove|rm)[^;&|\n]*\s[\"']?(?:1password|bitwarden|nordpass|keepassxc|lastpass)", re.IGNORECASE | re.M),
+     "désinstallation d'un password manager (brew) : interdite à l'agent"),
+    # gpg : export de clés PRIVÉES (--export / --list-secret-keys restent autorisés).
+    (re.compile(r"--export-secret-(?:keys?|subkeys)(?:[\s=]|$)", re.IGNORECASE),
+     "gpg --export-secret-keys : export de clés privées"),
 ]
 
 
@@ -148,6 +195,7 @@ def check_bash_command(cmd: str) -> Tuple[bool, str]:
                 f"Si ton intention est légitime, REFORMULE en ciblant un chemin BORNÉ et "
                 f"relatif (ex: './build', './dist', 'tests/') plutôt qu'un chemin racine "
                 f"ou système. N'utilise JAMAIS rm -rf /, format, mkfs, dd vers un disque, "
-                f"shutdown, ou git push --force."
+                f"shutdown, git push --force, NI les coffres de mots de passe "
+                f"(pass, op, bw, lpass, keychain) — les secrets ne se lisent pas en clair."
             )
     return True, ""

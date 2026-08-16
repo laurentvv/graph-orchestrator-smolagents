@@ -1778,3 +1778,38 @@ Coder est appliquée correctement par Qwen3.5-9B.
       + section 1-bis AJOUTÉE (demande user) : anti-confusion Usine (ce dépôt) ≠ Produits
       de l'Usine (runs/) + distinction de contexte AGENTS.md (assistant dev) vs prompts.py+skills
       (runtime nœuds). Gate mode local APRÈS réduction : 0 error, 1 warning soft, exit 0.
+
+## Jalons de l'Itération (cycle F-105 — password managers + redaction secrets, 2026-08-16)
+> P8-bis du plan (case « Durcissement sécurité : groupe 10 password managers + redaction
+> secrets »). Suite directe du merge PR #80 (F-103). Sécurité défensive déterministe :
+> l'agent ne doit JAMAIS lire un coffre de mots de passe, ni exfiltrer un secret dans une
+> trace. Miroir du pattern F-38 (denylist + tests paramétrés), 0 LLM, 0 risque runtime.
+
+- [x] F105-1 : Exploration — lecture du groupe 10 davidondrej (dangerous-patterns.txt
+      l.54-65 : doctrine « op/pass = mots courants → vrais subcommands seulement »),
+      test-guard.sh (~42 block PM + ~19 allow), section Redact mattpocock, bash_guard.py
+      F-38 (66 tests), feedback_utils.py (point unique de passage vers le LLM F-21).
+- [x] F105-2 : (a) bash_guard.py +9 patterns transpilés — CLIs distinctifs d'office ;
+      `pass` en position de commande STRICTE (`_SEP_CMD` début/;&| + re.M multiligne) ;
+      `op` avec ses 10 vrais subcommands ; security keychain (flags gérés) ; .app ;
+      ~/.password-store (~/$HOME/${HOME}//Users/x) ; open -a PM ; brew uninstall PM ;
+      gpg --export-secret-key(s|subkeys). Message pédagogique étendu aux coffres.
+- [x] F105-3 : (b) module redaction.py — redact_secrets() : blocs PEM privés (entier),
+      URL creds (user conservé), préfixes réservés (sk-/ghp-/github_pat_/xox[baprs]-/
+      AKIA/AIza/JWT eyJ), Bearer/Authorization, affectations nommées (nom SUFFIXE
+      d'identifiant OK : PGPASSWORD/OS_PASSWORD ; nom + séparateur + quotes conservés).
+      POLITIQUE ANTI-CORRUPTION fail-open : valeurs code-like (a.b, f(), [0], ${x},
+      $VAR, %VAR%, <...>, <8 chars) JAMAIS redactées ; idempotent.
+- [x] F105-4 : Branchement feedback_utils.truncate_output (Testeur→Judge, Judge→Coder,
+      bash_command) AVANT l'early-return court ; doctrine F-21 (lecture seule, DuckDB
+      intégral pour audit). Config redaction_enabled + REDACTION_ENABLED dans
+      .env.example ET .env local (règle AGENTS.md §7).
+- [x] F105-5 : Tests — test_bash_guard.py étendu (66 → 135 : 69 nouveaux groupe 10,
+      tous les faux positifs de la réf couverts) + test_redaction.py (19). 2 bugs de
+      design attrapés à la relecture : \bpassword ne matchait pas PGPASSWORD (préfixe
+      identifiant ajouté) et valeur dotted ya29.* exclue par l'anti-corruption (test
+      corrigé sur valeur dotless — fail-open assumé).
+- [x] F105-6 : Validation — py_compile OK, suite complète **1198 passed / 0 failed /
+      1 skipped** (1110 baseline + 88 nouveaux, 0 régression). État disque synchronisé
+      (feature_list F-105 completed, contract critères 386-390, plan case cochée, ce
+      bloc, README §Guardrails, événements DuckDB run_id f-105).
