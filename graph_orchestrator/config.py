@@ -361,6 +361,17 @@ class Settings:
     llm_retry_max_delay_s: float = 30.0
     llm_retry_jitter: float = 0.25
 
+    # --- Compaction v2 (Priorité 9 / F-101, opencode + s08 + pi) ---
+    # Archive disque perte-zéro : steps snippés → .transcripts/*.jsonl + gros
+    # tool outputs → .task_outputs/tool-results/ (dossier du run, cwd F-40).
+    # Opt-out COMPACTION_ARCHIVE_ENABLED=0 (retour : marqueur texte seul).
+    compaction_archive_enabled: bool = True
+    # Garde overflow pi §3.9 dans run_with_retry : UNE SEULE récupération de
+    # contexte débordé par exécution de nœud ; un second overflow → échec
+    # propre immédiat (plus de retries brûlés sur une requête incompressible).
+    # Opt-out COMPACTION_OVERFLOW_GUARD=0.
+    compaction_overflow_guard: bool = True
+
     # --- Init MCP non bloquante (Priorité 8 / F-104, crush) ---
     # Timeout de connexion PAR SERVEUR (un serveur npx pendu ne bloque jamais
     # le run) : chrome-devtools / context7 / puppeteer. Timeout → dégradation
@@ -581,6 +592,8 @@ def load_settings() -> Settings:
         llm_retry_base_delay_s=_get_float("LLM_RETRY_BASE_DELAY_S", 1.0),
         llm_retry_max_delay_s=_get_float("LLM_RETRY_MAX_DELAY_S", 30.0),
         llm_retry_jitter=_get_float("LLM_RETRY_JITTER", 0.25),
+        compaction_archive_enabled=_get_bool("COMPACTION_ARCHIVE_ENABLED", True),
+        compaction_overflow_guard=_get_bool("COMPACTION_OVERFLOW_GUARD", True),
         chrome_devtools_connect_timeout_s=_get_float("CHROME_DEVTOOLS_CONNECT_TIMEOUT_S", 25.0),
         context7_connect_timeout_s=_get_float("CONTEXT7_CONNECT_TIMEOUT_S", 15.0),
         puppeteer_connect_timeout_s=_get_float("PUPPETEER_CONNECT_TIMEOUT_S", 25.0),
