@@ -88,3 +88,17 @@ def test_tester_max_steps_default_and_override(monkeypatch):
     monkeypatch.setenv("TESTER_MAX_STEPS", "20")
     s2 = load_settings()
     assert s2.tester_max_steps == 20
+
+
+def test_turn_checkpoint_enabled_default_and_override(monkeypatch):
+    """TURN_CHECKPOINT_ENABLED (F-102) : snapshot git par itération sans contamination.
+
+    Défaut = True (opt-out). Le résumé « ce que git dit » complète le diff texte
+    F-53 dès l'itération 1 ; false = retour au comportement F-53 seul."""
+    monkeypatch.delenv("TURN_CHECKPOINT_ENABLED", raising=False)
+    s = load_settings()
+    assert s.turn_checkpoint_enabled is True
+    # Override via env (opt-out).
+    monkeypatch.setenv("TURN_CHECKPOINT_ENABLED", "false")
+    s2 = load_settings()
+    assert s2.turn_checkpoint_enabled is False

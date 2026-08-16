@@ -976,10 +976,12 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
     # F-70 : ancrage IN-DIFF ONLY. Le Judge reçoit le diff multi-fichiers (F-53,
     # déjà propagé dans subtask["git_diff"]) en priorité + le code complet tronqué
     # pour la vérification des exigences. En iter 1 (diff vide) = full-file pur,
-    # rétrocompat strict. Voir judge_diff.build_judge_code_block.
+    # rétrocompat strict. F-102 : + le résumé structuré « ce que git dit » (ref
+    # du tour, disponible dès l'iter 1). Voir judge_diff.build_judge_code_block.
     code_content = build_judge_code_block(
         _judge_deliverable_files(subtask),
         subtask.get("git_diff", ""),
+        turn_diff_files=subtask.get("turn_diff_summary"),
     )
 
     # Fail-closed : pas d'audit sécurité = pas d'approbation. On court-circuite le

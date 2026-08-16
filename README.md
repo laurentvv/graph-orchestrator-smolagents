@@ -99,6 +99,7 @@ The **Coder** model (Qwen-4B) wakes up, reads the Architect's draft, and writes 
 Before the code is finalized, it passes through our CI/CD-like pipeline:
 - **Static Tester:** Instantly checks for Syntax errors (e.g., TS in Vanilla JS) and checks DOM wiring (e.g., `addEventListener` attached to existing IDs).
 - **HTTP readiness proof (F-100):** the deliverable is served on a free local port (`http.server` for vanilla apps, or the project's own start command when detected) and probed — "the page is served and answers" becomes an executable proof instead of `file://` only.
+- **Per-iteration git checkpoint (F-102):** at the start of every Coder iteration the run worktree is snapshotted into a git ref (`refs/graph-orchestrator/turns/<key>`) without touching HEAD, the index or the worktree — the Judge then reads *what git says* changed (per-file status + adds/dels), available from iteration 1 onward.
 - **Multimodal Testing:** The Coder spins up a headless Chrome via MCP, takes a screenshot of `index.html`, and uses its vision capabilities to verify the dark theme and UI rendering.
 - **Judge & Security:** A deep reasoning model audits the code for vulnerabilities (XSS, `eval()`) and functional completeness. 
 
