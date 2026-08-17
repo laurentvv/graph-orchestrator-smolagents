@@ -63,6 +63,7 @@ Prompts de test classés par difficulté dans `references/Prompt-Vault/` (sous-m
 
 ## 5. Projets de Référence
 * **Code et audits** : `docs/references-audit/` (lié au code GitHub stocké dans `references/`) — implémentations production-éprouvées à réutiliser plutôt que de réinventer.
+* **Flags llama-server** : `docs/LLAMA_SERVER_FLAGS.md` — guide de décision pour intégrer un nouveau modèle GGUF (MTP spéculatif, KV quant, cache-reuse, flags écartés avec preuves, méthodologie de bench). À consulter AVANT de changer `<PREFIX>_*` dans le `.env`.
 * **Cartographie Nœuds & Skills** : `docs/NODES_AND_SKILLS.md` — system prompts forcés par nœud, 11 skills, modes eager/lazy (F-57). À consulter pour savoir ce que voit chaque agent LLM à l'exécution.
 * **Refactoring automatique des skills (F-92)** : `scripts/refactor_skills.py` découpe les `SKILL.md` > 80 lignes (sections secondaires → `resources/`, chargement lazy via `view_file`). À exécuter dès qu'un skill devient volumineux.
 
@@ -107,6 +108,8 @@ Un run E2E complet dure 30-40 min GPU-local ; valider la modif d'UN seul nœud (
 | `debug/run_verify.py` | Vérif exécutable F-100 (recette + readiness HTTP, 0 LLM) | `uv run python debug/run_verify.py [dossier]` |
 | `debug/run_turn_checkpoint.py` | Checkpoint git par itération F-102 (snapshot sans contamination, 0 LLM) | `uv run python debug/run_turn_checkpoint.py` |
 | `debug/run_fs_safety.py` | Robustesse FS F-95 (transaction+crash-recovery, verrou cross-process, cloisonnement IO, 0 LLM) | `uv run python debug/run_fs_safety.py` |
+| `debug/test_mtp_spec.py` | Compatibilité/bench MTP spéculatif llama-server (A/B baseline vs `--spec-type draft-mtp`, 0 LLM) | `uv run python debug/test_mtp_spec.py [--only fast\|reasoning\|no_think] [--ctx N]` |
+| `debug/bench_prefill_flags.py` | Bench préfill flags FAST (`--cache-reuse`, `-ub`), charge agent multi-tours simulée (0 LLM) | `uv run python debug/bench_prefill_flags.py [--ctx N] [--turns N]` |
 
 Boucle : identifier le nœud impacté → lancer son script → observer le verdict → couper si erreur, corriger, relancer. Input ad hoc : scénario nommé (`debug/run_judge.py bug`), prompt en CLI (`debug/run_router.py "ma description"`), ou `@fichier`. Une fois le nœud validé isolément, relancer l'E2E complet (§7). Détail technique : les nœuds DSPy ignorent le paramètre `*_model` — le vrai modèle vient de `_run_dspy_node → model_lifecycle(spec)` qui spawn son propre llama-server ; les scripts reproduisent fidèlement ce comportement.
 

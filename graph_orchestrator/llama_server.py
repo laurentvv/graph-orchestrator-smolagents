@@ -197,18 +197,11 @@ class _SpawnedServer:
             logger.warning("[llama-server] échec stop port %s : %s", self.port, str(e)[:120])
 
 
-def _spawn(spec: ModelSpec) -> Optional[_SpawnedServer]:
-    """Spawn un llama-server depuis un ModelSpec (backend=spawn). None si échec/no-op."""
-    blob = spec.model
-    if not blob or not os.path.exists(blob):
-        logger.warning("[llama-server] blob manquant/introuvable (%s) — no-op", blob)
-        print(f"[!] llama-server : blob introuvable ({blob[:40]}...) — no-op")
-        return None
-
-    port = _free_port()
+def _build_cmd(spec: ModelSpec, port: int) -> list[str]:
+    """Construit la commande llama-server depuis un ModelSpec (testable sans spawn)."""
     cmd = [
         _LLAMA_SERVER_BIN,
-        "-m", blob,
+        "-m", spec.model,
         "--host", "127.0.0.1",
         "--port", str(port),
         "-c", str(spec.context),
@@ -232,17 +225,58 @@ def _spawn(spec: ModelSpec) -> Optional[_SpawnedServer]:
         cmd += ["-ngl", str(spec.gpu_layers)]
     if spec.mmproj and os.path.exists(spec.mmproj):
         cmd += ["--mmproj", spec.mmproj]
+    # Décodage spéculatif MTP (bench debug/test_mtp_spec.py 2026-08-17, b10472) :
+    # consomme les couches nextn sinon ignorées. Config retenue sur le 9B dense :
+    # draft-mtp + n-max 2 (27,5 t/s vs 25,6 défaut 3 vs 24,1 avec --spec-default,
+    # baseline 18,2 — ngram-mod de --spec-default dégrade, cf. issue #24266).
+    # Le KV du draft suit la même quantization que le KV principal si kv_quant.
+    if getattr(spec, "spec_mtp", False):
+        kvq = spec.kv_quant or "q8_0"
+        cmd += ["--spec-type", "draft-mtp",
+                "--spec-draft-n-max", "2",
+                "--spec-draft-type-k", kvq, "--spec-draft-type-v", kvq]
+    # Quantization KV cache : gain net au grand contexte (moins de spill WDDM sur
+    # 6 Go), requiert Flash Attention (résolu par --flash-attn auto/on).
+    if getattr(spec, "kv_quant", ""):
+        cmd += ["--cache-type-k", spec.kv_quant, "--cache-type-v", spec.kv_quant]
+    # Réutilisation de chunks KV (shifting) pour les boucles agents multi-tours où
+    # le milieu de l'historique est réécrit (compaction F-101). Bench FAST :
+    # -10% préfill (debug/bench_prefill_flags.py) ; 256 = preset officiel Qwen Coder.
+    if getattr(spec, "cache_reuse", 0):
+        cmd += ["--cache-reuse", str(spec.cache_reuse)]
+    # Sampling serveur (reco Qwen top_k 20 / min_p 0) : nos clients n'envoient que
+    # temperature, le reste vient des défauts llama-server (top_k 40, min_p 0.05).
+    if getattr(spec, "top_k", 0):
+        cmd += ["--top-k", str(spec.top_k)]
+    if getattr(spec, "min_p", -1.0) >= 0:
+        cmd += ["--min-p", str(spec.min_p)]
+    return cmd
+
+
+def _spawn(spec: ModelSpec) -> Optional[_SpawnedServer]:
+    """Spawn un llama-server depuis un ModelSpec (backend=spawn). None si échec/no-op."""
+    blob = spec.model
+    if not blob or not os.path.exists(blob):
+        logger.warning("[llama-server] blob manquant/introuvable (%s) — no-op", blob)
+        print(f"[!] llama-server : blob introuvable ({blob[:40]}...) — no-op")
+        return None
+
+    port = _free_port()
+    cmd = _build_cmd(spec, port)
 
     # model_id logique = "default" garanti de matcher l'alias côté llama-server.
     # openai/ a besoin d'un model_id non-vide dans le body.
     model_id = "default"
 
     ngl_desc = f"ngl={spec.gpu_layers}" if spec.gpu_layers > 0 else "ngl=auto-fit"
-    os.path.basename(_LLAMA_SERVER_BIN) if os.path.sep in _LLAMA_SERVER_BIN else _LLAMA_SERVER_BIN
-    logger.info("[llama-server] spawn blob %s (backend=%s, reasoning=%s, port %d, %s, flash=%s)",
-                os.path.basename(blob)[:20], _LLAMA_BACKEND, spec.reasoning, port, ngl_desc, spec.flash_attn)
+    mtp_desc = "mtp=on" if getattr(spec, "spec_mtp", False) else "mtp=off"
+    kvq_desc = f"kv={spec.kv_quant}" if getattr(spec, "kv_quant", "") else "kv=f16"
+    logger.info("[llama-server] spawn blob %s (backend=%s, reasoning=%s, port %d, %s, flash=%s, %s, %s)",
+                os.path.basename(blob)[:20], _LLAMA_BACKEND, spec.reasoning, port, ngl_desc,
+                spec.flash_attn, mtp_desc, kvq_desc)
     print(f"[*] llama-server : chargement {os.path.basename(blob)[:25]} (backend={_LLAMA_BACKEND}, "
-          f"port {port}, reasoning={spec.reasoning}, {ngl_desc}, flash={spec.flash_attn})...")
+          f"port {port}, reasoning={spec.reasoning}, {ngl_desc}, flash={spec.flash_attn}, "
+          f"{mtp_desc}, {kvq_desc})...")
 
     # F-58-bis : capture des logs llama-server dans logs/llama-server/ (diag GPU/OOM).
     # Avant, stdout/stderr → DEVNULL : impossible de diagnostiquer l'offload GPU ou un

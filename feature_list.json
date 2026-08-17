@@ -1030,6 +1030,15 @@
       "dependencies": [
         "F-111"
       ]
+    },
+    {
+      "id": "F-123",
+      "name": "Décodage spéculatif MTP + KV quantisé + cache-reuse par rôle (flags llama-server opt-in)",
+      "description": "Diagnostic 2026-08-17 : les GGUF MTP du projet (Qwen3.5-4B-MTP, Ornith-1.0-9B-MTP) portent des couches nextn que llama-server IGNORAIT au chargement (logs 'unused tensor blk.32.nextn'). Nouveaux champs ModelSpec spec_mtp/kv_quant (env <PREFIX>_SPEC_MTP, <PREFIX>_KV_QUANT) consommés par _build_cmd (extrait de _spawn pour testabilité) : --spec-type draft-mtp --spec-draft-n-max 2 --spec-draft-type-k/-v <kv> + --cache-type-k/-v <kv>. Bench debug/test_mtp_spec.py (A/B, 0 LLM, b10472 @ctx32k/ngl99) : baseline 18,2 t/s ; draft-mtp 25,6 ; +n-max 2 27,5 ; +KV q8_0 (config livrée) 27,2 (~+50%) ; --spec-default (ngram-mod empilé) EXCLU car dégradé (24,1, issue #24266) ; acceptance 0,70. Qwen-4B RÉGRESSION -42% (acceptance 0,47) → activé sur REASONING/REASONING_NO_THINK uniquement, FAST inchangé. Build CUDA vendé monté b10427 → b10472 (13.3). Voie production validée (model_lifecycle : spawn+santé+complétion+kill, 'creating MTP draft context' dans le log). 7 tests tests/test_llama_server_cmd.py. Complément bench préfill debug/bench_prefill_flags.py (charge agent multi-tours avec bloc médian réécrit, type compaction F-101) : --cache-reuse 256 = -10% préfill sur FAST (validé @ctx49152, valeur des presets officiels llama.cpp Qwen Coder) → nouveau champ ModelSpec cache_reuse (env <PREFIX>_CACHE_REUSE, FAST_CACHE_REUSE=256) ; -ub 1024/2048 = +2/+6% seulement → défaut 512 conservé ; flags écartés après recherche : --spec-default (ngram-mod, dégradé), --swa-full (no-op hybride), --kv-unified (no-op 1 slot), --agent (sécurité/redondance MCP), --reasoning-preserve (aucun rôle thinking+multi-tours). Validation E2E run complet reportée à la prochaine session.",
+      "status": "completed",
+      "dependencies": [
+        "F-58"
+      ]
     }
   ]
 }
