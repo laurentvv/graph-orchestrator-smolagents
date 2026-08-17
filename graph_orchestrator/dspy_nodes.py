@@ -79,36 +79,41 @@ class RouterSignature(dspy.Signature):
 class PromptRefinerSignature(dspy.Signature):
     __doc__ = with_invariants(
         "prompt_refiner",
-        """Pipeline obligatoire :
-        1. CLARTÉ & DÉSAMBIGUÏSATION : détecte les termes VAGUES du prompt brut (ex: 'rapide',
-           'user-friendly', 'flexible', 'moderne', 'optimisé', 'beau') et liste-les dans
-           `ambiguities_detected`. Reformule-les en exigences mesurables (ex: 'rapide' →
-           'temps de réponse < 200ms' SI chiffrable, sinon supprime/nuance).
-        2. CONTEXTE : utilise `available_capabilities` pour ORIENTER la spec vers ce qui est
-           faisable (web-tester → critères testables via navigateur ; python-tester → critères
-           pytest ; context7 → note 'consulter la doc de la lib'). Tu ne fais que CITER, tu ne
-           consommes pas ces capacités toi-même.
-        3. FORMATAGE : structure la spec en sections fixes EXACTES :
-             ## Objectif (1-3 phrases : outcome visible attendu)
-             ## Fonctionnalités attendues (puces, chacune testable)
-             ## Contraintes techniques (stack, format imposé, taille max si précisée)
-             ## Critères de validation (Given/When/Then quand pertinent, sinon puces concrètes)
-        4. COMPLÉTION LÉGÈRE : ajoute UNIQUEMENT les manques évidents et basiques (edge cases
-           types : champ vide, données invalides, cas limite). N'AJOUTE JAMAIS de fonctionnalité
-           que l'utilisateur n'a pas demandée (anti-hallucination de scope).
+        """Mandatory pipeline:
+        1. CLARITY & DISAMBIGUATION: detect VAGUE terms in the raw prompt (e.g. 'fast',
+           'user-friendly', 'flexible', 'modern', 'optimized', 'nice-looking', and their
+           French equivalents such as 'rapide', 'beau') and list them in
+           `ambiguities_detected`. Rewrite them as measurable requirements (e.g. 'fast' →
+           'response time < 200ms' IF quantifiable, otherwise drop/soften).
+        2. CONTEXT: use `available_capabilities` to STEER the spec toward what is feasible
+           (web-tester → browser-testable criteria; python-tester → pytest criteria;
+           context7 → note 'consult the library docs'). Only CITE them, do not consume
+           these capabilities yourself.
+        3. FORMATTING: structure the spec into these EXACT fixed sections:
+             ## Objective (1-3 sentences: the expected visible outcome)
+             ## Expected Features (bullet points, each testable)
+             ## Technical Constraints (stack, imposed format, max size if specified)
+             ## Acceptance Criteria (Given/When/Then when relevant, otherwise concrete bullets)
+        4. LIGHT COMPLETION: add ONLY obvious basic gaps (typical edge cases: empty field,
+           invalid data, boundary values). NEVER add a feature the user did not ask for
+           (anti scope-hallucination).
 
-        RÈGLES CRITIQUES :
-        - Si une exigence est absente du prompt brut, ne la fabrique pas — contente-toi de la
-          signaler comme manquante dans une section 'À clarifier'.
-        - CONCISION : ~30 lignes max. Une spec est un brief, pas un roman.
-        - PRÉSERVE toute exigence EXPLICITE du prompt brut (stack imposée, format, nb d'éléments...).
-        - Si le prompt brut est DÉJÀ clair et structuré, renvoie une spec quasi identique (ne dégrade
-          pas une bonne entrée).
+        CRITICAL RULES:
+        - LANGUAGE: always write the refined spec in ENGLISH, whatever the input language
+          (pattern Kilo Code / Cline 'Enhance Prompt' — downstream small models are
+          significantly stronger on structured English).
+        - If a requirement is missing from the raw prompt, do not invent it — just flag it
+          as missing in a 'To clarify' section.
+        - CONCISENESS: ~30 lines max. A spec is a brief, not a novel.
+        - PRESERVE every EXPLICIT requirement of the raw prompt (imposed stack, format,
+          element counts...).
+        - If the raw prompt is ALREADY clear and structured, return a near-identical spec
+          (do not degrade a good input).
         """,
     )
-    raw_prompt: str = dspy.InputField(desc="Le prompt utilisateur brut, souvent vague ou incomplet")
-    available_capabilities: str = dspy.InputField(desc="Catalogue des capacités disponibles (skills, statut Context7, testers) pour orienter la spec vers ce qui est faisable")
-    output: PromptRefinerOutput = dspy.OutputField(desc="Spec structurée (refined_prompt) + termes vagues détectés (ambiguities_detected)")
+    raw_prompt: str = dspy.InputField(desc="The raw user prompt, often vague or incomplete (any language)")
+    available_capabilities: str = dspy.InputField(desc="Catalogue of available capabilities (skills, Context7 status, testers) to steer the spec toward what is feasible")
+    output: PromptRefinerOutput = dspy.OutputField(desc="Structured spec in ENGLISH (refined_prompt) + detected vague terms (ambiguities_detected)")
 
 
 class ArchitectSignature(dspy.Signature):

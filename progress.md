@@ -1,5 +1,23 @@
 # État d'Avancement du Sprint
 
+## Jalons de l'Itération (cycle F-115 — Spec PromptRefiner en anglais)
+> Décision utilisateur après démo du « Améliorer le prompt » de Kilo Code (fiche 47,
+> la référence d'origine de F-39) : nos petits modèles locaux sont nettement plus
+> forts sur l'anglais structuré → la spec raffinée passe en anglais, comme la
+> sortie Kilo. Second commit de la PR #91 (même objectif : convergence petits modèles).
+
+- [x] F115-1 : `PromptRefinerSignature` réécrite en anglais (règle LANGUAGE
+  explicite + sections `## Objective` / `## Expected Features` / `## Technical
+  Constraints` / `## Acceptance Criteria`).
+- [x] F115-2 : `requirements_checklist.py` (F-51) bilingue — anglais prioritaire,
+  français rétro-compat (checkpoints F-24 hérités) ; fallback inchangé.
+- [x] F115-3 : Tests — 27 ciblés PASS (mock anglais + test doctrinal signature +
+  3 parseur dont rétrocompat).
+- [x] F115-4 : Suite complète pytest — **1498 passed / 0 failed / 1 skipped**
+  (flaky minute-boundary passé cette exécution, 0 régression).
+- [x] F115-5 : État disque (contract C437-C439, feature_list F-115, ce fichier)
+  + DuckDB (#1172, #1206) + commit + push PR #91.
+
 ## Objectif Actuel
 - [x] Valider le coding workflow de bout en bout sur un prompt "landing page premium"
       (Architect → Coder → Tester → Judge → verdict). ATTEINT (run #12 HTML propre,

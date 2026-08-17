@@ -162,3 +162,38 @@ class TestTesterInjection:
         assert "extract_functionalities" in source
         assert "build_checklist_block" in source
         assert "checklist_block" in source
+
+
+# ==========================================
+# F-115 : sections anglaises (spec PromptRefiner désormais en anglais)
+# ==========================================
+class TestExtractEnglish:
+    def test_spec_anglaise_complete(self):
+        """Section '## Expected Features' parsée comme l'ancienne section française."""
+        spec = """## Objective
+Build a bubble sort visualizer.
+
+## Expected Features
+- Start button
+- Reset button
+- Speed slider
+- Comparison counter
+
+## Technical Constraints
+Vanilla JS.
+"""
+        funcs = extract_functionalities(spec)
+        assert len(funcs) == 4
+        assert "Start button" in funcs
+        assert "Comparison counter" in funcs
+
+    def test_insensible_casse_anglais(self):
+        spec = "## expected features\n- Start button\n"
+        funcs = extract_functionalities(spec)
+        assert funcs == ["Start button"]
+
+    def test_retrocompat_francais_preservee(self):
+        """Les specs/checkpoints hérités en français continuent d'être parsés."""
+        spec = "## Fonctionnalités attendues\n- Bouton Démarrer\n- Compteur\n"
+        funcs = extract_functionalities(spec)
+        assert funcs == ["Bouton Démarrer", "Compteur"]

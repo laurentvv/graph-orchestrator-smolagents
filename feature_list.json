@@ -950,6 +950,16 @@
         "F-50",
         "F-90"
       ]
+    },
+    {
+      "id": "F-115",
+      "name": "Spec PromptRefiner en anglais (pattern Kilo Code Enhance Prompt)",
+      "description": "Decision utilisateur 2026-08-17 (apres demonstration du 'Ameliorer le prompt' de Kilo Code) : la spec produite par le PromptRefiner (F-39) est desormais en ANGLAIS quel que soit le langage d'entree — les petits modeles locaux (Qwen 4B fast_spec, Ornith 9B) sont nettement plus forts sur l'anglais structure, et tous les consommateurs aval (Architect/Drafter/Coder/Tester/Judge) ont des prompts F-44 en anglais. (1) PromptRefinerSignature reecrite en anglais : regle LANGUAGE explicite + sections canoniques ## Objective / ## Expected Features / ## Technical Constraints / ## Acceptance Criteria. (2) requirements_checklist.py (F-51) parse les DEUX en-tetes (regex alternance Expected Features | Fonctionnalites attendues, anglais prioritaire, francais retro-compat checkpoints F-24 herites/specs anciennes) — la checklist Tester ne casse pas. (3) Tests : mock executeur passe en anglais + test doctrinal signature (ENGLISH + 4 sections EN + absence section FR) + 3 tests parseur anglais dont retrocompat francaise. 27 tests cibles PASS ; suite complete 1498 passed / 0 failed / 1 skipped (flaky minute-boundary passe cette execution, 0 regression). Contexte : le PromptRefiner etait DEJA inspire du pattern Kilo Code/Cline Enhance Prompt (P12 Phase 1) ; ce cycle aligne la QUALITE de sortie sur la reference.",
+      "status": "completed",
+      "dependencies": [
+        "F-39",
+        "F-51"
+      ]
     }
   ]
 }
