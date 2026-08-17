@@ -1021,6 +1021,15 @@
         "F-40",
         "F-23"
       ]
+    },
+    {
+      "id": "F-122",
+      "name": "ULTRA restreint à l'itération ≥ 3 (réactivation bornée, post-mortems runs #8/#10)",
+      "description": "Decision utilisateur (proposition 2 du post-mortem run #10). F-111 CODER ULTRA etait desactive depuis le run #8 (CODER_ULTRA_CORRECTION=false : Ornith-9B no-think trop lent — 3.8 t/s, mega-blocs > timeout 600 s) ; consequence run #10 : le 4B a reproduit le bug compteur 3x face aux gardes deterministes sans escalade de modele. F-122 reactive ULTRA en le BORNANT : _select_coder_spec declenche UNIQUEMENT a l'iteration >= 3 (derniere chance avant escalade F-23) — au plus UNE activation par run, cout borne, vraie derniere chance quand le 4B a echoue 2x. Declencheurs historiques (rejet deterministe it.2, coder mort) retires ; signaux prev_* conserves pour observabilite (workflows.py). Run #11 a montre le levier concurrent : le 4B sait corriger sur feedback qualitatif precis — les iterations 1-2 restent donc en 4B rapide. CODER_ULTRA_CORRECTION=true dans .env/.env.example (commentaire F-122). 2 tests inverses + docstring echelle ; 22/22 test_coder_hardening ; suite complete 1497 passed / 1 failed / 1 skipped (echec unique = flaky minute-boundary PREEXISTANT sans interaction avec F-122, documente) → 0 regression. Run E2E de validation reporte a une session ulterieure (decision utilisateur).",
+      "status": "completed",
+      "dependencies": [
+        "F-111"
+      ]
     }
   ]
 }
