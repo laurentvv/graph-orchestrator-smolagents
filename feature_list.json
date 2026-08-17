@@ -918,6 +918,16 @@
         "F-108",
         "F-109"
       ]
+    },
+    {
+      "id": "F-112",
+      "name": "Sonde animation instantanée multi-signal (Tier 3) + résolution arithmétique des délais (Tier 1c)",
+      "description": "Post-mortem run #8 (2026-08-16_2205, E2E FRESH_START 1h47) : livrable Bubble Sort avec tri INSTANTANÉ livré 3 itérations durant — le Judge fail-closed F-108 a correctement refusé d'approuver, mais AUCUN nœud n'a identifié le bug. Deux failles corrigées dans static_tester.py (0 LLM). (1) Tier 3 temporel : la sonde ne suivait que le PREMIER élément numérique du DOM = le libellé du slider (constante placée AVANT le compteur) → t0=t1=t2 → skip silencieux. Nouvelle sonde MULTI-SIGNAL : TOUS les éléments numériques (clés par id) + hash djb2 des pixels du premier <canvas> (toDataURL, tainted→null fail-open) + classes terminales (.sorted/.done/...) ; verdict pur _temporal_verdict : un signal a progressé (t1!=t0) ET aucun ne bouge dans la fenêtre de stabilisation (t2==t1) → instantané ; rien n'a bougé → skip (jamais de FP) ; un signal bouge encore → progressive OK. Fenêtre de stabilisation 50→350 ms (une animation légitime à pas 100-300 ms semblait 'stabilisée' entre deux pas à 50 ms → faux positif). (2) Tier 1c : _resolve_delay_ms résout ARITHMÉTIQUEMENT les arguments de sleep/setTimeout (substitution des variables liées à des littéraux entiers puis éval whitelistée [\\d+\\-*/(). ] uniquement — jamais de nom ni d'appel) : sleep(320 - speed*2) avec let speed=320 → -320 → flag 'valeur NÉGATIVE clampée à 0 par setTimeout' ; le bug formule était invisible du grep littéral. (3) Message pédagogique rewordé : l'ancien suggérait LITTÉRALEMENT 'const delay = 320 - speed * 28' — le Coder 4B l'a greffée à l'aveugle sur une variable en millisecondes (cause directe du bug du run #8) ; le nouveau porte l'INVARIANT (unité slider≠ms, formule évaluée de bout en bout) sans formule à copier. Validation : 19 tests nouveaux (6 _resolve_delay_ms dont fail-open div/0 et appel rejeté ; 3 behavioral dont formule négative flaggée + absence de formule littérale dans le message ; 8 _temporal_verdict purs dont signatures exactes du run #8 ; 2 LIVE réplique exacte run #8 (speedLabel avant compteur + canvas + formule négative) réfutée / version progressive passe) ; LIVE sur le VRAI livrable runs/2026-08-16_2205 : is_valid=False avec les DEUX réfutations (−320 ms statique + temporal compteur 0→214 stable + canvas) ; suite complète 1409 passed / 0 failed / 1 skipped (1390 baseline, 0 régression).",
+      "status": "completed",
+      "dependencies": [
+        "F-108",
+        "F-54"
+      ]
     }
   ]
 }

@@ -1,0 +1,77 @@
+## Fichier : index.html
+- **Structure** :
+  - `<!DOCTYPE html>` avec `<html>`, `<head>`, `<body>`
+  - `<head>` : meta charset/viewport, `<title>`, `<link rel="stylesheet" href="styles.css">`, `<script src="script.js"></script>`
+  - `<body>` :
+    - `<div id="container">` (flex-col, center)
+      - `<h1>Bubble Sort Visualizer</h1>`
+      - `<canvas id="chart" width="800" height="400"></canvas>`
+      - `<div id="controls">` (flex-row, gap)
+        - `<button id="startBtn">Start</button>`
+        - `<button id="resetBtn">Reset</button>`
+      - `<div id="speed">`
+        - `<label>Speed: <span id="speedLabel">5</span></label>`
+        - `<input type="range" id="speedRange" min="1" max="10" value="5">`
+      - `<div id="counter">Comparisons: <span id="counter">0</span></div>`
+- **IDs DOM exacts** : container, chart, startBtn, resetBtn, speedRange, speedLabel, counter
+- **Logique** : Canvas dessine les barres au chargement via `generateArray()` + `draw()`
+
+## Fichier : styles.css
+- **Palette** :
+  - `--bg: #1e1e2e` (fond sombre)
+  - `--text: #e0e0e0` (texte)
+  - `--gray: #454545` (barres non triées)
+  - `--yellow: #ffb74d` (barres en cours de comparaison)
+  - `--green: #66bb6a` (barres triées)
+- **Layout** :
+  - `body` : background var(--bg), color var(--text), font-family sans-serif, margin 0, display flex, justify-content center, align-items center, height 100vh
+  - `#container` : width 800px, max-width 90%, padding 20px, border-radius 10px, box-shadow
+  - `#chart` : width 100%, height 400px, border 2px solid var(--gray), border-radius 5px
+  - `#controls` : margin-top 15px, padding 10px, background var(--gray), border-radius 5px
+  - `button` : padding 10px 20px, background var(--yellow), color var(--bg), border none, border-radius 5px, cursor pointer, font-weight bold
+  - `input[type="range"]` : width 100%, margin 5px 0
+- **Animations** :
+  - `.bar` : transition height 0.3s ease
+  - `.comparing` : background var(--yellow), transition background 0.2s
+  - `.sorted` : background var(--green), transition background 0.2s
+- **Responsive** :
+  - `@media (max-width: 600px)` : canvas width 100%, height 300px, buttons stack vertically
+
+## Fichier : script.js
+- **Variables globales** :
+  - `arr = []` (tableau de 30 éléments)
+  - `isSorting = false` (flag pour arrêter le tri)
+  - `speed = 5` (ms par frame, contrôlé par slider)
+  - `comparisons = 0` (compteur de comparaisons)
+  - `swaps = 0` (compteur d'échanges)
+- **Fonctions** :
+  - `generateArray()` :
+    - Boucle 30 fois, push `Math.floor(Math.random() * 100) + 1` dans arr
+    - Appelle `draw()` pour afficher immédiatement
+  - `draw()` :
+    - Nettoie le canvas (`ctx.clearRect(0, 0, width, height)`)
+    - Calcule la hauteur de chaque barre : `(value / 100) * canvas.height - 20` (padding bas)
+    - Pour chaque barre :
+      - Dessine rectangule avec `ctx.fillRect(x, y, barWidth, barHeight)`
+      - Applique la classe CSS selon état : `.default` (gris), `.comparing` (jaune), `.sorted` (vert)
+      - Met à jour `bar.style.height` après chaque dessin
+  - `bubbleSort()` :
+    - Vérifie `!isSorting`, sinon retourne
+    - Boucle `while (swapped)` avec `swapped = false`
+    - Boucle `for (i = 0; i < n-1; i++)` :
+      - Si `arr[i] > arr[i+1]` :
+        - Increment `comparisons`
+        - Si `isSorting` → arrête, sinon swap
+        - Swap : échange `arr[i]` et `arr[i+1]`, met à jour DOM (hauteur + couleur)
+        - `swapped = true`
+    - Attend `await sleep(speed)` entre chaque itération
+    - Si `swapped` → recommence, sinon tri terminé
+    - Applique classe `.sorted` à toutes les barres
+  - `sleep(ms)` :
+    - Retourne `new Promise(resolve => setTimeout(resolve, ms))`
+- **Event Listeners** :
+  - `startBtn` → `isSorting = true`, appelle `bubbleSort()`
+  - `resetBtn` → `isSorting = false`, `comparisons = 0`, `swaps = 0`, appelle `generateArray()`
+  - `speedRange` → met à jour `speed` et texte `speedLabel`
+- **Init** :
+  - Au chargement : appelle `generateArray()` pour afficher les barres immédiatement

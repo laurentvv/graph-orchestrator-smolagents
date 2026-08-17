@@ -1,0 +1,133 @@
+/* Variables CSS */
+:root {
+    --bg: #1e1e2e;
+    --surface: #2a2a3e;
+    --text: #e0e0e0;
+    --muted: #94a0c4;
+    --accent: #6c8cff;
+    --accent-2: #39e6c4;
+    --bar-unsorted: #454545;
+    --bar-comparing: #ffb74d;
+    --bar-sorted: #66bb6a;
+}
+
+/* Reset et base */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background-color: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 1rem;
+}
+
+/* Container principal */
+#container {
+    max-width: 900px;
+    width: 100%;
+    background-color: var(--surface);
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* Titre */
+h1 {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin-bottom: 1.5rem;
+    color: var(--accent);
+    text-align: center;
+}
+
+/* Canvas */
+#chart {
+    display: block;
+    margin: 0 auto 2rem;
+    background-color: var(--bg);
+    border-radius: 8px;
+    border: 1px solid var(--muted);
+}
+
+/* Contrôles */
+#controls {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+}
+
+button {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s, background-color 0.2s;
+}
+
+#startBtn {
+    background-color: var(--accent);
+    color: var(--bg);
+}
+
+#resetBtn {
+    background-color: var(--accent-2);
+    color: var(--bg);
+}
+
+button:hover {
+    transform: scale(1.05);
+}
+
+button:active {
+    transform: scale(0.95);
+}
+
+/* Slider de vitesse */
+#speed {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+#speedRange {
+    width: 150px;
+}
+
+/* Compteur */
+#counter {
+    text-align: center;
+    font-size: 1.1rem;
+    color: var(--muted);
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+    #container {
+        padding: 1rem;
+    }
+    
+    h1 {
+        font-size: 1.5rem;
+    }
+    
+    #controls {
+        flex-direction: column;
+    }
+    
+    button {
+        width: 100%;
+    }
+}
