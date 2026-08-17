@@ -8,9 +8,9 @@
 
 | Métrique | Valeur |
 |---|---|
-| **Date de l'audit** | 2026-08-14 |
-| **Projets/dossiers audités** | 46 |
-| **Entrées de fichiers inventoriées** | 615 (inventaire machine : [`inventory.json`](./inventory.json)) |
+| **Date de l'audit** | 2026-08-17 |
+| **Projets/dossiers audités** | 47 |
+| **Entrées de fichiers inventoriées** | 634 (inventaire machine : [`inventory.json`](./inventory.json)) |
 | **Fichiers pertinents scannés** (base) | ~11 770 (hors `.git/`, `node_modules/`, médias, fixtures) |
 | **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css`) + JSON/YAML de spec/contrat |
 | **Exclusions** | `.git/` (~730 MB), `node_modules/`, médias (1 293 SVG, 16 mp4…), fixtures de tests, traductions de README (1 conservée/projet) |
@@ -19,7 +19,7 @@
 
 ---
 
-## 🧭 Navigation — les 46 fiches
+## 🧭 Navigation — les 47 fiches
 
 | # | Projet | Réutilisabilité | Fiche | Résumé en 1 ligne |
 |---|---|---|---|---|
@@ -69,6 +69,7 @@
 | 44 | **sentrux** | 🟡 Moyenne | [44-sentrux](./projects/44-sentrux.md) | Capteur de santé structurelle (5 métriques racines, score 0-10000) + pipeline tree-sitter multi-langage (Rust, à porter) |
 | 45 | **OpenSandbox** | 🟢 Haute | [45-OpenSandbox](./projects/45-OpenSandbox.md) | Plateforme de sandbox pour agents IA (ex-Alibaba) — transport retry Python pur (P8), spec lifecycle snapshot/restore (P8-bis), AGENTS.md hiérarchiques (P0), request-id ContextVar (P11) |
 | 46 | **deepseek-harness** | 🟢 Haute | [46-deepseek-harness](./projects/46-deepseek-harness.md) | Harness d'agent « everything is a plugin » (TS/Cordis, DeepSeek) — anti-loop + boucle ralph (P3), retry durable (P8), compaction checkpoint 8 sections (P9), event stream typé (P11) |
+| 47 | **kilocode** | 🟢 Haute | [47-kilocode](./projects/47-kilocode.md) | Agent de coding multi-surface (CLI/VS Code/JetBrains) — Agent Manager multi-worktrees (P12/P3), compaction payload recovery & chunks (P9), CodeMode confiné (P8-bis/P8), kilo-memory (P6/P11) |
 
 ---
 
@@ -283,6 +284,19 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | `references/deepseek-harness/packages/core/session/src/types.ts` | `SessionEventMap`, `SessionEvent.ignorable?`, `SurfaceOp`, `sourceEventSeqs` | **Event log typé extensible avec provenance** — le plus abouti du dossier ; convention « Model-visible ⟺ logged » (P11) |
 | `references/deepseek-harness/AGENTS.md` | « Registrations are effects », « Model-visible ⟺ logged », « Misconfiguration fails loud » | **Charte d'invariants** exigés de tout plugin — source directe pour enrichir `UNIVERSAL_INVARIANTS` (P0-bis) |
 
+### Orchestration multi-worktrees & Compaction résiliente aux gros payloads (kilocode)
+> 🌳 **Isolation complète des itérations et résilience aux context overflows multimédia.** Kilo Code apporte le gestionnaire de git worktrees (`WorktreeManager`) permettant d'exécuter des runs dans des branches dédiées sans collision, et résout les plantages de compaction sur les historiques riches en screenshots via `KiloCompactionPayloadRecovery`.
+
+| Fichier | Symbole(s) clé(s) | Apport |
+|---|---|---|
+| `references/kilocode/packages/kilo-vscode/src/agent-manager/WorktreeManager.ts` | `WorktreeManager`, `createWorktree`, `cleanupWorktree`, `RM_OPTS` | **Gestionnaire de cycle de vie des git worktrees** (`.kilo/worktrees/`) avec suppression récursive résiliente et multi-versioning (P12+P3) |
+| `references/kilocode/packages/opencode/src/kilocode/session/compaction-payload-recovery.ts` | `KiloCompactionPayloadRecovery`, `matches`, `strip` | **Sauvetage des erreurs 4MB/payload overflow** : stripping rétroactif des tool outputs et conversion des screenshots/médias en placeholders texte (P9) |
+| `references/kilocode/packages/opencode/src/kilocode/session/compaction-chunks.ts` | `KiloCompactionChunks`, `replay`, `summarize` | **Compaction récursive par chunks** (profondeur max 3, ratio 0.6) avec requêtes synthétiques de rejeu pour très longs historiques (P9) |
+| `references/kilocode/packages/codemode/src/codemode.ts` (+ `runtime.ts`) | `CodeMode`, `ExecutionLimits`, `DiagnosticKind` | **Interpréteur JS confiné par AST walk** avec quotas stricts (timeout, max tool calls) et diagnostics normalisés (P8-bis+P8) |
+| `references/kilocode/packages/kilo-memory/src/memory.ts` (+ `schema.ts`, `decisions.ts`) | `Memory`, `MemorySchema`, `MemoryDecisions` | **Mémoire structurée multi-fichiers** avec journal append-only des décisions (accepted/skipped/fallback) et digest 4KB (P6+P11) |
+| `references/kilocode/packages/opencode/src/kilocode/snapshot/diff-full.ts` | `DiffFull.batch`, `MAX_DETAIL_SIZE` | **Calcul de diff git natif par tranches de 500 fichiers** (contournement limite Windows 8191 chars) avec repli doux (P1+P6) |
+| `references/kilocode/packages/opencode/src/kilocode/permission/config-paths.ts` | `ConfigProtection`, `CONFIG_ROOT_FILES` | **Garde-fou interdisant au LLM d'auto-modifier ses fichiers de règles** (`kilo.json`, `AGENTS.md`) sans validation humaine (P0-bis+P8) |
+
 ---
 
 ## 📊 Matrice réutilisabilité croisée
@@ -319,9 +333,10 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | **TencentDB-Agent-Memory** | **8** | **5** | **0** | 🟢 **Haute** |
 | **OpenSandbox** | **14** | **7** | **1** | 🟢 **Haute** |
 | **deepseek-harness** | **13** | **9** | **2** | 🟢 **Haute** |
-| **Total** | **251** | **204** | **87** | — |
+| **kilocode** | **14** | **5** | **0** | 🟢 **Haute** |
+| **Total** | **265** | **209** | **87** | — |
 
-> ℹ️ Le total de la matrice (542 = 251+204+87) couvre les fiches 01-28 et 45-46. Les fiches 29-44 (ajout en masse du 2026-08-12) n'ont pas été intégrées à la matrice — leurs comptes par projet sont consultables programmatiquement dans [`inventory.json`](./inventory.json), qui fait foi : **615 entrées machine au total (300 H / 226 M / 87 L / 2 non classées)**.
+> ℹ️ Le total de la matrice (561 = 265+209+87) couvre les fiches 01-28 et 45-47. Les fiches 29-44 (ajout en masse du 2026-08-12) n'ont pas été intégrées à la matrice — leurs comptes par projet sont consultables programmatiquement dans [`inventory.json`](./inventory.json), qui fait foi : **634 entrées machine au total (313 H / 232 M / 87 L / 2 non classées)**.
 
 **Constats** :
 - **axon** (23 Haute) et **aider** (17 Haute) restent les mines d'or côté Python.
@@ -341,8 +356,9 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 - **hermes-agent** (15 Haute, 🟢 Haute) : **le dépôt le plus dense et portable du dossier sur 5 axes orthogonaux**. Compaction offline (`trajectory_compressor`) + live avec garde-fous persistés (`context_compressor` cooldown/streak/ineffective), persistence SQLite FTS5 + lineage + event-sourcing subagents, skills agentskills.io avec provenance contextvars + guard + AST audit, **bibliothèque sécurité Python pur copiable quasi telle quelle** (threat patterns + ~260 dangerous commands + SSRF guards + path traversal), contrat middleware 4 kinds avec `next_call` chain + fail-open. Cœur utile concentré dans ~15 fichiers Python (malgré 8487 fichiers au total). Rejoint le peloton de tête avec axon (23 Haute) et aider (17 Haute). Réserves : pas DuckDB (transposer le pattern), adapters LLM cloud massifs non portables, god-files à découper.
 - **cloudflare-os** (3 Moyenne, 🟡 Moyenne) : apporte un excellent pattern architectural de sécurité (**Gatekeepers**, Capability-based access control) et d'approbation asynchrone (human in the loop par simulation). Même si TS, la doctrine inspire fortement la gestion MCP.
 - **TencentDB-Agent-Memory** (8 Haute, 🟢 **Haute** — renotée 2026-08-07) : la fiche initiale était superficielle (4 briques, notée Moyenne). L'audit approfondi des **prompts** révèle un gisement complémentaire à qm pour **P6-ter (F-68)** : là où qm fournit le contrat de persistance scratch/notebook (`recall`/`capture`/`replaceIfRevision`), TencentDB couvre les **3 maillons que qm ne couvre pas** — (a) **extraction L1** d'atomes (3 principes : qualité>quantité, valide hors-contexte, fusion causale ; dualité chat/code), (b) **dédup L1** par `store/skip/update/merge` **supérieure** au `UPDATE/DELETE/ADD` de qm (merge cross-type + many-to-many + bump priorité), (c) **oubli par chaleur** (heat : new=1/update=old+1/merge=sum+1 + `[DELETED]`) qui manque totalement à notre KG. Bonus : **Skill Review gate** 5-critères + 4-dim/100pts (P10/F-87), **context-offload Mermaid scoré** + cognitive tombstones (P9/F-86). Ce sont des **prompts** TypeScript, transposables quasi-directement (pas du code runtime). Les 2 références qm+TencentDB sont **nécessaires ensemble** pour F-68.
-- **OpenSandbox** (14 Haute, 🟢 **Haute** — 2026-08-14) : le **complément d'infrastructure d'exécution** qui manquait au dossier. Ce n'est pas un orchestrateur (pas de Judge/TDD) mais la plateforme qui **exécute** le code généré de façon isolée/timeoutée/snapshotable/rejouable — exactement P8-bis. La pépite : le module `transport/` du SDK Python est **LE middleware P8 en Python pur copiable** (classification pré/post-send, jitter décorrélé, deadline mur-mur, `Retry-After` plafonné — design documenté OSEP-0017). La spec OpenAPI `sandbox-lifecycle.yml` fournit le **contrat** du rejouable (202+polling, TTL renew, snapshot/restore, endpoints signés) quand qm (14) fournissait l'idempotence applicative. Bonus P0 : AGENTS.md hiérarchiques (« le plus proche gagne » + Guardrails Always/Ask-first/Never). Runtime Go/K8s ignoré — on prend le contrat et le client.
+- **OpenSandbox** (14 Haute, 🟢 **Haute** — 2026-08-14) : le **complément d'infrastructure d'exécution** qui manquait au dossier. Ce n'est pas un orchestrateur (pas de Judge/TDD) mais la plateforme qui **exécute** le code généré de façon isolée/timeoutée/snapshotable/rejouable — exactement P8-bis. La pépite : le module `transport/` du SDK Python est **LE middleware P8 en Python pur copiable** (classification pré/post-send, jitter décorrélé, deadline mur-mur, `Retry-After` plafonné — design documenté OSEP-0017). La spec OpenAPI `sandbox-lifecycle.yml` fournit le **contrat** du rejouable (202 Biss+polling, TTL renew, snapshot/restore, endpoints signés) quand qm (14) fournissait l'idempotence applicative. Bonus P0 : AGENTS.md hiérarchiques (« le plus proche gagne » + Guardrails Always/Ask-first/Never). Runtime Go/K8s ignoré — on prend le contrat et le client.
 - **deepseek-harness** (13 Haute, 🟢 **Haute** — 2026-08-14) : **la meilleure référence de design sur P3 et P11**. Anti-loop en deux couches complémentaires : `repeat-tool-reminder` (détection douce de répétitions consécutives, escalade sans veto — le complément humain à notre LoopGuard F-36 et au stall detector loopx 19) et la **boucle ralph à agents frais** (contexte remis à zéro chaque round + handoff borné — la contre-mesure radicale). P11 : l'event log de session est **le plus abouti du dossier** (types extensibles par declaration merging, provenance `sourceEventSeqs`, flag `ignorable` = fail-closed sur type inconnu, convention « Model-visible ⟺ logged »). P9 : le prompt de checkpoint **8 sections** avec réutilisation du KV cache. P8 : retry durable **dont le compteur survit à un crash** (persisté dans le log) + spec des 5 waterfalls d'exécution d'outil. TypeScript/Cordis : on porte l'intention, pas la syntaxe ; P6 explicitement absent (self-declaration documentée comme limite — argument de plus pour notre Judge indépendant).
+- **kilocode** (14 Haute, 🟢 **Haute** — 2026-08-17) : **mine d'or architecturale pour l'isolation multi-worktrees, la compaction résiliente aux médias et le confinement d'outils**. (1) L'**Agent Manager** (`WorktreeManager`) fournit le blueprint complet pour exécuter des sessions de génération/test parallèles dans des git worktrees indépendants (`.kilo/worktrees/`) sans collision (P12/P3). (2) `KiloCompactionPayloadRecovery` résout les context overflows de 4MB dus à l'accumulation de screenshots/médias par stripping des tool outputs achevés et substitution en placeholders texte (P9). (3) `KiloCompactionChunks` apporte la compaction hiérarchique récursive par chunks (arbre profondeur 3, ratio 0.6) avec requêtes synthétiques de rejeu (P9). (4) `codemode` fournit un interpréteur JS confiné par AST walk avec quotas stricts (timeout, max tool calls) et diagnostics normalisés (P8-bis/P8). (5) `ConfigProtection` interdit au LLM de modifier ses propres fichiers de règles (`kilo.json`, `AGENTS.md`) sans validation humaine explicite (P0-bis/P8).
 
 
 ---
@@ -431,6 +447,13 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | Un **event log typé extensible** (provenance, fail-closed sur type inconnu) | Fiche **46-deepseek-harness** → `packages/core/session/src/types.ts` (`SessionEventMap`, `ignorable?`, `sourceEventSeqs`) |
 | La **spec des middlewares d'exécution d'outil** (5 waterfalls documentés) | Fiche **46-deepseek-harness** → `docs/tool-execution-pipeline.md` + `docs/architecture.md` (turn flow) |
 | Une **charte d'invariants** de développement agentique (fail-loud, « Model-visible ⟺ logged ») | Fiche **46-deepseek-harness** → `AGENTS.md` (racine) — source directe pour `UNIVERSAL_INVARIANTS` (P0-bis) |
+| **Isoler les sessions d'agents dans des git worktrees dédiés** | Fiche **47-kilocode** → `packages/kilo-vscode/src/agent-manager/WorktreeManager.ts` (`WorktreeManager`, `createWorktree`) |
+| **Sauver un context overflow 4MB** (screenshots/médias) en compaction | Fiche **47-kilocode** → `packages/opencode/src/kilocode/session/compaction-payload-recovery.ts` (`KiloCompactionPayloadRecovery`) |
+| Une **compaction hiérarchique par chunks** pour longs historiques | Fiche **47-kilocode** → `packages/opencode/src/kilocode/session/compaction-chunks.ts` (`KiloCompactionChunks`) |
+| Un **interpréteur de code confiné (CodeMode)** avec quotas et diagnostics | Fiche **47-kilocode** → `packages/codemode/src/codemode.ts` + `src/interpreter/runtime.ts` (`CodeMode`, `DiagnosticKind`) |
+| Une **mémoire persistante structurée avec journal des décisions** | Fiche **47-kilocode** → `packages/kilo-memory/src/memory.ts` (`Memory`, `MemoryDecisions`) |
+| **Protéger les fichiers de configuration** contre l'auto-altération LLM | Fiche **47-kilocode** → `packages/opencode/src/kilocode/permission/config-paths.ts` (`ConfigProtection`) |
+| Un **calcul de diff git natif par tranches de 500 fichiers** (guard Windows) | Fiche **47-kilocode** → `packages/opencode/src/kilocode/snapshot/diff-full.ts` (`DiffFull.batch`) |
 
 ---
 
@@ -440,8 +463,8 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 docs/references-audit/
 ├── README.md              ← Mode d'emploi (start ici)
 ├── INDEX.md               ← CE DOCUMENT (navigation + synthèse + Hall of Fame)
-├── inventory.json         ← Inventaire machine-lisible (615 entrées, filtrable)
-└── projects/              ← 46 fiches détaillées (1 par projet)
+├── inventory.json         ← Inventaire machine-lisible (634 entrées, filtrable)
+└── projects/              ← 47 fiches détaillées (1 par projet)
     ├── 01-prompt-vault.md
     ├── 02-aider.md
     ├── ...
@@ -478,7 +501,8 @@ docs/references-audit/
     ├── 43-framework.md
     ├── 44-sentrux.md
     ├── 45-OpenSandbox.md
-    └── 46-deepseek-harness.md
+    ├── 46-deepseek-harness.md
+    └── 47-kilocode.md
 ```
 
 **Pour recherche programmatique** : `inventory.json` est consommable directement :
@@ -490,3 +514,4 @@ high = [f for p in inv['projects'] for f in p['files'] if f['reuse'] == 'high']
 # Fichiers d'un projet précis
 axon = next(p for p in inv['projects'] if p['id'] == 'axon')
 ```
+
