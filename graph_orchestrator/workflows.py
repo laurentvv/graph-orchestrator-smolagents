@@ -150,6 +150,35 @@ def _scoped_chdir(target_dir: str):
         os.chdir(original)
 
 
+@contextmanager
+def _scoped_run_guard(run_output_dir: str, settings: Settings):
+    """Gardes FS de périmètre du run (F-95, port OpenKB) : verrou + allowlist IO.
+
+    Deux couches complémentaires, toutes deux opt-out :
+    1. **Verrou exclusif cross-process** (``fs_locks.write_lock``) sur
+       ``<run_dir>/.fs_tx/dir.lock`` — deux process ne peuvent pas muter le
+       même dossier de run (ex: deux reprises du même checkpoint lancées en
+       parallèle). La PREMIÈRE acquisition déclenche le drain des journaux de
+       transaction actifs (crash-recovery : rollback des mutations d'un
+       process mort, cf. ``fs_tx.recover_pending_journals``).
+    2. **Allowlist IO** (``io_guard``) — les outils FS du Coder (write_file,
+       read_file, search_replace...) sont confinés au dossier du run : le
+       Coder ne peut plus écrire/lire dans l'usine qui l'héberge. Fail-open
+       garanti hors de ce contexte (aucune racine = tout passe).
+    """
+    from .io_guard import scoped_allowed_roots
+
+    roots = [run_output_dir] if settings.io_allowlist_enabled else None
+    if not settings.run_dir_lock_enabled:
+        with scoped_allowed_roots(roots):
+            yield
+        return
+    from .fs_locks import write_lock
+
+    with scoped_allowed_roots(roots), write_lock(run_output_dir):
+        yield
+
+
 async def run_exploration_workflow(
     seed_tasks: List[dict],
     settings: Settings = default_settings,
@@ -376,7 +405,9 @@ async def run_coding_workflow(
         else None
     )
 
-    with _scoped_chdir(run_output_dir), _scoped_idempotency(_idem_store):
+    with _scoped_chdir(run_output_dir), _scoped_idempotency(_idem_store), _scoped_run_guard(
+        run_output_dir, settings
+    ):
         # Tout le corps ci-dessous (imports, nœuds, boucle Coder/Judge) s'exécute dans le
         # dossier du run. Les target_files relatifs y atterrissent naturellement.
 
@@ -675,7 +706,43 @@ async def run_coding_workflow(
                     )
 
                 # 1. Coder (smolagents, modèle FAST)
-                coder_res, m1 = await execute_coder_node(sub_dict, fast_model, settings)
+                # F-95 : transaction FS autour de la mutation du Coder (port
+                # OpenKB mutation.py). Snapshot des fichiers cibles AVANT la
+                # mutation + journal "active" sur disque. Sémantique :
+                #   - retour NORMAL (même status="failure") → mark_committed :
+                #     les fichiers partiels sont CONSERVÉS (sémantique
+                #     historique — le mode correction itération N+1 s'appuie
+                #     dessus) ;
+                #   - EXCEPTION → rollback + discard : l'état pré-Coder est
+                #     restauré, l'exception remonte (mutation échouée) ;
+                #   - CRASH PROCESS → le journal reste "active" → roulé back
+                #     par le PROCHAIN run au moment de prendre le verrou
+                #     exclusif (_drain_pending_journals) → la reprise par
+                #     checkpoint rejoue l'itération depuis l'état pré-Coder
+                #     (cohérent avec la granularité "début d'itération" F-24).
+                # hardlink_dirs=NONE volontaire : nos append_file écrivent
+                # in-place → un backup hardlinké serait corrompu (contrat
+                # OpenKB : temp+replace ou append-only uniquement).
+                if settings.fs_transactions_enabled:
+                    from pathlib import Path as _P
+
+                    from .fs_tx import snapshot_paths as _snapshot_paths
+
+                    _tx = _snapshot_paths(
+                        run_output_dir,
+                        [_P(run_output_dir) / f for f in subtask.target_files],
+                        operation=f"coder:{subtask.task_id}:iter{iteration}",
+                    )
+                    try:
+                        coder_res, m1 = await execute_coder_node(sub_dict, fast_model, settings)
+                    except Exception:
+                        _tx.rollback_best_effort()
+                        _tx.discard_best_effort()
+                        raise
+                    _tx.mark_committed()
+                    _tx.discard_best_effort()
+                else:
+                    coder_res, m1 = await execute_coder_node(sub_dict, fast_model, settings)
                 if m1:
                     sub_metrics.append(m1)
 

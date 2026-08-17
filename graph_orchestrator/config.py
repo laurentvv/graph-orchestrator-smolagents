@@ -423,6 +423,25 @@ class Settings:
     # absent = création OK, read impossible = on laisse passer). Opt-out pour debug.
     read_before_write_enabled: bool = True
 
+    # --- Robustesse FS : verrous + transactions + cloisonnement IO (Priorité 8-bis / F-95) ---
+    # Port OpenKB (fiche 32). Trois couches complémentaires, chacune opt-out :
+    # 1. run_dir_lock : verrou exclusif CROSS-PROCESS sur le dossier du run
+    #    (<run>/.fs_tx/dir.lock) — deux process ne peuvent pas muter le même
+    #    run (ex: deux reprises du même checkpoint lancées en parallèle). La
+    #    première acquisition exclusive DRAINE les journaux de transaction
+    #    actifs (crash-recovery).
+    # 2. fs_transactions : snapshot+journal autour de chaque appel Coder — un
+    #    process mort mi-écriture laisse un journal "active" roulé back au
+    #    prochain run (annulation des effets partiellement appliqués, complète
+    #    l'idempotence F-43).
+    # 3. io_allowlist : les outils FS du Coder (write/read/edit/list) sont
+    #    confinés au dossier du run (allowlist de chemins, Windows-safe) — le
+    #    Coder ne peut plus écrire dans l'usine qui l'héberge. Fail-open hors
+    #    run (aucune racine enregistrée = tout passe).
+    run_dir_lock_enabled: bool = True
+    fs_transactions_enabled: bool = True
+    io_allowlist_enabled: bool = True
+
     # --- Skills : sélection par l'Architect + budget tokens (Priorité 10, F-57) ---
     # L'Architect sélectionne les skills pertinents dans son plan (subtask.skills),
     # et le Coder reçoit leur corps complet. Ce budget plafonne la sélection pour
@@ -605,6 +624,9 @@ def load_settings() -> Settings:
         memory_recall_max_chars=_get_int("MEMORY_RECALL_MAX_CHARS", 1500),
         sanitizer_enabled=_get_bool("SANITIZER_ENABLED", True),
         read_before_write_enabled=_get_bool("READ_BEFORE_WRITE_ENABLED", True),
+        run_dir_lock_enabled=_get_bool("RUN_DIR_LOCK_ENABLED", True),
+        fs_transactions_enabled=_get_bool("FS_TRANSACTIONS_ENABLED", True),
+        io_allowlist_enabled=_get_bool("IO_ALLOWLIST_ENABLED", True),
         skill_budget_tokens=_get_int("SKILL_BUDGET_TOKENS", 8000),
         skill_finder_enabled=_get_bool("SKILL_FINDER_ENABLED", True),
         skill_finder_trusted_authors=_get_str(

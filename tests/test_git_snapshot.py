@@ -232,3 +232,41 @@ class TestTargetedRetestWithDiff:
         block = build_targeted_retest_block("bug", iteration=2)
         assert "evaluate_script" in block
         assert "length > 0" in block or "querySelectorAll" in block
+
+
+class TestFsTxExclusion:
+    """F-95 : le namespace transactionnel (.fs_tx/) ne pollue ni git status,
+    ni les commits, ni le worktree (exclusion via .git/info/exclude, PAS via
+    un .gitignore qui apparaîtrait lui-même comme fichier ajouté)."""
+
+    def test_fs_tx_absent_du_git_status(self, git_repo):
+        lock = git_repo / ".fs_tx" / "dir.lock"
+        lock.parent.mkdir(parents=True)
+        lock.write_text("", encoding="utf-8")
+        import subprocess
+
+        status = subprocess.run(
+            ["git", "status", "--porcelain"], cwd=git_repo, capture_output=True, text=True
+        ).stdout
+        assert ".fs_tx" not in status
+        assert status.strip() == ""  # worktree propre : le lock est invisible
+
+    def test_exclusion_idempotent_et_sans_gitignore_worktree(self, git_repo):
+        assert init_run_git() is True  # re-init : n'ajoute pas la ligne 2 fois
+        exclude = git_repo / ".git" / "info" / "exclude"
+        assert exclude.read_text(encoding="utf-8").count(".fs_tx/") == 1
+        assert (git_repo / ".gitignore").exists() is False  # pas de pollution worktree
+
+    def test_commit_n_inclut_pas_fs_tx(self, git_repo):
+        (git_repo / "index.html").write_text("<html>v1</html>")
+        lock = git_repo / ".fs_tx" / "dir.lock"
+        lock.parent.mkdir(parents=True)
+        lock.write_text("", encoding="utf-8")
+        assert commit_iteration(1) is True
+        import subprocess
+
+        tracked = subprocess.run(
+            ["git", "ls-files"], cwd=git_repo, capture_output=True, text=True
+        ).stdout
+        assert ".fs_tx" not in tracked
+        assert "index.html" in tracked
