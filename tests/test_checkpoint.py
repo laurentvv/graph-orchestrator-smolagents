@@ -11,6 +11,7 @@ Aucun appel LLM réel : les nœuds et les builders de modèles sont monkeypatch�
 pour des exécutions déterministes et rapides. Le KG utilise ":memory:" (RAM).
 """
 
+import tempfile
 import asyncio
 import hashlib
 
@@ -198,6 +199,7 @@ def _settings(kg_path=":memory:", fresh_start=False):
     from graph_orchestrator.config import Settings
     # Construit des settings avec un KG en mémoire + fresh_start pilotable.
     s = Settings(
+        output_dir=tempfile.mkdtemp(prefix="e2e_runs_"),  # F-113 : isole du vrai runs/
         local_api_base="http://x/v1",
         local_reasoning_api_base="http://x/v1",
         local_api_key="sk",

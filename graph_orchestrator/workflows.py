@@ -109,12 +109,56 @@ def _resolve_run_output_dir(
     return os.path.join(root, f"{stamp}_{slug}")
 
 
-def _prune_old_runs(runs_root: str, retention: int):
-    """Supprime les anciens dossiers de run pour limiter la croissance (Priorité 13)."""
+def _rmtree_verified(path: str, attempts: int = 3) -> bool:
+    """rmtree VÉRIFIÉ (post-mortem run #8, F-113) — retourne True ssi le dossier a disparu.
+
+    Avant : ``shutil.rmtree(path, ignore_errors=True)`` — sous Windows, une
+    suppression verrouillée (attribut read-only d'un blob git, handle transitoire)
+    laissait l'arbre PARTIELLEMENT supprimé (HEAD/refs partis, objects restants)
+    en silence, passe après passe : ~290 dossiers de runs/ éviscérés depuis le
+    3 août, et le run #8 détruit 20 min après sa fin. Ici : retries + handler
+    qui retire le read-only (pattern classique Windows) + VÉRIFICATION finale
+    — l'appelant ne logue « supprimé » que si le dossier a réellement disparu.
+    """
     import shutil
+    import stat
+    import time as _time
+
+    def _force_write(func, p, _exc):
+        # Retire le bit read-only (blobs git) puis retente l'opération.
+        try:
+            os.chmod(p, stat.S_IWUSR)
+            func(p)
+        except Exception:
+            raise
+
+    for attempt in range(attempts):
+        try:
+            shutil.rmtree(path, onerror=_force_write)
+        except OSError:
+            _time.sleep(0.2 * (attempt + 1))
+            continue
+        if not os.path.exists(path):
+            return True
+    # Dernier constat : parti ou non.
+    return not os.path.exists(path)
+
+
+def _prune_old_runs(runs_root: str, retention: int, grace_hours: float = 6.0):
+    """Supprime les anciens dossiers de run pour limiter la croissance (Priorité 13).
+
+    F-113 (post-mortem run #8) : (1) suppression VÉRIFIÉE via ``_rmtree_verified``
+    — le message « supprimé » n'est émis que si le dossier a DISPARU, sinon
+    warning bruyant (plus de destruction partielle silencieuse) ; (2) période
+    de GRÂCE : les runs modifiés il y a moins de ``grace_hours`` ne sont JAMAIS
+    candidats — un run tout juste terminé (ou poussé hors top-N par des dirs de
+    tests E2E) ne peut pas être détruit à chaud.
+    """
+    import time as _time
+
     if retention <= 0 or not os.path.isdir(runs_root):
         return
-    
+
     try:
         candidates = []
         for name in os.listdir(runs_root):
@@ -122,15 +166,26 @@ def _prune_old_runs(runs_root: str, retention: int):
             if os.path.isdir(path) and not name.startswith("."):
                 # Le pattern du dossier daté est YYYY-MM-DD_HHMM_slug
                 candidates.append((path, os.path.getmtime(path)))
-        
+
         # Tri par modification la plus récente d'abord (descendant)
         candidates.sort(key=lambda x: x[1], reverse=True)
-        
+
         if len(candidates) > retention:
+            now = _time.time()
+            grace_s = grace_hours * 3600
             to_delete = candidates[retention:]
-            for path, _ in to_delete:
-                shutil.rmtree(path, ignore_errors=True)
-                print(f"[🗑️] Ancien run supprimé (rétention={retention}) : {os.path.basename(path)}")
+            for path, mtime in to_delete:
+                if now - mtime < grace_s:
+                    # Run récent (ou fraîchement touché) : protégé par la grâce.
+                    continue
+                if _rmtree_verified(path):
+                    print(f"[🗑️] Ancien run supprimé (rétention={retention}) : {os.path.basename(path)}")
+                else:
+                    print(
+                        f"[⚠️] PRUNE PARTIEL : {os.path.basename(path)} n'a PAS pu être "
+                        f"entièrement supprimé (fichiers verrouillés ?) — réessayé au "
+                        f"prochain run. Aucun message 'supprimé' tant qu'il survit."
+                    )
     except Exception as e:
         print(f"[⚠️] Échec du nettoyage des anciens runs dans {runs_root} : {e}")
 

@@ -9,6 +9,7 @@ Couvre :
 - E2E toggle : prompt_refiner_enabled=False → prompt brut non modifié, nœud jamais appelé.
 - E2E checkpoint skip : refined_prompt en checkpoint → nœud jamais appelé, prompt hydraté.
 """
+import tempfile
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -219,6 +220,7 @@ def _seed_tasks():
 def _settings_full(prompt_refiner_enabled=True):
     from graph_orchestrator.config import Settings
     return Settings(
+        output_dir=tempfile.mkdtemp(prefix="e2e_runs_"),  # F-113 : isole du vrai runs/
         local_api_base="http://x/v1", local_reasoning_api_base="http://x/v1",
         local_api_key="sk", fast_model_id="m", reasoning_model_id="m",
         reasoning_max_tokens=8, fast_max_tokens=8, coder_temperature=0.2,

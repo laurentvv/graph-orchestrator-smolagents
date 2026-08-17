@@ -9,6 +9,7 @@ l'itération suivante. On valide deux invariants :
 Sans la troncature, le contexte du Coder explose au bout du 3ème essai.
 """
 
+import tempfile
 import asyncio
 import os
 
@@ -25,6 +26,7 @@ from graph_orchestrator.models import (
 def _settings(feedback_max_chars=500, kg_path=":memory:"):
     from graph_orchestrator.config import Settings
     return Settings(
+        output_dir=tempfile.mkdtemp(prefix="e2e_runs_"),  # F-113 : isole du vrai runs/
         local_api_base="http://x/v1", local_reasoning_api_base="http://x/v1",
         local_api_key="sk", fast_model_id="m", reasoning_model_id="m",
         reasoning_max_tokens=8, fast_max_tokens=8, coder_temperature=0.2,
