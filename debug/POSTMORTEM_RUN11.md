@@ -4,6 +4,10 @@
 > `F-82-T1 APPROUVÉ par le Juge 🚀` → `{"status": "success"}`.
 > ~23 min d'inférence (1 352 s), 14,3 M tokens input, exit 0.
 > Log : `logs/e2e_f113_dedicated.log` — rapport : `analysis_report.md`.
+> 📦 **Run préservé (immune à la rétention runs/) : `debug/reference_run_2026-08-17_first_e2e_approval/`**
+> — livrables approuvés + draft + `run_full.log` + `run_git_history.txt`
+> (correction = « Iteration 2, script.js +2 insertions ») + `.transcripts/`
+> (archives F-101) ; README local = plan de localisation complet.
 
 ## Ce qui s'est passé (la boucle complète, pour la première fois)
 

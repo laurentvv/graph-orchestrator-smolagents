@@ -1,0 +1,77 @@
+## Fichier : index.html
+- Structure : `<html>`, `<head>` avec `<meta charset="UTF-8">`, `<meta name="viewport">`, `<title>Bubble Sort Visualizer</title>`
+- `<link rel="stylesheet" href="styles.css">`
+- `<body>` :
+  - `<div id="container">` (wrapper principal, flex column)
+  - `<h1>Bubble Sort Visualizer</h1>`
+  - `<div id="controls">` (flex row) :
+    - `<button id="start-btn">Start</button>`
+    - `<button id="reset-btn">Reset</button>`
+    - `<label>Speed: <input type="range" id="speed-slider" min="10" max="500" value="100"> <span id="speed-value">100</span></label>`
+    - `<span id="comparison-counter">Comparaisons : 0</span>`
+  - `<div id="bars-container"></div>` (conteneur des barres, flex row)
+  - `<script src="script.js"></script>`
+
+## Fichier : styles.css
+- Variables CSS : `--bg: #1a1a2e`, `--text: #e0e0e0`, `--accent: #4fc3f7`, `--comparing: #ff9800`, `--sorted: #66bb6a`, `--bar-bg: #16213e`
+- Reset CSS basique (margin 0, box-sizing border-box)
+- `body` : background var(--bg), color var(--text), font-family system-ui, display flex, flex-direction column, align-items center, min-height 100vh, padding 20px
+- `#container` : width 100%, max-width 800px, display flex, flex-direction column, align-items center, gap 20px
+- `h1` : color var(--accent), font-size 1.5rem
+- `#controls` : display flex, flex-wrap wrap, gap 10px, align-items center
+- `button` : padding 8px 16px, border-radius 4px, border 1px solid var(--accent), background transparent, color var(--accent), cursor pointer, font-weight bold, transition background 0.2s
+- `button:hover` : background var(--accent), color var(--bg)
+- `#speed-slider` : width 150px, vertical align middle
+- `#speed-value` : color var(--accent), font-size 0.9rem
+- `#comparison-counter` : color var(--text), font-size 0.9rem
+- `#bars-container` : display flex, gap 2px, height 40px, align-items flex-end, width 100%, overflow hidden, transition height 0.3s
+- `.bar` : width 20px, background var(--accent), border-radius 2px 2px 0 0, transition height 0.2s, min-height 2px
+- `.bar.comparing` : background var(--comparing)
+- `.bar.sorted` : background var(--sorted)
+- `.bar.default` : background var(--accent)
+- Media query mobile (< 600px) : h1 font-size 1.2rem, #controls flex-direction column, buttons width 100%
+
+## Fichier : script.js
+- Variables globales : `arr = []`, `isSorting = false`, `speed = 100`, `comparisons = 0`, `bars = []`
+- `const container = document.getElementById('bars-container')`, `const startBtn = document.getElementById('start-btn')`, `const resetBtn = document.getElementById('reset-btn')`, `const speedSlider = document.getElementById('speed-slider')`, `const speedValue = document.getElementById('speed-value')`, `const counter = document.getElementById('comparison-counter')`
+- `const BAR_COUNT = 50`, `const BAR_MIN = 10`, `const BAR_MAX = 100`, `const BAR_HEIGHT = 40`
+- `function generateArray()` :
+  - `arr = []`, `bars = []`
+  - Boucle `i` de 0 à BAR_COUNT-1 : `arr.push(Math.floor(Math.random() * (BAR_MAX - BAR_MIN + 1)) + BAR_MIN)`
+  - `container.innerHTML = ''`, `bars = []`
+  - Appel `draw()`
+- `function draw()` :
+  - Boucle `i` de 0 à arr.length-1 :
+    - Créer `div.bar` avec `style.height = arr[i] * 2 + 'px'`, `style.width = '20px'`, `style.background = 'var(--accent)'`
+    - Ajouter class `default`
+    - Appeler `container.appendChild(bar)`
+    - `bars.push(bar)`
+- `async function bubbleSort()` :
+  - `isSorting = true`
+  - `startBtn.disabled = true`
+  - `comparisons = 0`
+  - `let swapped = true`
+  - `while (swapped)` :
+    - `swapped = false`
+    - Boucle `j` de 0 à arr.length-2 :
+      - `comparisons++`
+      - `counter.textContent = 'Comparaisons : ' + comparisons`
+      - `bars[j].classList.remove('default')`, `bars[j].classList.add('comparing')`
+      - `bars[j+1].classList.remove('default')`, `bars[j+1].classList.add('comparing')`
+      - `await sleep(speed)`
+      - Si `arr[j] > arr[j+1]` :
+        - Échanger `arr[j]` et `arr[j+1]`
+        - `swapped = true`
+        - `bars[j].style.height = arr[j] * 2 + 'px'`, `bars[j].style.background = 'var(--accent)'`
+        - `bars[j+1].style.height = arr[j+1] * 2 + 'px'`, `bars[j+1].style.background = 'var(--accent)'`
+        - `bars[j].classList.remove('comparing')`, `bars[j].classList.add('default')`
+        - `bars[j+1].classList.remove('comparing')`, `bars[j+1].classList.add('default')`
+    - `await sleep(speed)`
+  - Boucle finale : `bars.forEach(bar => bar.classList.remove('comparing'), bar.classList.add('sorted'))`
+  - `isSorting = false`, `startBtn.disabled = false`
+- `function sleep(ms)` : `return new Promise(resolve => setTimeout(resolve, ms))`
+- Event listeners :
+  - `startBtn.addEventListener('click', () => { if (!isSorting) bubbleSort() })`
+  - `resetBtn.addEventListener('click', () => { generateArray() })`
+  - `speedSlider.addEventListener('input', () => { speed = parseInt(speedSlider.value) ; speedValue.textContent = speed })`
+- Init : `generateArray()` au chargement
