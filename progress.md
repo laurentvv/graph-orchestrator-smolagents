@@ -1,5 +1,27 @@
 # État d'Avancement du Sprint
 
+## Jalons de l'Itération (cycle F-122 — ULTRA restreint à l'itération ≥ 3)
+> Décision utilisateur (proposition 2 du post-mortem run #10). Réactive
+> l'escalade de modèle F-111 en la bornant : le 9B no-think trop lent ne
+> s'active PLUS à l'itération 2 — uniquement à l'itération 3 (dernière chance
+> avant escalade), au plus UNE activation par run.
+
+- [x] F122-1 : `_select_coder_spec` — condition = `iteration >= 3` seule ;
+  déclencheurs historiques retirés (docstring F-111/F-122) ; signaux
+  `prev_*` conservés pour observabilité.
+- [x] F122-2 : `CODER_ULTRA_CORRECTION=true` réactivé (`.env` +
+  `.env.example`, commentaire F-122).
+- [x] F122-3 : Tests — 2 cas historiques inversés (it.2 déterministe /
+  coder-mort → fast), 22/22 `test_coder_hardening` PASS.
+- [x] F122-4 : Suite complète pytest — **1497 passed / 1 failed / 1 skipped**
+  (échec unique = flaky minute-boundary préexistant, sans interaction avec
+  F-122, documenté) → 0 régression.
+- [x] F122-5 : État disque (contract C440-C442, feature_list F-122, ce
+  fichier) + DuckDB (#1220) + commit + PR. **Run E2E de validation reporté
+  à une session ultérieure (décision utilisateur).**
+
+## Jalons de l'Itération (runs #10 + #11 — validation E2E post-merges PR #90/#91)
+
 ## Jalons de l'Itération (runs #10 + #11 — validation E2E post-merges PR #90/#91)
 > Run #10 (gardes actives) : F-114/F-115 VALIDÉS, F-112 partiel, F-113 non
 > exercé. Run #11 (STATIC_TESTER_ENABLED=0, dédié) : **PREMIÈRE APPROBATION

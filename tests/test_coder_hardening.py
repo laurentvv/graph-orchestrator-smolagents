@@ -445,10 +445,11 @@ class TestTesterMaxStepsFallback:
 # ==========================================
 
 class TestCoderUltra:
-    """F-111 : échelle d'escalade à signaux (l'exécution réelle fait foi).
+    """F-111/F-122 : escalade à signaux (l'exécution réelle fait foi).
 
-    - it.1 création → fast ; it.2 après rejet qualitatif → fast (le 4B suffit) ;
-    - it.2 après rejet DÉTERMINISTE → Ultra ; Coder mort avant → Ultra ;
+    - it.1 création → fast ; it.2 (rejet qualitatif OU déterministe OU Coder
+      mort) → fast (F-122 : l'Ultra trop lent pour s'activer tôt — le 4B sait
+      corriger sur feedback qualitatif, run #11) ;
     - it.3 (dernière chance) → Ultra toujours ; opt-out/sans spec → fast.
     """
 
@@ -477,24 +478,26 @@ class TestCoderUltra:
         )
         assert is_ultra is False and spec.model == "qwen-4b.gguf"
 
-    def test_correction_rejet_deterministepasse_ultra(self):
-        """Run #7 : rejet par garde déterministe (linter/static_tester) → le 4B
-        reproduit le bug → Ultra."""
+    def test_correction_rejet_deterministe_iteration2_reste_fast(self):
+        """F-122 : rejet par garde déterministe à l'itération 2 → PLUS d'Ultra
+        (verdict run #8 : 3.8 t/s, mega-blocs > timeout 600 s). L'Ultra attend
+        l'itération 3 — au plus UNE activation par run."""
         from graph_orchestrator.nodes import _select_coder_spec
         spec, mt, is_ultra = _select_coder_spec(
             {"iteration": 2, "prev_deterministic_reject": True},
             self._settings(),
         )
-        assert is_ultra is True and spec.model == "ornith-9b.gguf" and mt == 8192
+        assert is_ultra is False and spec.model == "qwen-4b.gguf" and mt == 4000
 
-    def test_coder_mort_avant_passe_ultra(self):
-        """Runs #4/#7 : thrash à max_steps sans verdict → Ultra."""
+    def test_coder_mort_iteration2_reste_fast(self):
+        """F-122 : Coder mort techniquement à l'itération 2 → fast (le signal
+        reste calculé pour l'observabilité mais ne déclenche plus l'Ultra)."""
         from graph_orchestrator.nodes import _select_coder_spec
         spec, _, is_ultra = _select_coder_spec(
             {"iteration": 2, "prev_coder_died": True},
             self._settings(),
         )
-        assert is_ultra is True
+        assert is_ultra is False
 
     def test_iteration3_derniere_chance_ultra(self):
         from graph_orchestrator.nodes import _select_coder_spec

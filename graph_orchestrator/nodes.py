@@ -323,15 +323,20 @@ def _visual_checklist_error(criteria_count):
 def _select_coder_spec(task: dict, settings) -> tuple:
     """F-111 : escalade à signaux du Coder — l'exécution réelle fait foi.
 
-    Échelle (calée sur les preuves des runs #6/#7) :
-      - itération 1 (création) → fast 4B (run #6 : convergence en 13 steps) ;
-      - correction après rejet QUALITATIF (Tester/Judge LLM) → fast 4B (run #6 :
-        le 4B a corrigé l'incrément avec le feedback précis) ;
-      - correction après rejet DÉTERMINISTE (linter/static_tester) → Ultra
-        (run #7 : le 4B a reproduit 3× le même bug face aux gardes) ;
-      - Coder mort techniquement à l'itération précédente → Ultra (thrash
-        constaté runs #4/#7 : max_steps sans final_answer) ;
-      - itération ≥ 3 (dernière chance avant escalade) → Ultra toujours.
+    Échelle (calée sur les preuves des runs #6/#7, resserrée F-122) :
+      - itérations 1-2 → fast 4B (création : convergence 12-13 steps runs
+        #6/#10 ; correction : le 4B SAIT corriger sur un feedback qualitatif
+        précis — prouvé run #11) ;
+      - itération ≥ 3 (dernière chance avant escalade F-23) → Ultra toujours.
+
+    F-122 (post-mortems runs #8/#10) : les déclencheurs historiques « rejet
+    déterministe à l'itération 2 » et « Coder mort techniquement » sont
+    RETIRÉS — l'Ultra (Ornith-9B no-think) est trop lent (3.8 t/s, mega-blocs
+    > timeout 600 s observés run #8) pour s'activer tôt. En bornant à
+    l'itération 3 : AU PLUS UNE activation par run, coût borné, et une vraie
+    dernière chance quand le 4B a échoué 2× (run #10 : bug compteur reproduit
+    3× face aux gardes déterministes). Les signaux prev_deterministic_reject /
+    prev_coder_died restent calculés (workflows) à titre d'observabilité.
 
     Retourne (spec, max_tokens, is_ultra). L'Ultra = no_think_spec (gros modèle
     sans thinking, REASONING_NO_THINK_*) si configurée, sinon repli fast.
@@ -341,11 +346,7 @@ def _select_coder_spec(task: dict, settings) -> tuple:
     ultra_ok = (
         getattr(settings, "coder_ultra_correction", False)
         and bool(no_think_model)
-        and (
-            iteration >= 3
-            or bool(task.get("prev_coder_died"))
-            or (iteration > 1 and bool(task.get("prev_deterministic_reject")))
-        )
+        and iteration >= 3
     )
     if ultra_ok:
         return settings.no_think_spec, settings.reasoning_max_tokens, True
