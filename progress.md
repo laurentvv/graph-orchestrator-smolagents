@@ -60,6 +60,57 @@
   baseline, 0 régression) ; LIVE : 0 nouveau dossier sous runs/ post-suite.
 - [x] F113-6 : État disque synchronisé + DuckDB + commit + PR.
 
+## Jalons de l'Itération (cycle F-95 — Robustesse FS : transactions + verrous + cloisonnement IO)
+> Priorité 8-bis (audit fiche 32-OpenKB, 2026-08-12). Complète l'idempotence F-43
+> (replays) par l'ANNULATION des effets partiellement appliqués, durcit le Mutex
+> F-20 vers du cross-process, et confine les IO du Coder par allowlist de chemins
+> (allowlist > denylist sur le périmètre). 3 modules Python pur 0 LLM.
+
+- [x] F95-1 : Exploration — lecture des 3 sources OpenKB (mutation.py 458 l.,
+  locks.py 257 l., agent/tools.py) + fiche audit 32 ; points d'intégration
+  identifiés (9 outils FS de tools.py, `with` workflows.py sans réindentation,
+  config pattern singleton `from .config import settings`).
+- [x] F95-2 : Module `fs_locks.py` — verrou OS advisory cross-process
+  `.fs_tx/dir.lock` (fcntl POSIX / msvcrt Windows + retry borné 10 s puis
+  FsLockTimeout), _LocalRwLock intra-process, réentrance par thread, upgrade
+  read→write refusé, drain différé des journaux à la 1re acquisition exclusive,
+  atomic_write_bytes/text/json (temp+replace+fsync). Écarts : pas de portalocker
+  (stdlib pur) ; read lock exclusif OS sous Windows (documenté).
+- [x] F95-3 : Module `fs_tx.py` — MutationSnapshot (journal active/committed/
+  rolled_back + backup), snapshot_paths (hardlink_dirs optionnel, repli copy2
+  sur EXDEV/EPERM/EACCES), track_new, rollback O(touched) par diff d'inode
+  (_restore_hardlinked_dir), recover_pending_journals (corrompu → suppression
+  bruyante ; rollback défaillant → retry borné 5 puis GAVE UP). Écarts :
+  publish_staged_tree non porté ; prod hardlink_dirs=None (append_file in-place).
+- [x] F95-4 : Module `io_guard.py` — allowlist scopée (pattern F-43), path_allowed
+  (realpath anti-traversal, normcase Windows, frontière stricte run2∉run), messages
+  pédagogiques, fail-open sans racine. Branché sur les 9 outils FS (write/append/
+  edit/search_replace/multi_replace/read_file/skeleton/js_syntax/list_directory) ;
+  bash_command non couvert (documenté).
+- [x] F95-5 : Branchement `workflows.py` — `_scoped_run_guard` (verrou exclusif
+  run dir + allowlist [run_output_dir]) composé dans le `with` existant ;
+  transaction fs_tx autour de chaque appel Coder (normal→committed, exception→
+  rollback+re-raise, crash→journal actif roulé back au run suivant, cohérent
+  checkpoint F-24). `git_snapshot.init_run_git` exclut `.fs_tx/` via
+  `.git/info/exclude` (PAS un .gitignore worktree — fix réactif : le .gitignore
+  cassait le test de non-contamination F-102 en apparaissant dans git status).
+  Config RUN_DIR_LOCK/FS_TRANSACTIONS/IO_ALLOWLIST_ENABLED + .env.example/.env.
+- [x] F95-6 : Validation — **54 tests nouveaux PASS** (fs_locks 17 dont verrou
+  cross-process réel parent/enfant subprocess ; fs_tx 16 dont inode partagé
+  O(touched) et GAVE UP après retry borné ; io_guard 18 dont traversal et
+  intégration des 9 outils ; git_snapshot +3 exclusion) ; suite complète
+  **1441 passed / 0 failed / 1 skipped** (1390 baseline, 0 régression ; le
+  1er run complet a réveillé le flaky minute-boundary `test_e2e_resume_reuses_
+  same_run_dir` PRÉ-EXISTANT F-53, repassé isolément ET au run final) ;
+  LIVE `debug/run_fs_safety.py` **3/3 démos** (crash-recovery end-to-end avec
+  drain au verrou, verrou cross-process, cloisonnement IO + fail-open).
+  Note env : symlink `pytest-current` mort (9 août) dans le temp pytest →
+  PermissionError au sessionfinish (défaut pytest/Windows sur symlink dir) ;
+  contourné via `--basetemp` (indépendant du projet).
+- [x] F95-7 : État disque synchronisé (feature_list F-95 completed, contract
+  C415-C420, plan P8-bis 3 sous-cases cochées + ligne d'état, progress, README)
+  + DuckDB + PR.
+
 ## Jalons de l'Itération (cycle F-101 — Compaction v2 : petits modèles + anti-boucle)
 > Priorité 9 (update références 2026-08-14, fiches opencode/learn-claude-code/pi/
 > claude-science/hermes-agent). La compaction déterministe 5 couches reste la

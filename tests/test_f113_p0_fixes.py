@@ -40,7 +40,7 @@ from graph_orchestrator.workflows import _prune_old_runs, _rmtree_verified
 class TestResolveApiBase:
     def test_propriete_api_base_logged_model(self):
         """LA régression du run #8 : LoggedOpenAIServerModel DOIT exposer son
-        vrai endpoint (le sauvetage Pydagnostic en dépend)."""
+        vrai endpoint (le sauvetage Pydantic en dépend)."""
         m = LoggedOpenAIServerModel(
             model_id="test-m",
             api_base="http://127.0.0.1:61585/v1",
