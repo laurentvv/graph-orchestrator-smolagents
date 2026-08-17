@@ -1407,6 +1407,10 @@ Code prêt pour la production, respectant les conventions du langage.
         # comptage des critères F-90 que l'enforcement va exiger (0 = gate
         # inactive, ex. opt-out config ou tâche sans critères).
         reset_visual_audit()
+        # F-114 : reset du compteur de screenshots du nudge checklist (même
+        # lifecycle que l'audit visuel ; traverse volontairement les retries).
+        from .vision_callback import reset_screenshot_nudge
+        reset_screenshot_nudge()
         _vc = task.get("visual_success_criteria") or []
         visual_criteria_count = (
             len([c for c in _vc if str(c).strip()]) if settings.visual_audit_enabled else 0
@@ -1452,7 +1456,12 @@ Code prêt pour la production, respectant les conventions du langage.
                 max_steps=settings.coder_max_steps,
                 add_base_tools=False,
                 code_block_tags="markdown",
-                step_callbacks=[make_screenshot_callback(screenshot_capture)],
+                # F-114 : visual_criteria_count → le callback vision nourrit le
+                # nudge checklist (rappel visual_check au 3e screenshot sans
+                # audit complet). 0 par défaut (Tester : nudge inactif).
+                step_callbacks=[make_screenshot_callback(
+                    screenshot_capture, visual_criteria_count=visual_criteria_count
+                )],
                 additional_authorized_imports=["os", "subprocess"],
                 executor_kwargs={"timeout_seconds": settings.tester_timeout_s},
             )

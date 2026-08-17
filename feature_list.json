@@ -939,6 +939,17 @@
         "F-108",
         "F-40"
       ]
+    },
+    {
+      "id": "F-114",
+      "name": "Cap fullPage des screenshots + nudge checklist visual_check (post-mortem run #9)",
+      "description": "Run #9 (E2E validation FRESH_START 2026-08-17_1439, ~1h28, debug/POSTMORTEM_RUN9.md) : échec Coder 3/3 tentatives SANS JAMAIS atteindre le Tester (F-112/F-113 restent à valider). Deux causes : (1) le 4B prenait des screenshots fullPage jusqu'à 1265×9315 px → prompt processing vision de plusieurs minutes → Request timed out (600 s) tuant la tentative 2 ; (2) 48 screenshots pour 0 appel visual_check — il conclut en prose, la gate F-109 refuse, le rappel F-109-bis est injecté au retry, il reproduit le même pattern → 43,9M tokens input pour 0 livrable (code généré pourtant sain, 0 erreur syntaxe). Fixes déterministes 0 LLM dans vision_callback.py : (a) CAP fullPage — _ScreenshotCapturingTool.force fullPage=False (et full_page) sur les clés UNIQUEMENT déjà présentes (jamais d'injection d'argument inconnu vers MCP), opt-out VISION_FULLPAGE_CAP (défaut true) + .env/.env.example ; strip filePath F-50/F-90 inchangé (test régression). (b) NUDGE contextuel (pattern repeat-tool-reminder fiche 46-deepseek-harness, rappel gradué via contexte SANS veto) — make_screenshot_callback gagne visual_criteria_count (Coder uniquement, WebTester=0 par défaut = inactif) ; au 3e screenshot (_NUDGE_THRESHOLD) avec critères F-90 manquants (lus via tools.get_visual_audit), le rappel injonctif (« NE prends PAS un autre screenshot : visual_check pour CHAQUE critère manquant [liste], puis final_answer ») est APPENDU à memory_step.observations — canal fiable car _finalize_step (step_callbacks) s'exécute APRÈS l'assignation des observations (vérifié smolagents agents.py:623), indépendant du type de retour (image PIL). reset_screenshot_nudge() au même site que reset_visual_audit() (nodes.py) ; le compteur traverse VOLONTAIREMENT les retries (30 screenshots tentative 1 → nudge immédiat tentative 2). Fail-open total. Validation : 14 tests nouveaux test_vision_nudge.py (cap 6 dont opt-out via dataclasses.replace+patch à la source convention test_bash_guard + régression filePath ; nudge 8 dont seuil exact, manquants listés, complète silencieuse, chemin Tester jamais nudgé, reset, observations préservées, holder vide n'avance pas le compteur). Suite complète (basetemp dédié) : 1493 passed / 1 failed / 1 skipped — échec unique = flaky minute-boundary test_output_dir PRÉEXISTANT (F-53/F-95, vérifié identique sans les changements F-114 via stash) → 0 régression. NB cycle : bascule parallèle du working copy sur docs/audit-kilocode pendant le cycle (travail fiche 47-kilocode de l'utilisateur) — conflit binaire data/event_stream.duckdb au retour de stash résolu depuis le commit de stash (blob SHA via git ls-tree/cat-file), 969 événements intacts, 0 perte.",
+      "status": "completed",
+      "dependencies": [
+        "F-109",
+        "F-50",
+        "F-90"
+      ]
     }
   ]
 }

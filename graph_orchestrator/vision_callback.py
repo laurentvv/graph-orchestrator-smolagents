@@ -21,9 +21,11 @@ sans casser le comportement original (l'image est quand même retournée à l'ag
 """
 
 import logging
-from typing import Any, List
+from typing import Any, List, Optional
 
 from smolagents import Tool
+
+from .config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +33,54 @@ logger = logging.getLogger(__name__)
 # callback. On utilise une liste mutable (append) plutôt qu'une valeur simple pour
 # pouvoir cumuler si plusieurs screenshots dans un même step, et reset entre steps.
 _CAPTURE_ATTR = "_last_screenshot"
+
+# F-114 (post-mortem run #9) : nudge contextuel vers la checklist visual_check.
+# Le 4B prenait 48 screenshots en concluant en prose SANS JAMAIS appeler
+# visual_check (0 appel en 3 tentatives) → la gate F-109 refusait final_answer
+# → boucle déterministe 3 × max_steps, 43,9 M tokens pour 0 livrable. Le nudge
+# rappelle l'exigence AU MOMENT du comportement fautif (dans les observations du
+# step), pas seulement au boundary de retry (F-109-bis). Pattern repeat-tool-reminder
+# (fiche 46-deepseek-harness) : rappel gradué injecté via le contexte, sans veto.
+_NUDGE_THRESHOLD = 3
+_SCREENSHOT_NUDGE_STATE = {"count": 0}
+
+
+def reset_screenshot_nudge() -> None:
+    """Réinitialise le compteur de screenshots du nudge (une exécution de nœud Coder = un cycle).
+
+    À appeler au même endroit que ``tools.reset_visual_audit()`` (même lifecycle).
+    Le compteur traverse volontairement les retries de run_with_retry : 30
+    screenshots pris à la tentative 1 doivent déclencher le nudge immédiatement
+    à la tentative 2, pas après 3 nouveaux screenshots.
+    """
+    _SCREENSHOT_NUDGE_STATE["count"] = 0
+
+
+def _build_checklist_nudge(criteria_count: int) -> Optional[str]:
+    """Construit le rappel checklist si le pattern « screenshots sans audit » est détecté.
+
+    Retourne None tant que le seuil n'est pas atteint ou que tous les critères
+    sont audités. Best-effort total : jamais d'exception (fail-open).
+    """
+    try:
+        from .tools import get_visual_audit  # import local (outils = état module-level)
+
+        _SCREENSHOT_NUDGE_STATE["count"] += 1
+        audited = {a.get("criterion_number") for a in get_visual_audit()}
+        missing = sorted(set(range(1, criteria_count + 1)) - audited)
+        if not missing or _SCREENSHOT_NUDGE_STATE["count"] < _NUDGE_THRESHOLD:
+            return None
+        n = _SCREENSHOT_NUDGE_STATE["count"]
+        return (
+            f"[CHECKLIST VISUELLE] Screenshot #{n} pris, mais {len(missing)}/{criteria_count} "
+            f"critère(s) restent NON audités : {missing}. NE prends PAS un autre screenshot : "
+            f"appelle MAINTENANT visual_check(criterion_number=i, verdict=True|False, "
+            f'observation="ce que tu vois sur la capture ci-dessus") pour CHAQUE critère '
+            f"manquant, puis final_answer. Sans checklist complète, final_answer sera REFUSÉ."
+        )
+    except Exception as e:  # pragma: no cover - fail-open garanti
+        logger.debug("nudge checklist échec (%s) — ignoré.", e)
+        return None
 
 
 class _ScreenshotCapturingTool(Tool):
@@ -96,6 +146,22 @@ class _ScreenshotCapturingTool(Tool):
                 "vision_callback: filePath strippé (fix screenshot loop) — "
                 "capture via observations_images, pas d'écriture disque."
             )
+        # F-114 (post-mortem run #9) : cap fullPage. Le Coder appelle
+        # take_screenshot(fullPage=True) → images de plusieurs milliers de pixels
+        # de haut (jusqu'à 1265×9315 observés) → prompt processing vision de
+        # plusieurs minutes → Request timed out (600 s) qui a tué la tentative 2
+        # du run #9. La capture viewport suffit à l'audit visuel. On ne mute QUE
+        # les clés déjà présentes (jamais d'injection d'argument inconnu vers le
+        # serveur MCP). Opt-out VISION_FULLPAGE_CAP=false.
+        if settings.vision_fullpage_cap:
+            for _key in ("fullPage", "full_page"):
+                if kwargs.get(_key):
+                    kwargs[_key] = False
+                    logger.debug(
+                        "vision_callback: %s forcé à False (cap F-114 — "
+                        "images fullPage géantes = timeouts LLM).",
+                        _key,
+                    )
         result = self.wrapped.forward(*args, **kwargs)
         # Capture si c'est une image (PIL.Image.Image). On importe PIL ici (pas au
         # niveau module) car PIL est une dépendance optionnelle via smolagents.
@@ -214,7 +280,7 @@ def wrap_screenshot_tools(tools: List[Tool], capture_holder: List[Any]) -> List[
     return wrapped_list
 
 
-def make_screenshot_callback(capture_holder: List[Any]):
+def make_screenshot_callback(capture_holder: List[Any], visual_criteria_count: int = 0):
     """Fabrique un step_callback smolagents qui peuple observations_images.
 
     À enregistrer via `step_callbacks=[cb]` sur le CodeAgent (Coder) ou
@@ -225,8 +291,20 @@ def make_screenshot_callback(capture_holder: List[Any]):
     Le capture_holder est RESET à chaque step (on ne veut garder que le dernier
     screenshot, pas empiler — un screenshot = ~1-2k tokens vision).
 
+    F-114 : si ``visual_criteria_count`` > 0 (Coder avec critères F-90 uniquement —
+    le Tester passe 0 par défaut, visual_check n'existe pas chez lui), le callback
+    vérifie après chaque screenshot si la checklist visual_check stagne
+    (pattern run #9 : 48 screenshots, 0 appel). Au seuil ``_NUDGE_THRESHOLD``, le
+    rappel est APPENDU à ``memory_step.observations`` — canal fiable car
+    ``_finalize_step`` (qui exécute les step_callbacks) tourne APRÈS l'assignation
+    des observations par l'agent (smolagents agents.py) : le texte survit dans la
+    mémoire et est vu au step suivant, indépendamment du type de retour de l'outil
+    (image PIL pour take_screenshot).
+
     Args:
         capture_holder: La même liste mutable passée à wrap_screenshot_tools.
+        visual_criteria_count: Nombre de critères visuels attendus (gate F-109).
+            0 = nudge inactif.
 
     Returns:
         Une fonction callback(memory_step, agent) -> None.
@@ -245,5 +323,14 @@ def make_screenshot_callback(capture_holder: List[Any]):
         # Reset pour le step suivant (la liste est partagée, on ne veut pas que le
         # screenshot d'un step précédent ressurgisse si le step courant n'en prend pas).
         capture_holder.clear()
+        # F-114 : nudge checklist (Coder uniquement, fail-open).
+        if visual_criteria_count > 0:
+            nudge = _build_checklist_nudge(visual_criteria_count)
+            if nudge:
+                try:
+                    current = getattr(memory_step, "observations", None) or ""
+                    memory_step.observations = f"{current}\n\n{nudge}" if current else nudge
+                except Exception as e:
+                    logger.debug("nudge checklist : append observations échec (%s).", e)
 
     return _callback
