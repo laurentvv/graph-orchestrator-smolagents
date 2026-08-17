@@ -8,6 +8,7 @@
 Couvre les critères de contract.md (recall-centric + global unique).
 """
 
+import tempfile
 import asyncio
 from dataclasses import replace
 
@@ -436,6 +437,7 @@ def _setup_workflow_mocks(monkeypatch):
 def _settings(recall_enabled=True, kg_path=":memory:"):
     from graph_orchestrator.config import Settings
     return Settings(
+        output_dir=tempfile.mkdtemp(prefix="e2e_runs_"),  # F-113 : isole du vrai runs/
         local_api_base="http://x/v1", local_reasoning_api_base="http://x/v1",
         local_api_key="sk", fast_model_id="m", reasoning_model_id="m",
         reasoning_max_tokens=8, fast_max_tokens=8, coder_temperature=0.2,

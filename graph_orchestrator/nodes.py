@@ -75,6 +75,23 @@ def query_duckdb_knowledge_graph(sql_query: str) -> str:
 # Modèles (construits une fois depuis la config)
 # ==========================================
 
+def _resolve_agent_api_base(agent_model) -> Optional[str]:
+    """Résout le VRAI endpoint du modèle d'un agent (post-mortem run #8, F-113).
+
+    ``smolagents.OpenAIServerModel`` n'expose PAS ``self.api_base`` — il range
+    l'URL uniquement dans ``client_kwargs["base_url"]``. L'ancien
+    ``getattr(agent_model, "api_base", None)`` rendait donc TOUJOURS None → le
+    sauvetage Pydantic (``extract_and_validate``) retombait sur
+    ``settings.local_api_base`` (port 8000, RIEN n'écoute en mode spawn) →
+    ``Connection error`` déterministe 3/3 au run #8, serveurs dynamiques sains.
+    Ordre : propriété ``api_base`` de LoggedOpenAIServerModel, puis
+    ``client_kwargs["base_url"]`` en repli (modèles non-Logged).
+    """
+    return getattr(agent_model, "api_base", None) or (
+        getattr(agent_model, "client_kwargs", None) or {}
+    ).get("base_url")
+
+
 class LoggedOpenAIServerModel(OpenAIServerModel):
     """OpenAIServerModel + log tokens + retry transport F-104 (P8).
 
@@ -99,6 +116,21 @@ class LoggedOpenAIServerModel(OpenAIServerModel):
     def __init__(self, *args, revive=None, **kwargs):
         super().__init__(*args, **kwargs)
         self._llm_revive = revive
+
+    @property
+    def api_base(self) -> Optional[str]:
+        """Le VRAI endpoint de ce modèle (post-mortem run #8, F-113).
+
+        ``smolagents.OpenAIServerModel`` n'assigne PAS ``self.api_base`` — il
+        range l'URL uniquement dans ``client_kwargs["base_url"]``. Le sauvetage
+        Pydantic (``run_with_retry`` → ``extract_and_validate``) lisait
+        ``getattr(agent_model, "api_base", None)`` → None → fallback
+        ``settings.local_api_base`` (port 8000, RIEN n'écoute en mode spawn)
+        → ``Connection error`` déterministe 3/3 au run #8 alors que les
+        serveurs dynamiques étaient sains. Cette propriété expose l'URL réelle
+        (suivie par ``_between_attempts`` lors d'un revive).
+        """
+        return self.client_kwargs.get("base_url")
 
     def _between_attempts(self) -> None:
         """openfox : re-résolution du client entre deux tentatives de retry."""
@@ -543,7 +575,7 @@ async def run_with_retry(
             raw_output = run_result.output if hasattr(run_result, "output") else run_result
             
             agent_model = getattr(agent, "model", None)
-            api_base_val = getattr(agent_model, "api_base", None)
+            api_base_val = _resolve_agent_api_base(agent_model)
             model_id_val = getattr(agent_model, "model_id", None)
             
             validated = extract_and_validate(raw_output, model_class, api_base=api_base_val, model_id=model_id_val)

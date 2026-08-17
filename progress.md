@@ -38,6 +38,28 @@
       web-tester). Implémentation TERMINÉE (42 tests sur les 3 zones, 692 passed / 7
       pré-existants non liés).
 
+## Jalons de l'Itération (cycle F-113 — Fixes P0 post-mortem run #8)
+> Les deux causes racines prouvées par debug/POSTMORTEM_RUN8.md, corrigées :
+> le sauvetage Pydantic qui tapait un port mort (LE bloqueur des approbations)
+> et le prune qui détruisait les runs en silence depuis le 3 août.
+
+- [x] F113-1 : Fix sauvetage — propriété `api_base` sur LoggedOpenAIServerModel
+  + `_resolve_agent_api_base` (fallback client_kwargs) dans run_with_retry.
+  smolagents n'expose PAS self.api_base → l'ancien getattr rendait toujours
+  None → sauvetage sur port 8000 mort → Connection error 3/3 du run #8.
+- [x] F113-2 : Fix prune — `_rmtree_verified` (retries + chmod read-only +
+  vérification finale) ; « supprimé » seulement si disparu (sinon PRUNE
+  PARTIEL bruyant) ; grâce 6h (un run frais ne peut plus être détruit à chaud).
+- [x] F113-3 : Fix isolation — 6 helpers E2E → output_dir=tempfile.mkdtemp
+  (avant : 8+ dossiers sous runs/ par exécution de suite → vrais runs poussés
+  hors rétention → détruits).
+- [x] F113-4 : 17 tests nouveaux PASS (dont la régression exacte du run #8,
+  blob read-only supprimé, run récent protégé par grâce, jamais de succès
+  mensonger, isolation des 6 helpers).
+- [x] F113-5 : Suite complète **1407 passed / 0 failed / 1 skipped** (1390
+  baseline, 0 régression) ; LIVE : 0 nouveau dossier sous runs/ post-suite.
+- [x] F113-6 : État disque synchronisé + DuckDB + commit + PR.
+
 ## Jalons de l'Itération (cycle F-101 — Compaction v2 : petits modèles + anti-boucle)
 > Priorité 9 (update références 2026-08-14, fiches opencode/learn-claude-code/pi/
 > claude-science/hermes-agent). La compaction déterministe 5 couches reste la

@@ -918,6 +918,17 @@
         "F-108",
         "F-109"
       ]
+    },
+    {
+      "id": "F-113",
+      "name": "Fixes P0 post-mortem run #8 — api_base du sauvetage Pydantic + prune vérifié + isolation runs/ des tests E2E",
+      "description": "Deux causes racines prouvées par debug/POSTMORTEM_RUN8.md, corrigées en un cycle. (1) SAUVETAGE : run_with_retry lisait getattr(agent_model, 'api_base', None) — or smolagents.OpenAIServerModel n'assigne PAS self.api_base (il range l'URL uniquement dans client_kwargs['base_url'], vérifié par introspection) → None à chaque fois → extract_and_validate retombait sur settings.local_api_base (port 8000, RIEN n'écoute en mode spawn) → Connection error déterministe 3/3 au run #8 alors que les 3 serveurs Tester dynamiques s'étaient terminés proprement (slot release, 0 erreur). C'est LE bloqueur des approbations : le Web Tester ne produisait jamais de verdict parsé → Judge fail-closed F-108 ×3 → escalade. Fix : propriété api_base sur LoggedOpenAIServerModel (lit client_kwargs['base_url'], donc suivie par _between_attempts lors d'un revive F-104) + helper _resolve_agent_api_base (attribut direct puis fallback client_kwargs — couvre les modèles non-Logged) branché dans run_with_retry. (2) PRUNE DESTRUCTEUR : _prune_old_runs faisait shutil.rmtree(ignore_errors=True) — sous Windows, une suppression verrouillée (read-only d'un blob git, handle transitoire) laissait l'arbre PARTIELLEMENT supprimé en silence (HEAD/refs partis, objects restants), passe après passe : ~290 dossiers de runs/ éviscérés depuis le 3 août (vagues corrélées aux exécutions de la suite pytest), et le run #8 DÉTRUIT 20 min après sa fin (livrables+draft+.transcripts supprimés, .git réduit à 37 objects — sauvés par capture 23:56 + blobs git via alternates). AMPLIFICATEUR : 6 helpers E2E construisaient Settings sans output_dir → vrais dossiers sous runs/ (dirs _t1/_task1 par dizaines) qui poussent les runs récents hors top-N de la rétention. Fix : _rmtree_verified (jusqu'à 3 tentatives + handler onerror qui retire le bit read-only + VÉRIFICATION finale — True ssi le dossier a disparu) ; _prune_old_runs n'émet '🗑️ supprimé' que si le dossier a DISPARU (sinon warning bruyant 'PRUNE PARTIEL') + période de GRÂCE 6h (les runs modifiés récemment ne sont JAMAIS candidats — un run tout juste terminé ne peut plus être détruit à chaud) ; les 6 helpers E2E (test_escalation/checkpoint/consolidation/lesson_recall/prompt_refiner/feedback_integration) passent output_dir=tempfile.mkdtemp(prefix='e2e_runs_'). Validation : 17 tests nouveaux (résolution api_base 5 dont propriété suivie par revive + fallback bare model + fail-open None ; rmtree_verified 3 dont read-only supprimé et échec avoué ; prune grâce 3 dont run récent protégé + jamais de message de succès mensonger + retention 0 noop ; isolation 6 paramétrés) ; suite complète 1407 passed / 0 failed / 1 skipped (1390 baseline, 0 régression) ; VÉRIFICATION LIVE post-suite : 0 nouveau dossier sous runs/ (avant : 8+ par exécution de suite).",
+      "status": "completed",
+      "dependencies": [
+        "F-104",
+        "F-108",
+        "F-40"
+      ]
     }
   ]
 }
