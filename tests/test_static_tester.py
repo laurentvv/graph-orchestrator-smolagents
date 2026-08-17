@@ -668,3 +668,271 @@ def test_canvas_children_clean_when_ctx_drawing():
     from graph_orchestrator.static_tester import _check_canvas_children
     js = "const ctx = canvas.getContext('2d'); ctx.fillRect(0, 0, 10, 10);"
     assert _check_canvas_children(RUN6_CANVAS_HTML, js) == []
+
+
+# ==========================================
+# F-112 (post-mortem run #8, 2026-08-16) — le livrable avait un tri instantané
+# invisible du Tier 3 : le découvreur de signal prenait le PREMIER élément
+# numérique du DOM = le libellé du slider (constante) placé AVANT le compteur.
+# + le délai était une FORMULE négative (`sleep(320 - speed*2)`, speed=320ms)
+# que la résolution littérale ne voyait pas.
+# ==========================================
+
+# Réplique exacte du run #8 : canvas (pas de .sorted), speedLabel numérique
+# AVANT le counter dans le DOM, tri complet instantané (sleep négatif clampé
+# à 0, draw() unique en fin).
+RUN8_INSTANT_CANVAS_HTML = """<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Bubble Sort Visualizer</title></head><body>
+<div id="container"><h1>Bubble Sort Visualizer</h1>
+<canvas id="chart" width="400" height="200"></canvas>
+<div id="controls"><button id="startBtn">Start</button><button id="resetBtn">Reset</button></div>
+<div id="speed"><label>Speed: <span id="speedLabel">5</span></label>
+<input type="range" id="speedRange" min="1" max="10" value="5"></div>
+<div id="counter">0</div></div>
+<script>
+const canvas=document.getElementById('chart'),ctx=canvas.getContext('2d');
+const counter=document.getElementById('counter');
+let arr=[],comparisons=0,speed=320;
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function draw(){ctx.clearRect(0,0,400,200);arr.forEach((v,i)=>{ctx.fillStyle='#454545';
+ctx.fillRect(i*13,200-v*2,12,v*2);});}
+function init(){arr=[];for(let i=0;i<30;i++)arr.push(Math.floor(Math.random()*100)+1);draw();}
+async function bubbleSort(){
+  comparisons=0;let swapped=true;
+  while(swapped){swapped=false;
+    for(let i=0;i<arr.length-1;i++){
+      comparisons++;counter.textContent=comparisons;
+      if(arr[i]>arr[i+1]){[arr[i],arr[i+1]]=[arr[i+1],arr[i]];swapped=true;}}}
+    await sleep(320 - speed * 2); // NÉGATIF (-320) → clampé à 0 par setTimeout
+  draw();}
+document.getElementById('startBtn').addEventListener('click',()=>{if(!window._s){window._s=1;bubbleSort();}});
+init();
+</script></body></html>"""
+
+# Même page mais avec UNE étape par await (délai positif 80ms, draw() dans la
+# boucle) : l'animation progressive ne doit JAMAIS être flagguée.
+RUN8_PROGRESSIVE_CANVAS_HTML = RUN8_INSTANT_CANVAS_HTML.replace(
+    """while(swapped){swapped=false;
+    for(let i=0;i<arr.length-1;i++){
+      comparisons++;counter.textContent=comparisons;
+      if(arr[i]>arr[i+1]){[arr[i],arr[i+1]]=[arr[i+1],arr[i]];swapped=true;}}}
+    await sleep(320 - speed * 2); // NÉGATIF (-320) → clampé à 0 par setTimeout
+  draw();}""",
+    """for(let p=0;p<arr.length-1;p++){
+    for(let i=0;i<arr.length-1-p;i++){
+      comparisons++;counter.textContent=comparisons;
+      if(arr[i]>arr[i+1]){[arr[i],arr[i+1]]=[arr[i+1],arr[i]];}
+      await sleep(80);draw();}} // UNE étape par await + rendu DANS la boucle
+  draw();}""",
+).replace("const speed=320;", "const speed=4;")
+
+
+class TestResolveDelayMs:
+    """F-112 — résolution arithmétique des délais (le bug formule du run #8)."""
+
+    def test_formule_negative_run8(self):
+        from graph_orchestrator.static_tester import _resolve_delay_ms
+        js = "let speed = 320;\nawait sleep(320 - speed * 2);"
+        assert _resolve_delay_ms("320 - speed * 2", js) == -320
+
+    def test_formule_positive_legitime(self):
+        from graph_orchestrator.static_tester import _resolve_delay_ms
+        js = "let speedValue = 10;\nawait sleep(320 - speedValue * 28);"
+        assert _resolve_delay_ms("320 - speedValue * 28", js) == 40
+
+    def test_variable_non_liee_fail_open(self):
+        from graph_orchestrator.static_tester import _resolve_delay_ms
+        assert _resolve_delay_ms("320 - speed * 28", "const other = 1;") is None
+        assert _resolve_delay_ms("speed", "") is None
+
+    def test_litteral_et_variable_simple(self):
+        from graph_orchestrator.static_tester import _resolve_delay_ms
+        assert _resolve_delay_ms("5", "x") == 5
+        assert _resolve_delay_ms("speed", "let speed = 5;") == 5
+
+    def test_division_par_zero_fail_open(self):
+        from graph_orchestrator.static_tester import _resolve_delay_ms
+        assert _resolve_delay_ms("speed / 0", "let speed = 100;") is None
+
+    def test_nom_de_fonction_rejete(self):
+        """Un appel (ex: `sleep(getDelay())`) n'est jamais évalué — whitelist
+        arithmétique stricte : pas d'eval arbitraire."""
+        from graph_orchestrator.static_tester import _resolve_delay_ms
+        assert _resolve_delay_ms("getDelay() + 1", "let getDelay = 3;") is None
+
+
+class TestBehavioralRun8Formula:
+    """Le Tier 1c attrape désormais la FORMULE négative (invisible avant F-112)."""
+
+    def test_run8_delai_negatif_flagge(self):
+        from graph_orchestrator.static_tester import _check_behavioral_smells
+        js = (
+            "let speed = 320;\n"
+            "async function s(){for(;;){comparisons++;"
+            "counter.textContent=comparisons;await sleep(320 - speed * 2);}}"
+        )
+        errors = _check_behavioral_smells(js)
+        assert any("-320 ms" in e and "NÉGATIVE" in e for e in errors), errors
+
+    def test_message_sans_formule_litterale_suggeree(self):
+        """Post-mortem run #8 : le message AVANT F-112 suggérait `320 - speed*28`
+        littéralement — le Coder l'a greffée à l'aveugle. Le nouveau message
+        porte l'INVARIANT (unité de la variable) et aucune formule à copier."""
+        from graph_orchestrator.static_tester import _check_behavioral_smells
+        errors = _check_behavioral_smells("await sleep(5); draw();")
+        assert errors
+        assert "320 - speed" not in errors[0]
+        assert "UNITÉ" in errors[0] or "unité" in errors[0]
+
+    def test_formule_positive_propre(self):
+        from graph_orchestrator.static_tester import _check_behavioral_smells
+        js = (
+            "let speedValue = 10;\n"
+            "async function s(){for(;;){comparisons++;"
+            "counter.textContent=comparisons;await sleep(320 - speedValue * 28);}}"
+        )
+        # 40 ms par étape = animation visible → pas de flag délai.
+        assert not any("Délai d'animation" in e for e in _check_behavioral_smells(js))
+
+
+class TestTemporalVerdict:
+    """F-112 — verdict pur multi-signal (sans Chrome), sur des snapshots réels."""
+
+    def _snap(self, **over):
+        base = {
+            "nums0": {"speedLabel": 5, "counter": 0},
+            "nums1": {"speedLabel": 5, "counter": 0},
+            "nums2": {"speedLabel": 5, "counter": 0},
+            "term0": 0, "term1": 0, "term2": 0,
+            "c0": 111, "c1": 111, "c2": 111,
+        }
+        base.update(over)
+        return base
+
+    def test_run8_compteur_progressif_puis_stable_flag(self):
+        """LA régression du run #8 : le compteur avance (0→217) et le canvas
+        change — mais TOUT est déjà stable à la fenêtre de stabilisation."""
+        from graph_orchestrator.static_tester import _temporal_verdict
+        snap = self._snap(nums1={"speedLabel": 5, "counter": 217},
+                          nums2={"speedLabel": 5, "counter": 217}, c1=222, c2=222)
+        verdict = _temporal_verdict(snap, "startBtn")
+        assert verdict and "[temporal]" in verdict[0]
+        assert "counter" in verdict[0] and "canvas" in verdict[0]
+
+    def test_run8_canvas_seul_flag(self):
+        """App canvas SANS compteur : le hash pixels reste le seul signal."""
+        from graph_orchestrator.static_tester import _temporal_verdict
+        snap = self._snap(c1=222, c2=222)
+        verdict = _temporal_verdict(snap, "startBtn")
+        assert verdict and "canvas" in verdict[0]
+
+    def test_progressive_pas_de_flag(self):
+        from graph_orchestrator.static_tester import _temporal_verdict
+        snap = self._snap(nums1={"speedLabel": 5, "counter": 13},
+                          nums2={"speedLabel": 5, "counter": 15})
+        assert _temporal_verdict(snap, "startBtn") == []
+
+ 
+
+    def test_canvas_progressif_pas_de_flag(self):
+        from graph_orchestrator.static_tester import _temporal_verdict
+        snap = self._snap(c1=222, c2=333)
+        assert _temporal_verdict(snap, "startBtn") == []
+
+    def test_signal_constant_seul_skip(self):
+        """L'exacte cécité du run #8 AVANT F-112 : seul le speedLabel (constante)
+        existe, rien ne bouge → skip (jamais de FP)."""
+        from graph_orchestrator.static_tester import _temporal_verdict
+        assert _temporal_verdict(self._snap(), "startBtn") == []
+
+    def test_classes_terminales_stables_flag(self):
+        from graph_orchestrator.static_tester import _temporal_verdict
+        snap = self._snap(term1=12, term2=12)
+        verdict = _temporal_verdict(snap, "startBtn")
+        assert verdict and "terminaux" in verdict[0]
+
+    def test_canvas_absent_ignore(self):
+        from graph_orchestrator.static_tester import _temporal_verdict
+        snap = self._snap(c0=None, c1=None, c2=None,
+                          nums1={"speedLabel": 5, "counter": 90},
+                          nums2={"speedLabel": 5, "counter": 90})
+        assert _temporal_verdict(snap, "startBtn")
+
+    def test_no_btn_skip(self):
+        from graph_orchestrator.static_tester import _temporal_verdict
+        assert _temporal_verdict({"reason": "no-btn"}, "startBtn") == []
+
+
+# Réplique exacte du run #8 : canvas (pas de .sorted), speedLabel numérique
+# AVANT le counter dans le DOM, tri complet instantané (sleep négatif clampé
+# à 0, draw() unique en fin).
+RUN8_INSTANT_CANVAS_HTML = """<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Bubble Sort Visualizer</title></head><body>
+<div id="container"><h1>Bubble Sort Visualizer</h1>
+<canvas id="chart" width="400" height="200"></canvas>
+<div id="controls"><button id="startBtn">Start</button><button id="resetBtn">Reset</button></div>
+<div id="speed"><label>Speed: <span id="speedLabel">5</span></label>
+<input type="range" id="speedRange" min="1" max="10" value="5"></div>
+<div id="counter">0</div></div>
+<script>
+const canvas=document.getElementById('chart'),ctx=canvas.getContext('2d');
+const counter=document.getElementById('counter');
+let arr=[],comparisons=0,speed=320;
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function draw(){ctx.clearRect(0,0,400,200);arr.forEach((v,i)=>{ctx.fillStyle='#454545';
+ctx.fillRect(i*13,200-v*2,12,v*2);});}
+function init(){arr=[];for(let i=0;i<30;i++)arr.push(Math.floor(Math.random()*100)+1);draw();}
+async function bubbleSort(){
+  comparisons=0;let swapped=true;
+  while(swapped){swapped=false;
+    for(let i=0;i<arr.length-1;i++){
+      comparisons++;counter.textContent=comparisons;
+      if(arr[i]>arr[i+1]){[arr[i],arr[i+1]]=[arr[i+1],arr[i]];swapped=true;}}}
+    await sleep(320 - speed * 2); // NEGATIF (-320) -> clampe a 0 par setTimeout
+  draw();}
+document.getElementById('startBtn').addEventListener('click',()=>{if(!window._s){window._s=1;bubbleSort();}});
+init();
+</script></body></html>"""
+
+# Même page mais UNE étape par await (delai positif 80ms, draw() DANS la
+# boucle) : l'animation progressive ne doit JAMAIS etre flagguee.
+RUN8_PROGRESSIVE_CANVAS_HTML = RUN8_INSTANT_CANVAS_HTML.replace(
+    """while(swapped){swapped=false;
+    for(let i=0;i<arr.length-1;i++){
+      comparisons++;counter.textContent=comparisons;
+      if(arr[i]>arr[i+1]){[arr[i],arr[i+1]]=[arr[i+1],arr[i]];swapped=true;}}}
+    await sleep(320 - speed * 2); // NEGATIF (-320) -> clampe a 0 par setTimeout
+  draw();}""",
+    """for(let p=0;p<arr.length-1;p++){
+    for(let i=0;i<arr.length-1-p;i++){
+      comparisons++;counter.textContent=comparisons;
+      if(arr[i]>arr[i+1]){[arr[i],arr[i+1]]=[arr[i+1],arr[i]];}
+      await sleep(80);draw();}} // UNE etape par await + rendu DANS la boucle
+  draw();}""",
+).replace("speed=320;", "speed=4;")
+
+
+class TestTemporalLiveRun8Regression:
+    """LIVE (Chrome requis, sinon skip) : la réplique exacte du run #8 DOIT être
+    réfutée par le Tier 3 multi-signal — là où l'ancienne sonde était aveugle
+    (speedLabel constant découvert avant le compteur)."""
+
+    def test_run8_replicat_refute(self, tmp_path):
+        p = _write(tmp_path, "index.html", RUN8_INSTANT_CANVAS_HTML)
+        res = static_check_html(p, run_devtools=True, run_temporal=True)
+        if res.tier_reached != "tier3":
+            pytest.skip("Chrome DevTools indispo dans l'env de test — Tier 3 testé en live.")
+        temporal_errors = [e for e in res.errors if "instantanée" in e or "[temporal]" in e]
+        assert temporal_errors, (
+            f"Le Tier 3 multi-signal doit détecter le tri instantané du run #8: {res.errors}"
+        )
+
+    def test_run8_progressive_replicat_passe(self, tmp_path):
+        p = _write(tmp_path, "index.html", RUN8_PROGRESSIVE_CANVAS_HTML)
+        res = static_check_html(p, run_devtools=True, run_temporal=True)
+        if res.tier_reached != "tier3":
+            pytest.skip("Chrome DevTools indispo dans l'env de test — Tier 3 testé en live.")
+        temporal_errors = [e for e in res.errors if "instantanée" in e or "[temporal]" in e]
+        assert not temporal_errors, (
+            f"Animation progressive canvas ne doit pas être flagguée: {temporal_errors}"
+        )

@@ -60,6 +60,37 @@
   baseline, 0 régression) ; LIVE : 0 nouveau dossier sous runs/ post-suite.
 - [x] F113-6 : État disque synchronisé + DuckDB + commit + PR.
 
+## Jalons de l'Itération (cycle F-112 — Sonde animation instantanée multi-signal)
+> Post-mortem run #8 (E2E FRESH_START 2026-08-16_2205, 1h47) : le livrable
+> Bubble Sort avait un tri INSTANTANÉ (formule de délai négative + aucun
+> repaint dans la boucle) sorti de 3 itérations sans qu'AUCUN nœud ne
+> l'identifie. Demande utilisateur : « trouver un moyen pour, comme toi,
+> trouver le problème ». Réponse : la sonde temporelle manuelle devient une
+> brique déterministe de l'usine (2 voies indépendantes).
+
+- [x] F112-1 : Diagnostic — Tier 3 cécité (découvreur de signal = PREMIER
+  élément numérique du DOM = speedLabel CONSTANTE placée avant le compteur →
+  t0=t1=t2 → skip silencieux) ; Tier 1c cécité (délai FORMULE non résolue) ;
+  cause amont (le message Tier 1c suggérait LITTÉRALEMENT la formule que le
+  Coder a greffée sur une variable en ms).
+- [x] F112-2 : `_resolve_delay_ms` (Tier 1c) — résolution arithmétique sûre
+  (substitution variables liées + éval whitelistée chiffres/opérateurs
+  uniquement) ; `sleep(320 - speed*2)` avec speed=320 → −320 → flag
+  « NÉGATIVE clampée à 0 » ; message rewordé : invariant d'UNITÉ, zéro
+  formule copiable.
+- [x] F112-3 : Tier 3 multi-signal — TOUS les éléments numériques (par id) +
+  hash djb2 pixels du premier <canvas> + classes terminales ; `_temporal_verdict`
+  pur (progressé-then-stable = instantané ; rien bougé = skip sans FP ; bouge
+  encore = progressive) ; stabilisation 50→350 ms (anti-FP pas lents).
+- [x] F112-4 : Tests — 19 nouveaux PASS (6 resolve + 3 behavioral + 8 verdict
+  purs + 2 LIVE réplique exacte run #8 : réfutée / progressive passe).
+- [x] F112-5 : Validation — LIVE sur le VRAI livrable `runs/2026-08-16_2205` :
+  is_valid=False avec les DEUX réfutations (−320 ms statique + temporal
+  « compteur counter 0→214 ; canvas (pixels) ») ; suite complète **1409
+  passed / 0 failed / 1 skipped** (1390 baseline, 0 régression).
+- [x] F112-6 : État disque synchronisé (feature_list F-112, contract
+  C421-C426, plan case sous F-100, README) + DuckDB + PR.
+
 ## Jalons de l'Itération (cycle F-95 — Robustesse FS : transactions + verrous + cloisonnement IO)
 > Priorité 8-bis (audit fiche 32-OpenKB, 2026-08-12). Complète l'idempotence F-43
 > (replays) par l'ANNULATION des effets partiellement appliqués, durcit le Mutex

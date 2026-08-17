@@ -253,6 +253,49 @@ _COUNTER_NAME_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Chars autorisés dans une expression de délai APRÈS substitution des variables
+# (éval sécurisée : aucun nom, aucun appel — que de l'arithmétique littérale).
+_SAFE_ARITH_RE = re.compile(r"^[\d+\-*/(). ]+$")
+
+
+def _resolve_delay_ms(arg: str, js: str) -> Optional[int]:
+    """Résout l'argument de délai `sleep(...)`/`setTimeout(...)` en millisecondes.
+
+    F-112 (post-mortem run #8) : l'ancienne résolution ne voyait que les
+    littéraux (`sleep(5)`) et les variables liées à un littéral (`speed` avec
+    `let speed = 5`). Le bug du run #8 était une FORMULE : `sleep(320 - speed*2)`
+    avec `let speed = 320` → −320 ms → clampé à 0 par setTimeout → animation
+    instantanée, invisible du grep. On substitue donc TOUTES les variables liées
+    à un littéral entier, puis on évalue l'arithmétique résultante si (et seulement
+    si) il ne reste que des chiffres et des opérateurs (jamais de nom, jamais
+    d'appel — pas d'eval arbitraire).
+
+    Returns:
+        Le délai en ms (peut être négatif — c'est le bug qu'on chasse), ou None
+        si non résolvable (on ne conclut pas, fail-open).
+    """
+    arg = arg.strip()
+    if not arg:
+        return None
+    if re.fullmatch(r"\d+", arg):
+        return int(arg)
+    # Substitue chaque identifiant lié à un littéral entier dans le source
+    # (`let|var|const name = <int>`). Les variables non liées laissent des
+    # résidus alphabétiques → l'expression est rejetée par _SAFE_ARITH_RE.
+    substituted = arg
+    for m in re.finditer(r"\b(?:let|var|const)\s+(\w+)\s*=\s*(\d+)\b", js):
+        substituted = re.sub(rf"\b{re.escape(m.group(1))}\b", m.group(2), substituted)
+    stripped = substituted.strip()
+    if stripped.isdigit():
+        return int(stripped)
+    if not _SAFE_ARITH_RE.match(stripped):
+        return None
+    try:
+        value = eval(substituted, {"__builtins__": {}}, {})  # noqa: S307 — whitelist arith ci-dessus
+    except (ZeroDivisionError, SyntaxError, ValueError, TypeError):
+        return None
+    return int(round(value))
+
 
 def _check_behavioral_smells(js: str) -> List[str]:
     """Tier 1c — smels comportementaux greppables (0 LLM, 0 Chrome).
@@ -312,23 +355,25 @@ def _check_behavioral_smells(js: str) -> List[str]:
     for m in re.finditer(r"setTimeout\(\s*[^,]+,\s*([^),]+)\)", js):
         delay_args.append((m.group(1).strip(), "setTimeout"))
     for arg, kind in delay_args:
-        value = None
-        if re.fullmatch(r"\d+", arg):
-            value = int(arg)
-        else:
-            dm = re.search(rf"\b(?:let|var|const)\s+{re.escape(arg)}\s*=\s*(\d+)\b", js)
-            if dm:
-                value = int(dm.group(1))
+        value = _resolve_delay_ms(arg, js)
         if value is None:
             continue
         if kind == "sleep" or has_animation_kw:
             if value < 20:
+                detail = (
+                    f" (valeur NÉGATIVE — setTimeout la clamp à 0 → instantané total)"
+                    if value < 0
+                    else f" (des centaines d'étapes × {value} ms < 2 s)"
+                )
                 errors.append(
                     f"[behavior] Délai d'animation de {value} ms par étape "
-                    f"(`{kind}({arg})`) — l'animation entière est QUASI INSTANTANÉE "
-                    f"(des centaines d'étapes × {value} ms < 2 s). Un pas d'animation "
-                    f"visible demande 50-300 ms : mappe le slider sur une échelle "
-                    f"adéquate (ex: `const delay = 320 - speed * 28;`)."
+                    f"(`{kind}({arg})` = {arg}) — l'animation entière est QUASI "
+                    f"INSTANTANÉE{detail}. Invariant : le délai effectif par étape "
+                    f"doit rester dans 50-300 ms pour TOUTE position du curseur — "
+                    f"vérifie l'UNITÉ de ta variable (valeur slider 1-10 ≠ "
+                    f"millisecondes) et évalue ta formule de bout en bout (une "
+                    f"formule qui peut devenir négative est silencieusement clampée "
+                    f"à 0 par setTimeout)."
                 )
 
     # --- (c) compteur incrémenté mais jamais RAFRAÎCHI à l'écran (post-mortem
@@ -633,17 +678,25 @@ def _evaluate_visibility(
 # d'animation (wait 2s then check final state) passe même si l'animation a duré 0 ms.
 #
 # Détection : on clique l'action primaire, on attend une fenêtre courte (400 ms), puis
-# on vérifie si l'état est déjà stabilisé (ne progresse plus). On découvre le signal de
-# progression génériquement (compteur numérique OU éléments marqués "terminal"), sans
-# hardcoder de sélecteur d'algorithme. Si l'état est stable à 400 ms alors que
-# l'animation devrait durer plus longtemps → animation instantanée.
+# on vérifie si l'état est déjà stabilisé (ne progresse plus). F-112 (post-mortem
+# run #8) : la sonde est MULTI-SIGNAL — TOUS les éléments numériques du DOM (clés
+# par id) + hash des pixels du premier <canvas> + classes terminales. La version
+# précédente ne suivait que le PREMIER élément numérique = le libellé du slider
+# (une constante placée avant le compteur) → t0=t1=t2 → skip silencieux.
+#
+# Si un signal a progressé (t1 != t0) ET qu'aucun ne bouge plus dans la fenêtre de
+# stabilisation (t2 == t1 partout) → tout s'est joué en < 400 ms → animation
+# instantanée. Aucun signal n'a progressé → on ne conclut pas (jamais de FP).
 
 # Fenêtre d'observation (ms). Assez courte pour rester déterministe, assez longue pour
 # qu'au moins une frame ait eu lieu (une animation légitime progresse déjà à ce stade).
 _TIER3_OBSERVE_MS = 400
 # Fenêtre secondaire (ms) pour mesurer la stabilisation : snapshot t1, attend cette
 # durée, snapshot t2. Si t2 == t1, l'animation est stabilisée (terminée).
-_TIER3_STABILIZATION_MS = 50
+# F-112 (post-mortem run #8) : 50 ms → 350 ms. À 50 ms, une animation LÉGITIME avec
+# un pas de 100-300 ms (slider lent) pouvait sembler « stabilisée » entre deux pas
+# → faux positif. 350 ms garantit qu'un pas ≤ 350 ms est vu bouger dans la fenêtre.
+_TIER3_STABILIZATION_MS = 350
 
 
 
@@ -700,40 +753,117 @@ def _check_console_errors(devtools_tools, url, primary_action_id=None):
         logger.debug("Static Tester Tier 4 console skip (%s).", e)
         return []
 
+def _temporal_verdict(snap: dict, primary_action_id: Optional[str]) -> List[str]:
+    """Verdict Tier 3 (pur, testable sans Chrome) sur les snapshots multi-signal.
+
+    F-112 (post-mortem run #8) : l'ancienne sonde ne suivait que le PREMIER
+    élément numérique du DOM — dans le run #8 c'était le libellé du slider
+    (``<span id="speedLabel">5</span>``, une CONSTANTE placée avant le compteur
+    dans le DOM) : t0=t1=t2=5 → « aucune progression » → skip silencieux,
+    l'animation instantanée passait. La nouvelle sonde suit TOUS les signaux :
+      - chaque élément numérique du DOM, clé par id ;
+      - le hash des pixels du premier ``<canvas>`` (les apps canvas n'ont souvent
+        AUCUN signal DOM exploitable — et les barres ne vivent qu'en pixels) ;
+      - le nombre d'éléments à classe terminale (.sorted/.done/...).
+
+    Logique : un signal a PROGRESSÉ si sa valeur a changé après le clic
+    (t1 != t0). Si au moins un signal a progressé ET qu'AUCUN ne bouge encore
+    dans la fenêtre de stabilisation (t2 == t1 pour tous) → tout l'état final
+    a été atteint en < _TIER3_OBSERVE_MS → animation instantanée (FAIL).
+    Aucun signal n'a progressé → on ne conclut pas (skip, jamais de FP) ;
+    un signal qui bouge encore → animation progressive légitime (OK).
+
+    Args:
+        snap: dict renvoyé par la sonde JS : {nums0, nums1, nums2: {id: int},
+            term0/term1/term2: int, c0/c1/c2: int|null} ou {reason: 'no-btn'}.
+        primary_action_id: id du bouton primaire (pour le message pédagogique).
+
+    Returns:
+        Liste d'erreurs (vide si OK / indéterminable).
+    """
+    if snap.get("reason") == "no-btn":
+        return []
+
+    nums0 = snap.get("nums0") or {}
+    nums1 = snap.get("nums1") or {}
+    nums2 = snap.get("nums2") or {}
+    term0, term1, term2 = snap.get("term0"), snap.get("term1"), snap.get("term2")
+    c0, c1, c2 = snap.get("c0"), snap.get("c1"), snap.get("c2")
+
+    changed: list = []  # signaux ayant progressé (t1 != t0)
+    for key in sorted(set(nums0) | set(nums1)):
+        v0, v1 = nums0.get(key), nums1.get(key)
+        if v0 is not None and v1 is not None and v0 != v1:
+            changed.append(f"compteur '{key}' {v0}→{v1}")
+    if term0 is not None and term1 is not None and term0 != term1:
+        changed.append(f"éléments terminaux {term0}→{term1}")
+    canvas_available = c0 is not None and c1 is not None
+    if canvas_available and c0 != c1:
+        changed.append("canvas (pixels)")
+
+    if not changed:
+        # Rien n'a bougé après le clic : animation non démarrée OU signaux
+        # indétectables → on ne conclut pas (fail-open, jamais de FP).
+        return []
+
+    still_moving: list = []  # signaux qui bougent encore (t2 != t1)
+    for key in sorted(set(nums1) | set(nums2)):
+        v1, v2 = nums1.get(key), nums2.get(key)
+        if v1 is not None and v2 is not None and v1 != v2:
+            still_moving.append(key)
+    if term1 is not None and term2 is not None and term1 != term2:
+        still_moving.append("terminaux")
+    if canvas_available and c1 is not None and c2 is not None and c1 != c2:
+        still_moving.append("canvas")
+
+    if still_moving:
+        # Au moins un signal progresse encore → animation progressive réelle.
+        return []
+
+    return [
+        f"[temporal] Animation instantanée détectée : l'action "
+        f"'{primary_action_id}' amène l'état à son terme en moins de "
+        f"{_TIER3_OBSERVE_MS} ms, au lieu de progresser sur plusieurs secondes. "
+        f"Signaux observés stabilisés dès la fenêtre d'observation : "
+        f"{'; '.join(changed)}. Causes typiques : (1) le délai par étape est "
+        f"NÉGATIF ou ~0 (setTimeout clampe le négatif à 0 — vérifie l'unité de "
+        f"ta variable vitesse : valeur slider ≠ millisecondes) ; (2) tout "
+        f"l'algorithme s'exécute dans un seul tick (boucle complète sans "
+        f"`await` INTERNE à la boucle de comparaison) ; (3) le rendu "
+        f"(draw/render/fillRect) n'est JAMAIS appelé DANS la boucle — le canvas "
+        f"ne se repeint qu'à la fin. Corrige : UN `await sleep(50-300ms)` + UN "
+        f"appel de rendu PAR comparaison/échange, et le slider doit moduler ce "
+        f"délai de bout en bout."
+    ]
+
+
 def _evaluate_temporal(
     devtools_tools: list, url: str, primary_action_id: Optional[str] = None
 ) -> List[str]:
     """Tier 3 : détecte une animation instantanée (stabilisée en < 400 ms au lieu de
     progresser sur plusieurs secondes).
 
-    GÉNÉRIQUE : ne suppose PAS l'algorithme. Découvre un signal de progression dans le
-    DOM (compteur numérique OU éléments marqués d'une classe "terminal"), puis détecte
-    la terminaison par stabilisation (le signal cesse de bouger entre deux snapshots
-    rapprochés) — pas en vérifiant une forme d'état final spécifique.
+    F-112 : sonde MULTI-SIGNAL (cf. _temporal_verdict) — tous les éléments
+    numériques par id + hash pixels du premier ``<canvas>`` + classes terminales.
+    La version précédente ne suivait que le premier élément numérique trouvé,
+    qui était une constante (libellé du slider) dans le run #8 → cécité totale
+    alors même que le compteur de comparaisons progressait juste après.
 
-    Réutilise le pattern DevTools de _evaluate_visibility (navigate + single
-    evaluate_script async), le helper _parse_devtools_json, et l'id d'action primaire
-    (_find_primary_action_id).
-
-    Protocole en UN seul evaluate_script :
-      1. Snapshot T0 = signal de progression découvert (ou -1 si indétectable).
+    Protocole en UN seul evaluate_script (pattern async documenté, jamais
+    d'IIFE) :
+      1. Snapshot t0 (tous signaux).
       2. Clic du bouton primaire.
-      3. await setTimeout(400) — fenêtre d'observation.
-      4. Snapshot T1.
-      5. await setTimeout(50) + snapshot T2 (mesure de stabilisation).
-      6. finished = (T2 == T1) → l'animation est stabilisée (terminée).
-
-    Verdict (côté Python) :
-      - elapsed_ms < 50 ET finished (état terminal atteint) → animation instantanée (FAIL).
-      - t1 > t0 non terminal → animation en cours (OK, pas de flag).
-      - t1 == t0 non terminal → non démarré ou signal indétectable → skip (jamais de FP).
+      3. await setTimeout(OBSERVE) — fenêtre d'observation.
+      4. Snapshot t1.
+      5. await setTimeout(STABILIZATION) + snapshot t2 (mesure de stabilisation).
+    Le verdict est rendu par _temporal_verdict (pur, testable sans Chrome).
 
     Args:
         primary_action_id: id du bouton primaire à cliquer (start/generate/run...).
             None → pas de déclenchement possible, on skip sans flaguer.
 
     Returns:
-        Liste d'erreurs (vide si OK ou si DevTools indispo / signal indétectable).
+        Liste d'erreurs (vide si OK ou si DevTools indispo / indéterminable).
     """
     if not devtools_tools or not primary_action_id:
         return []
@@ -759,61 +889,46 @@ def _evaluate_temporal(
             nav_kwargs = {}
         navigate(**nav_kwargs)
 
-        # Un seul evaluate_script async : snapshot T0 → clic → wait → snapshot T1.
-        # NB : chrome-devtools-mcp evaluate_script attend une DÉCLARATION de fonction
-        # (qu'il exécute lui-même). On autorise async () => { await ... } (documenté
-        # nodes.py:504) — on n'écrit JAMAIS d'IIFE `(() => {...})()` top-level await.
-        #
-        # GÉNÉRIQUE — on découvre le signal de progression au lieu de hardcoder des
-        # sélecteurs d'un tri en barres. On cherche, dans cet ordre :
-        #  1. un compteur numérique (élément dont le textContent est un entier — typiquement
-        #     un compteur de comparaisons/passes/visites affiché à l'utilisateur) ;
-        #  2. le nombre d'éléments portant une classe "terminal" (sorted/done/visited/
-        #     finished — convention universelle pour marquer les éléments traités).
-        # Si aucun signal n'est trouvé (signal=-1), on NE conclut pas (skip, pas de FP).
-        #
-        # Terminaison : on ne suppose JAMAIS la forme de l'état final (pas de "barres triées",
-        # pas de "tableau ordonné" — ce serait spécifique à un algorithme). On détecte la
-        # terminaison par STABILITÉ : si entre deux snapshots rapprochés (fin de la fenêtre
-        # d'observation) le signal ne bouge plus, l'animation est finie. Une animation en
-        # cours progresse encore → non terminal.
+        # Hash djb2 du dataURL du premier canvas : détection de changement de
+        # pixels SANS transporter le PNG (des dizaines de Ko) — le hash tient en
+        # un int. toDataURL peut lever sur canvas tainted (images externes) →
+        # try/catch → null → signal canvas ignoré (fail-open).
         js_probe = (
             "async () => {"
-            "  const findCounter = () => {"
-            "    const els = document.querySelectorAll('[id],[class]');"
-            "    for (const el of els) {"
+            "  const nums = () => {"
+            "    const out = {};"
+            "    for (const el of document.querySelectorAll('[id],[class]')) {"
             "      const m = (el.textContent || '').trim().match(/^\\d+$/);"
-            "      if (m) return parseInt(m[0]);"
+            "      if (m && el.id) out[el.id] = parseInt(m[0]);"
             "    }"
-            "    return null;"
+            "    return out;"
             "  };"
-            "  const findTerminal = () => {"
-            "    const sels = ['.sorted','.done','.visited','.finished','.completed'];"
-            "    for (const s of sels) { const n = document.querySelectorAll(s).length; if (n > 0) return n; }"
-            "    return null;"
+            "  const term = () => {"
+            "    let n = 0;"
+            "    for (const s of ['.sorted','.done','.visited','.finished','.completed'])"
+            "      n += document.querySelectorAll(s).length;"
+            "    return n;"
             "  };"
-            "  const progression = () => {"
-            "    const c = findCounter();"
-            "    if (c !== null) return c;"
-            "    const t = findTerminal();"
-            "    if (t !== null) return t;"
-            "    return -1;"
+            "  const canvasHash = () => {"
+            "    const c = document.querySelector('canvas');"
+            "    if (!c) return null;"
+            "    try {"
+            "      const data = c.toDataURL();"
+            "      let h = 0;"
+            "      for (let i = 0; i < data.length; i++)"
+            "        h = ((h << 5) - h + data.charCodeAt(i)) | 0;"
+            "      return h;"
+            "    } catch (e) { return null; }"
             "  };"
-            "  const t0 = progression();"
+            "  const nums0 = nums(); const term0 = term(); const c0 = canvasHash();"
             f"  const btn = document.getElementById('{primary_action_id}');"
-            "  if (!btn) { return JSON.stringify({t0: -1, t1: -1, t2: -1, elapsed_ms: -1, finished: false, reason: 'no-btn'}); }"
-            "  const t_start = performance.now();"
+            "  if (!btn) { return JSON.stringify({reason: 'no-btn'}); }"
             "  btn.click();"
             f"  await new Promise(r => setTimeout(r, {_TIER3_OBSERVE_MS}));"
-            "  const t1 = progression();"
-            "  const elapsed_ms = performance.now() - t_start;"
-            # Snapshot t2 après stabilisation : si t2 == t1, l'animation est stabilisée
-            # (terminée). Si t2 > t1, elle progresse encore → non terminal (animation
-            # légitime).
+            "  const nums1 = nums(); const term1 = term(); const c1 = canvasHash();"
             f"  await new Promise(r => setTimeout(r, {_TIER3_STABILIZATION_MS}));"
-            "  const t2 = progression();"
-            "  const finished = (t1 >= 0 && t2 === t1);"
-            "  return JSON.stringify({t0, t1, t2, elapsed_ms, finished});"
+            "  const nums2 = nums(); const term2 = term(); const c2 = canvasHash();"
+            "  return JSON.stringify({nums0, nums1, nums2, term0, term1, term2, c0, c1, c2});"
             "}"
         )
         raw = _eval(js_probe)
@@ -828,39 +943,7 @@ def _evaluate_temporal(
         if not item:
             return []
 
-        # Signal indétectable (pas de compteur, pas d'élément terminal, OU bouton absent)
-        # → on ne conclut pas (skip, jamais de faux positif).
-        if item.get("reason") == "no-btn":
-            return []
-        t0 = item.get("t0", -1)
-        t1 = item.get("t1", -1)
-        if t0 < 0 or t1 < 0:
-            # Aucun signal de progression trouvé dans le DOM → on ne peut pas mesurer.
-            return []
-
-        finished = bool(item.get("finished", False))
-
-        # Animation instantanée : l'état est stabilisé (t2 == t1) pendant la fenêtre
-        # d'observation de _TIER3_OBSERVE_MS (400 ms). Une animation légitime censée durer
-        # > 1 s ne serait PAS stabilisée à 400 ms → finished=true ici prouve que tout
-        # s'est exécuté en (au plus) quelques frames. On exige t1 > t0 (la progression a
-        # bien eu lieu, le clic a déclenché l'algorithme) pour éviter les faux positifs
-        # sur une page déjà à l'état terminal avant le clic.
-        if finished and t1 > t0:
-            return [
-                f"[temporal] Animation instantanée détectée : l'action '{primary_action_id}' "
-                f"amène l'état à son terme (signal {t0}→{t1}, puis stabilisé) en moins de "
-                f"{_TIER3_OBSERVE_MS} ms, au lieu de progresser sur plusieurs secondes. "
-                f"Cause typique : la fonction appelée par `requestAnimationFrame` (ou nommée "
-                f"step/tick/animate) contient les boucles `for`/`while` complètes de "
-                f"l'algorithme → tout s'exécute en 1 tick JS. Corrige en n'avançant que d'UNE "
-                f"seule étape par frame (état de progression persisté hors de la fonction). "
-                f"Le `delay`/slider de vitesse doit réellement contrôler le rythme."
-            ]
-        # Cas non terminal mais aucune progression : animation non démarrée OU signal
-        # non pertinent. On ne flag PAS (risque de faux positif : animation lente légitime
-        # où 400 ms < temps d'une étape). Le LLM Tester vérifiera le comportement réel.
-        return []
+        return _temporal_verdict(item, primary_action_id)
     except Exception as e:
         logger.debug("Static Tester Tier 3 skip (%s).", e)
         return []

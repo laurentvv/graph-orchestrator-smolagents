@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bubble Sort Visualizer</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="container">
+        <h1>Bubble Sort Visualizer</h1>
+        <canvas id="chart" width="800" height="400"></canvas>
+        <div id="controls">
+            <button id="startBtn">Start</button>
+            <button id="resetBtn">Reset</button>
+        </div>
+        <div id="speed">
+            <label>Speed: <span id="speedLabel">5</span></label>
+            <input type="range" id="speedRange" min="1" max="10" value="5">
+        </div>
+        <div id="counter">Comparisons: <span id="counter">0</span></div>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
