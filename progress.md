@@ -1,5 +1,27 @@
 # État d'Avancement du Sprint
 
+## Jalons de l'Itération (runs #10 + #11 — validation E2E post-merges PR #90/#91)
+> Run #10 (gardes actives) : F-114/F-115 VALIDÉS, F-112 partiel, F-113 non
+> exercé. Run #11 (STATIC_TESTER_ENABLED=0, dédié) : **PREMIÈRE APPROBATION
+> E2E COMPLÈTE** — F-113 validé, boucle Coder→Tester→Judge→APPROUVÉ de bout
+> en bout. Post-mortems : `debug/POSTMORTEM_RUN10.md` + `POSTMORTEM_RUN11.md`.
+
+- [x] Run #10 (~21 min, 9,5 M tokens) : Coder converge en 12 steps iter 1
+  (60 visual_check vs 0 au run #9 ; fullPage capé → 1280×800) ; livrable
+  rejeté 3× par Static Tester (bug compteur F-110) ; escalade propre.
+  F-114 ✅ F-115 ✅ F-112 🟡 F-113 ❌ (Tester LLM jamais tourné).
+- [x] Run #11 (~23 min, 14,3 M tokens, décision user prop. 1) : Web Tester
+  LLM 2× ; 2 sauvetages Pydantic SANS Connection error ; F-108 fail-closed
+  iter 1 ; **iter 2 le 4B corrige réellement** (feedback qualitatif précis) ;
+  re-test ciblé F-52 ; Security ; **Juge APPROUVE** 🚀.
+- [x] Découverte méta : le 4B sait corriger avec feedback LLM qualitatif —
+  là où le feedback déterministe du run #10 ne déclenchait rien. Qualité du
+  feedback = levier aussi fort que l'escalade de modèle (F-111), moins cher.
+- [ ] Décision user en attente : (2) ULTRA itération ≥ 3 seule, (3) F-120
+  plan.md/task.md, durcissement format sortie Tester (2/2 sauvetages).
+
+## Objectif Actuel
+
 ## Jalons de l'Itération (cycle F-115 — Spec PromptRefiner en anglais)
 > Décision utilisateur après démo du « Améliorer le prompt » de Kilo Code (fiche 47,
 > la référence d'origine de F-39) : nos petits modèles locaux sont nettement plus

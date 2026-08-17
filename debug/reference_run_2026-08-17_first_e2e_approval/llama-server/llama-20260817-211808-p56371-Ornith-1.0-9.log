@@ -1,0 +1,53 @@
+[34m0.00.189.880[0m [32mI [0mcmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+[34m0.00.246.949[0m [35mW srv  llama_server: -----------------
+[0m[34m0.00.246.957[0m [35mW srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+[0m[34m0.00.246.957[0m [35mW srv  llama_server: this can be a security risk (cross-origin attacks)
+[0m[34m0.00.246.958[0m [35mW srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+[0m[34m0.00.246.958[0m [35mW srv  llama_server: -----------------
+[0m[34m0.00.251.754[0m [32mI [0msrv    load_model: loading model 'D:\GIT\graph-orchestrator-smolagents\models\ornith-1.0\Ornith-1.0-9B-MTP-Q4_K_M.gguf'
+[34m0.02.993.405[0m [35mW model has unused tensor blk.32.attn_norm.weight (size = 16384 bytes) -- ignoring
+[0m[34m0.02.993.421[0m [35mW model has unused tensor blk.32.post_attention_norm.weight (size = 16384 bytes) -- ignoring
+[0m[34m0.02.993.440[0m [35mW model has unused tensor blk.32.attn_q.weight (size = 18874368 bytes) -- ignoring
+[0m[34m0.02.993.447[0m [35mW model has unused tensor blk.32.attn_k.weight (size = 2359296 bytes) -- ignoring
+[0m[34m0.02.993.453[0m [35mW model has unused tensor blk.32.attn_v.weight (size = 3440640 bytes) -- ignoring
+[0m[34m0.02.993.477[0m [35mW model has unused tensor blk.32.attn_output.weight (size = 9437184 bytes) -- ignoring
+[0m[34m0.02.993.484[0m [35mW model has unused tensor blk.32.attn_q_norm.weight (size = 1024 bytes) -- ignoring
+[0m[34m0.02.993.491[0m [35mW model has unused tensor blk.32.attn_k_norm.weight (size = 1024 bytes) -- ignoring
+[0m[34m0.02.993.498[0m [35mW model has unused tensor blk.32.ffn_gate.weight (size = 28311552 bytes) -- ignoring
+[0m[34m0.02.993.505[0m [35mW model has unused tensor blk.32.ffn_down.weight (size = 41287680 bytes) -- ignoring
+[0m[34m0.02.993.511[0m [35mW model has unused tensor blk.32.ffn_up.weight (size = 28311552 bytes) -- ignoring
+[0m[34m0.02.993.519[0m [35mW model has unused tensor blk.32.nextn.eh_proj.weight (size = 18874368 bytes) -- ignoring
+[0m[34m0.02.993.527[0m [35mW model has unused tensor blk.32.nextn.enorm.weight (size = 16384 bytes) -- ignoring
+[0m[34m0.02.993.534[0m [35mW model has unused tensor blk.32.nextn.hnorm.weight (size = 16384 bytes) -- ignoring
+[0m[34m0.02.993.555[0m [35mW model has unused tensor blk.32.nextn.shared_head_norm.weight (size = 16384 bytes) -- ignoring
+[0m[34m0.04.323.147[0m [32mI [0mcmn          init: llama threadpool init, n_threads = 14
+[34m0.05.432.100[0m [35mW load_hparams: Qwen-VL models require at minimum 1024 image tokens to function correctly on grounding tasks
+[0m[34m0.05.432.112[0m [35mW load_hparams: if you encounter problems with accuracy, try adding --image-min-tokens 1024
+[0m[34m0.05.432.113[0m [35mW load_hparams: more info: https://github.com/ggml-org/llama.cpp/issues/16842
+
+[0m[34m0.06.062.013[0m [32mI [0msrv    load_model: loaded multimodal model, 'D:\GIT\graph-orchestrator-smolagents\models\qwen35-mtp\mmproj-F16.gguf'
+[34m0.06.345.637[0m [32mI [0msrv    load_model: initializing, n_slots = 1, n_ctx_slot = 49152, kv_unified = 'false'
+[34m0.06.354.340[0m [32mI [0msrv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+[34m0.06.354.372[0m [32mI [0msrv  llama_server: model loaded
+[34m0.06.354.374[0m [32mI [0msrv  llama_server: listening on http://127.0.0.1:56371
+[34m0.06.578.525[0m [32mI [0mslot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+[34m0.06.578.584[0m [32mI [0mslot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+[34m0.11.725.821[0m [32mI [0mslot print_timing: id  0 | task 0 | prompt processing, n_tokens =   3102, progress = 0.65, t =   5.15 s / 602.66 tokens per second
+[34m0.13.550.553[0m [32mI [0mslot print_timing: id  0 | task 0 | prompt processing, n_tokens =   4263, progress = 0.89, t =   6.97 s / 611.45 tokens per second
+[34m0.14.189.480[0m [32mI [0mslot print_timing: id  0 | task 0 | prompt processing, n_tokens =   4775, progress = 1.00, t =   7.61 s / 627.39 tokens per second
+[34m0.26.559.073[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    100, tg =   8.20 t/s, tg_3s =   8.28 t/s
+[34m0.29.631.097[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    123, tg =   8.06 t/s, tg_3s =   7.49 t/s
+[34m0.32.636.674[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    145, tg =   7.93 t/s, tg_3s =   7.32 t/s
+[34m0.35.703.727[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    168, tg =   7.87 t/s, tg_3s =   7.50 t/s
+[34m0.38.784.503[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    191, tg =   7.82 t/s, tg_3s =   7.47 t/s
+[34m0.41.897.099[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    214, tg =   7.77 t/s, tg_3s =   7.39 t/s
+[34m0.44.994.632[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    237, tg =   7.74 t/s, tg_3s =   7.43 t/s
+[34m0.48.109.611[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    260, tg =   7.70 t/s, tg_3s =   7.38 t/s
+[34m0.51.237.474[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    283, tg =   7.67 t/s, tg_3s =   7.35 t/s
+[34m0.54.368.056[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    306, tg =   7.65 t/s, tg_3s =   7.35 t/s
+[34m0.57.487.662[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    329, tg =   7.63 t/s, tg_3s =   7.37 t/s
+[34m0.59.098.725[0m [32mI [0mslot print_timing: id  0 | task 0 | prompt eval time =    7907.97 ms /  4779 tokens (    1.65 ms per token,   604.33 tokens per second)
+[34m0.59.098.736[0m [32mI [0mslot print_timing: id  0 | task 0 |        eval time =   44612.14 ms /   341 tokens (  131.21 ms per token,     7.62 tokens per second)
+[34m0.59.098.737[0m [32mI [0mslot print_timing: id  0 | task 0 |       total time =   52520.11 ms /  5120 tokens
+[34m0.59.098.738[0m [32mI [0mslot print_timing: id  0 | task 0 |    graphs reused =        339
+[34m0.59.098.935[0m [32mI [0mslot      release: id  0 | task 0 | stop processing: n_tokens = 5119, truncated = 0
