@@ -15,6 +15,7 @@
 | `draft_F_82_T1.md` | Le draft de l'Architecte (Ornith-9B) |
 | `run_git_history.txt` | Historique git du run (F-53) : `Iteration 1` puis `Iteration 2 — script.js +2 insertions` = la correction chirurgicale du 4B, preuve matérielle |
 | `run_full.log` | Journal d'exécution complet (6 743 lignes) — le film du run : checklist `visual_check` 5/5 aux 2 itérations, verdicts Tester, 2 sauvetages Pydantic SANS `Connection error`, fail-closed F-108, APPROBATION finale |
+| `llama-server/` | Les 12 logs llama-server du run (spawn 20:50 → 21:18) — débits tokens/s par serveur, prompt processing, santé des spawns cuda (Qwen 4B Coder ×4, Ornith 9B ×8 : Architect/Drafter/Tester/Security/Judge/Escalation) |
 | `.transcripts/` | Archives de compaction F-101 (JSONL des steps snippés) |
 
 ## Contexte de reproduction
