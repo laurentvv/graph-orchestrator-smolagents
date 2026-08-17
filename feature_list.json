@@ -1039,6 +1039,16 @@
       "dependencies": [
         "F-58"
       ]
+    },
+    {
+      "id": "F-124",
+      "name": "Niveau graphique maximal — skill, prompts et durcissement des règles critiques",
+      "description": "Feedback utilisateur post-run #12 (livrable approuvé mais graphiquement fades vs runs précédents). Diagnostic : la skill frontend-design (lazy, chargée par le Coder) steerait activement vers la sobriété ('pas de signature flashy') — sain pour le CHROME d'une app, contre-productif pour un visualiseur où les éléments animés SONT le produit ; l'Architecte prescrivait des aplats monochromes et rien ne l'en empêchait. Correctif en 3 étages : (1) skill frontend-design +section 'Visualiseurs d'algorithmes — plancher d'effets' (glow+scale sur comparing, dégradé progressif sur sorted, cubic-bezier sur swaps, pills, fond de scène ; règle 'spec = PLANCHER pas plafond') ; (2) prompts.py : bloc architect 'NIVEAU GRAPHIQUE MAXIMAL' (critères EARS vérifiables) + bloc coder_frontend (plancher, vise max) ; (3) skill coding : règle critique 'barres verticales = flex ROW' (bug isolation F-124 : flex-direction column + flex:1 écrase style.height via flex-basis → bandes égales figées, effets parfaits sur viz dégénérée). Validation isolation run_coder.py (1099 s, 4B) : recettes de la skill appliquées VERBATIM (scaleY(1.06), cubic-bezier(.34,1.56,.64,1), box-shadow 0 0 12px, tokens exacts) MAIS régression flex column → règle 3 ajoutée. Sentinelles : 2 tests verrouillent la section skill (anti-écrasement — skill non trackée dans skills-lock.json) ; gate F-103 0 erreur (AGENTS.md compacté §4/§11.4 pour repasser sous la limite dure) ; 39 tests guidance OK. Prompt Tetris_Modern_Game.md ajouté à la vault (repo déforké laurentvv/Prompt-Vault) + miroir tracké prompts/tetris_modern_game.md — cas de validation E2E idéal. Validation E2E (Tetris) à venir.",
+      "status": "completed",
+      "dependencies": [
+        "F-115",
+        "F-57"
+      ]
     }
   ]
 }

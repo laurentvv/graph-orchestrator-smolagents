@@ -24,6 +24,11 @@ négociables. Les resources ci-dessous donnent le détail, mais la règle ci-des
      - ❌ `#viz { min-height: 300px; } .bar { height: 80%; }` → barres invisibles
      - ✅ `#viz { height: 300px; } .bar { height: 80%; }` (parent a `height`)
    - **En cas de doute, utilise des px absolus (`(value * 3) + 'px'`), pas de `%`, et JAMAIS 0.**
+   - **Barres verticales = conteneur flex ROW** : `display:flex` (row, défaut) +
+     `align-items:flex-end` + hauteurs px inline. JAMAIS `flex-direction:column` +
+     `flex:1` sur les barres : en colonne, `flex-basis:0` du flex ÉCRASE `style.height`
+     inline → bandes horizontales ÉGALES figées, le tri ne se voit pas (bug isolation
+     F-124 2026-08-18 : effets glow/cubic-bezier parfaits mais viz dégénérée).
 
 
 2. **JAVASCRIPT VANILLA PUR dans `<script>`** : aucune syntaxe TypeScript

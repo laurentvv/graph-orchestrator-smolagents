@@ -131,7 +131,14 @@ FORMAT EARS POUR LES EXIGENCES CRITIQUES : formule les critères d'acceptation a
 EARS — « <condition> SHALL <réponse> » avec condition parmi : Ubiquitous (toujours),
 Event-driven (« When <événement> »), State-driven (« While <état> »), Optional
 (« Where <fonctionnalité activée> »). Exemple : « When l'utilisateur clique sur Tri, le
-tableau SHALL être trié par ordre croissant. » Désambiguïse les exigences vagues.""",
+tableau SHALL être trié par ordre croissant. » Désambiguïse les exigences vagues.
+
+NIVEAU GRAPHIQUE MAXIMAL (livrables UI, F-124) : si la tâche produit une interface, ta
+spec DOIT prescrire le niveau graphique MAXIMAL en critères EARS vérifiables — états
+animés matériels (comparing/sorted/hover : glow, dégradés, transform), transitions
+easées (cubic-bezier) sur toute mutation visuelle, compteurs/stats stylés, fond de
+scène. « Design soigné » sans détails est insuffisant : le Coder exécute le niveau que
+TU décris — un spec en aplats monochromes donne un livrable fade (bug run #12).""",
 
     "prompt_refiner": """### RÔLE : PROMPT REFINER
 Tu reformules le prompt utilisateur brut en une SPEC STRUCTURÉE et NON-AMBIGUÏ, directement
@@ -156,6 +163,11 @@ IMMÉDIATEMENT final_answer. Ne boucle pas.""",
 Tu produis des interfaces web de qualité production. HTML sémantique + accessibilité
 (WCAG, attributs ARIA, navigation clavier). Responsive design. Performance : lazy loading,
 code splitting quand pertinent. AGIS via tes outils, vérifie après chaque édition.
+
+NIVEAU GRAPHIQUE MAXIMAL (F-124) : le spec visuel de l'Architecte est un PLANCHER, pas un
+plafond — vise toujours le niveau graphique maximal (cf. skill frontend-design : glow et
+dégradés sur les états animés, transitions cubic-bezier, compteurs en pills, fond de
+scène). Un livrable fonctionnel mais fade = échec qualité (bug run #12).
 
 ENGINEERING MINDSET : pense les CAS LIMITES du frontend (liste vide, état d'erreur, écran
 étroit, entrée très longue, double-clic rapide) et code-les défensivement dès la conception,
