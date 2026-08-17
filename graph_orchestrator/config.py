@@ -88,6 +88,30 @@ class ModelSpec:
     # Flash Attention (--flash-attn) : accélère le préfill des longs contextes.
     # Défaut "auto" = laisse llama-server choisir selon le modèle.
     flash_attn: str = "auto"
+    # --- Décodage spéculatif MTP (bench debug/test_mtp_spec.py 2026-08-17) ---
+    # Les GGUF "-MTP" portent des couches nextn que llama-server IGNORE sans
+    # --spec-type draft-mtp. Gain mesuré sur Ornith-9B @ctx32k/ngl99 : +13% spec
+    # seul, +29% avec KV q8_0. RÉGRESSION sur Qwen-4B (-42%, acceptance 0,47) →
+    # activer sur les rôles 9B (REASONING, REASONING_NO_THINK) UNIQUEMENT.
+    spec_mtp: bool = False
+    # Quantization KV cache (--cache-type-k/-v). Ex "q8_0" : divise ~2 la VRAM KV,
+    # gain net au GRAND contexte (réduit le spill WDDM), légère perte au petit.
+    # Vide = f16 (défaut llama-server).
+    kv_quant: str = ""
+    # Réutilisation de chunks KV via shifting (--cache-reuse N) quand le MILIEU du
+    # prompt change entre deux tours (compaction F-101, résumés d'anciens steps) :
+    # le cache de préfixe du slot est sinon invalidé au premier token modifié.
+    # 256 = presets officiels llama.cpp Qwen Coder ; bench debug/bench_prefill_flags.py
+    # 2026-08-17 : -10% préfill sur charge agent multi-tours (FAST @ctx49152 : OK).
+    # 0 = off (défaut). NB : non testé combiné à spec_mtp (rôles 9B) — FAST only.
+    cache_reuse: int = 0
+    # --- Sampling serveur (défauts Qwen, validés run E2E 2026-08-18) ---
+    # Nos clients n'envoient que temperature → les DÉFAUTS serveur s'appliquent au
+    # reste (llama-server : top_k 40, min_p 0.05). Recos officielles Qwen : top_k 20,
+    # min_p 0. top_p laissé au défaut serveur 0.95 (= reco thinking Qwen).
+    # top_k 0 / min_p < 0 = ne pas passer le flag.
+    top_k: int = 0
+    min_p: float = -1.0
 
 
 def _model_spec_from_env(prefix: str) -> ModelSpec:
@@ -116,6 +140,11 @@ def _model_spec_from_env(prefix: str) -> ModelSpec:
         context=_get_int(f"{prefix}_CONTEXT", 8192),
         gpu_layers=_get_int(f"{prefix}_NGL", 0),
         flash_attn=_get_str(f"{prefix}_FLASH_ATTN", "auto").lower(),
+        spec_mtp=_get_bool(f"{prefix}_SPEC_MTP", False),
+        kv_quant=_get_str(f"{prefix}_KV_QUANT", "").lower(),
+        cache_reuse=_get_int(f"{prefix}_CACHE_REUSE", 0),
+        top_k=_get_int(f"{prefix}_TOP_K", 0),
+        min_p=_get_float(f"{prefix}_MIN_P", -1.0),
     )
 
 
