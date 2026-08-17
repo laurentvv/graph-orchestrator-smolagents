@@ -36,11 +36,13 @@ Aucun flag n'est écrit en dur dans une commande shell : tout passe par `ModelSp
 | REASONING (Architect) | Ornith-1.0-9B-MTP Q4_K_M | `draft-mtp + n-max 2 + KV q8_0`, ngl 99 | **~+50%** tok/s (18,2 → 27,2 @ctx32k), acceptance 0,70 |
 | REASONING_NO_THINK (Judge, Security, Tester…) | Ornith-1.0-9B-MTP Q4_K_M | idem | idem |
 
-Build vendé : `vendor/llamacpp-cuda13/` (**b10472, CUDA 13.3**). Mise à jour : release
-GitHub `ggml-org/llama.cpp`, assets `llama-bXXXX-bin-win-cuda-13.3-x64.zip` **+**
-`cudart-llama-bin-win-cuda-13.3-x64.zip` (runtime, les deux à extraire au même
-endroit). Driver NVIDIA ≥ 580 requis pour CUDA 13. Ancien build gardé en
-`vendor/llamacpp-cuda13-b10427.bak/` (rollback).
+Build vendé : `vendor/llamacpp-cuda13/` (**b10472, CUDA 13.3**). **Mise à jour** (releases
+llama.cpp quasi-quotidiennes, veille hebdo programmée) :
+`uv run python scripts/update_llamacpp.py` vérifie sans rien toucher (exit 2 si
+nouvelle version) ; `--apply` télécharge build+cudart `cuda-13.3`, vérifie version ET
+flags critiques avant le swap, garde 1 backup `.bak` (rollback = renommer). TOUJOURS
+valider après `--apply` : `debug/test_mtp_spec.py --only reasoning` + tests. Driver
+NVIDIA ≥ 580 requis pour CUDA 13.
 
 ## 3. Guide de décision par flag (nouveau modèle)
 
