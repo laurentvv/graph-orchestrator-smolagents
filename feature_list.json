@@ -939,6 +939,67 @@
         "F-108",
         "F-40"
       ]
+    },
+    {
+      "id": "F-116",
+      "name": "Compaction résiliente aux payloads + hiérarchique par chunks (kilocode)",
+      "description": "P9 (case plan fiche 47-kilocode). (a) KiloCompactionPayloadRecovery : sur erreur payload/4MB/context overflow (regex 'request entity too large|function_payload_too_large'), stripper rétroactivement les tool outputs complétés (marqués compacted) et convertir les médias (screenshots) en placeholders texte '[Attached image/png: ...]' puis relancer la compaction avec prompt explicite — complément direct de F-101 OverflowGuard et F-114 cap fullPage (nous tuons la cause, kilocode sauve la session déjà saturée : pile le scénario run #9). (b) KiloCompactionChunks : compaction récursive arborescente par chunks (RATIO=0.6 du budget, DEPTH=3, régle 'Only summarize facts present in this chunk') pour historiques dépassant une passe de résumé — l'algorithme qui manque au compact LLM dormant F-86/F-101. (c) preserveRecentBudget (PRUNE_MINIMUM=20k, PRUNE_PROTECT=40k, TOOL_OUTPUT_MAX_CHARS=2k, PRUNE_PROTECTED_TOOLS=['skill'], DEFAULT_TAIL_TURNS=2, splitTurn aux frontières de turns) : l'ordonnancement de préservation du contexte récent. Vérifié dans le code réel le 2026-08-17.",
+      "status": "pending",
+      "dependencies": [
+        "F-101",
+        "F-114"
+      ]
+    },
+    {
+      "id": "F-117",
+      "name": "Exécution confinée : budgets par exécution + diagnostics typés + sandbox FS (kilocode codemode)",
+      "description": "P8-bis (case plan fiche 47-kilocode). S'inspirer du package codemode pour durcir notre CodeAgent (LocalPythonExecutor) : (1) ExecutionLimits {timeoutMs, maxToolCalls, maxOutputBytes} — nous avons un timeout global executor mais PAS de budget par nombre d'appels d'outils ni de volume de sortie (un Coder qui pousse 48 screenshots = le pattern run #9 qu'un maxOutputBytes aurait borné) ; (2) DiagnosticKind à 10 catégories stables (ParseError, UnsupportedSyntax, UnknownTool, InvalidToolInput, InvalidToolOutput, InvalidDataValue, ToolCallLimitExceeded, TimeoutExceeded, ToolFailure, ExecutionFailure) — remplacer nos messages ad hoc (orphan_repair/sanitizer/loop_guard) par une taxonomie unique routable ; (3) doctrine codemode/AGENTS.md : jamais d'autorité ambiante, frontières JSON pures, split erreurs publiques model-visible / privées host-diagnostics ; (4) kilo-sandbox (bubblewrap+seccomp, PathRule profiles, parseMountinfo) comme spécification Linux de notre sandbox P8-bis (Docker reste le chantier Windows). Vérifié dans le code réel (ExecutionLimits/DiagnosticKind textuels) le 2026-08-17.",
+      "status": "pending",
+      "dependencies": [
+        "F-38",
+        "F-95"
+      ]
+    },
+    {
+      "id": "F-118",
+      "name": "Sécurité du chargement de skills : confiance realpath anti-symlink (kilocode trust.ts)",
+      "description": "P10 (case plan fiche 47-kilocode). Durcir skills_loader/skill_loader_tool (F-57) : trustedInProject résout match ET projectRoot via realpathSync.native avant comparaison — un skill référencé dans le projet mais dont le chemin réel sort de la racine (symlink d'escalade) est rejeté ; isSafeSegment/isSafeRelativePath valident les chemins relatifs segment par segment. Complète la quick_validate/formation F-92/F-103 côté SÉCURITÉ (validation de contenu) par la sécurité de CHARGement (path traversal/usurpation). Pertinent pour F-82 (Skill Finder : installer des skills externes via skills.sh) où la confiance des chemins devient critique.",
+      "status": "pending",
+      "dependencies": [
+        "F-57",
+        "F-92"
+      ]
+    },
+    {
+      "id": "F-119",
+      "name": "Diff Judge par merge-base + garde anti-blocage du snapshotting git (kilocode)",
+      "description": "P6+P1 (2 cases plan fiche 47-kilocode ajoutées 2026-08-17 après vérification code réel). (a) WorktreeDiff/Review.getBaseBranch : diff de revue calculé depuis le MERGE-BASE (git diff --numstat/--name-status --no-renames <ancestor> + détection auto de la branche de base) — garantir que le bloc 'CE QUE GIT DIT' du Judge (F-102) relit toujours l'ancêtre commun plutôt que HEAD~1 (insuffisant après rebase/merge mid-run), avec exclusion des artefacts générés. (b) KiloSnapshotTrack : staging git isolé derrière timeout (TIMEOUT_MS=10s configurable, TURN_TIMEOUT_MS=120s) puis statut synthétique + disabledForSession (dégradation douce, jamais de freeze) — protéger commit_iteration F-53 et record_turn_checkpoint F-102 contre un run dir devenu massif.",
+      "status": "pending",
+      "dependencies": [
+        "F-53",
+        "F-102"
+      ]
+    },
+    {
+      "id": "F-120",
+      "name": "Gouvernance & modes : ConfigProtection + mode Plan par permissions + plan.md/task.md (kilocode)",
+      "description": "P0-bis + P8-bis (cases plan fiche 47-kilocode, dont celle issue du workflow utilisateur quotidien Plan/Code). (a) ConfigProtection : filtre de permission déterministe pré-écriture interdisant aux agents de modifier les fichiers de gouvernance (transposition : AGENTS.md, .env, tasks.json, data/, feature_list.json/contract.md/progress.md côté io_guard F-95 — un Coder qui réécrit sa propre charte = catastrophe silencielle). (b) Mode 'plan' par matrice de permissions (edit deny-all + allowlist du SEUL fichier plan + transitions plan_enter/plan_exit) : profil io_guard 'plan' du Coder n'autorisant que le draft. (c) Materialisation plan.md global + task.md (checklist sous-tâches) dans le run dir : traçabilité post-mortem lisible + ancrage STABLE ré-injectable au Coder (levier de convergence du 4B, complément F-114/F-115 ; connecte 'Cycle de vie du Plan' P6 plan_store open-swe).",
+      "status": "pending",
+      "dependencies": [
+        "F-95",
+        "F-24",
+        "F-89"
+      ]
+    },
+    {
+      "id": "F-121",
+      "name": "Isolation multi-worktrees & fork de session — Agent Manager (kilocode)",
+      "description": "P3+P12 (case plan fiche 47-kilocode). WorktreeManager : cycle de vie de git worktrees (.kilo/worktrees/ → transposition runs/ ou worktrees/ dédiés) pour exécuter des sessions d'agents en parallèle SANS polluer l'espace principal — création de branche, isolation, nettoyage récursif robuste avec retries (RM_OPTS), multi-versioning (jusqu'à 4 versions concurrentes d'un même prompt). forkSession/ForkHandoff : transfert d'état vers une nouvelle session isolée dans son worktree — LA contre-mesure 'fresh agent' de notre plan P3-bis(b) : au lieu de continuer un contexte saturé (runs #7/#9 : 3x41 steps de thrash), réinstancier le Coder avec un contexte neuf + handoff structuré borné. GROS chantier ( dépend de la stabilisation E2E) — à séquencer après le re-run de validation F-112/F-113.",
+      "status": "pending",
+      "dependencies": [
+        "F-40",
+        "F-23"
+      ]
     }
   ]
 }

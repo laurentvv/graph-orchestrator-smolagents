@@ -1,5 +1,5 @@
 {
-  "audit_date": "2026-08-14",
+  "audit_date": "2026-08-17",
   "scope": "filtered-useful (docs + code + specs; excludes .git/node_modules/media/fixtures/translated-READMEs)",
   "projects": [
     {
@@ -6938,7 +6938,264 @@
           "description": "Quasi vide (4 lignes) : pas de méthodologie d'éval dans ce dépôt — P6 non couvert."
         }
       ]
+    },
+    {
+      "id": "kilocode",
+      "name": "kilocode",
+      "path": "references/kilocode",
+      "category": "agent-platform",
+      "reuse_rating": "high",
+      "summary": "(ajouté par update_inventory.py)",
+      "files": [
+        {
+          "path": "references/kilocode/packages/kilo-vscode/src/agent-manager/WorktreeManager.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "WorktreeManager",
+            "WorktreeInfo",
+            "CreateWorktreeResult",
+            "createWorktree",
+            "cleanupWorktree",
+            "discoverWorktrees",
+            "sanitizeBranchName",
+            "RM_OPTS"
+          ],
+          "description": "Gestionnaire du cycle de vie des git worktrees pour l'isolation des sessions d'agents (.kilo/worktrees/) : création de branche, isolation de travail, nettoyage récursif avec retries."
+        },
+        {
+          "path": "references/kilocode/packages/kilo-vscode/src/agent-manager/fork-session.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "forkSession",
+            "ForkSessionOptions",
+            "ForkHandoff"
+          ],
+          "description": "Mécanisme de bifurcation de session d'agent : transfert d'état et d'environnement vers une nouvelle session isolée dans son propre worktree sans polluer la branche active."
+        },
+        {
+          "path": "references/kilocode/packages/kilo-vscode/src/agent-manager/constants.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "KILO_DIR",
+            "LEGACY_DIR",
+            "migrateAgentManagerData"
+          ],
+          "description": "Constantes d'emplacement et utilitaires de migration pour les données de l'Agent Manager (.kilo/worktrees/)."
+        },
+        {
+          "path": "references/kilocode/packages/opencode/src/kilocode/session/compaction-payload-recovery.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "KiloCompactionPayloadRecovery",
+            "matches",
+            "prompt",
+            "strip",
+            "process"
+          ],
+          "description": "Sauvetage automatique des erreurs de payload excessif (4MB / context overflow) lors de la compaction : stripping des tool outputs achevés et substitution des médias par placeholders texte."
+        },
+        {
+          "path": "references/kilocode/packages/opencode/src/kilocode/session/compaction-chunks.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "KiloCompactionChunks",
+            "eligible",
+            "needed",
+            "replay",
+            "summarize",
+            "budget"
+          ],
+          "description": "Compaction hiérarchique arborescente par découpage en chunks (profondeur max 3, ratio 0.6) avec synthèse récursive et génération de prompts synthétiques de rejeu."
+        },
+        {
+          "path": "references/kilocode/packages/opencode/src/session/compaction.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "PRUNE_MINIMUM",
+            "PRUNE_PROTECT",
+            "TOOL_OUTPUT_MAX_CHARS",
+            "PRUNE_PROTECTED_TOOLS",
+            "DEFAULT_TAIL_TURNS",
+            "preserveRecentBudget",
+            "turns",
+            "splitTurn"
+          ],
+          "description": "Ordonnancement de la compaction : calcul du budget de tokens récents à préserver (preserveRecentBudget), protection des outils de skills et découpage précis des frontières de turns."
+        },
+        {
+          "path": "references/kilocode/packages/codemode/src/codemode.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "CodeMode",
+            "ExecuteOptions",
+            "ExecutionLimits",
+            "DiagnosticKind",
+            "Diagnostic",
+            "Success",
+            "Failure"
+          ],
+          "description": "Contrat et schéma pour l'évaluation de programmes CodeMode manipulant des outils avec limites de ressources (timeoutMs, maxToolCalls, maxOutputBytes) et diagnostics normalisés."
+        },
+        {
+          "path": "references/kilocode/packages/codemode/src/interpreter/runtime.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "executeWithLimits",
+            "ToolRuntime",
+            "copyIn",
+            "copyOut",
+            "ToolReference"
+          ],
+          "description": "Interpréteur JavaScript confiné par parcours AST : exécution de programmes combinant plusieurs appels d'outils avec stdlib confinée et frontière de données sécurisée."
+        },
+        {
+          "path": "references/kilocode/packages/kilo-memory/src/memory.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "Memory",
+            "key",
+            "status",
+            "enable",
+            "disable"
+          ],
+          "description": "Façade du système de mémoire persistante par projet avec indexation, calcul de tokens et injection dans le contexte."
+        },
+        {
+          "path": "references/kilocode/packages/kilo-memory/src/schema.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "MemorySchema",
+            "Sources",
+            "Topics",
+            "Capture",
+            "Limits",
+            "Stats",
+            "State"
+          ],
+          "description": "Schéma et contraintes strictes de mémoire durable : fichiers spécialisés (project.md, environment.md, corrections.md), topics par règles, digest 4KB, lignes 240 chars."
+        },
+        {
+          "path": "references/kilocode/packages/kilo-memory/src/decisions.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "MemoryDecisions",
+            "Decision",
+            "Operation",
+            "Skipped",
+            "Save",
+            "Recall",
+            "Summary",
+            "summarize"
+          ],
+          "description": "Traçabilité et agrégation des décisions de mémoire : journalisation append-only des opérations acceptées, ignorées ou repliées (fallback)."
+        },
+        {
+          "path": "references/kilocode/packages/kilo-sandbox/src/filesystem.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "ensureDirectory",
+            "temporary",
+            "scoped",
+            "openDenied"
+          ],
+          "description": "Couche de système de fichiers sandboxé gérant les répertoires temporaires et bloquant les descripteurs mutables non autorisés."
+        },
+        {
+          "path": "references/kilocode/packages/kilo-sandbox/src/bubblewrap.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "parseMountinfo",
+            "validate",
+            "writable",
+            "beneath",
+            "command"
+          ],
+          "description": "Intégration Bubblewrap (/usr/bin/bwrap) : validation des points de montage (/proc/self/mountinfo), vérification d'absence de mounts imbriqués et protection de l'exécutable bwrap."
+        },
+        {
+          "path": "references/kilocode/packages/opencode/src/kilocode/snapshot/diff-full.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "DiffFull.batch",
+            "DiffFull.detail",
+            "MAX_DETAIL_SIZE",
+            "unified"
+          ],
+          "description": "Moteur de diff haute performance : exécution de git diff --unified=3 découpé en tranches de 500 fichiers (limite Windows 8191 chars) avec repli doux sur échec."
+        },
+        {
+          "path": "references/kilocode/packages/opencode/src/kilocode/snapshot/track.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "KiloSnapshotTrack",
+            "TIMEOUT_MS",
+            "TURN_TIMEOUT_MS"
+          ],
+          "description": "Surveillance asynchrone des snapshots git sur dépôts massifs (timeout 10s, injection d'état synthétique dans le chat, désactivation douce par projet)."
+        },
+        {
+          "path": "references/kilocode/packages/opencode/src/kilocode/review/worktree-diff.ts",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "WorktreeDiff",
+            "Item",
+            "ancestor",
+            "stats",
+            "list"
+          ],
+          "description": "Calculateur de diff de revue basé sur git merge-base avec stats numstat et exclusion des fichiers générés/ignorés."
+        },
+        {
+          "path": "references/kilocode/packages/opencode/src/kilocode/permission/config-paths.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "ConfigProtection",
+            "CONFIG_DIRS",
+            "CONFIG_ROOT_FILES",
+            "isRelative",
+            "physical"
+          ],
+          "description": "Garde-fou d'intégrité de configuration : protection des fichiers critiques (kilo.json, AGENTS.md, .kilo/) contre toute modification non autorisée par le LLM."
+        },
+        {
+          "path": "references/kilocode/packages/opencode/src/kilocode/skill/trust.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "trustedInProject"
+          ],
+          "description": "Validation de confiance des skills : résolution realpathSync empêchant les escalades de privilèges via symlinks internes au projet."
+        },
+        {
+          "path": "references/kilocode/.kilo/skills/kilocode-merge-minimizer/SKILL.md",
+          "type": "skill",
+          "reuse": "medium",
+          "key_symbols": [
+            "kilocode_change",
+            "check-opencode-annotations",
+            "Decision Rules"
+          ],
+          "description": "Doctrine formelle de minimisation des diffs pour la maintenance d'un fork en aval avec balisage strict et vérification statique."
+        }
+      ]
     }
   ],
-  "projects_audited": 46
+  "projects_audited": 47
 }
