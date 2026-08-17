@@ -19,6 +19,10 @@ Audit 45-46 (2026-08-14, procédure PROCEDURE-AUDIT-REFERENCE.md) :
                             hiérarchiques, P11 request-id, P12 tenancy, P3 anti-loop LangGraph)
   - 46 deepseek-harness   = 24 entrées (P3 anti-loop + ralph, P8 retry durable, P9 compaction 8
                             sections, P11 event stream typé, P10 skills scopés, P0-bis charte)
+Audit 47 (2026-08-17, procédure PROCEDURE-AUDIT-REFERENCE.md) :
+  - 47 kilocode           = 19 entrées (P12 WorktreeManager / fork-session, P9 compaction-payload-recovery /
+                            compaction-chunks / preserveRecentBudget, P8-bis CodeMode / bubblewrap sandbox,
+                            P6/P11 kilo-memory / WorktreeDiff, P0-bis ConfigProtection / trust skills)
 NB : les projets 27-44 ont été ajoutés directement dans inventory.json (fiches 27-44) ; ce script
 les passe à l'identique. projects_audited reflète le total réel.
 
@@ -948,11 +952,82 @@ DSH_FILES = [
      "description": "Quasi vide (4 lignes) : pas de méthodologie d'éval dans ce dépôt — P6 non couvert."},
 ]
 
+# ---------------------------------------------------------------------------
+# 47 — kilocode : 19 entrées (Agent Manager worktrees + compaction chunks/payload + codemode + memory + sandbox + diff-full + protections)
+# ---------------------------------------------------------------------------
+KC_BASE = "references/kilocode"
+KILOCODE_FILES = [
+    # --- Agent Manager & Worktree Isolation (P12 Scopes / Multi-session & P3 Anti-loop) ---
+    {"path": f"{KC_BASE}/packages/kilo-vscode/src/agent-manager/WorktreeManager.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["WorktreeManager", "WorktreeInfo", "CreateWorktreeResult", "createWorktree", "cleanupWorktree", "discoverWorktrees", "sanitizeBranchName", "RM_OPTS"],
+     "description": "Gestionnaire du cycle de vie des git worktrees pour l'isolation des sessions d'agents (.kilo/worktrees/) : création de branche, isolation de travail, nettoyage récursif avec retries."},
+    {"path": f"{KC_BASE}/packages/kilo-vscode/src/agent-manager/fork-session.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["forkSession", "ForkSessionOptions", "ForkHandoff"],
+     "description": "Mécanisme de bifurcation de session d'agent : transfert d'état et d'environnement vers une nouvelle session isolée dans son propre worktree sans polluer la branche active."},
+    {"path": f"{KC_BASE}/packages/kilo-vscode/src/agent-manager/constants.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["KILO_DIR", "LEGACY_DIR", "migrateAgentManagerData"],
+     "description": "Constantes d'emplacement et utilitaires de migration pour les données de l'Agent Manager (.kilo/worktrees/)."},
+    # --- Compaction de contexte & Résilience Payload (P9 Compaction) ---
+    {"path": f"{KC_BASE}/packages/opencode/src/kilocode/session/compaction-payload-recovery.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["KiloCompactionPayloadRecovery", "matches", "prompt", "strip", "process"],
+     "description": "Sauvetage automatique des erreurs de payload excessif (4MB / context overflow) lors de la compaction : stripping des tool outputs achevés et substitution des médias par placeholders texte."},
+    {"path": f"{KC_BASE}/packages/opencode/src/kilocode/session/compaction-chunks.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["KiloCompactionChunks", "eligible", "needed", "replay", "summarize", "budget"],
+     "description": "Compaction hiérarchique arborescente par découpage en chunks (profondeur max 3, ratio 0.6) avec synthèse récursive et génération de prompts synthétiques de rejeu."},
+    {"path": f"{KC_BASE}/packages/opencode/src/session/compaction.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["PRUNE_MINIMUM", "PRUNE_PROTECT", "TOOL_OUTPUT_MAX_CHARS", "PRUNE_PROTECTED_TOOLS", "DEFAULT_TAIL_TURNS", "preserveRecentBudget", "turns", "splitTurn"],
+     "description": "Ordonnancement de la compaction : calcul du budget de tokens récents à préserver (preserveRecentBudget), protection des outils de skills et découpage précis des frontières de turns."},
+    # --- CodeMode & Interpréteur Confiné (P8-bis Sandbox & P8 Middlewares) ---
+    {"path": f"{KC_BASE}/packages/codemode/src/codemode.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["CodeMode", "ExecuteOptions", "ExecutionLimits", "DiagnosticKind", "Diagnostic", "Success", "Failure"],
+     "description": "Contrat et schéma pour l'évaluation de programmes CodeMode manipulant des outils avec limites de ressources (timeoutMs, maxToolCalls, maxOutputBytes) et diagnostics normalisés."},
+    {"path": f"{KC_BASE}/packages/codemode/src/interpreter/runtime.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["executeWithLimits", "ToolRuntime", "copyIn", "copyOut", "ToolReference"],
+     "description": "Interpréteur JavaScript confiné par parcours AST : exécution de programmes combinant plusieurs appels d'outils avec stdlib confinée et frontière de données sécurisée."},
+    # --- Mémoire Structurée & Décisions (P6 Judge & P11 Event Stream) ---
+    {"path": f"{KC_BASE}/packages/kilo-memory/src/memory.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["Memory", "key", "status", "enable", "disable"],
+     "description": "Façade du système de mémoire persistante par projet avec indexation, calcul de tokens et injection dans le contexte."},
+    {"path": f"{KC_BASE}/packages/kilo-memory/src/schema.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["MemorySchema", "Sources", "Topics", "Capture", "Limits", "Stats", "State"],
+     "description": "Schéma et contraintes strictes de mémoire durable : fichiers spécialisés (project.md, environment.md, corrections.md), topics par règles, digest 4KB, lignes 240 chars."},
+    {"path": f"{KC_BASE}/packages/kilo-memory/src/decisions.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["MemoryDecisions", "Decision", "Operation", "Skipped", "Save", "Recall", "Summary", "summarize"],
+     "description": "Traçabilité et agrégation des décisions de mémoire : journalisation append-only des opérations acceptées, ignorées ou repliées (fallback)."},
+    # --- Sandbox & Isolation Système (P8-bis Sandbox) ---
+    {"path": f"{KC_BASE}/packages/kilo-sandbox/src/filesystem.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["ensureDirectory", "temporary", "scoped", "openDenied"],
+     "description": "Couche de système de fichiers sandboxé gérant les répertoires temporaires et bloquant les descripteurs mutables non autorisés."},
+    {"path": f"{KC_BASE}/packages/kilo-sandbox/src/bubblewrap.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["parseMountinfo", "validate", "writable", "beneath", "command"],
+     "description": "Intégration Bubblewrap (/usr/bin/bwrap) : validation des points de montage (/proc/self/mountinfo), vérification d'absence de mounts imbriqués et protection de l'exécutable bwrap."},
+    # --- Snapshot & Diff Git-Native (P1 Safe Editing & P6 Review) ---
+    {"path": f"{KC_BASE}/packages/opencode/src/kilocode/snapshot/diff-full.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["DiffFull.batch", "DiffFull.detail", "MAX_DETAIL_SIZE", "unified"],
+     "description": "Moteur de diff haute performance : exécution de git diff --unified=3 découpé en tranches de 500 fichiers (limite Windows 8191 chars) avec repli doux sur échec."},
+    {"path": f"{KC_BASE}/packages/opencode/src/kilocode/snapshot/track.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["KiloSnapshotTrack", "TIMEOUT_MS", "TURN_TIMEOUT_MS"],
+     "description": "Surveillance asynchrone des snapshots git sur dépôts massifs (timeout 10s, injection d'état synthétique dans le chat, désactivation douce par projet)."},
+    {"path": f"{KC_BASE}/packages/opencode/src/kilocode/review/worktree-diff.ts", "type": "code", "reuse": "medium",
+     "key_symbols": ["WorktreeDiff", "Item", "ancestor", "stats", "list"],
+     "description": "Calculateur de diff de revue basé sur git merge-base avec stats numstat et exclusion des fichiers générés/ignorés."},
+    # --- Protections & Sécurité des Skills (P0-bis Invariants & P10 Skills) ---
+    {"path": f"{KC_BASE}/packages/opencode/src/kilocode/permission/config-paths.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["ConfigProtection", "CONFIG_DIRS", "CONFIG_ROOT_FILES", "isRelative", "physical"],
+     "description": "Garde-fou d'intégrité de configuration : protection des fichiers critiques (kilo.json, AGENTS.md, .kilo/) contre toute modification non autorisée par le LLM."},
+    {"path": f"{KC_BASE}/packages/opencode/src/kilocode/skill/trust.ts", "type": "code", "reuse": "high",
+     "key_symbols": ["trustedInProject"],
+     "description": "Validation de confiance des skills : résolution realpathSync empêchant les escalades de privilèges via symlinks internes au projet."},
+    {"path": f"{KC_BASE}/.kilo/skills/kilocode-merge-minimizer/SKILL.md", "type": "skill", "reuse": "medium",
+     "key_symbols": ["kilocode_change", "check-opencode-annotations", "Decision Rules"],
+     "description": "Doctrine formelle de minimisation des diffs pour la maintenance d'un fork en aval avec balisage strict et vérification statique."},
+]
+
 def main() -> None:
     data = json.loads(INVENTORY.read_text(encoding="utf-8"))
 
-    data["projects_audited"] = 46
-    data["audit_date"] = "2026-08-14"
+    data["projects_audited"] = 47
+    data["audit_date"] = "2026-08-17"
 
     updated = []
     seen_ids = set()
@@ -1111,6 +1186,15 @@ def main() -> None:
                 "summary": "Harness d'agent de coding CLI/Web de DeepSeek AI (MIT, developer preview), TypeScript/Cordis « everything is a plugin ». La valeur n'est pas le code (non portable) mais des mécanismes de loop ultra-documentés et invariant-driven (invariant.ts par package, ~450 ADRs, 92 docs sous-systèmes). Meilleure référence de design sur 6 priorités : P3 (repeat-tool-reminder + boucle ralph à agents frais + delegationDepthOf), P8 (llm-retry durable dont le compteur survit à un crash + BlockAssembler tolérant + spec 5 waterfalls d'exécution d'outil), P9 (prompt de checkpoint 8 sections avec KV-cache reuse + pruner déterministe + comptabilité shadow price), P10 (skills lazy scopés), P11 (event log typé extensible avec provenance et flag ignorable — le plus abouti du dossier), P0-bis (charte d'invariants « Model-visible ⟺ logged », « Misconfiguration fails loud »). P6 explicitement absent (self-declaration documentée comme limite). Réserves : developer preview (copier des mécanismes, jamais des formats de sérialisation), biais Node/Cordis, python/ = simple driver sans logique.",
                 "files": DSH_FILES,
             }
+        elif pid == "kilocode":
+            project = {
+                "id": "kilocode", "name": "kilocode",
+                "path": "references/kilocode",
+                "category": "agent-platform",
+                "reuse_rating": "high",
+                "summary": "Plateforme d'agent de coding multi-surface (fork OpenCode + Kilo additions, Apache-2.0/MIT). Mine d'or pour l'architecture et les algorithmes de résilience : (1) Agent Manager & WorktreeManager pour l'isolation de sessions parallèles dans des git worktrees indépendants (.kilo/worktrees/) et multi-versioning (P12/P3), (2) compaction payload recovery pour sauver les context overflows de 4MB dus aux screenshots et compaction hiérarchique par chunks (P9), (3) CodeMode interpréteur JS confiné par AST walk avec quotas stricts et diagnostics typés (P8-bis/P8), (4) kilo-memory avec capture structurée et decisions tracking (P6/P11), (5) diff unifié git-native optimisé Windows et slow-repo guard (P1/P6), (6) protections strictes de configuration ConfigProtection et trust validation des skills (P0-bis/P10).",
+                "files": KILOCODE_FILES,
+            }
         updated.append(project)
         seen_ids.add(pid)
 
@@ -1206,6 +1290,11 @@ def main() -> None:
                         "path": "references/deepseek-harness",
                         "category": "agent-harness", "reuse_rating": "high",
                         "summary": "(ajouté par update_inventory.py)", "files": DSH_FILES})
+    if "kilocode" not in seen_ids:
+        updated.append({"id": "kilocode", "name": "kilocode",
+                        "path": "references/kilocode",
+                        "category": "agent-platform", "reuse_rating": "high",
+                        "summary": "(ajouté par update_inventory.py)", "files": KILOCODE_FILES})
 
     data["projects"] = updated
 
@@ -1219,7 +1308,7 @@ def main() -> None:
             by_reuse[r] = by_reuse.get(r, 0) + 1
     print(f"OK — {len(data['projects'])} projets, {total} entrées au total.")
     print(f"Répartition : {by_reuse}")
-    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi", "hermes-agent", "cloudflare-os", "browser-use", "TencentDB-Agent-Memory", "system-prompts-leaks", "OpenSandbox", "deepseek-harness"):
+    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi", "hermes-agent", "cloudflare-os", "browser-use", "TencentDB-Agent-Memory", "system-prompts-leaks", "OpenSandbox", "deepseek-harness", "kilocode"):
         proj = next(p for p in data["projects"] if p["id"] == new_id)
         print(f"  {new_id} : {len(proj['files'])} entrées (reuse_rating={proj['reuse_rating']})")
 
