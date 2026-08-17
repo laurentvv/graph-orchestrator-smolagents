@@ -329,6 +329,14 @@ class Settings:
     # VISUAL_AUDIT_ENABLED=false (et 0 critère F-90 = gate inactive).
     visual_audit_enabled: bool = True
 
+    # --- Cap fullPage des screenshots (F-114, post-mortem run #9) ---
+    # Le Coder appelle take_screenshot(fullPage=True) → images de plusieurs
+    # milliers de pixels de haut (jusqu'à 1265×9315 observés run #9) → prompt
+    # processing vision de plusieurs minutes → Request timed out (600 s) qui a
+    # tué une tentative entière. Le wrapper vision force fullPage=False (clés
+    # déjà présentes uniquement). Opt-out VISION_FULLPAGE_CAP=false.
+    vision_fullpage_cap: bool = True
+
     # --- Coder Ultra (F-111, post-mortem run #7) ---
     # La CORRECTION (itération > 1) utilise le gros modèle SANS thinking
     # (no_think_spec = Ornith-9B) au lieu du 4B rapide : le 4B exécute mais ne
@@ -604,6 +612,7 @@ def load_settings() -> Settings:
         judge_grounding_enabled=_get_bool("JUDGE_GROUNDING_ENABLED", True),
         judge_respect_test_failure=_get_bool("JUDGE_RESPECT_TEST_FAILURE", True),
         visual_audit_enabled=_get_bool("VISUAL_AUDIT_ENABLED", True),
+        vision_fullpage_cap=_get_bool("VISION_FULLPAGE_CAP", True),
         coder_ultra_correction=_get_bool("CODER_ULTRA_CORRECTION", True),
         turn_checkpoint_enabled=_get_bool("TURN_CHECKPOINT_ENABLED", True),
         llm_retry_enabled=_get_bool("LLM_RETRY_ENABLED", True),

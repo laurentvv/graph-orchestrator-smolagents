@@ -1,5 +1,23 @@
 # État d'Avancement du Sprint
 
+## Jalons de l'Itération (cycle F-115 — Spec PromptRefiner en anglais)
+> Décision utilisateur après démo du « Améliorer le prompt » de Kilo Code (fiche 47,
+> la référence d'origine de F-39) : nos petits modèles locaux sont nettement plus
+> forts sur l'anglais structuré → la spec raffinée passe en anglais, comme la
+> sortie Kilo. Second commit de la PR #91 (même objectif : convergence petits modèles).
+
+- [x] F115-1 : `PromptRefinerSignature` réécrite en anglais (règle LANGUAGE
+  explicite + sections `## Objective` / `## Expected Features` / `## Technical
+  Constraints` / `## Acceptance Criteria`).
+- [x] F115-2 : `requirements_checklist.py` (F-51) bilingue — anglais prioritaire,
+  français rétro-compat (checkpoints F-24 hérités) ; fallback inchangé.
+- [x] F115-3 : Tests — 27 ciblés PASS (mock anglais + test doctrinal signature +
+  3 parseur dont rétrocompat).
+- [x] F115-4 : Suite complète pytest — **1498 passed / 0 failed / 1 skipped**
+  (flaky minute-boundary passé cette exécution, 0 régression).
+- [x] F115-5 : État disque (contract C437-C439, feature_list F-115, ce fichier)
+  + DuckDB (#1172, #1206) + commit + push PR #91.
+
 ## Objectif Actuel
 - [x] Valider le coding workflow de bout en bout sur un prompt "landing page premium"
       (Architect → Coder → Tester → Judge → verdict). ATTEINT (run #12 HTML propre,
@@ -37,6 +55,59 @@
       dans le prompt Coder + section dédiée dans le skill coding (miroir du bloc IIFE
       web-tester). Implémentation TERMINÉE (42 tests sur les 3 zones, 692 passed / 7
       pré-existants non liés).
+
+## Jalons de l'Itération (cycle F-114 — Cap fullPage + nudge checklist, post-mortem run #9)
+> Feu vert utilisateur (propositions 1+2 du post-mortem). Deux fixes déterministes
+> 0 LLM dans `vision_callback.py` pour débloquer la convergence du Coder :
+> éliminer les images fullPage géantes (timeout 600 s) et rappeler la checklist
+> `visual_check` AU MOMENT du comportement fautif (pas seulement au boundary).
+
+- [x] F114-1 : Cap `fullPage` — force `fullPage=False` (et `full_page`) sur les
+  clés uniquement déjà présentes ; config `VISION_FULLPAGE_CAP` (défaut true) +
+  `.env`/`.env.example` ; strip filePath F-50/F-90 inchangé (test régression).
+- [x] F114-2 : Nudge contextuel — `make_screenshot_callback(…,
+  visual_criteria_count=0)` (Coder uniquement) ; au 3e screenshot avec critères
+  manquants → rappel injonctif APPENDU à `memory_step.observations` (canal fiable :
+  `_finalize_step` après assignation observations, smolagents agents.py:623) ;
+  compteur traverse les retries ; `reset_screenshot_nudge()` au site de
+  `reset_visual_audit()` ; fail-open total.
+- [x] F114-3 : Tests — **14 nouveaux PASS** (`tests/test_vision_nudge.py` :
+  cap 6 + nudge 8) ; py_compile 3 fichiers.
+- [x] F114-4 : Suite complète pytest (basetemp dédié F-95) — **1493 passed /
+  1 failed / 1 skipped** ; échec unique = flaky minute-boundary
+  `test_e2e_resume_reuses_same_run_dir` PRÉEXISTANT (documenté F-53/F-95,
+  vérifié identique SANS les changements F-114 via stash) → **0 régression**.
+- [ ] F114-5 : État disque (contract C432-C436, feature_list F-114, ce fichier)
+  + DuckDB + commit + PR.
+- [ ] F114-6 : Re-run E2E validation F-112/F-113 (après merge).
+
+> Note d'incident (sans perte) : bascule parallèle du working copy sur
+> `docs/audit-kilocode` (travail fiche 47-kilocode de l'utilisateur) pendant le
+> cycle — restauration sur `fix/f-114-screenshot-cap-nudge` via stash ; conflit
+> binaire sur `data/event_stream.duckdb` résolu depuis le commit de stash
+> (récupéré par blob SHA via `git ls-tree`/`git cat-file`) : 969 événements
+> intacts au final, 0 perte.
+
+## Jalons de l'Itération (run #9 — validation E2E post-merge F-112+F-113, ÉCHOUÉE en amont)
+> Run FRESH_START `runs/2026-08-17_1439_bubble_sort_multifile_v6` (~1 h 28,
+> exit 0, `failure/"Coder crash"`). Post-mortem complet :
+> `debug/POSTMORTEM_RUN9.md` + `analysis_report.md`.
+
+- [x] Run exécuté, analysé (`scripts/run_analyzer.py`), post-mortem rédigé +
+  DuckDB (#1059).
+- [x] Validations PASSANTES au passage (chemin négatif, en prod) : F-109 +
+  F-109-bis (gate checklist : refus + rappel injecté), F-36 anti-loop, F-88
+  stall detector, F-99 idle re-injection (cascade complète), F-95 (fs_tx/git
+  run dir/allowlist) et F-101 (transcripts) actifs, échec définitif propre
+  (exit 0, checkpoint effacé). Aucun `Connection error` au sauvetage Pydantic.
+- [ ] **NON validés** : F-113 (Web Tester jamais atteint → parsage verdict
+  post-fix api_base à prouver) et F-112 (Static Tester jamais atteint → sonde
+  animation à prouver en chaîne).
+- [ ] **Bloqueur identifié** : le Coder 4B fait 0 appel `visual_check` en
+  3 tentatives (48 screenshots, conclusion en prose) + amplificateur
+  `take_screenshot(fullPage=True)` (images 9 315 px → timeout 600 s, tentative
+  2 tuée). 43,9 M tokens input, 0 livrable. Propositions 1/2/3 dans le
+  post-mortem — **décision utilisateur attendue** (AGENTS.md §8).
 
 ## Jalons de l'Itération (cycle F-113 — Fixes P0 post-mortem run #8)
 > Les deux causes racines prouvées par debug/POSTMORTEM_RUN8.md, corrigées :

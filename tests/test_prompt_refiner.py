@@ -57,7 +57,7 @@ def test_execute_prompt_refiner_node(mock_cot, mock_configure):
     mock_instance = MagicMock()
     mock_prediction = MagicMock()
     expected = PromptRefinerOutput(
-        refined_prompt="## Objectif\nCréer un tri à bulles visuel.",
+        refined_prompt="## Objective\nCreate a visual bubble sort.",
         ambiguities_detected=["beau", "rapide"],
     )
     mock_prediction.output = expected
@@ -71,7 +71,7 @@ def test_execute_prompt_refiner_node(mock_cot, mock_configure):
 
     assert output is not None
     assert isinstance(output, PromptRefinerOutput)
-    assert "Objectif" in output.refined_prompt
+    assert "Objective" in output.refined_prompt
     assert output.ambiguities_detected == ["beau", "rapide"]
     assert metrics is not None
     assert metrics.node == "prompt_refiner_dspy"
@@ -357,3 +357,20 @@ def test_e2e_checkpoint_skip_refiner(monkeypatch, tmp_path):
     asyncio.run(run_coding_workflow(tasks, s))
 
     assert calls["n"] == 0  # nœud skippé grâce au checkpoint
+
+
+# ==========================================
+# F-115 : sortie spec en ANGLAIS (pattern Kilo Code "Enhance Prompt")
+# ==========================================
+def test_signature_exige_sortie_anglaise():
+    """La signature impose l'anglais quel que soit le langage d'entrée + sections EN."""
+    doc = PromptRefinerSignature.__doc__
+    # Règle de langue explicite
+    assert "ENGLISH" in doc
+    # Sections canoniques anglaises (consommées par requirements_checklist F-51)
+    assert "## Objective" in doc
+    assert "## Expected Features" in doc
+    assert "## Technical Constraints" in doc
+    assert "## Acceptance Criteria" in doc
+    # Les sections françaises ne doivent PLUS être imposées
+    assert "## Fonctionnalités attendues" not in doc

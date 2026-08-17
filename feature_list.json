@@ -234,15 +234,6 @@
       ]
     },
     {
-      "id": "F-29a",
-      "name": "Migration Coder → CodeAgent (smolagents)",
-      "description": "P1 feuille de route finalisation. Le Coder (execute_coder_node) était un ToolCallingAgent : gemma (petit modèle local) ne sait pas émettre de tool_call JSON fiable (tool_calls=None, finish_reason='stop' — le modèle 'parle' de l'action au lieu de l'exécuter). 3 comparatifs empiriques (Bubble Sort : CodeAgent -63% tokens; dashboard monolithique : TCA ingérable 1h; dashboard incrémental : TCA ÉCHEC 317 octets vs CodeAgent 28895 octets) ont validé la migration. IMPLÉMENTÉ : execute_coder_node instancie maintenant un CodeAgent (final_answer en SYNTAXE PYTHON au lieu de JSON, 1 step = 1 code block complet pouvant enchaîner plusieurs write_file/append_file). CodeAgent seul (pas de fallback TCA configurable — les petits modèles ne font pas de tool_call JSON fiable). run_with_retry RÉUTILISÉ (compatible CodeAgent, hérite de MultiStepAgent). Accompagné de F-32 (prompt réécrit structure canonique) et F-33 (guard logiciel anti-déraillement).",
-      "status": "completed",
-      "dependencies": [
-        "F-28"
-      ]
-    },
-    {
       "id": "F-29",
       "name": "Stratégie de découpage adaptative (Architect évolué)",
       "description": "P2 feuille de route finalisation. Gap révélé par le cycle CodeAgent : l'Architect actuel (DSPy) découpe en sous-tâches (1 fichier = 1, F-15) MAIS ne raisonne NI sur la TAILLE des fichiers, NI sur la STRATÉGIE de construction. Un dashboard de 3000 lignes en 1 sous-tâche = ingérable (1h sans step 1 fini en TCA). ÉVOLUTION prévue : enrichir ArchitectSignature pour émettre, en plus des target_files, une stratégie PAR sous-tâche : simple (1 write_file, petit fichier) | incrémental (squelette + append_file sections, gros fichier monolithique type HTML) | multi-fichier (1 module logique = 1 fichier < ~200 lignes, type Python/TS). Décision techno-driven (HTML=incrémental, Python/TS=multi-fichier) — cf. audits references + web. L'Architect doit dicter au Coder COMMENT construire, pas juste QUOI construire. Sans ça, le CodeAgent (P1) reste sous-exploité. Dépend de la validation P1 (CodeAgent au Coder).",
@@ -250,6 +241,15 @@
       "dependencies": [
         "F-28",
         "F-15"
+      ]
+    },
+    {
+      "id": "F-29a",
+      "name": "Migration Coder → CodeAgent (smolagents)",
+      "description": "P1 feuille de route finalisation. Le Coder (execute_coder_node) était un ToolCallingAgent : gemma (petit modèle local) ne sait pas émettre de tool_call JSON fiable (tool_calls=None, finish_reason='stop' — le modèle 'parle' de l'action au lieu de l'exécuter). 3 comparatifs empiriques (Bubble Sort : CodeAgent -63% tokens; dashboard monolithique : TCA ingérable 1h; dashboard incrémental : TCA ÉCHEC 317 octets vs CodeAgent 28895 octets) ont validé la migration. IMPLÉMENTÉ : execute_coder_node instancie maintenant un CodeAgent (final_answer en SYNTAXE PYTHON au lieu de JSON, 1 step = 1 code block complet pouvant enchaîner plusieurs write_file/append_file). CodeAgent seul (pas de fallback TCA configurable — les petits modèles ne font pas de tool_call JSON fiable). run_with_retry RÉUTILISÉ (compatible CodeAgent, hérite de MultiStepAgent). Accompagné de F-32 (prompt réécrit structure canonique) et F-33 (guard logiciel anti-déraillement).",
+      "status": "completed",
+      "dependencies": [
+        "F-28"
       ]
     },
     {
@@ -738,13 +738,6 @@
       ]
     },
     {
-      "id": "F-92",
-      "name": "Progressive Disclosure / Révélation progressive (Skills complexes)",
-      "description": "Refactorisation des compétences volumineuses (animation-vocabulary, skill-creator) pour utiliser la révélation progressive (lazy loading granulaire des assets). Déplacer les sections lourdes (glossaires, exemples) vers un dossier `resources/` et conserver un index/routeur dans `SKILL.md` avec des instructions sur quand et comment lire ces ressources secondaires avec view_file ou un outil similaire. Réduit la consommation de tokens et le gonflement de contexte.",
-      "status": "completed",
-      "dependencies": []
-    },
-    {
       "id": "F-90",
       "name": "Architecte-Pilote — Critères de validation générés par l'Architecte",
       "description": "L'Architecte devient le PILOTE UNIQUE des validations : il produit 3 champs de critères spécifiques au cahier des charges (visual_success_criteria pour le Coder, functional_test_criteria pour le Tester, acceptance_rubric pour le Judge), dérivés de sa compréhension de la spec. Remplace les prompts fixes/génériques qui ne savaient pas ce qu'ils validaient (bug canvas 2026-08-08 : le Coder VOYAIT un canvas vide mais l'excusait car le prompt disait 'rendu conforme' sans définir conforme). IMPLÉMENTÉ : (1) models.py +3 champs sur ArchitectTask (défaut vide, rétrocompat checkpoint) ; (2) dspy_nodes.py ArchitectSignature docstring enrichi avec directives anti-biais explicites + exemples concrets (canvas vide = BUG, pas normal) ; (3) validation_criteria.py nouveau module (3 fonctions pures builder, 0 LLM, miroir requirements_checklist.py F-46) ; (4) workflows.py sub_dict +3 clés propagées (OBLIGATOIRE, sinon champ perdu comme tester_skills) ; (5) nodes.py _build_devtools_blocks enrichi du bloc visuel anti-biais (checklist OUI/NON sur screenshot) ; (6) web_tester.py functional_test_criteria remplace F-46 quand non vide (priorité F-47 > F-90 > F-46, préserve tous chemins) ; (7) dspy_nodes.py Judge acceptance_rubric concaténé à task_requirements. Hiérarchie Tester : F-47 (itération>1 targeted) > F-90 (Architecte) > F-46 (regex spec). 25 tests PASS (test_validation_criteria.py), 0 régression (11 échecs pré-existants confirmés sur main). VALIDATION RUN RÉUSSIE (2026-08-11, run #9) : Architecte a produit 6 critères visuels + 7 fonctionnels + rubric CRITICAL/HIGH/MEDIUM/LOW, critères injectés aux 3 nœuds, sous-tâche APPROUVÉE par le Judge au 1er cycle (1ère approbation en 9 runs). La validation F-90 a révélé et corrigé 6 bugs infrastructure annexes (voir F-61 itération : screenshot filePath strip, Tester fallback verdict max_steps, Judge vue deliverable complet, règle CSS height=0 inline, Static Tester settle wait, Tester max_steps=8/timeout 480).",
@@ -753,6 +746,13 @@
         "F-29",
         "F-46"
       ]
+    },
+    {
+      "id": "F-92",
+      "name": "Progressive Disclosure / Révélation progressive (Skills complexes)",
+      "description": "Refactorisation des compétences volumineuses (animation-vocabulary, skill-creator) pour utiliser la révélation progressive (lazy loading granulaire des assets). Déplacer les sections lourdes (glossaires, exemples) vers un dossier `resources/` et conserver un index/routeur dans `SKILL.md` avec des instructions sur quand et comment lire ces ressources secondaires avec view_file ou un outil similaire. Réduit la consommation de tokens et le gonflement de contexte.",
+      "status": "completed",
+      "dependencies": []
     },
     {
       "id": "F-93",
@@ -938,6 +938,27 @@
         "F-104",
         "F-108",
         "F-40"
+      ]
+    },
+    {
+      "id": "F-114",
+      "name": "Cap fullPage des screenshots + nudge checklist visual_check (post-mortem run #9)",
+      "description": "Run #9 (E2E validation FRESH_START 2026-08-17_1439, ~1h28, debug/POSTMORTEM_RUN9.md) : échec Coder 3/3 tentatives SANS JAMAIS atteindre le Tester (F-112/F-113 restent à valider). Deux causes : (1) le 4B prenait des screenshots fullPage jusqu'à 1265×9315 px → prompt processing vision de plusieurs minutes → Request timed out (600 s) tuant la tentative 2 ; (2) 48 screenshots pour 0 appel visual_check — il conclut en prose, la gate F-109 refuse, le rappel F-109-bis est injecté au retry, il reproduit le même pattern → 43,9M tokens input pour 0 livrable (code généré pourtant sain, 0 erreur syntaxe). Fixes déterministes 0 LLM dans vision_callback.py : (a) CAP fullPage — _ScreenshotCapturingTool.force fullPage=False (et full_page) sur les clés UNIQUEMENT déjà présentes (jamais d'injection d'argument inconnu vers MCP), opt-out VISION_FULLPAGE_CAP (défaut true) + .env/.env.example ; strip filePath F-50/F-90 inchangé (test régression). (b) NUDGE contextuel (pattern repeat-tool-reminder fiche 46-deepseek-harness, rappel gradué via contexte SANS veto) — make_screenshot_callback gagne visual_criteria_count (Coder uniquement, WebTester=0 par défaut = inactif) ; au 3e screenshot (_NUDGE_THRESHOLD) avec critères F-90 manquants (lus via tools.get_visual_audit), le rappel injonctif (« NE prends PAS un autre screenshot : visual_check pour CHAQUE critère manquant [liste], puis final_answer ») est APPENDU à memory_step.observations — canal fiable car _finalize_step (step_callbacks) s'exécute APRÈS l'assignation des observations (vérifié smolagents agents.py:623), indépendant du type de retour (image PIL). reset_screenshot_nudge() au même site que reset_visual_audit() (nodes.py) ; le compteur traverse VOLONTAIREMENT les retries (30 screenshots tentative 1 → nudge immédiat tentative 2). Fail-open total. Validation : 14 tests nouveaux test_vision_nudge.py (cap 6 dont opt-out via dataclasses.replace+patch à la source convention test_bash_guard + régression filePath ; nudge 8 dont seuil exact, manquants listés, complète silencieuse, chemin Tester jamais nudgé, reset, observations préservées, holder vide n'avance pas le compteur). Suite complète (basetemp dédié) : 1493 passed / 1 failed / 1 skipped — échec unique = flaky minute-boundary test_output_dir PRÉEXISTANT (F-53/F-95, vérifié identique sans les changements F-114 via stash) → 0 régression. NB cycle : bascule parallèle du working copy sur docs/audit-kilocode pendant le cycle (travail fiche 47-kilocode de l'utilisateur) — conflit binaire data/event_stream.duckdb au retour de stash résolu depuis le commit de stash (blob SHA via git ls-tree/cat-file), 969 événements intacts, 0 perte.",
+      "status": "completed",
+      "dependencies": [
+        "F-109",
+        "F-50",
+        "F-90"
+      ]
+    },
+    {
+      "id": "F-115",
+      "name": "Spec PromptRefiner en anglais (pattern Kilo Code Enhance Prompt)",
+      "description": "Decision utilisateur 2026-08-17 (apres demonstration du 'Ameliorer le prompt' de Kilo Code) : la spec produite par le PromptRefiner (F-39) est desormais en ANGLAIS quel que soit le langage d'entree — les petits modeles locaux (Qwen 4B fast_spec, Ornith 9B) sont nettement plus forts sur l'anglais structure, et tous les consommateurs aval (Architect/Drafter/Coder/Tester/Judge) ont des prompts F-44 en anglais. (1) PromptRefinerSignature reecrite en anglais : regle LANGUAGE explicite + sections canoniques ## Objective / ## Expected Features / ## Technical Constraints / ## Acceptance Criteria. (2) requirements_checklist.py (F-51) parse les DEUX en-tetes (regex alternance Expected Features | Fonctionnalites attendues, anglais prioritaire, francais retro-compat checkpoints F-24 herites/specs anciennes) — la checklist Tester ne casse pas. (3) Tests : mock executeur passe en anglais + test doctrinal signature (ENGLISH + 4 sections EN + absence section FR) + 3 tests parseur anglais dont retrocompat francaise. 27 tests cibles PASS ; suite complete 1498 passed / 0 failed / 1 skipped (flaky minute-boundary passe cette execution, 0 regression). Contexte : le PromptRefiner etait DEJA inspire du pattern Kilo Code/Cline Enhance Prompt (P12 Phase 1) ; ce cycle aligne la QUALITE de sortie sur la reference.",
+      "status": "completed",
+      "dependencies": [
+        "F-39",
+        "F-51"
       ]
     },
     {

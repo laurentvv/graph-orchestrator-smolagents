@@ -6,7 +6,8 @@ comme TEXTE LIBRE. Un petit LLM (gemma) n'extrait pas fiablement les N fonctionn
 manquant non détecté sur run Bubble Sort #3).
 
 SOLUTION : la spec du PromptRefiner contient une section structurée
-`## Fonctionnalités attendues` avec des puces testables (exigence explicite de la
+`## Expected Features` (anglais depuis F-115 ; `## Fonctionnalités attendues` accepté
+en rétro-compat) avec des puces testables (exigence explicite de la
 signature PromptRefinerSignature). On parse cette section en liste Python
 déterministe (regex, 0 LLM) et on l'injecte au Tester comme CHECKLIST OBLIGATOIRE :
 pour CHAQUE fonctionnalité, 1 assertion + verdict PASS/FAIL/N-A.
@@ -27,8 +28,10 @@ from typing import List
 def extract_functionalities(spec_text: str) -> List[str]:
     """Extrait la liste des fonctionnalités depuis la section dédiée de la spec.
 
-    Cherche la section `## Fonctionnalités attendues` (insensible casse/accents) et
-    parse ses puces (- ou *) jusqu'à la section suivante (## ou fin).
+    Cherche la section `## Expected Features` (PromptRefiner F-115, sortie anglais) ou,
+    en rétro-compatibilité, `## Fonctionnalités attendues` (specs héritées françaises /
+    checkpoints F-24 repris) — insensible casse/accents — et parse ses puces (- ou *)
+    jusqu'à la section suivante (## ou fin).
 
     Args:
         spec_text: La spec structurée produite par le PromptRefiner (ou le prompt
@@ -39,8 +42,11 @@ def extract_functionalities(spec_text: str) -> List[str]:
         l'ordre. Liste vide si la section n'existe pas ou n'a pas de puces.
 
     Exemples:
-        >>> spec = "## Fonctionnalités attendues\\n- Bouton Démarrer\\n- Compteur\\n## Suite"
+        >>> spec = "## Expected Features\\n- Start button\\n- Counter\\n## Next"
         >>> extract_functionalities(spec)
+        ['Start button', 'Counter']
+        >>> spec_fr = "## Fonctionnalités attendues\\n- Bouton Démarrer\\n- Compteur\\n## Suite"
+        >>> extract_functionalities(spec_fr)
         ['Bouton Démarrer', 'Compteur']
     """
     if not spec_text:
@@ -48,10 +54,11 @@ def extract_functionalities(spec_text: str) -> List[str]:
 
     # Recherche de la section. Insensible à la casse et aux variantes d'accents
     # (le modèle peut écrire "FonctionnalitéS attendueS" ou "fonctionnalités attendues").
-    # On cherche "## Fonctionnalités attendues" avec tolérance sur le pluriel/accents.
+    # F-115 : la spec PromptRefiner est désormais en ANGLAIS — on accepte les DEUX
+    # en-têtes (anglais prioritaire, français = rétro-compat checkpoints/specs anciens).
     # Match jusqu'à la prochaine section (## ) ou fin de texte.
     pattern = re.compile(
-        r"##\s*Fonctionnalit[ée]s?\s+attendues?\s*\n(.*?)(?=\n##\s|\Z)",
+        r"##\s*(?:Expected\s+Features?|Fonctionnalit[ée]s?\s+attendues?)\s*\n(.*?)(?=\n##\s|\Z)",
         re.IGNORECASE | re.DOTALL,
     )
     match = pattern.search(spec_text)
