@@ -4,6 +4,7 @@ import subprocess
 from smolagents import tool
 
 from .idempotency import get_current_store, make_op_key
+from .io_guard import ensure_read_allowed, ensure_write_allowed
 from .path_utils import normalize_tool_path
 from .search_replace_utils import find_similar_lines, replace_most_similar_chunk
 
@@ -113,6 +114,11 @@ def read_file(path: str, offset: int = 0, limit: int = -1) -> str:
     # F-97 / MA-5 : un petit LLM passe parfois un `file:///` URL (correct pour
     # navigate_page mais fatal à open()) ou un préfixe MSYS `/d/...`. On normalise.
     path = normalize_tool_path(path)
+    # F-95 : cloisonnement IO — hors des racines autorisées (run dir en prod),
+    # refus pédagogique. Fail-open si aucune racine enregistrée.
+    _denied = ensure_read_allowed(path)
+    if _denied:
+        return _denied
     try:
         with open(path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
@@ -134,6 +140,11 @@ def read_python_skeleton(path: str) -> str:
     Args:
         path: The absolute or relative path to the Python file.
     """
+    # F-97 / F-95 : normalisation du chemin + cloisonnement IO (fail-open).
+    path = normalize_tool_path(path)
+    _denied = ensure_read_allowed(path)
+    if _denied:
+        return _denied
     try:
         from .skeleton import get_skeleton
         with open(path, 'r', encoding='utf-8') as f:
@@ -157,6 +168,11 @@ def check_js_syntax(path: str) -> str:
     """
     import shutil
 
+    # F-97 / F-95 : normalisation + cloisonnement IO (fail-open).
+    path = normalize_tool_path(path)
+    _denied = ensure_read_allowed(path)
+    if _denied:
+        return _denied
     if shutil.which("node") is None:
         return f"ℹ️ `node` non disponible — vérification de syntaxe ignorée pour {path}."
     try:
@@ -182,6 +198,10 @@ def list_directory(path: str = ".") -> str:
         path: The directory path to list. Defaults to current directory.
     """
     path = normalize_tool_path(path)
+    # F-95 : cloisonnement IO (fail-open).
+    _denied = ensure_read_allowed(path)
+    if _denied:
+        return _denied
     try:
         files = os.listdir(path)
         return f"Contents of {path}:\n" + "\n".join(files)
@@ -201,6 +221,13 @@ def write_file(path: str, content: str) -> str:
         content: The COMPLETE content to write into the file. Must NOT be empty.
     """
     try:
+        # F-97 / F-95 : normalisation + cloisonnement IO — le Coder ne peut pas
+        # écrire hors du dossier du run (échec par défaut = périmètre, avant
+        # toute autre garde). Fail-open si aucune racine enregistrée.
+        path = normalize_tool_path(path)
+        _denied = ensure_write_allowed(path)
+        if _denied:
+            return _denied
         # Garde anti-contenu-vide (bug critique des petits modèles : le contenu
         # réel finit dans le raisonnement/prose, pas dans l'argument content).
         # On rejette explicitement et on renvoie un message pédagogique au modèle
@@ -272,6 +299,11 @@ def append_file(path: str, content: str) -> str:
         content: The chunk to append. Must NOT be empty or a placeholder.
     """
     try:
+        # F-97 / F-95 : normalisation + cloisonnement IO (fail-open).
+        path = normalize_tool_path(path)
+        _denied = ensure_write_allowed(path)
+        if _denied:
+            return _denied
         # Garde anti-contenu-vide / anti-placeholder (même logique que write_file).
         if content is None or not str(content).strip():
             return (
@@ -375,6 +407,11 @@ def edit_file(path: str, old_string: str, new_string: str, replace_all: bool = F
         new_string: The replacement string.
         replace_all: If true, replaces all occurrences. If false and multiple occurrences exist, it fails.
     """
+    # F-97 / F-95 : normalisation + cloisonnement IO (fail-open).
+    path = normalize_tool_path(path)
+    _denied = ensure_write_allowed(path)
+    if _denied:
+        return _denied
     try:
         with open(path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -518,6 +555,11 @@ def search_replace(path: str, old_string: str, new_string: str) -> str:
         new_string: The new block of text that replaces 'old_string'. Must be real code, never a
             placeholder like 'TODO' or '// code here'.
     """
+    # F-97 / F-95 : normalisation + cloisonnement IO (fail-open).
+    path = normalize_tool_path(path)
+    _denied = ensure_write_allowed(path)
+    if _denied:
+        return _denied
     try:
         # Garde anti-placeholder : un new_string qui vide/placeholderise le code est refusé.
         if _is_placeholder(new_string):
@@ -581,6 +623,11 @@ def multi_replace(path: str, replacements: list) -> str:
             Example: [{"old_string": "foo()", "new_string": "bar()"}, ...]
             The 'old_string' is matched tolerantly.
     """
+    # F-97 / F-95 : normalisation + cloisonnement IO (fail-open).
+    path = normalize_tool_path(path)
+    _denied = ensure_write_allowed(path)
+    if _denied:
+        return _denied
     try:
         if not replacements or not isinstance(replacements, list):
             return "ERROR: 'replacements' must be a non-empty list of dictionaries."
