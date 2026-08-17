@@ -330,3 +330,32 @@ class TestIntegrationRepoReel:
         assert total < CHAIN_SOFT, (
             f"Chaine Coder {total} octets au-dessus du soft {CHAIN_SOFT}"
         )
+
+
+class TestF124VisualPolishFloor:
+    """F-124 : le plancher d'effets visuels (visualiseurs) vit dans
+    skills/frontend-design/SKILL.md. Ce skill n'est PAS sourcé d'un repo externe
+    (absent de skills-lock.json → un `skills update` tiers ne l'écrase pas), mais
+    ce test verrouille la section : si le fichier est réécrit/écrasé par erreur,
+    la suite échoue bruyamment au lieu de laisser les livrables redevenir fades
+    (bug esthétique run #12, validé utilisateur 2026-08-18).
+    """
+
+    def test_section_plancher_effets_presente(self):
+        skill = REPO_ROOT / "skills" / "frontend-design" / "SKILL.md"
+        content = skill.read_text(encoding="utf-8")
+        assert "plancher d'effets" in content, (
+            "La section F-124 'Visualiseurs d'algorithmes — plancher d'effets' a "
+            "disparu de skills/frontend-design/SKILL.md (écrasement ?)"
+        )
+        # Les invariants clés du plancher doivent rester présents.
+        for marker in ("cubic-bezier", "box-shadow", "linear-gradient"):
+            assert marker in content, f"Marqueur d'effet {marker!r} absent du skill"
+
+    def test_skill_non_trackee_en_lock_externe(self):
+        import json
+        lock = json.loads((REPO_ROOT / "skills" / "skills-lock.json").read_text(encoding="utf-8"))
+        assert "frontend-design" not in lock.get("skills", {}), (
+            "frontend-design est devenu une source externe trackée : un update "
+            "tier pourrait écraser le plancher F-124"
+        )

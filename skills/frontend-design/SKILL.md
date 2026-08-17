@@ -60,6 +60,16 @@ l'écran au point d'écraser le contenu fonctionnel.
 - Animations subtiles : `transition: transform .2s`, apparition au scroll via
   IntersectionObserver.
 
+## Visualiseurs d'algorithmes — plancher d'effets (F-124, non négociable)
+La sobriété vaut pour le CHROME (card, titres, contrôles). Dans un visualiseur, les éléments
+animés SONT le produit : le spec de l'Architecte est un PLANCHER — complète-le, jamais aplats.
+- `comparing` : accent dédié + glow (`box-shadow: 0 0 12px var(--accent)`) + `scaleY(1.06)`.
+- `sorted` : dégradé distinct (ex. `linear-gradient(180deg,var(--accent-2),var(--accent))`),
+  appliqué PROGRESSIVEMENT (position par position), pas toutes les barres d'un coup.
+- swaps : `transition: height .25s cubic-bezier(.34,1.56,.64,1)` — jamais de saut sec.
+- Compteurs en pills (`border-radius:999px`, `tabular-nums`) ; fond de scène : grille ou
+  vignette subtile. Interdit : toutes les barres en UN aplat monochrome (bug run #12).
+
 ## Finition (non négociable)
 Responsive mobile · focus clavier visible (`:focus-visible`) · `prefers-reduced-motion`
 respecté · contraste WCAG AA · sémantique HTML5 (`<header><nav><main><section><article><footer>`,
