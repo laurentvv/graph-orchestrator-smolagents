@@ -238,6 +238,10 @@ _JS_CLASSNAME_RE = re.compile(
 _DYNAMIC_CONTAINER_HINTS = (
     "appendchild", "innerhtml", "insertbefore", "createelement",
 )
+# Contexte « éléments de DONNÉES » pour le check chargement (run #15) : on ne
+# réfute un conteneur vide à l'ouverture QUE pour les sélecteurs évoquant des
+# barres/graphiques — une modale/tooltip légitimement cachée ne matche pas.
+_LOAD_CONTEXT_RE = re.compile(r"bar|chart|viz|canvas|graph|histo|colonne", re.IGNORECASE)
 # Noms de boutons « primaire » (démarre l'action principale = peuple le DOM).
 # GÉNÉRIQUE : on cherche des mots communs, pas un id spécifique.
 _PRIMARY_ACTION_RE = re.compile(
@@ -594,10 +598,13 @@ def _evaluate_visibility(
         navigate(**nav_kwargs)
 
         # Étape 7 + étape 6 COMBINÉES en UN seul evaluate_script synchrone :
-        # on déclenche l'action primaire (clic) PUIS on probe la visibilité, dans
-        # le même appel. C'est plus fiable qu'un clic séparé (le handler peut
-        # être async, le probe séparé peut s'exécuter avant la mise à jour du DOM).
-        # Sans ça, le bug des barres invisibles (créées au clic) est indétectable.
+        # on mesure AVANT l'action (état au CHARGEMENT), on déclenche l'action
+        # primaire (clic) PUIS on re-probe la visibilité, dans le même appel.
+        # C'est plus fiable qu'un clic séparé (le handler peut être async, le
+        # probe séparé peut s'exécuter avant la mise à jour du DOM). Sans ça,
+        # le bug des barres invisibles (créées au clic) est indétectable.
+        # Run #15 : la mesure PRE-clic attrape le « conteneur vide au
+        # chargement » (critère F-82 n°1) que l'auto-audit du Coder coche à tort.
         # NB : chrome-devtools-mcp evaluate_script attend une DÉCLARATION de
         # fonction (qu'il exécute lui-même), PAS une IIFE `(() => {...})()`.
         sel_list = ", ".join(f"'{s}'" for s in selectors)
@@ -615,8 +622,21 @@ def _evaluate_visibility(
                 f" await new Promise(r => setTimeout(r, 150));"
             )
         js_probe = (
-            "async () => {" + click_clause +
+            "async () => {"
+            # Phase 1 — état AU CHARGEMENT (avant toute interaction) : pour chaque
+            # sélecteur, combien d'éléments existent et combien sont visibles
+            # (hauteur > 6px ; le run #15 posait height:0 + min-height:4px).
             "  const sels = [" + sel_list + "];"
+            "  const snap = () => { const o = [];"
+            "    for (const sel of sels) {"
+            "      const els = document.querySelectorAll(sel);"
+            "      let vis = 0;"
+            "      for (const el of els) { if (el.getBoundingClientRect().height > 6) vis++; }"
+            "      o.push({sel, count: els.length, visible: vis});"
+            "    } return o; };"
+            "  const before = snap();"
+            + click_clause +
+            # Phase 2 — après l'action primaire : visibilité fine + barres plates.
             "  const out = [];"
             "  for (const sel of sels) {"
             "    const els = document.querySelectorAll(sel);"
@@ -652,16 +672,46 @@ def _evaluate_visibility(
             "    }"
             "    out.push({sel, count: els.length, h: r.height, hidden, flat});"
             "  }"
-            "  return JSON.stringify(out);"
+            "  return JSON.stringify({before: before, after: out});"
             "}"
         )
         raw = _eval(js_probe)
         # Le retour chrome-devtools-mcp est wrappé + parfois doublement échappé :
         # 'Script ran on page and returned:\n```json\n"[...échappé...]"\n```'
         # On extrait le JSON de façon robuste (plusieurs passes de déséchappement).
-        result_list = _parse_devtools_json(raw)
+        result = _parse_devtools_json(raw)
+        # Format v2 (run #15) : {before: [...], after: [...]} ; repli : liste
+        # plate = ancien format (robustesse si Chrome tronque le wrapper).
+        if isinstance(result, dict):
+            before_list = result.get("before") or []
+            result_list = result.get("after") or []
+        elif isinstance(result, list):
+            before_list = []
+            result_list = result
+        else:
+            before_list, result_list = [], []
 
         errors: List[str] = []
+        # Run #15 (conteneur vide au chargement, critère F-82 n°1) : les éléments
+        # de DONNÉES existent au chargement mais AUCUN n'est visible (height ≤ 6px
+        # — ex : createBars() pose height:0, les vraies hauteurs ne viennent qu'au
+        # clic Start). On ne cible QUE les sélecteurs à contexte barres/chart
+        # (≥5 éléments = un dataset) pour ne pas flagguer une modale/tooltip
+        # légitimement cachée avant interaction.
+        for item in before_list:
+            if not isinstance(item, dict):
+                continue
+            sel = str(item.get("sel", ""))
+            count0 = item.get("count", 0)
+            visible0 = item.get("visible", 0)
+            if count0 >= 5 and visible0 == 0 and _LOAD_CONTEXT_RE.search(sel):
+                errors.append(
+                    f"[CHARGEMENT] {count0} éléments \"{sel}\" présents au chargement mais "
+                    f"AUCUN visible (hauteurs ≤ 6px) : la page paraît VIDE à l'ouverture "
+                    f"(critère F-82 : ≥1 barre visible au chargement — run #15 : createBars() "
+                    f"posait height:0). Correction : pose la hauteur/style de chaque barre "
+                    f"DÈS sa création, pas seulement au démarrage de l'action."
+                )
         for item in result_list:
             if not isinstance(item, dict):
                 continue

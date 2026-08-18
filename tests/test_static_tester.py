@@ -596,6 +596,41 @@ def test_varied_bars_run14_ok(tmp_path):
     assert not any("IDENTIQUES" in e for e in res.errors)
 
 
+def test_empty_at_load_run15_flagged(tmp_path):
+    """Run #15 : barres CRÉÉES au chargement mais height:0 (les vraies hauteurs
+    ne viennent qu'au clic Start) → page visuellement VIDE à l'ouverture.
+    Le snapshot PRE-clic du Tier 2 DOIT réfuter (critère F-82 n°1). Skip si
+    Chrome indispo (live)."""
+    html = _bars_page(
+        "display: flex; flex-direction: row; align-items: flex-end; height: 300px;",
+        "width: 12px; background: #ef5350;",
+        "b.style.height = '0px';",  # bug run #15 : hauteur nulle à la création
+    )
+    p = _write(tmp_path, "index.html", html)
+    res = static_check_html(p, run_devtools=True)
+    if res.tier_reached != "tier2":
+        pytest.skip("Chrome DevTools indispo dans l'env de test — Tier 2 testé en live.")
+    assert not res.is_valid, f"Conteneur vide au chargement (run #15) : devrait être réfuté : {res.errors}"
+    assert any("[CHARGEMENT]" in e for e in res.errors)
+
+
+def test_bars_visible_at_load_ok(tmp_path):
+    """Contre-faux-positif du check chargement : barres avec hauteur réelle
+    DÈS la création (géométrie correcte) → aucun flag [CHARGEMENT]. Skip si
+    Chrome indispo (live)."""
+    html = _bars_page(
+        "display: flex; flex-direction: row; align-items: flex-end; height: 300px;",
+        "width: 12px; background: #ef5350;",
+        "b.style.height = vals[i] + 'px';",
+    )
+    p = _write(tmp_path, "index.html", html)
+    res = static_check_html(p, run_devtools=True)
+    if res.tier_reached != "tier2":
+        pytest.skip("Chrome DevTools indispo dans l'env de test — Tier 2 testé en live.")
+    assert res.is_valid, f"Barres visibles au chargement ne doivent pas être flagguées : {res.errors}"
+    assert not any("[CHARGEMENT]" in e for e in res.errors)
+
+
 # ==========================================
 # Dégradation node absent
 # ==========================================
