@@ -74,6 +74,37 @@ class TestDeriveGoal:
         goal = derive_goal("Crée un   visualiseur\nde bubble sort très joli")
         assert goal == "Crée un visualiseur de bubble sort très joli"
 
+    def test_section_objective_extraite_sans_titres(self):
+        """Run #13 : le Goal ne doit plus contenir les titres markdown de la
+        spec PromptRefiner (F-115) ni le contenu des sections suivantes."""
+        spec = (
+            "## Objective\nCreate a vanilla Bubble Sort visualizer in three files.\n\n"
+            "## Expected Features\n- Start button\n- Counter\n\n"
+            "## Technical Constraints\nNo CDN."
+        )
+        goal = derive_goal(spec)
+        assert goal == "Create a vanilla Bubble Sort visualizer in three files."
+        assert "##" not in goal
+        assert "Expected Features" not in goal
+        assert "Start button" not in goal
+
+    def test_section_objectif_retrocompat_francais(self):
+        goal = derive_goal("## Objectif\nCrée un visualiseur de tri.\n## Suite")
+        assert goal == "Crée un visualiseur de tri."
+
+    def test_section_objective_tronquee(self):
+        spec = "## Objective\n" + "x" * 500 + "\n\n## Next"
+        goal = derive_goal(spec)
+        assert len(goal) == 201  # 200 + '…'
+        assert goal.endswith("…")
+
+    def test_section_vide_repli_document_entier(self):
+        goal = derive_goal("## Objective\n\n## Expected Features\n- item\nFais un tri visuel sympa")
+        assert goal == "## Expected Features - item Fais un tri visuel sympa"
+
+    def test_sans_section_repli_texte_brut(self):
+        assert derive_goal("Fais un visualiseur de tri à bulles.") == "Fais un visualiseur de tri à bulles."
+
     def test_tronque_avec_ellipse(self):
         goal = derive_goal("x" * 500)
         assert len(goal) == 201  # 200 + '…'

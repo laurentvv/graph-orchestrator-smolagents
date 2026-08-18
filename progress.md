@@ -24,14 +24,28 @@
   linter/static, verdict juge, approbation, escalade, circuit breaker ; anchor
   dans `sub_dict` à chaque itération) + `{task.get('plan_anchor', '')}` dans le
   prompt Coder (`nodes.py`). Source de vérité INCHANGÉE (checkpoint F-24).
-- [x] F120-4 : Tests — **33 nouveaux PASS** (32 test_plan_files + 1 config) ;
+- [x] F120-4 : Tests — **24 nouveaux PASS** (23 test_plan_files + 1 config ;
   py_compile 4 fichiers ; gate F-103 : 29 surfaces, 0 erreur, 0 warning.
 - [x] F120-5 : Suite complète (basetemp dédié F-95) — **1532 passed / 0 failed
   / 1 skipped** (flaky minute-boundary PASSÉ cette exécution) → 0 régression.
 - [x] F120-6 : État disque (contract C443-C445, feature_list F-120 completed
-  rescopé, ce fichier, README) + DuckDB + commit + PR. **Run E2E de validation
-  (Bubble Sort : vérifier plan.md/task.md dans le run + anchor dans le prompt)
-  reporté à une session ultérieure (décision utilisateur).**
+  rescopé, ce fichier, README) + DuckDB + commit + PR #97.
+- [x] F120-7 : **Run E2E #13 de validation exécuté (exigé user)** — run
+  `2026-08-18_1130` (~80 min, 74,7 M tokens, 0/2, échec technique). **F-120
+  VALIDÉ en prod** : plan.md miroir complet, task.md journal EXACT des 6
+  transitions (démonstration post-mortem : c'est lui qui a reconstitué la
+  chronologie), anchor 8× stable. Échec du run = 2 causes INDÉPENDANTES de
+  F-120 (post-mortem complet `debug/POSTMORTEM_RUN13.md`) : (1) FAUX POSITIF
+  Static Tester — sonde Tier 2 lit `backgroundColor` mais pas `background-image`
+  → toute barre en linear-gradient sans texte = « invisible » (premier run E2E
+  post-F-124 dont la validation avait été reportée) ; (2) TS-01 thrash rituel
+  visuel 41 steps non convergé (pattern run #9) + timeouts 600 s finaux (10
+  serveurs llama spawnés / 0 arrêt loggé — piste leak VRAM). Propositions P0-P3
+  dans le post-mortem — **décision utilisateur attendue** (fix Static Tester
+  en tête).
+- [x] F120-8 : Fix Goal post-run #13 — `derive_goal` extrait la section
+  `## Objective` de la spec F-115 (miroir parseur requirements_checklist F-51,
+  rétrocompat `## Objectif`, repli texte brut) ; +5 tests → **28/28 PASS**.
 
 ## Jalons de l'Itération (cycle F-122 — ULTRA restreint à l'itération ≥ 3)
 > Décision utilisateur (proposition 2 du post-mortem run #10). Réactive

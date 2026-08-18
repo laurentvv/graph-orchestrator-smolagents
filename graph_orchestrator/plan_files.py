@@ -37,6 +37,7 @@ la logique de run (lecture humaine / post-mortem + ancrage Coder).
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
@@ -69,9 +70,31 @@ _EVENT_LABELS = {
 }
 
 
+def _extract_objective_section(task_content: str) -> str:
+    """Extrait le texte de la section `## Objective` de la spec PromptRefiner
+    (F-115 ; `## Objectif` accepté en rétro-compat français) — miroir du
+    parseur de sections de requirements_checklist (F-51/F-115). Match jusqu'à
+    la section suivante (## ) ou fin. Chaîne vide si absente (prompt brut /
+    spec non structurée)."""
+    if not task_content:
+        return ""
+    pattern = re.compile(
+        r"##\s*(?:Objective|Objectifs?)\s*\n(.*?)(?=\n##\s|\Z)",
+        re.IGNORECASE | re.DOTALL,
+    )
+    match = pattern.search(task_content)
+    if not match:
+        return ""
+    return match.group(1).strip()
+
+
 def derive_goal(task_content: str, max_chars: int = _MAX_GOAL_CHARS) -> str:
-    """Goal = cahier des charges aplati et tronqué (1 « phrase » lisible)."""
-    flat = " ".join((task_content or "").split())
+    """Goal = section Objective de la spec (F-115) si présente, aplatie et
+    tronquée — sans titres markdown ni contenu des sections suivantes. Repli
+    sur le document entier aplati (prompt brut, PromptRefiner désactivé,
+    section vide)."""
+    section = _extract_objective_section(task_content)
+    flat = " ".join((section or task_content or "").split())
     if len(flat) <= max_chars:
         return flat
     return flat[:max_chars].rstrip() + "…"
