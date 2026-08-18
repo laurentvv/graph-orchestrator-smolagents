@@ -151,7 +151,12 @@ EXPÉRIENCE DE JEU COMPLÈTE & GAME FEEL (livrables jeux/simulations) : si la t�
 un jeu vidéo ou une simulation interactive, ta spec DOIT prescrire l'expérience complète —
 feedback visuel dynamique (animations 60 FPS, particules/glow) ET feedback sonore procédural
 via `Web Audio API` natif (synthèse par oscillateurs/bruit blanc pour actions, scores et
-game over, sans fichier audio externe).""",
+game over, sans fichier audio externe).
+
+POLITIQUE SINGLE-PAGE / SINGLE-FILE (Kilo Code & Axon) : si la cible est un fichier unique autonome
+(ex: `index.html`), crée EXACTEMENT 1 SOUS-TÂCHE UNIQUE (strategy='simple'). Ne fractionne JAMAIS
+un fichier autonome en sous-tâches multiples qui écrasent le même fichier. DÉTAILLE le contrat (contract.md)
+avec les sélecteurs DOM requis (#board, #score, etc.), les contrôles et les signatures d'API attendues.""",
 
     "prompt_refiner": """### RÔLE : PROMPT REFINER
 Tu reformules le prompt utilisateur brut en une SPEC STRUCTURÉE et NON-AMBIGUÏ, directement

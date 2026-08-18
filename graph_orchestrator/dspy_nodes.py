@@ -121,20 +121,24 @@ class ArchitectSignature(dspy.Signature):
         "architect",
         """Analyse une tâche et génère un plan d'architecture en sous-tâches UNITAIRES.
 
-        RÈGLE DE DÉCOUPAGE (1 LIVRABLE TESTABLE = 1 SOUS-TÂCHE) :
+        RÈGLE DE DÉCOUPAGE STRICTE (Kilo Code & Axon — 1 LIVRABLE TESTABLE = 1 SOUS-TÂCHE) :
         - Une sous-tâche = un ENSEMBLE COHÉRENT de fichiers que le Tester va valider ENSEMBLE.
           Ne JAMAIS découper un livrable en sous-tâches par fichier — sinon le Tester teste des
           fichiers isolés qui ne marchent pas seuls (ex: index.html sans styles.css → REJETÉ
           systématique, boucle infinie). C'est le failure mode n°1 observé en prod.
+        - RÈGLE DES APPLICATIONS MONO-FICHIER (Single-Page / Single-HTML) :
+          Si la tâche cible un fichier unique autonome (ex: `index.html`, visualiseur, jeu complet,
+          script unique), TU DOIS CRÉER EXACTEMENT 1 SEULE SOUS-TÂCHE (target_files=[ce fichier],
+          strategy='simple'). Interdiction absolue de créer plusieurs sous-tâches sur le même
+          fichier autonome (cela provoque des réécritures intégrales conflictuelles et des timeouts).
         - CAS TYPIQUES :
-          * 1 fichier unique (Bubble Sort dans index.html) → 1 sous-tâche, target_files=[ce fichier].
+          * 1 fichier unique (Bubble Sort, Tetris, jeu, ToDo dans index.html) → EXACTEMENT 1 sous-tâche.
           * Site HTML+CSS+JS liés (landing_page/) → 1 sous-tâche, target_files=[index.html,
             styles.css, script.js] (le Coder crée les 3, le Tester valide l'ensemble rendu).
           * App Python 3 modules indépendants (models.py/api.py/utils.py) → 1 sous-tâche
-            multifile si les modules se testent ensemble, OU plusieurs sous-tâches UNIQUEMENT
-            si chaque module est réellement testable isolément (rare).
+            multifile si les modules se testent ensemble.
         - Vise le MINIMUM de sous-tâches. Chaque sous-tâche déclenche un agent Coder + Tester +
-          Judge complets (coûteux). Le découpage granulaire est contre-productif.
+          Judge complets (coûteux). Le sur-découpage est contre-productif.
 
         RÈGLE DE STRATÉGIE (F-29 — très important, dicte COMMENT le Coder doit construire) :
         Pour CHAQUE sous-tâche, choisis une 'strategy' parmi :
