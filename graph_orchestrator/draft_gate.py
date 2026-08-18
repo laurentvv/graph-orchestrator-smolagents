@@ -110,6 +110,19 @@ _ANIM_SPEC_KEYWORDS = re.compile(
     re.IGNORECASE,
 )
 
+# --- Barres plates : flex-direction column + flex:1 (run #14, F-124) -----------
+# LE bug de géométrie du visualiseur : un conteneur de barres en
+# flex-direction:column avec flex:1 sur les barres → flex-basis:0 ÉCRASE
+# style.height → N bandes horizontales égales (min-height) pleine largeur,
+# au lieu de barres verticales proportionnelles. La règle flex ROW existe dans
+# le skill coding du Coder, mais si le DRAFT (Architect/Drafter) prescrit
+# column le 4B suit le draft — le gate doit rejeter AVANT injection.
+_FLEX_COLUMN_RE = re.compile(r"flex-direction\s*:\s*column", re.IGNORECASE)
+_FLEX_ONE_RE = re.compile(r"flex\s*:\s*1\b|flex-grow\s*:", re.IGNORECASE)
+_BAR_CONTEXT_RE = re.compile(
+    r"\.bar[s]?\b|\bbarres?\b|\bchart\b|\bviz\b|visuali[sz]", re.IGNORECASE
+)
+
 
 def _find_code_blocks(md: str) -> List[Tuple[int, int, str]]:
     """Retourne les blocs de code (début, fin, langue).
@@ -269,6 +282,33 @@ def _detect_instant_animation(md: str, spec_hint: str = "") -> List[DraftIssue]:
     return issues
 
 
+def _detect_flex_column_bars(md: str) -> List[DraftIssue]:
+    """Barres de visualiseur en flex-direction:column + flex:1 (run #14).
+
+    Signature exacte du bug : le draft prescrit un conteneur de barres en
+    colonne ET flex:1/flex-grow sur les enfants ET un contexte barres/chart.
+    Les 3 conditions ensemble sont quasi toujours fautrices — une mise en page
+    légitime en colonne (panneaux, cartes) n'a pas de contexte barres + flex:1
+    combinés. Rejet (le Coder part de zéro) : le corriger à la main dans le
+    draft laisserait la géométrie incohérente avec le reste du plan.
+    """
+    if not (_FLEX_COLUMN_RE.search(md) and _FLEX_ONE_RE.search(md) and _BAR_CONTEXT_RE.search(md)):
+        return []
+    return [DraftIssue(
+        kind="flex_column_bars",
+        severity="critical",
+        description=(
+            "Conteneur de barres en flex-direction:column avec flex:1 sur les "
+            "barres : flex-basis:0 ÉCRASE style.height → N bandes horizontales "
+            "égales pleine largeur (barres plates), au lieu de barres verticales "
+            "proportionnelles. Géométrie correcte : conteneur flex ROW + "
+            "align-items:flex-end + hauteurs px inline sur chaque barre (règle "
+            "skill coding F-124). Le draft est rejeté : le Coder repart de zéro."
+        ),
+        action="reject",
+    )]
+
+
 def _fix_malformed_blocks(md: str) -> Tuple[str, List[DraftIssue]]:
     """Blocs ``` non fermés → ajoute la clôture manquante. CORRECT."""
     issues = []
@@ -340,6 +380,7 @@ def check_draft(draft_markdown: str, spec_hint: str = "") -> DraftCheck:
     # 2. Détections REJECT (sur le markdown corrigé).
     result.issues.extend(_detect_placeholders(result.corrected_markdown))
     result.issues.extend(_detect_dup_definitions(result.corrected_markdown))
+    result.issues.extend(_detect_flex_column_bars(result.corrected_markdown))
 
     # 3. Détections WARN (animation instantanée, 3 variantes génériques).
     result.issues.extend(

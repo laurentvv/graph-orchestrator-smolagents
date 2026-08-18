@@ -380,6 +380,79 @@ def test_behavioral_compteur_calcule_non_flagge():
     assert _check_behavioral_smells(js) == []
 
 
+RUN17_STATIC_COUNTER_JS = """let comparisonCount = 0;
+let isSorting = false;
+const counter = document.getElementById('counter');
+const startBtn = document.getElementById('startBtn');
+async function bubbleSort() {
+    comparisonCount = 0;
+    counter.textContent = '0';
+    for (let i = 0; i < arr.length - 1; i++) {
+        await sleep(speed);
+        if (arr[i] > arr[i + 1]) { swapped = true; }
+    }
+    markSorted();
+}
+function reset() {
+    comparisonCount = 0;
+    counter.textContent = '0';
+}
+"""
+
+
+def test_behavioral_compteur_statique_run17():
+    """Run #17 : l'élément #counter est ciblé par JS mais écrit UNIQUEMENT avec
+    des littéraux constants — la variable comparisonCount n'est jamais affichée
+    (le check (a) ne voit rien : aucun identifiant dans les écritures). La
+    variante (a-bis) raisonne sur l'ÉLÉMENT et doit réfuter."""
+    errors = _check_behavioral_smells(RUN17_STATIC_COUNTER_JS)
+    assert any(
+        "littéraux constants" in e and "counter" in e for e in errors
+    ), f"compteur statique run #17 non détecté : {errors}"
+
+
+def test_behavioral_compteur_dynamique_element_non_flagge():
+    """Anti-FP du (a-bis) : même code mais l'élément reçoit une valeur dynamique
+    (template) → jamais flaggué."""
+    js = RUN17_STATIC_COUNTER_JS.replace(
+        "counter.textContent = '0';",
+        "counter.textContent = `${comparisonCount}`;",
+    )
+    assert not any("littéraux constants" in e for e in _check_behavioral_smells(js))
+
+
+def test_behavioral_compteur_litteral_avec_mot_run18():
+    """Run #18 : le littéral contenait un MOT ('Comparaisons: 0') que la 1re
+    version du (a-bis) prenait pour un identifiant → non flaggué à tort. Les
+    identifiants doivent être cherchés HORS des littéraux de chaîne."""
+    js = RUN17_STATIC_COUNTER_JS.replace(
+        "counter.textContent = '0';",
+        "counter.textContent = 'Comparaisons: 0';",
+    )
+    errors = _check_behavioral_smells(js)
+    assert any("littéraux constants" in e for e in errors), (
+        f"compteur littéral avec mot dedans (run #18) non détecté : {errors}"
+    )
+
+
+def test_behavioral_compteur_concatene_variable_run18bis():
+    """Anti-FP : concaténation AVEC la variable compteur (`'Comparaisons: ' +
+    comparisonCount`) = écriture dynamique légitime → (a-bis) ne flaggue pas ;
+    si la variable n'est jamais incrémentée, c'est le check (a) élargi qui
+    doit tirer (affichage détecté via identifiant hors littéraux)."""
+    js = RUN17_STATIC_COUNTER_JS.replace(
+        "counter.textContent = '0';",
+        "counter.textContent = 'Comparaisons: ' + comparisonCount;",
+    )
+    errs = _check_behavioral_smells(js)
+    assert not any("littéraux constants" in e for e in errs), (
+        f"concaténation avec variable = écriture dynamique, pas un littéral : {errs}"
+    )
+    assert any("comparisonCount" in e and "JAMAIS incrémenté" in e for e in errs), (
+        f"la variable affichée mais jamais incrémentée doit être flagguée par (a) : {errs}"
+    )
+
+
 def test_behavioral_template_literal_counter():
     js = "let swaps = 0;\nel.innerHTML = `Swaps: ${swaps}`;\nloop();"
     errors = _check_behavioral_smells(js)
@@ -461,6 +534,174 @@ def test_tier2_skipped_when_devtools_off(tmp_path, monkeypatch):
     res = static_check_html(p, run_devtools=False)
     assert res.is_valid
     assert res.tier_reached == "tier1"
+
+
+def test_gradient_bars_visible_run13(tmp_path):
+    """Run #13 (F-124) : `.comparing { background: linear-gradient(…) }` sans
+    texte — backgroundColor reste TRANSPARENT (le gradient vit dans
+    background-image) mais la barre est PARFAITEMENT visible (hauteur réelle).
+    La sonde Tier 2 ne doit PLUS la flagguer « INVISIBLE » (faux positif qui a
+    coûté 2 itérations complètes au run #13). Skip si Chrome indispo (live)."""
+    html = """<!DOCTYPE html><html><body>
+<style>
+#bars { display: flex; align-items: flex-end; gap: 4px; min-height: 400px; }
+.bar { width: 24px; height: 60px; background: linear-gradient(180deg, #42a5f5, #1e88e5); }
+.bar.comparing { background: linear-gradient(180deg, #ff6f00, #f57c00); }
+</style>
+<div id="bars"></div>
+<button id="go">Go</button>
+<script>
+const bars = document.getElementById("bars");
+const go = document.getElementById("go");
+go.addEventListener("click", () => {
+  for (let i = 0; i < 5; i++) {
+    const b = document.createElement("div");
+    b.className = "bar" + (i < 2 ? " comparing" : "");
+    bars.appendChild(b);
+  }
+});
+</script></body></html>"""
+    p = _write(tmp_path, "index.html", html)
+    res = static_check_html(p, run_devtools=True)
+    if res.tier_reached != "tier2":
+        pytest.skip("Chrome DevTools indispo dans l'env de test — Tier 2 testé en live.")
+    assert res.is_valid, f"Faux positif run #13 : barres à gradient flagguées : {res.errors}"
+    assert not any("INVISIBLE" in e for e in res.errors)
+
+
+def test_truly_transparent_bars_still_flagged(tmp_path):
+    """Contre-faux-négatif du fix run #13 : un div avec hauteur réelle mais
+    AUCUN fond (ni couleur ni image) et sans texte reste réellement invisible à
+    l'écran (bug historique « perte de classe de couleur ») → DOIT rester
+    flaggué. Skip si Chrome indispo (live)."""
+    html = """<!DOCTYPE html><html><body>
+<style>
+#bars { display: flex; align-items: flex-end; gap: 4px; min-height: 400px; }
+.bar { width: 24px; height: 60px; } /* AUCUN background → invisible à l'écran */
+</style>
+<div id="bars"></div>
+<button id="go">Go</button>
+<script>
+const bars = document.getElementById("bars");
+const go = document.getElementById("go");
+go.addEventListener("click", () => {
+  for (let i = 0; i < 5; i++) {
+    const b = document.createElement("div");
+    b.className = "bar";
+    bars.appendChild(b);
+  }
+});
+</script></body></html>"""
+    p = _write(tmp_path, "index.html", html)
+    res = static_check_html(p, run_devtools=True)
+    if res.tier_reached != "tier2":
+        pytest.skip("Chrome DevTools indispo dans l'env de test — Tier 2 testé en live.")
+    assert not res.is_valid, "Barres réellement transparentes (aucun fond) : devraient être flagguées."
+    assert any("INVISIBLE" in e for e in res.errors)
+
+
+def test_sonde_tier2_couvre_background_image():
+    """Garde anti-régression (déterministe, 0 Chrome) : la sonde JS du Tier 2
+    doit tester cs.backgroundImage — sinon tout fond en gradient (F-124)
+    redevient un faux « INVISIBLE » (run #13)."""
+    import inspect
+
+    import graph_orchestrator.static_tester as st
+
+    assert "cs.backgroundImage === 'none'" in inspect.getsource(st)
+
+
+def _bars_page(css_container: str, css_bar: str, js_height: str) -> str:
+    """Page de visualiseur paramétrable : 20 barres créées au clic."""
+    return f"""<!DOCTYPE html><html><body>
+<style>
+#bars {{ {css_container} }}
+.bar {{ {css_bar} }}
+</style>
+<div id="bars"></div>
+<button id="go">Go</button>
+<script>
+const bars = document.getElementById("bars");
+const go = document.getElementById("go");
+go.addEventListener("click", () => {{
+  const vals = [12, 45, 78, 23, 90, 56, 34, 67, 89, 15, 42, 71, 28, 95, 63, 38, 82, 50, 19, 74];
+  for (let i = 0; i < 20; i++) {{
+    const b = document.createElement("div");
+    b.className = "bar";
+    {js_height}
+    bars.appendChild(b);
+  }}
+}});
+</script></body></html>"""
+
+
+def test_flat_bars_run14_flagged(tmp_path):
+    """Run #14 (barres plates) : 20 barres quasi IDENTIQUES + pleine largeur
+    (flex-basis écrase style.height) → le Tier 2 DOIT réfuter même si chaque
+    barre est individuellement « visible ». Géométrie EXACTE du bug : conteneur
+    column + flex:1. Skip si Chrome indispo (live)."""
+    html = _bars_page(
+        "display: flex; flex-direction: column; height: 300px;",
+        "flex: 1; background: #ef5350;",
+        "",
+    )
+    p = _write(tmp_path, "index.html", html)
+    res = static_check_html(p, run_devtools=True)
+    if res.tier_reached != "tier2":
+        pytest.skip("Chrome DevTools indispo dans l'env de test — Tier 2 testé en live.")
+    assert not res.is_valid, f"Barres plates (run #14) devraient être flagguées : {res.errors}"
+    assert any("IDENTIQUES" in e for e in res.errors)
+
+
+def test_varied_bars_run14_ok(tmp_path):
+    """Contre-faux-positif : 20 barres ROW avec hauteurs PROPORTIONNELLES
+    variées → jamais flagguées « IDENTIQUES ». Skip si Chrome indispo (live)."""
+    html = _bars_page(
+        "display: flex; flex-direction: row; align-items: flex-end; height: 300px;",
+        "width: 12px; background: #ef5350;",
+        "b.style.height = vals[i] + 'px';",
+    )
+    p = _write(tmp_path, "index.html", html)
+    res = static_check_html(p, run_devtools=True)
+    if res.tier_reached != "tier2":
+        pytest.skip("Chrome DevTools indispo dans l'env de test — Tier 2 testé en live.")
+    assert res.is_valid, f"Barres proportionnelles ne doivent pas être flagguées : {res.errors}"
+    assert not any("IDENTIQUES" in e for e in res.errors)
+
+
+def test_empty_at_load_run15_flagged(tmp_path):
+    """Run #15 : barres CRÉÉES au chargement mais height:0 (les vraies hauteurs
+    ne viennent qu'au clic Start) → page visuellement VIDE à l'ouverture.
+    Le snapshot PRE-clic du Tier 2 DOIT réfuter (critère F-82 n°1). Skip si
+    Chrome indispo (live)."""
+    html = _bars_page(
+        "display: flex; flex-direction: row; align-items: flex-end; height: 300px;",
+        "width: 12px; background: #ef5350;",
+        "b.style.height = '0px';",  # bug run #15 : hauteur nulle à la création
+    )
+    p = _write(tmp_path, "index.html", html)
+    res = static_check_html(p, run_devtools=True)
+    if res.tier_reached != "tier2":
+        pytest.skip("Chrome DevTools indispo dans l'env de test — Tier 2 testé en live.")
+    assert not res.is_valid, f"Conteneur vide au chargement (run #15) : devrait être réfuté : {res.errors}"
+    assert any("[CHARGEMENT]" in e for e in res.errors)
+
+
+def test_bars_visible_at_load_ok(tmp_path):
+    """Contre-faux-positif du check chargement : barres avec hauteur réelle
+    DÈS la création (géométrie correcte) → aucun flag [CHARGEMENT]. Skip si
+    Chrome indispo (live)."""
+    html = _bars_page(
+        "display: flex; flex-direction: row; align-items: flex-end; height: 300px;",
+        "width: 12px; background: #ef5350;",
+        "b.style.height = vals[i] + 'px';",
+    )
+    p = _write(tmp_path, "index.html", html)
+    res = static_check_html(p, run_devtools=True)
+    if res.tier_reached != "tier2":
+        pytest.skip("Chrome DevTools indispo dans l'env de test — Tier 2 testé en live.")
+    assert res.is_valid, f"Barres visibles au chargement ne doivent pas être flagguées : {res.errors}"
+    assert not any("[CHARGEMENT]" in e for e in res.errors)
 
 
 # ==========================================

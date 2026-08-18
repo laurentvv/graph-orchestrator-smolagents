@@ -1,0 +1,40 @@
+[34m0.00.119.415[0m [32mI [0mcmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+[34m0.00.168.849[0m [35mW srv  llama_server: -----------------
+[0m[34m0.00.168.857[0m [35mW srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+[0m[34m0.00.168.857[0m [35mW srv  llama_server: this can be a security risk (cross-origin attacks)
+[0m[34m0.00.168.858[0m [35mW srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+[0m[34m0.00.168.858[0m [35mW srv  llama_server: -----------------
+[0m[34m0.00.185.582[0m [32mI [0msrv    load_model: loading model 'D:\GIT\graph-orchestrator-smolagents\models\ornith-1.0\Ornith-1.0-9B-MTP-Q4_K_M.gguf'
+[34m0.04.922.713[0m [32mI [0mcmn          init: llama threadpool init, n_threads = 14
+[34m0.06.086.079[0m [32mI [0mcommon_speculative_init_result: creating MTP draft context against the target model 'D:\GIT\graph-orchestrator-smolagents\models\ornith-1.0\Ornith-1.0-9B-MTP-Q4_K_M.gguf'
+[34m0.06.116.352[0m [35mW load_hparams: Qwen-VL models require at minimum 1024 image tokens to function correctly on grounding tasks
+[0m[34m0.06.116.360[0m [35mW load_hparams: if you encounter problems with accuracy, try adding --image-min-tokens 1024
+[0m[34m0.06.116.361[0m [35mW load_hparams: more info: https://github.com/ggml-org/llama.cpp/issues/16842
+
+[0m[34m0.10.711.141[0m [32mI [0msrv    load_model: loaded multimodal model, 'D:\GIT\graph-orchestrator-smolagents\models\qwen35-mtp\mmproj-F16.gguf'
+[34m0.11.101.342[0m [32mI [0msrv    load_model: initializing, n_slots = 1, n_ctx_slot = 49152, kv_unified = 'false'
+[34m0.11.202.219[0m [32mI [0msrv          init: chat template supports preserving reasoning, consider enabling it via --reasoning-preserve
+[34m0.11.202.246[0m [32mI [0msrv  llama_server: model loaded
+[34m0.11.202.248[0m [32mI [0msrv  llama_server: listening on http://127.0.0.1:55660
+[34m0.11.769.677[0m [32mI [0mslot get_availabl: id  0 | task -1 | selected slot by LRU, t_last = -1
+[34m0.11.769.735[0m [32mI [0mslot launch_slot_: id  0 | task 0 | processing task, is_child = 0
+[34m0.15.176.747[0m [32mI [0mslot print_timing: id  0 | task 0 | prompt processing, n_tokens =   2048, progress = 0.39, t =   3.27 s / 626.78 tokens per second
+[34m0.16.682.161[0m [32mI [0mslot print_timing: id  0 | task 0 | prompt processing, n_tokens =   2939, progress = 0.56, t =   4.83 s / 608.06 tokens per second
+[34m0.19.816.370[0m [32mI [0mslot print_timing: id  0 | task 0 | prompt processing, n_tokens =   4721, progress = 0.90, t =   7.95 s / 593.91 tokens per second
+[34m0.20.648.941[0m [32mI [0mslot print_timing: id  0 | task 0 | prompt processing, n_tokens =   5233, progress = 1.00, t =   8.80 s / 594.81 tokens per second
+[34m0.29.718.885[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    101, tg =  11.30 t/s, tg_3s =  11.41 t/s
+[34m0.32.850.209[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    123, tg =  10.18 t/s, tg_3s =   7.03 t/s
+[34m0.35.961.350[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    149, tg =   9.81 t/s, tg_3s =   8.36 t/s
+[34m0.39.055.813[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    171, tg =   9.35 t/s, tg_3s =   7.11 t/s
+[34m0.42.152.169[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    199, tg =   9.30 t/s, tg_3s =   9.04 t/s
+[34m0.45.242.335[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    225, tg =   9.19 t/s, tg_3s =   8.41 t/s
+[34m0.48.342.175[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    246, tg =   8.92 t/s, tg_3s =   6.77 t/s
+[34m0.51.426.928[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    272, tg =   8.87 t/s, tg_3s =   8.43 t/s
+[34m0.54.505.565[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    302, tg =   8.95 t/s, tg_3s =   9.74 t/s
+[34m0.57.578.692[0m [32mI [0mslot print_timing: id  0 | task 0 | n_gen =    336, tg =   9.13 t/s, tg_3s =  11.06 t/s
+[34m0.59.475.147[0m [32mI [0mslot print_timing: id  0 | task 0 | prompt eval time =    9100.37 ms /  5237 tokens (    1.74 ms per token,   575.47 tokens per second)
+[34m0.59.475.155[0m [32mI [0mslot print_timing: id  0 | task 0 |        eval time =   38605.05 ms /   359 tokens (  107.84 ms per token,     9.27 tokens per second)
+[34m0.59.475.156[0m [32mI [0mslot print_timing: id  0 | task 0 |       total time =   47705.42 ms /  5596 tokens
+[34m0.59.475.157[0m [32mI [0mslot print_timing: id  0 | task 0 |    graphs reused =        167
+[34m0.59.475.163[0m [32mI [0mslot print_timing: id  0 | task 0 | draft acceptance = 0.56845 (  191 accepted /   336 generated), mean len =  2.14
+[34m0.59.475.382[0m [32mI [0mslot      release: id  0 | task 0 | stop processing: n_tokens = 5596, truncated = 0

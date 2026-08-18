@@ -383,6 +383,18 @@ class Settings:
     # TURN_CHECKPOINT_ENABLED=false (retour au comportement F-53 seul).
     turn_checkpoint_enabled: bool = True
 
+    # --- Matérialisation du plan (F-120, transposition planning-with-files) ---
+    # Écrit plan.md (miroir fidèle de TOUT l'ArchitectOutput : architecture
+    # globale, sous-tâches, stratégie/sections, checklist fichiers, critères
+    # F-82, skills) + task.md (checklist vivante + journal des verdicts) dans
+    # le dossier du run, régénérés à chaque transition par workflows.py
+    # (déterministe, best-effort). Un anchor court stable est aussi injecté
+    # dans le prompt Coder à chaque itération (levier de convergence 4B des
+    # post-mortems #10/#11). Opt-out PLAN_TASK_MATERIALIZE=false (retour :
+    # aucun fichier ni anchor). Défaut dataclass True pour ne pas casser les
+    # helpers de test qui construisent Settings() à la main.
+    plan_task_materialize: bool = True
+
     # --- Retry transport LLM v2 (Priorité 8 / F-104) ---
     # Retry PRÉ-CONTENU au niveau de l'APPEL LLM (openfox) : un « Connection
     # error » transitoire est rejoué à l'identique, de façon transparente pour
@@ -644,6 +656,7 @@ def load_settings() -> Settings:
         vision_fullpage_cap=_get_bool("VISION_FULLPAGE_CAP", True),
         coder_ultra_correction=_get_bool("CODER_ULTRA_CORRECTION", True),
         turn_checkpoint_enabled=_get_bool("TURN_CHECKPOINT_ENABLED", True),
+        plan_task_materialize=_get_bool("PLAN_TASK_MATERIALIZE", True),
         llm_retry_enabled=_get_bool("LLM_RETRY_ENABLED", True),
         llm_transport_retries=_get_int("LLM_TRANSPORT_RETRIES", 5),
         llm_retry_base_delay_s=_get_float("LLM_RETRY_BASE_DELAY_S", 1.0),

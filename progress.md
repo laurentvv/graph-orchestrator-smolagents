@@ -1,5 +1,99 @@
 # État d'Avancement du Sprint
 
+## Jalons de l'Itération (gouvernance backlog — grooming post-run #19, décision user 2026-08-18)
+
+- [x] GOV-1 : Arbitrage des 18 features pending sur les besoins réels démontrés
+  (mono-GPU, runs séquentiels, livrables vanilla, humain dans la boucle) —
+  **3 chantiers conservés** : F-116 (compaction, PRIORITÉ 1, intègre F-86),
+  F-119 (diff Judge merge-base), F-87 (qualification skills, intègre F-96).
+- [x] GOV-2 : **14 features annulées** (statut `cancelled` + raison par
+  description) : F-18/25/34/74/77/78/79/94/107/117/118/121 + fusions F-86/F-96.
+- [x] GOV-3 : **F-61 clos** en `completed` — rôle permanent du méta-analyste
+  (§8) établi et démontré à chaud (7 runs le 2026-08-18).
+- [x] GOV-4 : Note de gouvernance en tête de `plan_usine_logicielle.md` (les
+  cases ouvertes = journal d'idées historique ; source de vérité =
+  feature_list.json). Compteur final : **105 completed / 14 cancelled /
+  3 pending**.
+
+## Jalons de l'Itération (cycle F-120 — plan.md + task.md, transposition planning-with-files)
+> Décision utilisateur après revue de la spécification kilocode (3 itérations de
+> plan : ConfigProtection + matrice permissions → profil plan Architect/Drafter
+> → minimal) : « simplement un plan.md et un task.md basé sur plan.md », sur le
+> modèle du skill planning-with-files (OthmanAdi) montré par l'utilisateur.
+> Volets ConfigProtection/mode plan NON PORTÉS : l'Architect et le Drafter sont
+> des nœuds DSPy sans AUCUN outil FS (dspy_nodes.py:730/:848) — la restriction
+> est déjà par construction, il n'y a rien à bridER (kilocode en a besoin car
+> son agent de planification est un agent outillé interactif).
+
+- [x] F120-1 : Module `graph_orchestrator/plan_files.py` (0 LLM) —
+  `build_plan_markdown` miroir fidèle de TOUT l'ArchitectOutput (critères
+  visuels/fonctionnels/rubric F-82 et skills F-57 inclus — rien de perdu,
+  vérifié champ par champ), `build_task_markdown` (checklist vivante + journal
+  daté des verdicts), `write_plan_files` best-effort, `build_coder_anchor`
+  bloc court STABLE volontairement sans critères visuels (déjà injectés par
+  le bloc F-82 — anti-redondance).
+- [x] F120-2 : Config `plan_task_materialize` (défaut True, PLAN_TASK_MATERIALIZE)
+  + `.env.example` + `.env` local.
+- [x] F120-3 : Branchement `workflows.py` (helper `_sync_plan_files` à chaque
+  transition : post-Architect/reprise, démarrage sous-tâche, coder KO, rejets
+  linter/static, verdict juge, approbation, escalade, circuit breaker ; anchor
+  dans `sub_dict` à chaque itération) + `{task.get('plan_anchor', '')}` dans le
+  prompt Coder (`nodes.py`). Source de vérité INCHANGÉE (checkpoint F-24).
+- [x] F120-4 : Tests — **24 nouveaux PASS** (23 test_plan_files + 1 config ;
+  py_compile 4 fichiers ; gate F-103 : 29 surfaces, 0 erreur, 0 warning.
+- [x] F120-5 : Suite complète (basetemp dédié F-95) — **1532 passed / 0 failed
+  / 1 skipped** (flaky minute-boundary PASSÉ cette exécution) → 0 régression.
+- [x] F120-6 : État disque (contract C443-C445, feature_list F-120 completed
+  rescopé, ce fichier, README) + DuckDB + commit + PR #97.
+- [x] F120-7 : **Run E2E #13 de validation exécuté (exigé user)** — run
+  `2026-08-18_1130` (~80 min, 74,7 M tokens, 0/2, échec technique). **F-120
+  VALIDÉ en prod** : plan.md miroir complet, task.md journal EXACT des 6
+  transitions (démonstration post-mortem : c'est lui qui a reconstitué la
+  chronologie), anchor 8× stable. Échec du run = 2 causes INDÉPENDANTES de
+  F-120 (post-mortem complet `debug/POSTMORTEM_RUN13.md`) : (1) FAUX POSITIF
+  Static Tester — sonde Tier 2 lit `backgroundColor` mais pas `background-image`
+  → toute barre en linear-gradient sans texte = « invisible » (premier run E2E
+  post-F-124 dont la validation avait été reportée) ; (2) TS-01 thrash rituel
+  visuel 41 steps non convergé (pattern run #9) + timeouts 600 s finaux (10
+  serveurs llama spawnés / 0 arrêt loggé — piste leak VRAM). Propositions P0-P3
+  dans le post-mortem — **décision utilisateur attendue** (fix Static Tester
+  en tête).
+- [x] F120-8 : Fix Goal post-run #13 — `derive_goal` extrait la section
+  `## Objective` de la spec F-115 (miroir parseur requirements_checklist F-51,
+  rétrocompat `## Objectif`, repli texte brut) ; +5 tests → **28/28 PASS**.
+- [x] F120-9 : **Session debug exigée user (« run final sans erreur et
+  fonctionnel ») — 3 runs E2E le même jour** : #13 échec (faux positif
+  gradient + thrash), #14 2/2 APPROUVÉES mais barres PLATES (géométrie du
+  DRAFT column+flex:1, auto-approuvée par le rituel visuel), #15 **SUCCÈS
+  COMPLET**. Fixes empilés : P0 sonde Tier 2 `backgroundImage` (preuve live
+  livrable #13 : hidden AVANT=true/APRÈS=false) + print d'arrêt llama +
+  CODER_MAX_STEPS 40→30 (f801716) ; puis 3 étages géométrie — draft_gate
+  `flex_column_bars` REJECT, règle flex ROW prompt Architect (F-124 bis),
+  sonde Tier 2 barres plates (preuve live #14 : flat_DETECTE=true) (b01fee4).
+- [x] F120-10 : **Run #15 (2026-08-18_1717) = run final SANS ERREUR et
+  FONCTIONNEL** : 1/1 approuvé itération 1 (24 min, 429k tokens, record),
+  livrable 3 fichiers validé visuellement par chrome-devtools — 30 barres
+  verticales proportionnelles (5,6→182px inline), gradient turquoise→violet,
+  30/30 triées, compteur 225, dark theme. Post-mortem complet (épilogue
+  #13→#15) : `debug/POSTMORTEM_RUN13.md`.
+- [x] F120-11 : Suite complète post-fixes (basetemp dédié) — **1543 passed /
+  0 failed / 5 skipped** (les 5 skips = tests live Tier 2 sans Chrome dans
+  l'env pytest, documentés ; flaky minute-boundary PASSÉ cette exécution) →
+  0 régression. Contract C446-C448 ajoutés. Cycle F-120 CLOS : PR #97
+  contient feature + fixes de validation (F-120, F-49 sonde, F-91 gate,
+  F-124-bis géométrie).
+- [x] F120-12 : **Soirée de durcissement (runs #16→#19, feedback utilisateur
+  en boucle visuelle)** : #16 échec propre (mur F-116, thrash 772k) ;
+  #17/#18 succès graphe mais compteur FIGÉ en 2 nouvelles variantes F-110
+  (littéraux purs, puis littéral avec mot) → checks (a-bis) v1+v2 « compteur
+  statique » + (a) élargi aux concaténations (c5c2370, 2549d0f ; preuves sur
+  les scripts réels, 70 passed). **#19 = RUN FINAL PARFAIT** : 1/1 APPROUVÉ
+  it1 (~14 min) — validation visuelle complète : chargement 29/30 barres
+  (4→250px), COMPTEUR VIVANT 0→249, tri 30/30 croissant, dark theme.
+  Bilan du jour : 7 runs E2E, chaque défaut (gardes OU œil humain) a reçu
+  son garde déterministe. Post-mortem épilogue complet :
+  `debug/POSTMORTEM_RUN13.md`.
+
 ## Jalons de l'Itération (cycle F-122 — ULTRA restreint à l'itération ≥ 3)
 > Décision utilisateur (proposition 2 du post-mortem run #10). Réactive
 > l'escalade de modèle F-111 en la bornant : le 9B no-think trop lent ne

@@ -138,7 +138,14 @@ spec DOIT prescrire le niveau graphique MAXIMAL en critères EARS vérifiables �
 animés matériels (comparing/sorted/hover : glow, dégradés, transform), transitions
 easées (cubic-bezier) sur toute mutation visuelle, compteurs/stats stylés, fond de
 scène. « Design soigné » sans détails est insuffisant : le Coder exécute le niveau que
-TU décris — un spec en aplats monochromes donne un livrable fade (bug run #12).""",
+TU décris — un spec en aplats monochromes donne un livrable fade (bug run #12).
+
+GÉOMÉTRIE DES VISUALISEURS À BARRES (run #14) : si la tâche affiche des barres/colonnes
+de données proportionnelles, ta spec DOIT imposer conteneur `display:flex` (ROW) +
+`align-items:flex-end` + hauteur par barre (px/% inline). JAMAIS `flex-direction:column`
++ `flex:1` sur les barres : flex-basis:0 écrase style.height → N bandes plates égales
+pleine largeur (le Coder suit ton plan à la lettre — bug run #14, draft rejeté par le
+gate F-91).""",
 
     "prompt_refiner": """### RÔLE : PROMPT REFINER
 Tu reformules le prompt utilisateur brut en une SPEC STRUCTURÉE et NON-AMBIGUÏ, directement

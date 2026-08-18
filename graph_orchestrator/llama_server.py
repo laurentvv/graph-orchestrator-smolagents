@@ -191,6 +191,11 @@ class _SpawnedServer:
             except subprocess.TimeoutExpired:
                 self.proc.kill()  # SIGKILL
                 self.proc.wait(timeout=5)
+            # Run #13 : le stop n'allait qu'au logger.info (invisible en console)
+            # → « 10 spawns / 0 arrêt » dans le log a égaré le post-mortem vers
+            # une piste leak. Print symétrique du « prêt » pour un cycle
+            # spawn/stop lisible d'un seul regard.
+            print(f"[~] llama-server : arrêté (port {self.port}, {self.model_id}) — VRAM libérée")
             logger.info("[llama-server] process port %s (%s) terminé — VRAM libérée",
                         self.port, self.model_id)
         except Exception as e:

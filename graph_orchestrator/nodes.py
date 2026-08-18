@@ -1354,7 +1354,7 @@ NOTE CRITIQUE : "linter_ok" doit être True SEULEMENT si tu as vérifié ton cod
 Code prêt pour la production, respectant les conventions du langage.
 {skills_block}{local_agents_md_block}
 
-### Contenu de la tâche
+{task.get('plan_anchor', '')}### Contenu de la tâche
 {task['content']}
 {task.get('draft_instruction', '')}
 """ + (f"\n### Contexte global (Rappel du cahier des charges initial)\n{task['original_content']}\n" if task.get("original_content") else "") + (

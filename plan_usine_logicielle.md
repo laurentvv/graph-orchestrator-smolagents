@@ -2,6 +2,21 @@
 
 Ce document traduit l'audit des références (`references_audit.md`) en une feuille de route concrète, triée par ordre d'importance critique. L'objectif est d'atteindre le "Fire and Forget" complet.
 
+> **⚖️ Gouvernance du backlog (2026-08-18, décision utilisateur — grooming post-run #19)** :
+> Après 19 runs E2E (dont la journée des 7 runs → livrable parfait), le backlog a été
+> arbitré sur les **besoins réels démontrés** (usine mono-GPU 6 Go, runs séquentiels,
+> livrables web vanilla 1-3 fichiers, humain dans la boucle) :
+> - **SEULS 3 chantiers restent actifs** dans `feature_list.json` : **F-116** (compaction
+>   résiliente,Priorité 1 — le mur des thrashs #13/#16 ; intègre l'ex-F-86 sémantique),
+>   **F-119** (diff Judge merge-base), **F-87** (qualification des skills ; intègre
+>   l'ex-F-96 harnais). F-61 (méta-analyste) CLOS en tant que rôle permanent établi (§8).
+> - **14 features ANNULÉES** (statut `cancelled`, raison dans chaque description) :
+>   F-18/25/34/74/77/78/79/94/107 (inutiles pour l'usage réel) et F-117/118/121
+>   (infrastructure multi-session/sandbox éloignée du mono-GPU local).
+> - Les cases ouvertes ci-dessous liées à ces features sont **historiques** : à lire comme
+>   un journal d'idées d'audit, plus comme un engagement. Source de vérité des statuts :
+>   `feature_list.json`.
+
 > **🎯 Principe directeur (filtre qualité des références)** — Chaque feature à venir s'appuie sur une référence qui a **fait le job en production** :
 > - **Références production-éprouvées** (transposables avec confiance) : `aider` (PyPI top OpenRouter), `crush` (Charm/Go), `deer-flow` (ByteDance), `qm` (plateforme Slack/Web), `open-swe` (dérivé SWE-agent), `pi` (agent interactif TS).
 > - **Référence mature mais collectée** (prompts, à adapter) : `claude-code-unified-agents`.

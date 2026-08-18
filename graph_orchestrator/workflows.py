@@ -598,6 +598,41 @@ async def run_coding_workflow(
                 "output_dir": run_output_dir,
             })
 
+        # --- F-120 : matérialisation plan.md + task.md (planning-with-files) ---
+        # Vues déterministes de coding_state, régénérées à CHAQUE transition du
+        # run (0 LLM, best-effort) : plan.md = miroir fidèle de TOUT
+        # l'ArchitectOutput ; task.md = checklist vivante + journal daté des
+        # verdicts (miroir du Error Log de la référence : « ne jamais répéter
+        # une approche échouée sans muter l'approche »). Source de vérité
+        # INCHANGÉE (checkpoint F-24) — ces fichiers servent à la traçabilité
+        # post-mortem et d'ancrage stable du Coder, jamais à la logique de run.
+        # Journal en mémoire : après crash/reprise il repart vide (checklist
+        # régénérée depuis le checkpoint — vue non critique, documentée).
+        from .plan_files import build_coder_anchor, make_event, write_plan_files
+
+        plan_events: list = []
+
+        def _sync_plan_files(event: Optional[dict] = None) -> None:
+            if not settings.plan_task_materialize:
+                return
+            try:
+                if event is not None:
+                    plan_events.append(event)
+                arch = coding_state.get("architect_result") or {}
+                subtasks = arch.get("subtasks") or []
+                idx = coding_state.get("current_subtask_idx", 0)
+                in_progress_id = subtasks[idx].get("task_id") if 0 <= idx < len(subtasks) else None
+                write_plan_files(
+                    run_output_dir,
+                    coding_state.get("seed_content", ""),
+                    arch,
+                    completed_ids=frozenset(coding_state["completed_subtasks"]),
+                    in_progress_id=in_progress_id,
+                    events=tuple(plan_events),
+                )
+            except Exception as exc:
+                print(f"    [~] F-120 : sync plan.md/task.md ignorée ({exc})")
+
         async def process_subtask_loop(subtask, start_iteration: int = 1) -> Tuple[dict, List[NodeMetrics]]:
             sub_metrics = []
             entity_id = f"file:{subtask.task_id}"
@@ -694,6 +729,20 @@ async def run_coding_workflow(
                 }
                 ultra_signals["deterministic_reject"] = False
                 ultra_signals["coder_died"] = False
+
+                # F-120 : anchor stable (Goal + sous-tâche courante + checklist
+                # fichiers + pointeur plan.md) — identique à CHAQUE itération :
+                # c'est le point fixe du Coder 4B (post-mortems #10/#11). Les
+                # critères visuels ne sont PAS dupliqués ici : le bloc F-82
+                # dédié les injecte déjà dans le prompt (nodes.py).
+                if settings.plan_task_materialize:
+                    sub_dict["plan_anchor"] = build_coder_anchor(
+                        subtask.task_id,
+                        subtask.description,
+                        subtask.target_files,
+                        strategy=getattr(subtask, "strategy", "simple"),
+                        goal=coding_state.get("seed_content", ""),
+                    )
 
                 # 0. Drafter (iteration 1 uniquement)
                 if iteration == 1:
@@ -804,6 +853,10 @@ async def run_coding_workflow(
                 if not coder_res or coder_res.status == "failure":
                     ultra_signals["coder_died"] = True
                     print(f"    [-] Le Coder a échoué techniquement sur {subtask.task_id}.")
+                    _sync_plan_files(make_event(
+                        subtask.task_id, iteration, "coder_failed",
+                        (coder_res.details if coder_res and coder_res.details else "aucun résultat"),
+                    ))
                     return {"status": "failure", "reason": "Coder crash"}, sub_metrics
 
                 # F-48 : commit l'état post-Coder dans le git local du run. Permet
@@ -874,6 +927,9 @@ async def run_coding_workflow(
                     )
                     if ref_id and obs_id:
                         kg.add_edge(ref_id, obs_id, "REFUTES")
+                    _sync_plan_files(make_event(
+                        subtask.task_id, iteration, "lint_refuted", lint_res.details
+                    ))
                     # On passe à l'itération suivante SANS Tester/Judge (économie de cycles LLM).
                     continue
 
@@ -915,6 +971,9 @@ async def run_coding_workflow(
                         kg.add_edge(ref_id, obs_id, "REFUTES")
                     # F-111 : rejet déterministe → Coder Ultra à la correction suivante.
                     ultra_signals["deterministic_reject"] = True
+                    _sync_plan_files(make_event(
+                        subtask.task_id, iteration, "static_refuted", static_res.details
+                    ))
                     # On passe à l'itération suivante SANS Tester/Judge LLM.
                     continue
 
@@ -992,6 +1051,12 @@ async def run_coding_workflow(
                     # (à la reprise, elle sera sautée sans ré-exécuter le Coder).
                     coding_state["completed_subtasks"].append(subtask.task_id)
                     save_coding_state(coding_state["current_subtask_idx"], iteration)
+                    # completed_subtasks est déjà mis à jour → le même sync passe
+                    # la case à complete ET journalise l'approbation (F-120).
+                    _sync_plan_files(make_event(
+                        subtask.task_id, iteration, "approved",
+                        judge_res.final_feedback if judge_res else "",
+                    ))
                     return {"status": "success", "task_id": subtask.task_id}, sub_metrics
                 else:
                     feedback = judge_res.final_feedback if judge_res else "Erreur système du juge."
@@ -1011,6 +1076,9 @@ async def run_coding_workflow(
                     )
                     if ref_id and obs_id:
                         kg.add_edge(ref_id, obs_id, "REFUTES")
+                    _sync_plan_files(make_event(
+                        subtask.task_id, iteration, "rejected", feedback
+                    ))
 
             print(f"    [!] Max itérations atteintes pour {subtask.task_id}.")
 
@@ -1070,6 +1138,9 @@ async def run_coding_workflow(
                         for ref in refutations:
                             kg.add_edge(esc_id, ref['id'], "ESCALATES")
                     print(f"    [⚠] {subtask.task_id} ESCALADÉ — diagnostic persisté (gravité: {esc_res.severity}).")
+                    _sync_plan_files(make_event(
+                        subtask.task_id, max_iter, "escalated", esc_res.root_cause
+                    ))
                     return {
                         "status": "escalated",
                         "task_id": subtask.task_id,
@@ -1078,6 +1149,9 @@ async def run_coding_workflow(
 
                 print(f"    [-] Nœud d'Escalade indisponible/échoué pour {subtask.task_id} — repli sur le statut brut.")
 
+            _sync_plan_files(make_event(
+                subtask.task_id, max_iter, "max_iterations", "circuit breaker activé"
+            ))
             return {"status": "max_iterations_reached", "task_id": subtask.task_id}, sub_metrics
 
         for task in seed_tasks:
@@ -1099,6 +1173,10 @@ async def run_coding_workflow(
 
             # Persiste le plan (premier checkpoint utile : sauve l'appel Architect).
             coding_state["architect_result"] = architect_result.model_dump()
+
+            # F-120 : matérialise plan.md + task.md dès que le plan existe
+            # (reprise comprise : régénéré avec les sous-tâches déjà approuvées).
+            _sync_plan_files()
 
             print(f"[+] Plan de l'Architecte reçu : {architect_result.global_architecture}")
             print(f"[*] 2. Fan-out : Lancement des boucles d'ingénierie parallèles sur {len(architect_result.subtasks)} sous-tâches...\n")
@@ -1122,6 +1200,9 @@ async def run_coding_workflow(
                     checkpoint = None  # le checkpoint n'est consommé qu'une fois
 
                 print(f"[*] Traitement de la sous-tâche {i+1}/{len(architect_result.subtasks)}...")
+                _sync_plan_files(make_event(
+                    st.task_id, start_iter, "started", "boucle Coder lancée"
+                ))
                 res, metrics = await process_subtask_loop(st, start_iteration=start_iter)
                 all_metrics.extend(metrics)
                 results.append(res)

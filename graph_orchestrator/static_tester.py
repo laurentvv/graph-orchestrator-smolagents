@@ -238,6 +238,10 @@ _JS_CLASSNAME_RE = re.compile(
 _DYNAMIC_CONTAINER_HINTS = (
     "appendchild", "innerhtml", "insertbefore", "createelement",
 )
+# Contexte « éléments de DONNÉES » pour le check chargement (run #15) : on ne
+# réfute un conteneur vide à l'ouverture QUE pour les sélecteurs évoquant des
+# barres/graphiques — une modale/tooltip légitimement cachée ne matche pas.
+_LOAD_CONTEXT_RE = re.compile(r"bar|chart|viz|canvas|graph|histo|colonne", re.IGNORECASE)
 # Noms de boutons « primaire » (démarre l'action principale = peuple le DOM).
 # GÉNÉRIQUE : on cherche des mots communs, pas un id spécifique.
 _PRIMARY_ACTION_RE = re.compile(
@@ -323,12 +327,20 @@ def _check_behavioral_smells(js: str) -> List[str]:
         return errors
 
     # --- (a) compteur mort ---
+    # Run #18 : élargissement — l'affichage peut être une CONCATÉNATION
+    # (`textContent = 'Comparaisons: ' + comparisonCount`) que l'ancienne regex
+    # (stopée au premier guillemet) ne voyait pas. On collecte tout identifiant
+    # compteur présent dans la valeur d'écriture HORS littéraux de chaîne.
+    def _strip_quotes(expr: str) -> str:
+        return re.sub(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"", "", expr)
+
     displayed: set = set()
     for m in re.finditer(
-        r"(?:textContent|innerText|innerHTML)\s*=\s*[`\"']?[^`\"';]*?\b([A-Za-z_$][\w$]*)\b", js
+        r"(?:textContent|innerText|innerHTML)\s*=\s*([^;\n]+)", js
     ):
-        if _COUNTER_NAME_RE.search(m.group(1)):
-            displayed.add(m.group(1))
+        for nm in re.finditer(r"\b([A-Za-z_$][\w$]*)\b", _strip_quotes(m.group(1))):
+            if _COUNTER_NAME_RE.search(nm.group(1)):
+                displayed.add(nm.group(1))
     for m in re.finditer(r"\$\{\s*([A-Za-z_$][\w$]*)\s*\}", js):
         if _COUNTER_NAME_RE.search(m.group(1)):
             displayed.add(m.group(1))
@@ -343,6 +355,43 @@ def _check_behavioral_smells(js: str) -> List[str]:
                 f"incrémenté dans le code (initialisé à 0, aucun `{name}++`/`{name} += 1`). "
                 f"Le compteur restera à 0 à vie — incrémente-le à chaque comparaison/"
                 f"échange/étape de l'algorithme."
+            )
+
+    # (a-bis, run #17) COMPTEUR STATIQUE : la variante qui esquive (a) —
+    # l'élément compteur (id DOM type counter/comparisons) est bien ciblé par
+    # JS (const x = document.getElementById('counter')) mais ses écritures
+    # textContent sont TOUTES des littéraux constants ('0') : la variable
+    # compteur (comparisonCount) n'est jamais affichée, le DOM affichera le
+    # littéral à vie. Le check (a) ne voit rien car aucun identifiant n'apparaît
+    # dans les écritures → il faut raisonner sur l'ÉLÉMENT, pas la variable.
+    for m in re.finditer(
+        r"\b(?:const|let|var)\s+(\w+)\s*=\s*document\.getElementById\(\s*[\"']([\w-]+)[\"']\s*\)",
+        js,
+    ):
+        dom_var, el_id = m.group(1), m.group(2)
+        if not _COUNTER_NAME_RE.search(el_id):
+            continue
+        writes = re.findall(
+            rf"\b{re.escape(dom_var)}\.(?:textContent|innerText|innerHTML)\s*=\s*([^;\n]+)",
+            js,
+        )
+        if not writes:
+            continue  # jamais écrit directement → d'autres mécanismes possibles, on ne conclut pas
+        # Run #18 : un mot DANS le littéral ('Comparaisons: 0') n'est PAS un
+        # identifiant — on ne strip que les quotes simples/doubles (les
+        # backticks restent : `${var}` est une écriture dynamique légitime).
+        has_dynamic_write = any(
+            "${" in w or re.search(r"\b[A-Za-z_$][\w$]*\b", _strip_quotes(w))
+            for w in writes
+        )
+        if not has_dynamic_write:
+            errors.append(
+                f"[behavior] Compteur '{el_id}' (élément #{el_id}) écrit UNIQUEMENT avec des "
+                f"littéraux constants ({len(writes)} écriture(s), ex : `{dom_var}.textContent = '…'`) : "
+                f"la valeur du compteur n'est JAMAIS affichée dynamiquement. Crée une variable compteur, "
+                f"incrémente-la dans la boucle et affiche-la à chaque étape "
+                f"(ex : `{dom_var}.textContent = \\`Comparaisons : ${{{el_id.replace('-', '_')}Count}}\\``) "
+                f"(runs #17/#18 : compteur figé pour toujours)."
             )
 
     # --- (b) animation instantanée ---
@@ -594,10 +643,13 @@ def _evaluate_visibility(
         navigate(**nav_kwargs)
 
         # Étape 7 + étape 6 COMBINÉES en UN seul evaluate_script synchrone :
-        # on déclenche l'action primaire (clic) PUIS on probe la visibilité, dans
-        # le même appel. C'est plus fiable qu'un clic séparé (le handler peut
-        # être async, le probe séparé peut s'exécuter avant la mise à jour du DOM).
-        # Sans ça, le bug des barres invisibles (créées au clic) est indétectable.
+        # on mesure AVANT l'action (état au CHARGEMENT), on déclenche l'action
+        # primaire (clic) PUIS on re-probe la visibilité, dans le même appel.
+        # C'est plus fiable qu'un clic séparé (le handler peut être async, le
+        # probe séparé peut s'exécuter avant la mise à jour du DOM). Sans ça,
+        # le bug des barres invisibles (créées au clic) est indétectable.
+        # Run #15 : la mesure PRE-clic attrape le « conteneur vide au
+        # chargement » (critère F-82 n°1) que l'auto-audit du Coder coche à tort.
         # NB : chrome-devtools-mcp evaluate_script attend une DÉCLARATION de
         # fonction (qu'il exécute lui-même), PAS une IIFE `(() => {...})()`.
         sel_list = ", ".join(f"'{s}'" for s in selectors)
@@ -615,8 +667,21 @@ def _evaluate_visibility(
                 f" await new Promise(r => setTimeout(r, 150));"
             )
         js_probe = (
-            "async () => {" + click_clause +
+            "async () => {"
+            # Phase 1 — état AU CHARGEMENT (avant toute interaction) : pour chaque
+            # sélecteur, combien d'éléments existent et combien sont visibles
+            # (hauteur > 6px ; le run #15 posait height:0 + min-height:4px).
             "  const sels = [" + sel_list + "];"
+            "  const snap = () => { const o = [];"
+            "    for (const sel of sels) {"
+            "      const els = document.querySelectorAll(sel);"
+            "      let vis = 0;"
+            "      for (const el of els) { if (el.getBoundingClientRect().height > 6) vis++; }"
+            "      o.push({sel, count: els.length, visible: vis});"
+            "    } return o; };"
+            "  const before = snap();"
+            + click_clause +
+            # Phase 2 — après l'action primaire : visibilité fine + barres plates.
             "  const out = [];"
             "  for (const sel of sels) {"
             "    const els = document.querySelectorAll(sel);"
@@ -629,22 +694,69 @@ def _evaluate_visibility(
             # le CSS le masque explicitement (display:none / visibility:hidden).
             # On NE flag PAS sur width==0 seul : en flexbox, un enfant sans
             # flex-basis est réduit à width=0 bien qu'affiché (faux positif).
+            # Run #13 (F-124) : un `background: linear-gradient(…)` vit dans
+            # background-image, PAS dans backgroundColor (qui reste transparent)
+            # → ne flaguer « sans fond » que si l'élément n'a NI couleur NI
+            # image de fond, sinon toute barre à gradient est un faux « INVISIBLE ».
             "    const hidden = (r.height === 0 "
             "                     || cs.display === 'none' || cs.visibility === 'hidden' "
             "                     || cs.opacity === '0' "
-            "                     || (first.innerText.trim() === '' && cs.backgroundColor === 'rgba(0, 0, 0, 0)' && !['img','svg','canvas'].includes(first.tagName.toLowerCase())));"
-            "    out.push({sel, count: els.length, h: r.height, hidden});"
+            "                     || (first.innerText.trim() === '' && cs.backgroundColor === 'rgba(0, 0, 0, 0)' && cs.backgroundImage === 'none' && !['img','svg','canvas'].includes(first.tagName.toLowerCase())));"
+            # Run #14 (barres plates, F-124) : si le JS crée ≥10 éléments pour ce
+            # sélecteur (barres de visualiseur), on mesure la DISTRIBUTION des
+            # hauteurs. Signature du bug flex-direction:column + flex:1 : toutes
+            # les hauteurs quasi égales (flex-basis écrase style.height) ET
+            # pleine largeur (bandes horizontales au lieu de barres verticales).
+            "    let flat = false;"
+            "    if (els.length >= 10) {"
+            "      let minH = Infinity, maxH = 0;"
+            "      for (const el of els) { const h = el.getBoundingClientRect().height;"
+            "        if (h < minH) minH = h; if (h > maxH) maxH = h; }"
+            "      const pw = (first.parentElement || document.body).getBoundingClientRect().width;"
+            "      flat = (maxH - minH) <= Math.max(1, maxH * 0.1) && r.width >= pw * 0.8;"
+            "    }"
+            "    out.push({sel, count: els.length, h: r.height, hidden, flat});"
             "  }"
-            "  return JSON.stringify(out);"
+            "  return JSON.stringify({before: before, after: out});"
             "}"
         )
         raw = _eval(js_probe)
         # Le retour chrome-devtools-mcp est wrappé + parfois doublement échappé :
         # 'Script ran on page and returned:\n```json\n"[...échappé...]"\n```'
         # On extrait le JSON de façon robuste (plusieurs passes de déséchappement).
-        result_list = _parse_devtools_json(raw)
+        result = _parse_devtools_json(raw)
+        # Format v2 (run #15) : {before: [...], after: [...]} ; repli : liste
+        # plate = ancien format (robustesse si Chrome tronque le wrapper).
+        if isinstance(result, dict):
+            before_list = result.get("before") or []
+            result_list = result.get("after") or []
+        elif isinstance(result, list):
+            before_list = []
+            result_list = result
+        else:
+            before_list, result_list = [], []
 
         errors: List[str] = []
+        # Run #15 (conteneur vide au chargement, critère F-82 n°1) : les éléments
+        # de DONNÉES existent au chargement mais AUCUN n'est visible (height ≤ 6px
+        # — ex : createBars() pose height:0, les vraies hauteurs ne viennent qu'au
+        # clic Start). On ne cible QUE les sélecteurs à contexte barres/chart
+        # (≥5 éléments = un dataset) pour ne pas flagguer une modale/tooltip
+        # légitimement cachée avant interaction.
+        for item in before_list:
+            if not isinstance(item, dict):
+                continue
+            sel = str(item.get("sel", ""))
+            count0 = item.get("count", 0)
+            visible0 = item.get("visible", 0)
+            if count0 >= 5 and visible0 == 0 and _LOAD_CONTEXT_RE.search(sel):
+                errors.append(
+                    f"[CHARGEMENT] {count0} éléments \"{sel}\" présents au chargement mais "
+                    f"AUCUN visible (hauteurs ≤ 6px) : la page paraît VIDE à l'ouverture "
+                    f"(critère F-82 : ≥1 barre visible au chargement — run #15 : createBars() "
+                    f"posait height:0). Correction : pose la hauteur/style de chaque barre "
+                    f"DÈS sa création, pas seulement au démarrage de l'action."
+                )
         for item in result_list:
             if not isinstance(item, dict):
                 continue
@@ -655,10 +767,22 @@ def _evaluate_visibility(
                 h = item.get("h", 0)
                 errors.append(
                     f"[DOM] {count} élément(s) \"{sel}\" créé(s) par le JS mais "
-                    f"INVISIBLE(s) (height={h}, display:none, visibility:hidden, opacity:0, ou background transparent sans texte). "
+                    f"INVISIBLE(s) (height={h}, display:none, visibility:hidden, opacity:0, ou aucun fond (ni couleur ni image) sans texte). "
                     f"Bug CSS probable : `height` en pourcentage sur conteneur "
                     f"sans `height` explicite, élément en `position:absolute` hors écran, "
                     f"ou perte de classe CSS de couleur (ex: élément devenu transparent). Vérifie le CSS et le Javascript (classList)."
+                )
+            # Run #14 (barres plates, F-124) : ≥10 éléments aux hauteurs quasi
+            # toutes égales ET pleine largeur = flex-basis:0 écrase style.height
+            # (flex-direction:column + flex:1). Le livrable est « visible » mais
+            # géométriquement FAUX (bandes plates au lieu de barres verticales).
+            if count >= 10 and item.get("flat", False):
+                errors.append(
+                    f"[DOM] {count} éléments \"{sel}\" quasi IDENTIQUES (hauteurs égales, pleine largeur) : "
+                    f"la hauteur proportionnelle des données est ÉCRASÉE. Bug de géométrie typique : "
+                    f"conteneur `flex-direction:column` + `flex:1` sur les enfants (flex-basis:0 écrase "
+                    f"style.height — run #14). Correction : conteneur `display:flex` (ROW) + "
+                    f"`align-items:flex-end` + hauteur px/% inline par barre."
                 )
         return errors
     except Exception as e:
