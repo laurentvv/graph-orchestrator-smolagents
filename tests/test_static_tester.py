@@ -421,6 +421,38 @@ def test_behavioral_compteur_dynamique_element_non_flagge():
     assert not any("littéraux constants" in e for e in _check_behavioral_smells(js))
 
 
+def test_behavioral_compteur_litteral_avec_mot_run18():
+    """Run #18 : le littéral contenait un MOT ('Comparaisons: 0') que la 1re
+    version du (a-bis) prenait pour un identifiant → non flaggué à tort. Les
+    identifiants doivent être cherchés HORS des littéraux de chaîne."""
+    js = RUN17_STATIC_COUNTER_JS.replace(
+        "counter.textContent = '0';",
+        "counter.textContent = 'Comparaisons: 0';",
+    )
+    errors = _check_behavioral_smells(js)
+    assert any("littéraux constants" in e for e in errors), (
+        f"compteur littéral avec mot dedans (run #18) non détecté : {errors}"
+    )
+
+
+def test_behavioral_compteur_concatene_variable_run18bis():
+    """Anti-FP : concaténation AVEC la variable compteur (`'Comparaisons: ' +
+    comparisonCount`) = écriture dynamique légitime → (a-bis) ne flaggue pas ;
+    si la variable n'est jamais incrémentée, c'est le check (a) élargi qui
+    doit tirer (affichage détecté via identifiant hors littéraux)."""
+    js = RUN17_STATIC_COUNTER_JS.replace(
+        "counter.textContent = '0';",
+        "counter.textContent = 'Comparaisons: ' + comparisonCount;",
+    )
+    errs = _check_behavioral_smells(js)
+    assert not any("littéraux constants" in e for e in errs), (
+        f"concaténation avec variable = écriture dynamique, pas un littéral : {errs}"
+    )
+    assert any("comparisonCount" in e and "JAMAIS incrémenté" in e for e in errs), (
+        f"la variable affichée mais jamais incrémentée doit être flagguée par (a) : {errs}"
+    )
+
+
 def test_behavioral_template_literal_counter():
     js = "let swaps = 0;\nel.innerHTML = `Swaps: ${swaps}`;\nloop();"
     errors = _check_behavioral_smells(js)

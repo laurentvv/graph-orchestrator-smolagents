@@ -327,12 +327,20 @@ def _check_behavioral_smells(js: str) -> List[str]:
         return errors
 
     # --- (a) compteur mort ---
+    # Run #18 : élargissement — l'affichage peut être une CONCATÉNATION
+    # (`textContent = 'Comparaisons: ' + comparisonCount`) que l'ancienne regex
+    # (stopée au premier guillemet) ne voyait pas. On collecte tout identifiant
+    # compteur présent dans la valeur d'écriture HORS littéraux de chaîne.
+    def _strip_quotes(expr: str) -> str:
+        return re.sub(r"'(?:\\.|[^'\\])*'|\"(?:\\.|[^\"\\])*\"", "", expr)
+
     displayed: set = set()
     for m in re.finditer(
-        r"(?:textContent|innerText|innerHTML)\s*=\s*[`\"']?[^`\"';]*?\b([A-Za-z_$][\w$]*)\b", js
+        r"(?:textContent|innerText|innerHTML)\s*=\s*([^;\n]+)", js
     ):
-        if _COUNTER_NAME_RE.search(m.group(1)):
-            displayed.add(m.group(1))
+        for nm in re.finditer(r"\b([A-Za-z_$][\w$]*)\b", _strip_quotes(m.group(1))):
+            if _COUNTER_NAME_RE.search(nm.group(1)):
+                displayed.add(nm.group(1))
     for m in re.finditer(r"\$\{\s*([A-Za-z_$][\w$]*)\s*\}", js):
         if _COUNTER_NAME_RE.search(m.group(1)):
             displayed.add(m.group(1))
@@ -369,16 +377,21 @@ def _check_behavioral_smells(js: str) -> List[str]:
         )
         if not writes:
             continue  # jamais écrit directement → d'autres mécanismes possibles, on ne conclut pas
+        # Run #18 : un mot DANS le littéral ('Comparaisons: 0') n'est PAS un
+        # identifiant — on ne strip que les quotes simples/doubles (les
+        # backticks restent : `${var}` est une écriture dynamique légitime).
         has_dynamic_write = any(
-            "${" in w or re.search(r"\b[A-Za-z_$][\w$]*\b", w) for w in writes
+            "${" in w or re.search(r"\b[A-Za-z_$][\w$]*\b", _strip_quotes(w))
+            for w in writes
         )
         if not has_dynamic_write:
             errors.append(
                 f"[behavior] Compteur '{el_id}' (élément #{el_id}) écrit UNIQUEMENT avec des "
                 f"littéraux constants ({len(writes)} écriture(s), ex : `{dom_var}.textContent = '…'`) : "
-                f"la valeur du compteur n'est JAMAIS affichée dynamiquement. Affiche-la à chaque étape "
-                f"(ex : `{dom_var}.textContent = \\`${{comparisonCount}}\\``) ET incrémente la variable "
-                f"compteur dans la boucle (run #17 : compteur figé à 0 pour toujours)."
+                f"la valeur du compteur n'est JAMAIS affichée dynamiquement. Crée une variable compteur, "
+                f"incrémente-la dans la boucle et affiche-la à chaque étape "
+                f"(ex : `{dom_var}.textContent = \\`Comparaisons : ${{{el_id.replace('-', '_')}Count}}\\``) "
+                f"(runs #17/#18 : compteur figé pour toujours)."
             )
 
     # --- (b) animation instantanée ---
