@@ -1,5 +1,25 @@
 # Post-mortem Run #13 — Validation E2E F-120 (plan.md + task.md)
 
+> **ÉPILOGUE (mêne journée) — dénouement complet en 3 runs** :
+> - **#13** (11:30) : échec 0/2 — faux positif gradient (fix P0, commit f801716)
+>   + thrash TS-01 (cap steps 40→30) ; F-120 validé.
+> - **#14** (16:20, fixes actifs) : **2/2 APPROUVÉES, code OK** (TS-01 it2 :
+>   correction chirurgicale du compteur F-110 ; TS-02 it1 ; 35 min, 1,07 M
+>   tokens ; 0 faux positif gradient). MAIS validation visuelle humaine :
+>   50 bandes plates de 4px pleine largeur — le DRAFT de l'Architect
+>   prescrivait `#viz{flex-direction:column}+.bar{flex:1}` (flex-basis écrase
+>   style.height, bug exact documenté F-124) et le 4B suit le draft contre le
+>   skill ; auto-approuvé par le rituel visuel. Fixes 3 étages (commit b01fee4) :
+>   draft_gate `flex_column_bars` (REJECT), règle géométrie prompt Architect,
+>   sonde Tier 2 « barres plates » (preuve live flat_DETECTE=true sur le
+>   livrable #14).
+> - **#15** (17:17) : **SUCCÈS COMPLET — code OK + graphique OK** : 1/1
+>   approuvé en PREMIÈRE itération (24 min, 429k tokens, record). Draft sain
+>   (#chart flex-end ROW — Fix B suivi). Validation visuelle chrome-devtools :
+>   30 barres verticales proportionnelles (hauteurs inline 5,6→182px
+>   variées), gradient turquoise→violet (backgroundImage — accepté à juste
+>   titre par la sonde corrigée P0), 30/30 triées, compteur 225, thème sombre.
+
 **Run** : `coding_d72dc8e36445c6` (run_id identique aux runs #10-#12, même hash de tâche)
 `bubble_sort_multifile_v6` — `runs/2026-08-18_1130_bubble_sort_multifile_v6/`
 **Date** : 2026-08-18 11:30 → ~12:58 (TS-01) puis 13:03 → 13:50 (TS-02). Wall ~80 min.

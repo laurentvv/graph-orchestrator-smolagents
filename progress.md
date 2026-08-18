@@ -46,6 +46,27 @@
 - [x] F120-8 : Fix Goal post-run #13 — `derive_goal` extrait la section
   `## Objective` de la spec F-115 (miroir parseur requirements_checklist F-51,
   rétrocompat `## Objectif`, repli texte brut) ; +5 tests → **28/28 PASS**.
+- [x] F120-9 : **Session debug exigée user (« run final sans erreur et
+  fonctionnel ») — 3 runs E2E le même jour** : #13 échec (faux positif
+  gradient + thrash), #14 2/2 APPROUVÉES mais barres PLATES (géométrie du
+  DRAFT column+flex:1, auto-approuvée par le rituel visuel), #15 **SUCCÈS
+  COMPLET**. Fixes empilés : P0 sonde Tier 2 `backgroundImage` (preuve live
+  livrable #13 : hidden AVANT=true/APRÈS=false) + print d'arrêt llama +
+  CODER_MAX_STEPS 40→30 (f801716) ; puis 3 étages géométrie — draft_gate
+  `flex_column_bars` REJECT, règle flex ROW prompt Architect (F-124 bis),
+  sonde Tier 2 barres plates (preuve live #14 : flat_DETECTE=true) (b01fee4).
+- [x] F120-10 : **Run #15 (2026-08-18_1717) = run final SANS ERREUR et
+  FONCTIONNEL** : 1/1 approuvé itération 1 (24 min, 429k tokens, record),
+  livrable 3 fichiers validé visuellement par chrome-devtools — 30 barres
+  verticales proportionnelles (5,6→182px inline), gradient turquoise→violet,
+  30/30 triées, compteur 225, dark theme. Post-mortem complet (épilogue
+  #13→#15) : `debug/POSTMORTEM_RUN13.md`.
+- [x] F120-11 : Suite complète post-fixes (basetemp dédié) — **1543 passed /
+  0 failed / 5 skipped** (les 5 skips = tests live Tier 2 sans Chrome dans
+  l'env pytest, documentés ; flaky minute-boundary PASSÉ cette exécution) →
+  0 régression. Contract C446-C448 ajoutés. Cycle F-120 CLOS : PR #97
+  contient feature + fixes de validation (F-120, F-49 sonde, F-91 gate,
+  F-124-bis géométrie).
 
 ## Jalons de l'Itération (cycle F-122 — ULTRA restreint à l'itération ≥ 3)
 > Décision utilisateur (proposition 2 du post-mortem run #10). Réactive
