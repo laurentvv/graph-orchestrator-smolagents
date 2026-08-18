@@ -1,0 +1,32 @@
+[34m0.00.202.224[0m [32mI [0mcmn  common_param: common_params_print_info: verbosity = 3 (adjust with the `-lv N` CLI arg)
+[34m0.00.257.629[0m [35mW srv  llama_server: -----------------
+[0m[34m0.00.257.636[0m [35mW srv  llama_server: CORS is set to allow all origins ('*') and no API key is set
+[0m[34m0.00.257.636[0m [35mW srv  llama_server: this can be a security risk (cross-origin attacks)
+[0m[34m0.00.257.637[0m [35mW srv  llama_server: more info: https://github.com/ggml-org/llama.cpp/pull/25655
+[0m[34m0.00.257.637[0m [35mW srv  llama_server: -----------------
+[0m[34m0.00.261.181[0m [32mI [0msrv    load_model: loading model 'D:\GIT\graph-orchestrator-smolagents\models\qwen35-4b-mtp\Qwen3.5-4B-Q4_K_M.gguf'
+[34m0.03.884.219[0m [35mW model has unused tensor blk.32.attn_norm.weight (size = 10240 bytes) -- ignoring
+[0m[34m0.03.884.233[0m [35mW model has unused tensor blk.32.post_attention_norm.weight (size = 10240 bytes) -- ignoring
+[0m[34m0.03.884.251[0m [35mW model has unused tensor blk.32.attn_q.weight (size = 11796480 bytes) -- ignoring
+[0m[34m0.03.884.257[0m [35mW model has unused tensor blk.32.attn_k.weight (size = 1474560 bytes) -- ignoring
+[0m[34m0.03.884.263[0m [35mW model has unused tensor blk.32.attn_v.weight (size = 2150400 bytes) -- ignoring
+[0m[34m0.03.884.284[0m [35mW model has unused tensor blk.32.attn_output.weight (size = 5898240 bytes) -- ignoring
+[0m[34m0.03.884.290[0m [35mW model has unused tensor blk.32.attn_q_norm.weight (size = 1024 bytes) -- ignoring
+[0m[34m0.03.884.296[0m [35mW model has unused tensor blk.32.attn_k_norm.weight (size = 1024 bytes) -- ignoring
+[0m[34m0.03.884.302[0m [35mW model has unused tensor blk.32.ffn_gate.weight (size = 13271040 bytes) -- ignoring
+[0m[34m0.03.884.309[0m [35mW model has unused tensor blk.32.ffn_down.weight (size = 19353600 bytes) -- ignoring
+[0m[34m0.03.884.315[0m [35mW model has unused tensor blk.32.ffn_up.weight (size = 13271040 bytes) -- ignoring
+[0m[34m0.03.884.322[0m [35mW model has unused tensor blk.32.nextn.eh_proj.weight (size = 13926400 bytes) -- ignoring
+[0m[34m0.03.884.329[0m [35mW model has unused tensor blk.32.nextn.enorm.weight (size = 10240 bytes) -- ignoring
+[0m[34m0.03.884.335[0m [35mW model has unused tensor blk.32.nextn.hnorm.weight (size = 10240 bytes) -- ignoring
+[0m[34m0.03.884.354[0m [35mW model has unused tensor blk.32.nextn.shared_head_norm.weight (size = 10240 bytes) -- ignoring
+[0m[34m0.04.980.792[0m [32mI [0mcmn          init: llama threadpool init, n_threads = 14
+[34m0.05.418.012[0m [35mW load_hparams: Qwen-VL models require at minimum 1024 image tokens to function correctly on grounding tasks
+[0m[34m0.05.418.020[0m [35mW load_hparams: if you encounter problems with accuracy, try adding --image-min-tokens 1024
+[0m[34m0.05.418.020[0m [35mW load_hparams: more info: https://github.com/ggml-org/llama.cpp/issues/16842
+
+[0m[34m0.06.019.136[0m [32mI [0msrv    load_model: loaded multimodal model, 'D:\GIT\graph-orchestrator-smolagents\models\qwen35-4b-mtp\mmproj-F16.gguf'
+[34m0.06.019.146[0m [35mW srv    load_model: cache_reuse is not supported by multimodal, it will be disabled
+[0m[34m0.06.193.832[0m [32mI [0msrv    load_model: initializing, n_slots = 1, n_ctx_slot = 49152, kv_unified = 'false'
+[34m0.06.203.822[0m [32mI [0msrv  llama_server: model loaded
+[34m0.06.203.835[0m [32mI [0msrv  llama_server: listening on http://127.0.0.1:58489
