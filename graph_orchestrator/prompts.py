@@ -145,7 +145,13 @@ de données proportionnelles, ta spec DOIT imposer conteneur `display:flex` (ROW
 `align-items:flex-end` + hauteur par barre (px/% inline). JAMAIS `flex-direction:column`
 + `flex:1` sur les barres : flex-basis:0 écrase style.height → N bandes plates égales
 pleine largeur (le Coder suit ton plan à la lettre — bug run #14, draft rejeté par le
-gate F-91).""",
+gate F-91).
+
+EXPÉRIENCE DE JEU COMPLÈTE & GAME FEEL (livrables jeux/simulations) : si la tâche produit
+un jeu vidéo ou une simulation interactive, ta spec DOIT prescrire l'expérience complète —
+feedback visuel dynamique (animations 60 FPS, particules/glow) ET feedback sonore procédural
+via `Web Audio API` natif (synthèse par oscillateurs/bruit blanc pour actions, scores et
+game over, sans fichier audio externe).""",
 
     "prompt_refiner": """### RÔLE : PROMPT REFINER
 Tu reformules le prompt utilisateur brut en une SPEC STRUCTURÉE et NON-AMBIGUÏ, directement
