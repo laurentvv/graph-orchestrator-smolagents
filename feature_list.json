@@ -135,8 +135,8 @@
     {
       "id": "F-18",
       "name": "Nœud dédié recherche web",
-      "description": "PISTE : évaluer un nœud dédié (recherche pré-architecte) vs DuckDuckGoSearchTool injecté actuellement. À évaluer.",
-      "status": "pending",
+      "description": "[ANNULÉ 2026-08-18, décision user — grooming backlog : seuls 3 chantiers réels conservés (F-116+86, F-119, F-87+96)] Nœud recherche web inutile : cahiers des charges Prompt-Vault autonomes (vanilla), Context7 couvre déjà les libs externes.",
+      "status": "cancelled",
       "dependencies": []
     },
     {
@@ -201,8 +201,8 @@
     {
       "id": "F-25",
       "name": "Générateur de Repo Map (Tree-sitter)",
-      "description": "Parser le code source et injecter l'arborescence structurelle dans le prompt Architect.",
-      "status": "pending",
+      "description": "[ANNULÉ 2026-08-18, décision user — grooming backlog : seuls 3 chantiers réels conservés (F-116+86, F-119, F-87+96)] Repo Map tree-sitter inutile : livrables de 1-3 fichiers, l'exploration de grosses codebases n'est pas notre usage.",
+      "status": "cancelled",
       "dependencies": []
     },
     {
@@ -292,8 +292,8 @@
     {
       "id": "F-34",
       "name": "Nœud d'Audit Dette Technique (python-health-audit)",
-      "description": "Cycle futur (APRÈS P1-P3, hors périmètre de finalisation). Intégration du projet de l'utilisateur (github.com/laurentvv/python-health-audit) comme nœud d'audit qualité LOURD en FIN de workflow — à ne PAS confondre avec le Linter (F-30) qui est un gatekeeper léger dans la boucle chaude. python-health-audit (via uvx : Ruff + Vulture + Radon + Pylint) détecte la DETTE TECHNIQUE (code mort, complexité cyclomatique, duplication, maintainability index) et sort un rapport Markdown avec grade A-F. DIFFÉRENCES clés vs F-30 Linter : (1) usage = audit complet de projet sur demande, pas gatekeeper à chaque itération; (2) latence = uvx télécharge/install Ruff/Vulture/Radon/Pylint à chaque run (lourd, incompatible avec boucle chaude); (3) périmètre = Python seulement (vs Linter multi-langue tree-sitter); (4) ne détecte PAS les erreurs de syntaxe (son créneau = maintenabilité). POSITIONNEMENT dans le workflow : après le Judge (nœud optionnel d'audit final), OU invoqué via skill séparé par l'utilisateur. Ne PAS intégrer dans le cycle P1-P3 (garder le scope maîtrisé).",
-      "status": "pending",
+      "description": "[ANNULÉ 2026-08-18, décision user — grooming backlog : seuls 3 chantiers réels conservés (F-116+86, F-119, F-87+96)] Audit dette technique sans objet : livrables jetables régénérés à chaque run — la dette n'existe pas.",
+      "status": "cancelled",
       "dependencies": [
         "F-30"
       ]
@@ -504,8 +504,8 @@
     {
       "id": "F-61",
       "name": "Amélioration Continue automatisée (Self-Learning)",
-      "description": "Implémentation d'une boucle de feedback exploitant les rapports générés par `run_analyzer.py`. L'objectif est d'utiliser ces données pour ajuster dynamiquement les prompts des agents (nodes.py, SKILLS) et ainsi éviter les erreurs récurrentes (comme InterpreterError) lors des exécutions futures. Itération 1 (post-mortem run 123955) : 3 bugs (Security fail-open fail-closed, Tester click forbidden allowlist DevTools, Coder } au lieu de ) règle prompt n°8). Itération 2 (post-mortem run coding_d72dc8e36445c4b6 du 2026-08-06, F-70 non impliqué) : 3 failure modes Coder récurrents diagnostiqués via run_analyzer.py et corrigés — (1) Guard anti-`}` fermant ; (2) CODER_MAX_STEPS configurable (défaut 18, avant 25 hardcoded) ; (3) Circuit-breaker idle consécutifs (idle_breaker_threshold défaut 3). 8 tests test_coder_hardening.py. Itération 3 (post-mortem run coding_d72dc8e36445c4b6 E2E du 2026-08-06 20:16, verdict failure) : bug logiciel `run_with_retry` lignes 296-297 `if loop_msg: pass` — le LoopGuard (F-36) comptabilisait comme 'répétition' l'itération de correction légitime (write_file/search_replace rejoués après relecture F-67), puis le bloc `if validated:` jettait silencieusement un final_answer valide (status:success) → verdict failure alors que les 3 fichiers étaient bons. Fix : un `validated` réussi prime TOUJOURS sur `loop_msg` ; loop_msg ne guide le retry QUE quand validated is None. Test `test_valid_final_answer_wins_over_loop_guard` (test_coder_hardening.py). Suite pytest 674 passed (+1) / 26 échecs préexistants identiques (git stash), 0 régression. La boucle est opérationnelle mais itérative (statut in_progress). Itération 4 (post-mortem run E2E partiel 1h30 du 2026-08-13, interrompu trop long) : diagnostic via run_analyzer.py — 17,4M tokens input (vs 7,5M run9 complet), 111 steps, 4 restarts Tester, 6 crashes Pydantic→sauvetage DSPy→Connection error. DIAGNOSTIC CORRIGÉ : P2 'compaction screenshots' était DÉJÀ implémenté (apply_image_purge, compaction.py:22, appelé inconditionnellement dans write_memory_to_messages — grep initial l'avait manqué). Vraie cause des 5 retries Tester : _tester_max_steps_fallback (nodes.py:189) retournait None en l'absence de signal PASS/FAIL → retry complet du Tester qui re-thrash (import os, navigation sans assertion) → None → retry ×5 (le sauvetage DSPy Connection error est un symptôme secondaire, il rend None proprement). Fix P1 (scope approuvé 'robustesse extraction verdict Tester') : (1) _tester_max_steps_fallback ne retourne PLUS None — verdict failure 'Tester n'a pas convergé' par défaut (tue la boucle : un run max_steps sans conclusion est lui-même un signal) ; (2) extract_and_validate (models.py) tronque le broken_text du sauvetage à 6000 chars (défensif anti Connection error sur payload énorme). P2 rien (déjà fait). P3 droppé (snip threshold irrelevant à max_steps=8). 5 tests TestTesterMaxStepsFallback PASS (dont 1 mis à jour). Suite 902 passed / 8 failed pré-existants (test_read_gate ×4 + test_skill_lazy_loading ×3-4, confirmés strictement identiques via git stash, documentés F-82). 0 régression.",
-      "status": "in_progress",
+      "description": "[CLÔS 2026-08-18, décision user] Rôle PERMANENT établi, pas un chantier ponctuel : la boucle hybride Humain+IA de l'AGENTS.md §8 est documentée et a tourné À CHAUD toute la journée du 2026-08-18 (7 runs E2E, chaque défaut → garde déterministe ou consigne amont, jusqu'au livrable parfait run #19). Le processus vit dans AGENTS.md + les post-mortems, pas dans du code à finir.",
+      "status": "completed",
       "dependencies": [
         "F-60"
       ]
@@ -613,8 +613,8 @@
     {
       "id": "F-74",
       "name": "Historisation Multi-BDD DuckDB et Nettoyage des Logs",
-      "description": "Validation de la Priorité 11 (Event Stream). Bases DuckDB dédiées (event_stream.duckdb existe, runs_history.duckdb prévue) pour isoler les statistiques et suivre la consommation des tokens. PARTIE JOURNAL PLAT CLOSE (F-106, 2026-08-14) : fichier supprimé, historique complet (199 événements datés) récupéré depuis git dans event_stream.duckdb, CLI assistant scripts/log_event.py ouvert. RESTE : instrumentation runtime automatique (workflows → event stream / runs_history pour tokens+durées) et routine de rétention.",
-      "status": "pending",
+      "description": "[ANNULÉ 2026-08-18, décision user — grooming backlog : seuls 3 chantiers réels conservés (F-116+86, F-119, F-87+96)] Multi-BDD sur-ingénierie : la base DuckDB unique fonctionne, la rétention runs/KG existe déjà.",
+      "status": "cancelled",
       "dependencies": []
     },
     {
@@ -636,8 +636,8 @@
     {
       "id": "F-77",
       "name": "Traçabilité des forks de sessions (Fork Origin)",
-      "description": "Enregistrer l'origine d'un run lorsqu'il est bifurqué d'un point précédent (checkpoint), pour conserver l'arbre d'héritage et afficher l'historique complet.",
-      "status": "pending",
+      "description": "[ANNULÉ 2026-08-18, décision user — grooming backlog : seuls 3 chantiers réels conservés (F-116+86, F-119, F-87+96)] Traçabilité forks : pas de forks dans l'usage réel (runs séquentiels mono-GPU) — famille multi-session abandonnée.",
+      "status": "cancelled",
       "dependencies": [
         "F-24"
       ]
@@ -645,15 +645,15 @@
     {
       "id": "F-78",
       "name": "Validation Event Sourcing (Reducer JSONL)",
-      "description": "Ajout d'un validateur (reducer) pour détecter les corruptions dans l'event stream (ex: double ouverture d'opération, ou enregistrement après clôture) inspiré du projet pi.",
-      "status": "pending",
+      "description": "[ANNULÉ 2026-08-18, décision user — grooming backlog : seuls 3 chantiers réels conservés (F-116+86, F-119, F-87+96)] Event sourcing reducer : même famille multi-session que F-77/F-121, aucune douleur réelle.",
+      "status": "cancelled",
       "dependencies": []
     },
     {
       "id": "F-79",
       "name": "Règles de Frontière de Phase",
-      "description": "Formaliser les Phase Boundaries pour déclencher la compaction de contexte au bon moment (ex: après réflexion, avant l'implémentation), évitant la perte d'informations critiques.",
-      "status": "pending",
+      "description": "[ANNULÉ 2026-08-18, décision user — grooming backlog : seuls 3 chantiers réels conservés (F-116+86, F-119, F-87+96)] Règles frontière de phase : flou, aucune douleur ressentie en 19 runs E2E.",
+      "status": "cancelled",
       "dependencies": []
     },
     {
@@ -708,14 +708,14 @@
     {
       "id": "F-86",
       "name": "Context-offload LLM sémantique (résumé scoré + cognitive tombstones)",
-      "description": "Sous-section P9 du plan usine logicielle (audit fiche 28-TencentDB-Agent-Memory, 2026-08-07). Notre compaction.py actuelle est DÉTERMINISTE et 0 LLM (snip/micro/budget) — c'est sa force (coût nul) mais sa limite (pas de sémantique, perte d'information sur les runs longs). TencentDB propose un COMPLÉMENT sémantique opt-in en 3 prompts pour les runs longs (fan-out multi-sous-tâches) où la troncature déterministe sature : (1) L1 summarization — chaque paire tool-call + tool-result devient un résumé JSON SCORÉ 0-10 (3-step : alignement tâche / filtrage de valeur / impact) qui décide si le résumé peut remplacer l'original ; (2) L1.5 gatekeeper de cycle de tâche — détecte taskCompleted/isLongTask/isContinuation/continuationMmdFile pour savoir quand on change de tâche ; (3) L2 graphe Mermaid — machine à états cognitive ≤4000 chars avec COGNITIVE TOMBSTONES (status: blocked pour les culs-de-sac, au lieu de les tronquer silencieusement et perdre l'apprentissage d'échec) + node_mapping exhaustif (1 tool_call = 1 nœud). Doctrine d'intégration : OPT-IN sur runs longs seulement, garder la compaction 0-LLM par défaut (ne pas régresser le coût). Référence : references/TencentDB-Agent-Memory/MemoryCore/src/offload/local-llm/prompts/l1-prompt.ts + l15-prompt.ts + l2-prompt.ts (jumeau offload_server/prompts/ quasi-identique). Priorité : MOYENNE (le P9 actuel marche ; c'est un enrichissement conditionnel pour runs longs).",
-      "status": "pending",
+      "description": "[FUSIONNÉ dans F-116 2026-08-18, décision user] Même problématique que F-116 — le périmètre est repris dans sa description. Sous-section P9 du plan usine logicielle (audit fiche 28-TencentDB-Agent-Memory, 2026-08-07). Notre compaction.py actuelle est DÉTERMINISTE et 0 LLM (snip/micro/budget) — c'est sa force (coût nul) mai",
+      "status": "cancelled",
       "dependencies": []
     },
     {
       "id": "F-87",
       "name": "Skill Review Gate (classification 5-critères + acceptation 4-dim/100pts)",
-      "description": "Sous-section P10 du plan usine logicielle (audit fiche 28-TencentDB-Agent-Memory, 2026-08-07). Va AU-DELÀ de l'isolation de rôle <<past-user>> déjà captée (P10 ligne Extraction de Skills) : quand on générera/validera des skills (F-65 ingestion pépites prompts, F-80 sélection Architect), objectiver l'acceptation via une gate formelle en 2 étages : (1) CLASSIFICATION 5-critères — l'artefact est-il une Skill, une Memory, une page Wiki, un nœud CodeGraph, ou du contexte temporaire ? (évite de stocker comme skill ce qui devrait être un fait mémoire — failure mode classique) ; (2) GATE D'ACCEPTATION 4-dimensions / 100 points avec seuils ≥72 total ET ≥12 par dimension (empêche une dimension faible compensée par les autres). Le prompt impose aussi un template SKILL.md canonique (When to use / When not / Required inputs / Workflow / Decision rules / Output format / Validation / Pitfalls) + role-isolation stricte <<past-*>> + contrat de sortie 'Nothing to save.' si rien à faire. Référence : references/TencentDB-Agent-Memory/MemoryCore/src/core/skill/prompts/skill-review-prompt.ts (SKILL_REVIEW_PROMPT). Priorité : MOYENNE (dépend de F-65/F-80 qui sont pending).",
+      "description": "[PÉRIMÈTRE ÉTENDU 2026-08-18 : intègre l'ex-F-96 harnais d'évaluation — décision user] Qualification des skills AVANT run E2E. La journée l'a prouvé : un skill/prompt change tout (frontend-design F-124 → faux positif gradient ; règle flex ROW → run #19 parfait). But : pouvoir tester un changement de skill sans brûler 25 min de run. Skill Review Gate (classification 5-critères + acceptation 4-dim/100pts) + harnais split train/test et robustesse MCP (ex-F-96).",
       "status": "pending",
       "dependencies": []
     },
@@ -766,8 +766,8 @@
     {
       "id": "F-94",
       "name": "Capteur de santé structurelle du code (feedback loop architectural before/after)",
-      "description": "Priorité 6 (P6) / Priorité 15 (P15) du plan usine logicielle (audit fiche 44-sentrux, 2026-08-12). Le Judge actuel ne juge que la conformité au cahier des charges (Spec) et les standards de code (Standards) — il est AVEUGLE à la dégradation architecturale globale : un Coder peut passer le Judge en respectant la spec tout en dégradant la modularité, introduisant des cycles de dépendances, ou augmentant la profondeur de couplage. sentrux (🟢 Haute, mais Rust) calcule 5 métriques racines (modularité, acyclicité, profondeur, égalité, redondance) en un score continu 0-10000 et prend des instantanés avant/après l'intervention de l'agent pour bloquer ou corriger si le score se dégrade. Solution : capteur déterministe (Python, via nos deps existantes libcst F-71 / linter F-30 tree-sitter) qui snapshot 3-5 métriques architecturales avant et après le run Coder, compare, et émet un signal (delta_score) consommable par le Judge (finding automatique si dégradation > seuil) et le Meta-Analyste (P15). Périmètre : initial sur le run courant (dossier runs/) ; pas de KG structural complet (P4 HORS-SCOPE). Référence : references/sentrux/sentrux-core/src/metrics/root_causes.rs + metrics/rules/checks.rs. Priorité : MOYENNE (enrichissement Judge, nécessite de définir les métriques portables Python).",
-      "status": "pending",
+      "description": "[ANNULÉ 2026-08-18, décision user — grooming backlog : seuls 3 chantiers réels conservés (F-116+86, F-119, F-87+96)] Santé structurelle : les livrables sont neufs à chaque run ; la santé de l'USINE est couverte par le méta-analyste (§8).",
+      "status": "cancelled",
       "dependencies": [
         "F-30"
       ]
@@ -785,8 +785,8 @@
     {
       "id": "F-96",
       "name": "Harnais d'évaluation des skills (split train/test + robustesse MCP)",
-      "description": "Priorité 10 (P10) / Priorité 6 (P6) du plan usine logicielle (audit fiche 38-skills Anthropic, 2026-08-12). Nos skills (F-11/F-57/F-80/F-92) sont itérés au jugé — aucun harnais d'évaluation ne mesure objectivement si une modification de SKILL.md améliore ou dégrade le comportement de l'agent. Le dépôt skills officiel d'Anthropic (🟢 Haute) fournit deux harnais concrets en Python : skill-creator/scripts/run_loop.py (split_eval_set — split train/test pour skills agentiques, boucle brouillon/test/évaluation) et mcp-builder/scripts/evaluation.py (harnais de robustesse pour serveurs MCP). Solution : un harnais d'évaluation offline (0 impact sur la boucle chaude) qui (a) fige un jeu de prompts de test (Prompt-Vault Easy/Medium), (b) exécute le Coder/Tester avec et sans une modif de skill (A/B), (c) mesure le delta via les métriques Judge (F-70 judge_metrics.py — precision/recall/MRR) + métriques run_analyzer (F-60 — tokens, durée, steps en erreur). Objective l'itération des skills (F-57 v3 budget tokens, F-92 progressive disclosure, F-82 skill finder). Référence : references/skills/skills/skill-creator/scripts/run_loop.py (split_eval_set) + skills/mcp-builder/scripts/evaluation.py. Priorité : MOYENNE (dépend de l'accumulation d'un dataset d'éval ; le squelette peut être posé tôt).",
-      "status": "pending",
+      "description": "[FUSIONNÉ dans F-87 2026-08-18, décision user] Même problématique que F-87 — le périmètre est repris dans sa description. Priorité 10 (P10) / Priorité 6 (P6) du plan usine logicielle (audit fiche 38-skills Anthropic, 2026-08-12). Nos skills (F-11/F-57/F-80/F-92) sont itérés au jugé — aucun harnais d'évaluation ne mesure ",
+      "status": "cancelled",
       "dependencies": [
         "F-70",
         "F-60"
@@ -881,8 +881,8 @@
     {
       "id": "F-107",
       "name": "Migration éventuelle des fichiers de suivi plats vers DuckDB (progress.md en tête)",
-      "description": "Note utilisateur 2026-08-14 (au fil de F-106) : « y'aura peut-être un sujet pour les autres .md de migrer en base, à voir si ça gonfle trop ». CANDIDAT n°1 : progress.md (~1 500 lignes, append-only — chaque cycle ajoute 20-40 lignes de section) — le pattern serait d'archiver les sections d'itérations passées dans event_stream.duckdb (comme F-106 a fait pour le journal plat) et de ne garder en texte que le sprint courant. NON PRIORITAIRES : feature_list.json et contract.md — leur valeur réside dans le diff git lisible (review Kilo) ; une table DuckDB casserait ce confort. DÉCLENCHEUR : taille/bruit excessif constaté (Meta-Analyste P15 peut mesurer la croissance par cycle via l'historique git). Pattern réutilisable tel quel : scripts/recover_log_history.py (parsing + import daté idempotent) + table run_event. Statut : à évaluer, aucune implémentation avant que le seuil de gonflement soit atteint.",
-      "status": "pending",
+      "description": "[ANNULÉ 2026-08-18, décision user — grooming backlog : seuls 3 chantiers réels conservés (F-116+86, F-119, F-87+96)] Migration fichiers plats → DuckDB : l'ergonomie humaine (lecture directe de progress.md/contract.md) est un atout — décision user.",
+      "status": "cancelled",
       "dependencies": [
         "F-106"
       ]
@@ -964,7 +964,7 @@
     {
       "id": "F-116",
       "name": "Compaction résiliente aux payloads + hiérarchique par chunks (kilocode)",
-      "description": "P9 (case plan fiche 47-kilocode). (a) KiloCompactionPayloadRecovery : sur erreur payload/4MB/context overflow (regex 'request entity too large|function_payload_too_large'), stripper rétroactivement les tool outputs complétés (marqués compacted) et convertir les médias (screenshots) en placeholders texte '[Attached image/png: ...]' puis relancer la compaction avec prompt explicite — complément direct de F-101 OverflowGuard et F-114 cap fullPage (nous tuons la cause, kilocode sauve la session déjà saturée : pile le scénario run #9). (b) KiloCompactionChunks : compaction récursive arborescente par chunks (RATIO=0.6 du budget, DEPTH=3, régle 'Only summarize facts present in this chunk') pour historiques dépassant une passe de résumé — l'algorithme qui manque au compact LLM dormant F-86/F-101. (c) preserveRecentBudget (PRUNE_MINIMUM=20k, PRUNE_PROTECT=40k, TOOL_OUTPUT_MAX_CHARS=2k, PRUNE_PROTECTED_TOOLS=['skill'], DEFAULT_TAIL_TURNS=2, splitTurn aux frontières de turns) : l'ordonnancement de préservation du contexte récent. Vérifié dans le code réel le 2026-08-17.",
+      "description": "[PÉRIMÈTRE ÉTENDU 2026-08-18 : intègre l'ex-F-86 context-offload sémantique — décision user] Compaction résiliente aux payloads + hiérarchique par chunks (kilocode). LE MUR démontré des runs #13/#16 (thrash 772k-990k tokens/step, ~40 min perdues, échecs propres sans faux succès) : les screenshots du rituel visuel s'accumulent dans l'historique sans purge intra-run (~25k tokens/step). Volet déterministe (chunks, purge images agressive, budget payloads) + volet LLM sémantique opt-in (ex-F-86 : résumé scoré, cognitive tombstones). PRIORITÉ 1 du backlog.",
       "status": "pending",
       "dependencies": [
         "F-101",
@@ -974,8 +974,8 @@
     {
       "id": "F-117",
       "name": "Exécution confinée : budgets par exécution + diagnostics typés + sandbox FS (kilocode codemode)",
-      "description": "P8-bis (case plan fiche 47-kilocode). S'inspirer du package codemode pour durcir notre CodeAgent (LocalPythonExecutor) : (1) ExecutionLimits {timeoutMs, maxToolCalls, maxOutputBytes} — nous avons un timeout global executor mais PAS de budget par nombre d'appels d'outils ni de volume de sortie (un Coder qui pousse 48 screenshots = le pattern run #9 qu'un maxOutputBytes aurait borné) ; (2) DiagnosticKind à 10 catégories stables (ParseError, UnsupportedSyntax, UnknownTool, InvalidToolInput, InvalidToolOutput, InvalidDataValue, ToolCallLimitExceeded, TimeoutExceeded, ToolFailure, ExecutionFailure) — remplacer nos messages ad hoc (orphan_repair/sanitizer/loop_guard) par une taxonomie unique routable ; (3) doctrine codemode/AGENTS.md : jamais d'autorité ambiante, frontières JSON pures, split erreurs publiques model-visible / privées host-diagnostics ; (4) kilo-sandbox (bubblewrap+seccomp, PathRule profiles, parseMountinfo) comme spécification Linux de notre sandbox P8-bis (Docker reste le chantier Windows). Vérifié dans le code réel (ExecutionLimits/DiagnosticKind textuels) le 2026-08-17.",
-      "status": "pending",
+      "description": "[ANNULÉ 2026-08-18, décision user — grooming backlog : seuls 3 chantiers réels conservés (F-116+86, F-119, F-87+96)] Sandbox exécution confinée : le Coder est déjà confiné 3 fois (allowlist F-95 + bash_guard F-38 + transactions FS) — suffisant en local.",
+      "status": "cancelled",
       "dependencies": [
         "F-38",
         "F-95"
@@ -984,8 +984,8 @@
     {
       "id": "F-118",
       "name": "Sécurité du chargement de skills : confiance realpath anti-symlink (kilocode trust.ts)",
-      "description": "P10 (case plan fiche 47-kilocode). Durcir skills_loader/skill_loader_tool (F-57) : trustedInProject résout match ET projectRoot via realpathSync.native avant comparaison — un skill référencé dans le projet mais dont le chemin réel sort de la racine (symlink d'escalade) est rejeté ; isSafeSegment/isSafeRelativePath valident les chemins relatifs segment par segment. Complète la quick_validate/formation F-92/F-103 côté SÉCURITÉ (validation de contenu) par la sécurité de CHARGement (path traversal/usurpation). Pertinent pour F-82 (Skill Finder : installer des skills externes via skills.sh) où la confiance des chemins devient critique.",
-      "status": "pending",
+      "description": "[ANNULÉ 2026-08-18, décision user — grooming backlog : seuls 3 chantiers réels conservés (F-116+86, F-119, F-87+96)] Confiance realpath skills : menace réaliste seulement pour des skills externes massivement installés (skills.sh) — à réévaluer si F-82 devient courant.",
+      "status": "cancelled",
       "dependencies": [
         "F-57",
         "F-92"
@@ -1015,8 +1015,8 @@
     {
       "id": "F-121",
       "name": "Isolation multi-worktrees & fork de session — Agent Manager (kilocode)",
-      "description": "P3+P12 (case plan fiche 47-kilocode). WorktreeManager : cycle de vie de git worktrees (.kilo/worktrees/ → transposition runs/ ou worktrees/ dédiés) pour exécuter des sessions d'agents en parallèle SANS polluer l'espace principal — création de branche, isolation, nettoyage récursif robuste avec retries (RM_OPTS), multi-versioning (jusqu'à 4 versions concurrentes d'un même prompt). forkSession/ForkHandoff : transfert d'état vers une nouvelle session isolée dans son worktree — LA contre-mesure 'fresh agent' de notre plan P3-bis(b) : au lieu de continuer un contexte saturé (runs #7/#9 : 3x41 steps de thrash), réinstancier le Coder avec un contexte neuf + handoff structuré borné. GROS chantier ( dépend de la stabilisation E2E) — à séquencer après le re-run de validation F-112/F-113.",
-      "status": "pending",
+      "description": "[ANNULÉ 2026-08-18, décision user — grooming backlog : seuls 3 chantiers réels conservés (F-116+86, F-119, F-87+96)] Multi-worktrees & Agent Manager : infrastructure sessions parallèles/forks — l'usage réel est 1 run séquentiel sur 1 GPU 6 Go. La plus grosse, la plus chère, zéro douleur.",
+      "status": "cancelled",
       "dependencies": [
         "F-40",
         "F-23"

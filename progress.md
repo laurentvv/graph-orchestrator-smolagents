@@ -1,5 +1,20 @@
 # État d'Avancement du Sprint
 
+## Jalons de l'Itération (gouvernance backlog — grooming post-run #19, décision user 2026-08-18)
+
+- [x] GOV-1 : Arbitrage des 18 features pending sur les besoins réels démontrés
+  (mono-GPU, runs séquentiels, livrables vanilla, humain dans la boucle) —
+  **3 chantiers conservés** : F-116 (compaction, PRIORITÉ 1, intègre F-86),
+  F-119 (diff Judge merge-base), F-87 (qualification skills, intègre F-96).
+- [x] GOV-2 : **14 features annulées** (statut `cancelled` + raison par
+  description) : F-18/25/34/74/77/78/79/94/107/117/118/121 + fusions F-86/F-96.
+- [x] GOV-3 : **F-61 clos** en `completed` — rôle permanent du méta-analyste
+  (§8) établi et démontré à chaud (7 runs le 2026-08-18).
+- [x] GOV-4 : Note de gouvernance en tête de `plan_usine_logicielle.md` (les
+  cases ouvertes = journal d'idées historique ; source de vérité =
+  feature_list.json). Compteur final : **105 completed / 14 cancelled /
+  3 pending**.
+
 ## Jalons de l'Itération (cycle F-120 — plan.md + task.md, transposition planning-with-files)
 > Décision utilisateur après revue de la spécification kilocode (3 itérations de
 > plan : ConfigProtection + matrice permissions → profil plan Architect/Drafter
