@@ -637,7 +637,20 @@ def _evaluate_visibility(
             "                     || cs.display === 'none' || cs.visibility === 'hidden' "
             "                     || cs.opacity === '0' "
             "                     || (first.innerText.trim() === '' && cs.backgroundColor === 'rgba(0, 0, 0, 0)' && cs.backgroundImage === 'none' && !['img','svg','canvas'].includes(first.tagName.toLowerCase())));"
-            "    out.push({sel, count: els.length, h: r.height, hidden});"
+            # Run #14 (barres plates, F-124) : si le JS crée ≥10 éléments pour ce
+            # sélecteur (barres de visualiseur), on mesure la DISTRIBUTION des
+            # hauteurs. Signature du bug flex-direction:column + flex:1 : toutes
+            # les hauteurs quasi égales (flex-basis écrase style.height) ET
+            # pleine largeur (bandes horizontales au lieu de barres verticales).
+            "    let flat = false;"
+            "    if (els.length >= 10) {"
+            "      let minH = Infinity, maxH = 0;"
+            "      for (const el of els) { const h = el.getBoundingClientRect().height;"
+            "        if (h < minH) minH = h; if (h > maxH) maxH = h; }"
+            "      const pw = (first.parentElement || document.body).getBoundingClientRect().width;"
+            "      flat = (maxH - minH) <= Math.max(1, maxH * 0.1) && r.width >= pw * 0.8;"
+            "    }"
+            "    out.push({sel, count: els.length, h: r.height, hidden, flat});"
             "  }"
             "  return JSON.stringify(out);"
             "}"
@@ -663,6 +676,18 @@ def _evaluate_visibility(
                     f"Bug CSS probable : `height` en pourcentage sur conteneur "
                     f"sans `height` explicite, élément en `position:absolute` hors écran, "
                     f"ou perte de classe CSS de couleur (ex: élément devenu transparent). Vérifie le CSS et le Javascript (classList)."
+                )
+            # Run #14 (barres plates, F-124) : ≥10 éléments aux hauteurs quasi
+            # toutes égales ET pleine largeur = flex-basis:0 écrase style.height
+            # (flex-direction:column + flex:1). Le livrable est « visible » mais
+            # géométriquement FAUX (bandes plates au lieu de barres verticales).
+            if count >= 10 and item.get("flat", False):
+                errors.append(
+                    f"[DOM] {count} éléments \"{sel}\" quasi IDENTIQUES (hauteurs égales, pleine largeur) : "
+                    f"la hauteur proportionnelle des données est ÉCRASÉE. Bug de géométrie typique : "
+                    f"conteneur `flex-direction:column` + `flex:1` sur les enfants (flex-basis:0 écrase "
+                    f"style.height — run #14). Correction : conteneur `display:flex` (ROW) + "
+                    f"`align-items:flex-end` + hauteur px/% inline par barre."
                 )
         return errors
     except Exception as e:

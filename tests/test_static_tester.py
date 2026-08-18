@@ -538,6 +538,64 @@ def test_sonde_tier2_couvre_background_image():
     assert "cs.backgroundImage === 'none'" in inspect.getsource(st)
 
 
+def _bars_page(css_container: str, css_bar: str, js_height: str) -> str:
+    """Page de visualiseur paramétrable : 20 barres créées au clic."""
+    return f"""<!DOCTYPE html><html><body>
+<style>
+#bars {{ {css_container} }}
+.bar {{ {css_bar} }}
+</style>
+<div id="bars"></div>
+<button id="go">Go</button>
+<script>
+const bars = document.getElementById("bars");
+const go = document.getElementById("go");
+go.addEventListener("click", () => {{
+  const vals = [12, 45, 78, 23, 90, 56, 34, 67, 89, 15, 42, 71, 28, 95, 63, 38, 82, 50, 19, 74];
+  for (let i = 0; i < 20; i++) {{
+    const b = document.createElement("div");
+    b.className = "bar";
+    {js_height}
+    bars.appendChild(b);
+  }}
+}});
+</script></body></html>"""
+
+
+def test_flat_bars_run14_flagged(tmp_path):
+    """Run #14 (barres plates) : 20 barres quasi IDENTIQUES + pleine largeur
+    (flex-basis écrase style.height) → le Tier 2 DOIT réfuter même si chaque
+    barre est individuellement « visible ». Géométrie EXACTE du bug : conteneur
+    column + flex:1. Skip si Chrome indispo (live)."""
+    html = _bars_page(
+        "display: flex; flex-direction: column; height: 300px;",
+        "flex: 1; background: #ef5350;",
+        "",
+    )
+    p = _write(tmp_path, "index.html", html)
+    res = static_check_html(p, run_devtools=True)
+    if res.tier_reached != "tier2":
+        pytest.skip("Chrome DevTools indispo dans l'env de test — Tier 2 testé en live.")
+    assert not res.is_valid, f"Barres plates (run #14) devraient être flagguées : {res.errors}"
+    assert any("IDENTIQUES" in e for e in res.errors)
+
+
+def test_varied_bars_run14_ok(tmp_path):
+    """Contre-faux-positif : 20 barres ROW avec hauteurs PROPORTIONNELLES
+    variées → jamais flagguées « IDENTIQUES ». Skip si Chrome indispo (live)."""
+    html = _bars_page(
+        "display: flex; flex-direction: row; align-items: flex-end; height: 300px;",
+        "width: 12px; background: #ef5350;",
+        "b.style.height = vals[i] + 'px';",
+    )
+    p = _write(tmp_path, "index.html", html)
+    res = static_check_html(p, run_devtools=True)
+    if res.tier_reached != "tier2":
+        pytest.skip("Chrome DevTools indispo dans l'env de test — Tier 2 testé en live.")
+    assert res.is_valid, f"Barres proportionnelles ne doivent pas être flagguées : {res.errors}"
+    assert not any("IDENTIQUES" in e for e in res.errors)
+
+
 # ==========================================
 # Dégradation node absent
 # ==========================================
