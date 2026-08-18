@@ -46,7 +46,7 @@ SKILLS_DIR = os.path.join(_REPO_ROOT, "skills")
 MANIFEST_PATH = os.path.join(SKILLS_DIR, "installed-skills.json")
 
 # Allowlist d'auteurs par défaut (surchargeable via SKILL_FINDER_TRUSTED_AUTHORS).
-DEFAULT_TRUSTED_AUTHORS = "vercel-labs,microsoft,google-labs-code,clerk,greensock"
+DEFAULT_TRUSTED_AUTHORS = "vercel-labs,anthropics,openai,github,microsoft,google-labs-code,clerk,greensock,gamedev-skills,elevenlabs,omer-metin"
 
 # Marqueurs de confiance exposés par skills.sh dans la sortie de `skills find`.
 # Best-effort : la sortie CLI n'est pas contractuelle, on tolère l'absence.

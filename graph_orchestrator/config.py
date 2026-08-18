@@ -509,7 +509,7 @@ class Settings:
     # marqueurs skills.sh (safe/verified → info ; unsafe/malicious → blocage).
     # Miroir de skill_finder.DEFAULT_TRUSTED_AUTHORS (duplication assumée pour
     # éviter un import croisé config↔skill_finder).
-    skill_finder_trusted_authors: str = "vercel-labs,microsoft,google-labs-code,clerk,greensock"
+    skill_finder_trusted_authors: str = "vercel-labs,anthropics,openai,github,microsoft,google-labs-code,clerk,greensock,gamedev-skills,elevenlabs,omer-metin"
 
     # --- Guard bash denylist (Priorité 8-bis : robustesse runtime) ---
     # `bash_command` exécute des commandes issues du LLM via shell=True. Un guard
@@ -682,7 +682,7 @@ def load_settings() -> Settings:
         skill_finder_enabled=_get_bool("SKILL_FINDER_ENABLED", True),
         skill_finder_trusted_authors=_get_str(
             "SKILL_FINDER_TRUSTED_AUTHORS",
-            "vercel-labs,microsoft,google-labs-code,clerk,greensock",
+            "vercel-labs,anthropics,openai,github,microsoft,google-labs-code,clerk,greensock,gamedev-skills,elevenlabs,omer-metin",
         ),
         bash_guard_enabled=_get_bool("BASH_GUARD_ENABLED", True),
         redaction_enabled=_get_bool("REDACTION_ENABLED", True),
