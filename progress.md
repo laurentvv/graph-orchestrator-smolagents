@@ -67,6 +67,17 @@
   0 régression. Contract C446-C448 ajoutés. Cycle F-120 CLOS : PR #97
   contient feature + fixes de validation (F-120, F-49 sonde, F-91 gate,
   F-124-bis géométrie).
+- [x] F120-12 : **Soirée de durcissement (runs #16→#19, feedback utilisateur
+  en boucle visuelle)** : #16 échec propre (mur F-116, thrash 772k) ;
+  #17/#18 succès graphe mais compteur FIGÉ en 2 nouvelles variantes F-110
+  (littéraux purs, puis littéral avec mot) → checks (a-bis) v1+v2 « compteur
+  statique » + (a) élargi aux concaténations (c5c2370, 2549d0f ; preuves sur
+  les scripts réels, 70 passed). **#19 = RUN FINAL PARFAIT** : 1/1 APPROUVÉ
+  it1 (~14 min) — validation visuelle complète : chargement 29/30 barres
+  (4→250px), COMPTEUR VIVANT 0→249, tri 30/30 croissant, dark theme.
+  Bilan du jour : 7 runs E2E, chaque défaut (gardes OU œil humain) a reçu
+  son garde déterministe. Post-mortem épilogue complet :
+  `debug/POSTMORTEM_RUN13.md`.
 
 ## Jalons de l'Itération (cycle F-122 — ULTRA restreint à l'itération ≥ 3)
 > Décision utilisateur (proposition 2 du post-mortem run #10). Réactive

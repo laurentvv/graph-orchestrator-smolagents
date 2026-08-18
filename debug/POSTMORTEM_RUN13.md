@@ -19,6 +19,28 @@
 >   30 barres verticales proportionnelles (hauteurs inline 5,6→182px
 >   variées), gradient turquoise→violet (backgroundImage — accepté à juste
 >   titre par la sonde corrigée P0), 30/30 triées, compteur 225, thème sombre.
+>
+> **ÉPILOGUE BIS (soirée, feedback utilisateur « pas de barre visible au
+> chargement » + « compteur figé ») — 4 runs de plus** :
+> - **#16** (19:26) : échec propre — thrash 31 steps ×3 tentatives (contexte
+>   772k, mur F-116) ; le Coder avait lui-même audité ses critères en ÉCHEC
+>   mais plus aucun step. Aucun faux succès.
+> - **#17** (20:09) : 1/1 it1 (16 min), chargement VALIDÉ (29/30 visibles —
+>   le fix pre-clic a payé) MAIS compteur figé : variante F-110 sans
+>   incrémentation, écritures `textContent = '0'` littérales → fix check
+>   (a-bis) « compteur statique » (c5c2370).
+> - **#18** (21:32) : 1/1 it1 (15 min, 20 steps dans le couloir), mais
+>   compteur figé en variante `'Comparaisons: 0'` — le MOT dans le littéral
+>   trompait mon propre check (a-bis) v1 → fix v2 : identifiants cherchés
+>   HORS littéraux + check (a) élargi aux concaténations (2549d0f). Preuves
+>   sur les scripts réels #17 ET #18.
+> - **#19** (21:54→22:09) : ***RUN FINAL PARFAIT*** — 1/1 APPROUVÉ it1
+>   (~14 min, 21 steps). Validation visuelle complète : chargement 29/30
+>   barres visibles (4→250px proportionnelles), **COMPTEUR VIVANT
+>   0→44→168→249**, tri 30/30 ordre croissant vérifié, thème sombre.
+>   Après 7 runs E2E dans la journée, l'usine produit un livrable 100 %
+>   conforme au cahier des charges — chaque défaut constaté (par les gardes
+>   OU la validation humaine) a reçu son garde déterministe.
 
 **Run** : `coding_d72dc8e36445c6` (run_id identique aux runs #10-#12, même hash de tâche)
 `bubble_sort_multifile_v6` — `runs/2026-08-18_1130_bubble_sort_multifile_v6/`
