@@ -349,6 +349,38 @@ def _check_behavioral_smells(js: str) -> List[str]:
                 f"échange/étape de l'algorithme."
             )
 
+    # (a-bis, run #17) COMPTEUR STATIQUE : la variante qui esquive (a) —
+    # l'élément compteur (id DOM type counter/comparisons) est bien ciblé par
+    # JS (const x = document.getElementById('counter')) mais ses écritures
+    # textContent sont TOUTES des littéraux constants ('0') : la variable
+    # compteur (comparisonCount) n'est jamais affichée, le DOM affichera le
+    # littéral à vie. Le check (a) ne voit rien car aucun identifiant n'apparaît
+    # dans les écritures → il faut raisonner sur l'ÉLÉMENT, pas la variable.
+    for m in re.finditer(
+        r"\b(?:const|let|var)\s+(\w+)\s*=\s*document\.getElementById\(\s*[\"']([\w-]+)[\"']\s*\)",
+        js,
+    ):
+        dom_var, el_id = m.group(1), m.group(2)
+        if not _COUNTER_NAME_RE.search(el_id):
+            continue
+        writes = re.findall(
+            rf"\b{re.escape(dom_var)}\.(?:textContent|innerText|innerHTML)\s*=\s*([^;\n]+)",
+            js,
+        )
+        if not writes:
+            continue  # jamais écrit directement → d'autres mécanismes possibles, on ne conclut pas
+        has_dynamic_write = any(
+            "${" in w or re.search(r"\b[A-Za-z_$][\w$]*\b", w) for w in writes
+        )
+        if not has_dynamic_write:
+            errors.append(
+                f"[behavior] Compteur '{el_id}' (élément #{el_id}) écrit UNIQUEMENT avec des "
+                f"littéraux constants ({len(writes)} écriture(s), ex : `{dom_var}.textContent = '…'`) : "
+                f"la valeur du compteur n'est JAMAIS affichée dynamiquement. Affiche-la à chaque étape "
+                f"(ex : `{dom_var}.textContent = \\`${{comparisonCount}}\\``) ET incrémente la variable "
+                f"compteur dans la boucle (run #17 : compteur figé à 0 pour toujours)."
+            )
+
     # --- (b) animation instantanée ---
     has_animation_kw = bool(
         re.search(r"\b(animate|animation|sort|step|frame|speed)\w*\b", js, re.I)

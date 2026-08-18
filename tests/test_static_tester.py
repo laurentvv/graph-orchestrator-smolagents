@@ -380,6 +380,47 @@ def test_behavioral_compteur_calcule_non_flagge():
     assert _check_behavioral_smells(js) == []
 
 
+RUN17_STATIC_COUNTER_JS = """let comparisonCount = 0;
+let isSorting = false;
+const counter = document.getElementById('counter');
+const startBtn = document.getElementById('startBtn');
+async function bubbleSort() {
+    comparisonCount = 0;
+    counter.textContent = '0';
+    for (let i = 0; i < arr.length - 1; i++) {
+        await sleep(speed);
+        if (arr[i] > arr[i + 1]) { swapped = true; }
+    }
+    markSorted();
+}
+function reset() {
+    comparisonCount = 0;
+    counter.textContent = '0';
+}
+"""
+
+
+def test_behavioral_compteur_statique_run17():
+    """Run #17 : l'élément #counter est ciblé par JS mais écrit UNIQUEMENT avec
+    des littéraux constants — la variable comparisonCount n'est jamais affichée
+    (le check (a) ne voit rien : aucun identifiant dans les écritures). La
+    variante (a-bis) raisonne sur l'ÉLÉMENT et doit réfuter."""
+    errors = _check_behavioral_smells(RUN17_STATIC_COUNTER_JS)
+    assert any(
+        "littéraux constants" in e and "counter" in e for e in errors
+    ), f"compteur statique run #17 non détecté : {errors}"
+
+
+def test_behavioral_compteur_dynamique_element_non_flagge():
+    """Anti-FP du (a-bis) : même code mais l'élément reçoit une valeur dynamique
+    (template) → jamais flaggué."""
+    js = RUN17_STATIC_COUNTER_JS.replace(
+        "counter.textContent = '0';",
+        "counter.textContent = `${comparisonCount}`;",
+    )
+    assert not any("littéraux constants" in e for e in _check_behavioral_smells(js))
+
+
 def test_behavioral_template_literal_counter():
     js = "let swaps = 0;\nel.innerHTML = `Swaps: ${swaps}`;\nloop();"
     errors = _check_behavioral_smells(js)
