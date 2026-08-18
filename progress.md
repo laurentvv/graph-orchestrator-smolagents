@@ -1,5 +1,38 @@
 # État d'Avancement du Sprint
 
+## Jalons de l'Itération (cycle F-120 — plan.md + task.md, transposition planning-with-files)
+> Décision utilisateur après revue de la spécification kilocode (3 itérations de
+> plan : ConfigProtection + matrice permissions → profil plan Architect/Drafter
+> → minimal) : « simplement un plan.md et un task.md basé sur plan.md », sur le
+> modèle du skill planning-with-files (OthmanAdi) montré par l'utilisateur.
+> Volets ConfigProtection/mode plan NON PORTÉS : l'Architect et le Drafter sont
+> des nœuds DSPy sans AUCUN outil FS (dspy_nodes.py:730/:848) — la restriction
+> est déjà par construction, il n'y a rien à bridER (kilocode en a besoin car
+> son agent de planification est un agent outillé interactif).
+
+- [x] F120-1 : Module `graph_orchestrator/plan_files.py` (0 LLM) —
+  `build_plan_markdown` miroir fidèle de TOUT l'ArchitectOutput (critères
+  visuels/fonctionnels/rubric F-82 et skills F-57 inclus — rien de perdu,
+  vérifié champ par champ), `build_task_markdown` (checklist vivante + journal
+  daté des verdicts), `write_plan_files` best-effort, `build_coder_anchor`
+  bloc court STABLE volontairement sans critères visuels (déjà injectés par
+  le bloc F-82 — anti-redondance).
+- [x] F120-2 : Config `plan_task_materialize` (défaut True, PLAN_TASK_MATERIALIZE)
+  + `.env.example` + `.env` local.
+- [x] F120-3 : Branchement `workflows.py` (helper `_sync_plan_files` à chaque
+  transition : post-Architect/reprise, démarrage sous-tâche, coder KO, rejets
+  linter/static, verdict juge, approbation, escalade, circuit breaker ; anchor
+  dans `sub_dict` à chaque itération) + `{task.get('plan_anchor', '')}` dans le
+  prompt Coder (`nodes.py`). Source de vérité INCHANGÉE (checkpoint F-24).
+- [x] F120-4 : Tests — **33 nouveaux PASS** (32 test_plan_files + 1 config) ;
+  py_compile 4 fichiers ; gate F-103 : 29 surfaces, 0 erreur, 0 warning.
+- [x] F120-5 : Suite complète (basetemp dédié F-95) — **1532 passed / 0 failed
+  / 1 skipped** (flaky minute-boundary PASSÉ cette exécution) → 0 régression.
+- [x] F120-6 : État disque (contract C443-C445, feature_list F-120 completed
+  rescopé, ce fichier, README) + DuckDB + commit + PR. **Run E2E de validation
+  (Bubble Sort : vérifier plan.md/task.md dans le run + anchor dans le prompt)
+  reporté à une session ultérieure (décision utilisateur).**
+
 ## Jalons de l'Itération (cycle F-122 — ULTRA restreint à l'itération ≥ 3)
 > Décision utilisateur (proposition 2 du post-mortem run #10). Réactive
 > l'escalade de modèle F-111 en la bornant : le 9B no-think trop lent ne

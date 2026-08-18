@@ -102,3 +102,18 @@ def test_turn_checkpoint_enabled_default_and_override(monkeypatch):
     monkeypatch.setenv("TURN_CHECKPOINT_ENABLED", "false")
     s2 = load_settings()
     assert s2.turn_checkpoint_enabled is False
+
+
+def test_plan_task_materialize_default_and_override(monkeypatch):
+    """PLAN_TASK_MATERIALIZE (F-120) : plan.md + task.md dans le run dir.
+
+    Défaut = True (opt-out). Transposition planning-with-files : miroir fidèle
+    de l'ArchitectOutput + checklist vivante + anchor stable au Coder ;
+    false = aucun fichier ni anchor."""
+    monkeypatch.delenv("PLAN_TASK_MATERIALIZE", raising=False)
+    s = load_settings()
+    assert s.plan_task_materialize is True
+    # Override via env (opt-out).
+    monkeypatch.setenv("PLAN_TASK_MATERIALIZE", "false")
+    s2 = load_settings()
+    assert s2.plan_task_materialize is False

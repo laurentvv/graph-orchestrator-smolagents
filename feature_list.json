@@ -1003,9 +1003,9 @@
     },
     {
       "id": "F-120",
-      "name": "Gouvernance & modes : ConfigProtection + mode Plan par permissions + plan.md/task.md (kilocode)",
-      "description": "P0-bis + P8-bis (cases plan fiche 47-kilocode, dont celle issue du workflow utilisateur quotidien Plan/Code). (a) ConfigProtection : filtre de permission déterministe pré-écriture interdisant aux agents de modifier les fichiers de gouvernance (transposition : AGENTS.md, .env, tasks.json, data/, feature_list.json/contract.md/progress.md côté io_guard F-95 — un Coder qui réécrit sa propre charte = catastrophe silencielle). (b) Mode 'plan' par matrice de permissions (edit deny-all + allowlist du SEUL fichier plan + transitions plan_enter/plan_exit) : profil io_guard 'plan' du Coder n'autorisant que le draft. (c) Materialisation plan.md global + task.md (checklist sous-tâches) dans le run dir : traçabilité post-mortem lisible + ancrage STABLE ré-injectable au Coder (levier de convergence du 4B, complément F-114/F-115 ; connecte 'Cycle de vie du Plan' P6 plan_store open-swe).",
-      "status": "pending",
+      "name": "Matérialisation plan.md + task.md dans le run dir (planning-with-files) — ex mode Plan kilocode, rescopé",
+      "description": "RESCOPE utilisateur 2026-08-18 : matérialisation plan.md + task.md, transposition déterministe du skill planning-with-files (OthmanAdi). plan.md = miroir fidèle de TOUT l'ArchitectOutput (architecture globale, sous-tâches : description/stratégie/sections/checklist fichiers, critères visuels/fonctionnels/rubric F-82, skills F-57) + statuts pending/in_progress/complete ; task.md = checklist vivante + journal daté des verdicts (démarrage, rejets linter/static/juge, approbation, escalade) ; les deux régénérés à chaque transition par workflows.py (0 LLM, best-effort, source de vérité = checkpoint F-24 inchangé) ; anchor court STABLE injecté dans le prompt Coder à chaque itération (ancrage de convergence 4B, proposition 3 post-mortems #10/#11 ; non redondant avec le bloc critères F-82). Volets initialement spécifiés NON PORTÉS (écarts consciencieux) : ConfigProtection + matrice de permissions du mode plan kilocode — l'Architect et le Drafter sont des nœuds DSPy sans AUCUN outil FS (restriction déjà par construction, dspy_nodes.py:730/:848) ; kilocode en a besoin car son agent de planification est un agent outillé interactif, topologie absente de notre usine.",
+      "status": "completed",
       "dependencies": [
         "F-95",
         "F-24",
