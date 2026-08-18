@@ -67,11 +67,23 @@ reconstituer la chronologie complète du run en une lecture.
 
 - TS-02 it3 : 3× timeout exactement à 600.01 s (LLM_TIMEOUT_S). Le serveur 4B ne
   répondait plus.
-- **10 serveurs llama-server spawnés sur le run, 0 arrêt loggé** (grep « prêt » vs
-  « arrêt » : 10/0) — un leak de processus (VRAM 6 Go) est le suspect principal de
-  la dégradation finale. Hier run #12 : « ZÉRO respawn F-104, zéro crash VRAM » —
-  à investiguer (lifecycle : les serveurs des nœuds précédents ne seraient pas
-  tous libérés ?).
+- **« 10 serveurs spawnés / 0 arrêt » — piste LEAK RÉFUTÉE après coup** (lecture
+  `llama_server.py` + `tasklist` post-run : 0 processus résiduel) : le design de
+  `model_lifecycle` est spawn/stop PAR NŒUD (context manager), 10 nœuds = 10
+  cycles spawn/stop normaux ; les stops allaient au `logger.info` — invisible en
+  console — d'où l'illusion d'empilement dans le log. Fix d'observabilité ajouté :
+  le stop imprime désormais `[~] llama-server : arrêté (port X)` symétrique du
+  « prêt ». Explication restante des timeouts : conjonction (a) préfill ÉNORME
+  (le contexte Coder atteignait ~990k input tokens/step — 3 retries de prefill
+  de cette taille sur RTX 3060) et (b) chevauchement structurel 4B (serveur du
+  Coder, vivant tout le run) + 9B (nœuds DSPy) au-delà des 6 Go de VRAM →
+  débordement mmap/RAM. Le run #12 tenait sur la même topologie : la différence
+  du jour est le volume du contexte (990k vs ~90k), lui-même conséquence du
+  thrash 2.a et du faux positif 2.b qui a multiplié les itérations.
+- **Cap steps élargi localement** : `.env` avait `CODER_MAX_STEPS=40` (écart non
+  tracké vs défaut documenté 30, doctrine F-61 : « le défaut 25 laissait boucler
+  jusqu'à 87 steps » ; production typique 6-14 steps). Réaligné sur 30 — TS-01
+  aurait été coupé ~25 % plus tôt.
 
 ## 3. Métriques (`run_analyzer.py` + tableau d'observabilité)
 
@@ -79,24 +91,24 @@ reconstituer la chronologie complète du run en une lecture.
 - Tokens : 74,7 M input / 615 k output (cumul steps) ; 516 k trackés (table run).
 - 0 verdict Judge ; 54 entités / 105 claims KG ; checkpoint effacé en fin (propre).
 
-## 4. Propositions (dans l'ordre — feu vert utilisateur requis, AGENTS.md §8)
+## 4. Propositions — état après session debug 2026-08-18 (feu vert user : « corrige tout, run final sans erreur »)
 
-1. **P0 — Fix Static Tester Tier 2** (déblocage majeur, déterministe, 0 LLM) : la
-   sonde doit considérer un `background-image ≠ 'none'` comme VISIBLE. Changement :
-   ajouter `&& cs.backgroundImage === 'none'` à la condition « background
-   transparent sans texte » + tests de régression (cas gradient sans texte →
-   visible ; cas transparent réel → toujours invisible). TS-02 it1/it2 avaient un
-   livrable sain : ce faux positif a coûté 2 itérations complètes + la pression
-   qui a mené aux timeouts.
-2. **P1 — Enquête lifecycle llama-server** : compter/process-check les serveurs
-   vivants mid-run (10 spawns / 0 stop loggé) ; tuer explicitement les serveurs
-   des nœuds terminés ou réutiliser les ports (le run #12 n'avait pas ce profil).
-3. **P2 — Re-run E2E Bubble Sort** après P0 (et idéalement P1) pour valider F-124
-   E2E + F-120 en conditions nominales. F-120 lui-même n'a rien à corriger pour
-   re-runner.
-4. **Micro-améliorations F-120 constatées** (non bloquantes) : statut `failed`
-   pour une sous-tâche terminée en échec (TS-01 affichée `pending` en fin de run,
-   ambigu) ; Goal par section `## Objective` (corrigé sur la branche, tests 28/28).
+1. **P0 — Fix Static Tester Tier 2 : ✅ FAIT** — la sonde exige désormais
+   `backgroundImage === 'none'` pour flagguer « sans fond » ; +3 tests
+   (`test_gradient_bars_visible_run13` live, `test_truly_transparent_bars_still_flagged`
+   live anti-faux-négatif, `test_sonde_tier2_couvre_background_image` garde source).
+   **Preuve live sur le VRAI livrable du run #13** (chrome-devtools, sonde exacte
+   reproduite) : `hidden_AVANT_fix=true, hidden_APRES_fix=false` — barres 293 px,
+   gradient orange dans `backgroundImage`, `backgroundColor` transparent.
+2. **P1 — Observabilité lifecycle : ✅ FAIT** (le « leak » était une illusion de
+   log, cf. 2.c ; le stop s'imprime maintenant en console). Aucun bug à corriger.
+3. **Cap steps local : ✅ FAIT** — `CODER_MAX_STEPS` 40 → 30 (défaut documenté).
+4. **P2 — Re-run E2E Bubble Sort : EN COURS** après validation suite complète —
+   critère de succès exigé par l'utilisateur : run sans erreur, code OK ET
+   graphique OK.
+5. **P3 — Micro-améliorations F-120 restantes (cycle futur)** : statut `failed`
+   pour sous-tâche en échec (TS-01 affichée `pending` en fin de run, ambigu).
+   Goal par section `## Objective` : ✅ déjà corrigé (28/28 tests).
 
 ## 5. Artefacts
 

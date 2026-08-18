@@ -629,10 +629,14 @@ def _evaluate_visibility(
             # le CSS le masque explicitement (display:none / visibility:hidden).
             # On NE flag PAS sur width==0 seul : en flexbox, un enfant sans
             # flex-basis est réduit à width=0 bien qu'affiché (faux positif).
+            # Run #13 (F-124) : un `background: linear-gradient(…)` vit dans
+            # background-image, PAS dans backgroundColor (qui reste transparent)
+            # → ne flaguer « sans fond » que si l'élément n'a NI couleur NI
+            # image de fond, sinon toute barre à gradient est un faux « INVISIBLE ».
             "    const hidden = (r.height === 0 "
             "                     || cs.display === 'none' || cs.visibility === 'hidden' "
             "                     || cs.opacity === '0' "
-            "                     || (first.innerText.trim() === '' && cs.backgroundColor === 'rgba(0, 0, 0, 0)' && !['img','svg','canvas'].includes(first.tagName.toLowerCase())));"
+            "                     || (first.innerText.trim() === '' && cs.backgroundColor === 'rgba(0, 0, 0, 0)' && cs.backgroundImage === 'none' && !['img','svg','canvas'].includes(first.tagName.toLowerCase())));"
             "    out.push({sel, count: els.length, h: r.height, hidden});"
             "  }"
             "  return JSON.stringify(out);"
@@ -655,7 +659,7 @@ def _evaluate_visibility(
                 h = item.get("h", 0)
                 errors.append(
                     f"[DOM] {count} élément(s) \"{sel}\" créé(s) par le JS mais "
-                    f"INVISIBLE(s) (height={h}, display:none, visibility:hidden, opacity:0, ou background transparent sans texte). "
+                    f"INVISIBLE(s) (height={h}, display:none, visibility:hidden, opacity:0, ou aucun fond (ni couleur ni image) sans texte). "
                     f"Bug CSS probable : `height` en pourcentage sur conteneur "
                     f"sans `height` explicite, élément en `position:absolute` hors écran, "
                     f"ou perte de classe CSS de couleur (ex: élément devenu transparent). Vérifie le CSS et le Javascript (classList)."

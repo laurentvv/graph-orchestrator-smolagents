@@ -463,6 +463,81 @@ def test_tier2_skipped_when_devtools_off(tmp_path, monkeypatch):
     assert res.tier_reached == "tier1"
 
 
+def test_gradient_bars_visible_run13(tmp_path):
+    """Run #13 (F-124) : `.comparing { background: linear-gradient(…) }` sans
+    texte — backgroundColor reste TRANSPARENT (le gradient vit dans
+    background-image) mais la barre est PARFAITEMENT visible (hauteur réelle).
+    La sonde Tier 2 ne doit PLUS la flagguer « INVISIBLE » (faux positif qui a
+    coûté 2 itérations complètes au run #13). Skip si Chrome indispo (live)."""
+    html = """<!DOCTYPE html><html><body>
+<style>
+#bars { display: flex; align-items: flex-end; gap: 4px; min-height: 400px; }
+.bar { width: 24px; height: 60px; background: linear-gradient(180deg, #42a5f5, #1e88e5); }
+.bar.comparing { background: linear-gradient(180deg, #ff6f00, #f57c00); }
+</style>
+<div id="bars"></div>
+<button id="go">Go</button>
+<script>
+const bars = document.getElementById("bars");
+const go = document.getElementById("go");
+go.addEventListener("click", () => {
+  for (let i = 0; i < 5; i++) {
+    const b = document.createElement("div");
+    b.className = "bar" + (i < 2 ? " comparing" : "");
+    bars.appendChild(b);
+  }
+});
+</script></body></html>"""
+    p = _write(tmp_path, "index.html", html)
+    res = static_check_html(p, run_devtools=True)
+    if res.tier_reached != "tier2":
+        pytest.skip("Chrome DevTools indispo dans l'env de test — Tier 2 testé en live.")
+    assert res.is_valid, f"Faux positif run #13 : barres à gradient flagguées : {res.errors}"
+    assert not any("INVISIBLE" in e for e in res.errors)
+
+
+def test_truly_transparent_bars_still_flagged(tmp_path):
+    """Contre-faux-négatif du fix run #13 : un div avec hauteur réelle mais
+    AUCUN fond (ni couleur ni image) et sans texte reste réellement invisible à
+    l'écran (bug historique « perte de classe de couleur ») → DOIT rester
+    flaggué. Skip si Chrome indispo (live)."""
+    html = """<!DOCTYPE html><html><body>
+<style>
+#bars { display: flex; align-items: flex-end; gap: 4px; min-height: 400px; }
+.bar { width: 24px; height: 60px; } /* AUCUN background → invisible à l'écran */
+</style>
+<div id="bars"></div>
+<button id="go">Go</button>
+<script>
+const bars = document.getElementById("bars");
+const go = document.getElementById("go");
+go.addEventListener("click", () => {
+  for (let i = 0; i < 5; i++) {
+    const b = document.createElement("div");
+    b.className = "bar";
+    bars.appendChild(b);
+  }
+});
+</script></body></html>"""
+    p = _write(tmp_path, "index.html", html)
+    res = static_check_html(p, run_devtools=True)
+    if res.tier_reached != "tier2":
+        pytest.skip("Chrome DevTools indispo dans l'env de test — Tier 2 testé en live.")
+    assert not res.is_valid, "Barres réellement transparentes (aucun fond) : devraient être flagguées."
+    assert any("INVISIBLE" in e for e in res.errors)
+
+
+def test_sonde_tier2_couvre_background_image():
+    """Garde anti-régression (déterministe, 0 Chrome) : la sonde JS du Tier 2
+    doit tester cs.backgroundImage — sinon tout fond en gradient (F-124)
+    redevient un faux « INVISIBLE » (run #13)."""
+    import inspect
+
+    import graph_orchestrator.static_tester as st
+
+    assert "cs.backgroundImage === 'none'" in inspect.getsource(st)
+
+
 # ==========================================
 # Dégradation node absent
 # ==========================================
