@@ -227,26 +227,14 @@ class Settings:
     feedback_max_chars: int  # plafond global du feedback injecté au Coder
 
     # --- Cap steps du Web Tester (optimisation durée, fix TIMINGS_ANALYSE) ---
-    # Plafond de max_steps pour le WebTestRunner (ToolCallingAgent Puppeteer). Le défaut
-    # historique (24) laissait le modèle boucler jusqu'à 10 steps sur une friction JS
-    # (ex: `document.querySelector` écrasé par assignation) sans jamais final_answer —
-    # ~30 min perdues. Le verdict est généralement clair à 10-12 steps (smoke-test +
-    # 2-4 assertions fonctionnelles). Baisser à 12 borne la durée sans perte de
-    # couverture. Opt-out : TESTER_MAX_STEPS plus haut si les assertions le nécessitent.
-    # Valeur par défaut dans la dataclass : évite de casser les helpers de test qui
-    # construisent Settings(...) à la main (même convention que loop_guard_threshold etc.).
-    tester_max_steps: int = 8
+    # Plafond de max_steps pour le WebTestRunner (ToolCallingAgent Puppeteer).
+    # 12 steps permet une séquence complète : 1 navigate + 1 console + 1 snapshot +
+    # 4-6 assertions interactives / state-diffing (touches, clics, chute, score) +
+    # 1 screenshot + 1 final_answer.
+    tester_max_steps: int = 12
     # Hard deadline wall-clock du Web Tester (smolagents ToolCallingAgent + MCP Puppeteer/
-    # DevTools). Fix blocage : sans ce timeout, un appel MCP bloquant (Chrome hung, npx stdio
-    # deadlock, page JS en boucle infinie) fige le Tester indéfiniment. À l'expiration,
-    # run_with_retry rend un échec propre (None) → le Judge enchaîne. 0 = désactivé (legacy).
-    # Si non setté, fallback sur test_timeout_s (rétro-compatibilité). Défaut 120 dans la
-    # dataclass pour ne pas casser les helpers de test qui construisent Settings() à la main.
-    # 480s (8 min) = FILET anti-MCP-hung, pas le binding. Règle : max_steps (8) × t/step
-    # (~55s pire cas 9B+DevTools = 440s) DOIT gagner la course contre le wall-clock pour que
-    # le Tester converge (auto-final-answer) au lieu de timeout. Runs 2026-08-11 : à 12 steps
-    # le wall-clock (360s puis 600s) gagnait toujours → timeout systématique sans verdict.
-    tester_timeout_s: int = 480
+    # DevTools). 600s (10 min) donne le filet nécessaire pour 12 steps sans timeout.
+    tester_timeout_s: int = 600
 
     # --- Inline des resources de skill pour le Tester (F-97 / MA-5) ---
     # Résout la progressive disclosure F-92 côté serveur : inline les resources/*.md
@@ -632,11 +620,11 @@ def load_settings() -> Settings:
         log_level=_get_str("LOG_LEVEL", "LOW"),
         fresh_start=_get_bool("FRESH_START", False),
         test_timeout_s=_get_int("TEST_TIMEOUT_S", 120),
-        tester_timeout_s=_get_int("TESTER_TIMEOUT_S", 480),
+        tester_timeout_s=_get_int("TESTER_TIMEOUT_S", 600),
         stderr_head_lines=_get_int("STDERR_HEAD_LINES", 20),
         stderr_tail_lines=_get_int("STDERR_TAIL_LINES", 20),
         feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),
-        tester_max_steps=_get_int("TESTER_MAX_STEPS", 8),
+        tester_max_steps=_get_int("TESTER_MAX_STEPS", 12),
         tester_inline_skill_resources=_get_bool("TESTER_INLINE_SKILL_RESOURCES", True),
         coder_max_steps=_get_int("CODER_MAX_STEPS", 30),
         idle_breaker_threshold=_get_int("IDLE_BREAKER_THRESHOLD", 3),
