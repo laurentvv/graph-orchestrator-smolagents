@@ -402,8 +402,9 @@ class CodeJudgeSignature(dspy.Signature):
         code soumis (ancre in-diff) — pas de remarque générique. Permet au Coder d'agir
         directement sur le feedback.
 
-        Remplis ``findings`` (structuré) ET ``final_feedback`` (résumé actionnable pour le Coder
-        à la prochaine itération, si rejet).
+        Remplis ``findings`` (structuré), ``root_cause`` (cause racine précise si rejet),
+        ``fix_instruction`` (instruction chirurgicale de correction si rejet), ET ``final_feedback``
+        (résumé actionnable pour le Coder à la prochaine itération, si rejet).
         """,
     )
     task_id: str = dspy.InputField(desc="Identifiant de la tâche examinée")
@@ -411,7 +412,7 @@ class CodeJudgeSignature(dspy.Signature):
     security_vulnerabilities: List[str] = dspy.InputField(desc="Liste des problèmes de sécurité soulevés par le Security Reviewer")
     test_results: str = dspy.InputField(desc="Sortie brute des tests fonctionnels exécutés par l'agent QA")
     task_requirements: str = dspy.InputField(desc="Le cahier des charges complet (comportements attendus). Sert à vérifier que le test_results couvre bien les comportements clés et que le code les implémente — pas seulement qu'il ne crash pas.")
-    output: CodeJudgeOutput = dspy.OutputField(desc="Verdict final (is_approved) + findings (rubric sévérité) + final_feedback (résumé actionnable si rejet)")
+    output: CodeJudgeOutput = dspy.OutputField(desc="Verdict final (is_approved) + findings (rubric sévérité) + root_cause + fix_instruction + final_feedback (résumé actionnable si rejet)")
 
 
 class EscalationSignature(dspy.Signature):
@@ -1065,21 +1066,36 @@ async def execute_code_judge_node(subtask: dict, test_res: Any, security_res: Op
                 "missing": "le nœud Tester n'a produit AUCUN verdict",
             }[test_status]
             print(f"[!] Test {test_status} pour {subtask.get('id')} — Judge SKIPPÉ (fail-closed), approbation bloquée.")
+            # Extraction chirurgicale de la cause racine depuis test_details (LLM-Council Fiche 22)
+            detected_root_cause = f"Échec des tests fonctionnels ({reason})"
+            detected_fix_instruction = "Corriger les échecs fonctionnels rapportés par l'agent QA."
+            if any(k in test_details for k in ("TypeError", "ReferenceError", "SyntaxError", "Uncaught", "[error]")):
+                for line in test_details.splitlines():
+                    if any(k in line for k in ("TypeError", "ReferenceError", "SyntaxError", "Uncaught", "[error]")):
+                        detected_root_cause = f"Exception JS non gérée : {line.strip()}"
+                        detected_fix_instruction = f"Inspecter la source et corriger l'erreur : {line.strip()}"
+                        break
+            elif "INERT" in test_details or "inerte" in test_details.lower():
+                detected_root_cause = "Le canvas ou l'animation est inerte / surface peinte vide (Canvas probe échec)."
+                detected_fix_instruction = "Vérifier l'initialisation du canvas, les dimensions réelles et la boucle requestAnimationFrame."
+
             blocked = CodeJudgeOutput(
                 task_id=subtask.get("id", "unknown"),
                 is_approved=False,
+                root_cause=detected_root_cause,
+                fix_instruction=detected_fix_instruction,
                 final_feedback=(
-                    f"APPROBATION BLOQUÉE (fail-closed test) : {reason}. "
-                    f"Détails du Tester : {test_details[:500] or '(aucun)'} "
-                    "Corrige les échecs listés — l'approbation est impossible tant que "
-                    "les tests fonctionnels échouent."
+                    f"APPROBATION BLOQUÉE (fail-closed test) : {reason}.\n"
+                    f"🎯 CAUSE RACINE : {detected_root_cause}\n"
+                    f"🛠️ INSTRUCTION DE CORRECTION : {detected_fix_instruction}\n"
+                    f"Détails du Tester : {test_details[:500] or '(aucun)'}"
                 ),
                 findings=[Finding(
                     severity="critical",
                     category="testing",
                     location="(verdict Tester)",
                     description=f"Verdict Tester = {test_status} : {test_details[:300] or 'aucun détail'}",
-                    suggestion="Corriger les échecs fonctionnels signalés par le Tester, puis relancer l'itération.",
+                    suggestion=detected_fix_instruction,
                 )],
             )
             metrics = NodeMetrics(

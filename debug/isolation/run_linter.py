@@ -64,6 +64,40 @@ HTML_TRAILING = """<!DOCTYPE html>
 <div>ce contenu est après la fermeture du document</div>
 """
 
+# Bug 4 : JS inline dans HTML avec tuples Python [(0,0), ...] (le bug exact du Tetris 4B :
+# évalue silencieusement à [0, ...] via l'opérateur virgule et casse le kick[0]).
+HTML_JS_PYTHON_TUPLES = """<!DOCTYPE html>
+<html>
+<head><title>Tetris</title></head>
+<body>
+<script>
+const WALL_KICKS = {
+    '0->1': [(0,0), (-1,0), (-1,1), (0,-2), (-1,-2)],
+};
+</script>
+</body>
+</html>
+"""
+
+# Bug 5 : Variable const mutée dans boucle/fonction (le bug exact du Ghost Piece Tetris :
+# const ghostY = piece.y; while (...) { ghostY++; } -> TypeError: Assignment to constant variable).
+HTML_JS_CONST_MUTATION = """<!DOCTYPE html>
+<html>
+<head><title>Tetris</title></head>
+<body>
+<script>
+function drawGhost() {
+    const ghostY = currentPiece.y;
+    while (!collide()) {
+        ghostY++;
+    }
+}
+</script>
+</body>
+</html>
+"""
+
+
 # ─── Fichiers CORRECTS (référence, tout doit PASS) ────────────────────────────
 
 PY_OK = """def trier(tableau):
@@ -148,6 +182,10 @@ if __name__ == "__main__":
                     run("TypeScript dans du .js (failure mode n°1 Coder)", {".js": JS_TS_IN_VANILLA}, "failure")))
     results.append(("HTML contenu après </html> (structure)",
                     run("HTML : contenu après </html> (bug dashboard)", {".html": HTML_TRAILING}, "failure")))
+    results.append(("HTML JS tuples Python (fuite 4B)",
+                    run("HTML : JS inline avec tuples Python [(0,0), ...]", {".html": HTML_JS_PYTHON_TUPLES}, "failure")))
+    results.append(("HTML JS const mutation (TypeError Tetris)",
+                    run("HTML : JS inline avec variable const mutée (TypeError)", {".html": HTML_JS_CONST_MUTATION}, "failure")))
 
     # --- Scénarios CORRECTS (chacun DOIT retourner success) ---
     results.append(("Python propre",

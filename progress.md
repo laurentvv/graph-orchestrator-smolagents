@@ -2294,3 +2294,75 @@ Coder est appliquée correctement par Qwen3.5-9B.
       1 skipped** (1110 baseline + 88 nouveaux, 0 régression). État disque synchronisé
       (feature_list F-105 completed, contract critères 386-390, plan case cochée, ce
       bloc, README §Guardrails, événements DuckDB run_id f-105).
+
+## Jalons de l'Itération (F-126 — durcissements Coder post-mortem run 1552)
+
+> Post-mortem run 2026-08-19_1552 (Tetris) : « Coder crash » après 3 retries
+> (~93 min, 98 steps). Bug local `merge()` (ROWS itéré sur matrice shape 2-4
+> lignes → TypeError au 1er posage) jamais trouvé : le 4B réécrivait TOUT
+> index.html (3 réécritures ~15 min/passe) → contexte inondé → 400
+> exceed_context_size (54 115 > n_ctx 49 152) ; gate screenshot F-109 faux
+> négatif (scan mémoire purgée) ; erreurs console sans localisation. Décision
+> utilisateur : « Go » sur les 4 recommandations R1-R4 (branche
+> fix/coder-hardening-run1552, base fix/architect-skillfinder-failopen).
+
+- [x] F126-1 (R1) : garde anti-réécriture totale dans `tools.write_file` — REFUS
+      d'écraser un fichier EXISTANT de >100 lignes (message pédagogique →
+      read_file ciblé + search_replace/multi_replace ; création libre ; seuil
+      CODER_WRITEFILE_MAX_LINES, 0=off ; fail-open OSError). Settings
+      `coder_writefile_max_lines` (config.py). Prompt : description write_file
+      mise à jour (OUTILS DISPONIBLES) + règle « erreur console = bug LOCAL »
+      dans le RAPPEL récence.
+- [x] F126-2 (R2) : FAST_CONTEXT 49152→65536 + FAST_KV_QUANT=q8_0 dans .env et
+      .env.example (65536@q8_0 = MOINS de VRAM KV que 49152@f16 sur RTX 3060
+      6 Go) + docs/LLAMA_SERVER_FLAGS.md §3.5 mis à jour (leçon run 1552).
+- [x] F126-3 (R3) : preuve durable de screenshot — `tools._SCREENSHOT_PROOF`
+      (mark_screenshot_taken/screenshot_was_taken/reset_screenshot_proof),
+      marquée à l'EXÉCUTION réelle par vision_callback (_mark_screenshot_proof :
+      image PIL ou texte sans signature d'échec ; take_snapshot exclu). Gate
+      nodes.py : flag durable PRIMAIRE, scan agent.memory.steps conservé en
+      fallback. Reset au même endroit que reset_visual_audit (traverse les
+      retries).
+- [x] F126-4 (R4) : enrichissement console — wrapper _ConsoleEnrichingTool +
+      wrap_console_enrichment (vision_callback) : après list_console_messages,
+      chaque [error] msgid (max 4) est détaillé via get_console_message →
+      stack frames (max 8) + directive read_file(path, offset=ligne-8,
+      limit=20) + search_replace chirurgical + avertissement anti-réécriture.
+      Branché dans execute_coder_node. Fail-open total.
+- [x] F126-5 : Tests — nouveau tests/test_f126_run1552_hardening.py (23 verts :
+      garde write_file 5, config 3, preuve screenshot 6 dont 2 via
+      run_with_retry en conditions purgées, enrichment console 8) + entrées
+      feature_list F-125 (rattrapage session précédente) et F-126 +
+      check_agent_guidance 0 erreur. Validation E2E : à confirmer au prochain
+      run Tetris.
+
+## Jalons de l'Itération (post-mortem run 2026-08-19_2104 — validation F-126 à chaud)
+
+> Run Tetris FRESH_START interrompu à ~72 min sur décision utilisateur (dernière
+> tentative CODER ULTRA stérile). Verdict central : **livrable sain, Testers
+> fautifs** — 2 rejets sur verdicts fantômes (max-steps → prose → rescue →
+> « failure ») alors que le jeu tourne (0 erreur console, vérifié en direct).
+
+- [x] F-126 VALIDÉ en production : R1 zéro réécriture totale (itération 2 =
+      read_file + search_replace chirurgical, 7 steps/5 min) ; R2 ctx 65536 +
+      KV q8_0 sans overflow (10,9 M tokens in vs 39 M au run 1552) ; R3/R4
+      sans stress (checklists passées, 0 erreur console à enrichir).
+- [x] Constat Tester (cause racine des 2 rejets) : budget 8/6 steps brûlé en
+      découverte d'UI (ID canvas) + erreurs d'outils propres (-32602 enum,
+      NameError evaluate_script) → final_answer en prose au max-steps →
+      verdict « failure » générique → fail-closed. AUCUN bug réel identifié.
+- [x] Correctif immédiat appliqué : TESTER_MAX_STEPS 8 → 16 (.env + .env.example,
+      prompt tester auto-adaptatif via settings).
+- [x] F-127 appliqué (feu vert utilisateur « go ») : TARGETED_MAX_STEPS 6 → 10 ;
+      REASONING_NO_THINK_NGL=99 dans .env + .env.example (serveur Tester/Ultra en
+      full offload, était bridé à 7,7 t/s en auto-fit) ; `_tester_max_steps_fallback`
+      n'attribute plus les erreurs d'OUTILS du Tester (MCP -32602, NameError sandbox,
+      probe null) à l'app — les « Uncaught » de l'app restent des FAIL (règle ancrée,
+      testée) ; helper `discover_ui()` (inventaire canvas/boutons/inputs en 1 appel,
+      en tête des helpers DevTools, Coder + Tester) ; `_sanitize_console_kwargs` filtre
+      l'enum `types` avant l'appel MCP ; wrapper console enrichi branché aussi sur le
+      Tester. CODER ULTRA : maintenu + accéléré par NGL=99, statut à réévaluer au
+      prochain E2E. Tests : tests/test_f127_tester_hardening.py (16 verts) +
+      factory devtools 5→6 helpers.
+- [x] CODER ULTRA (footnote) : modèle trop lourd à 7,7 t/s — 3 tentatives mortes
+      (cap 1200 s, stall step 26, tuée). Décision modèle à revoir à froid.

@@ -358,7 +358,7 @@ class TestTesterMaxStepsFallback:
         """Des assertions ont tourné (PASS observé), aucun FAIL → success."""
         from graph_orchestrator.nodes import _tester_max_steps_fallback
         step = SimpleNamespace(
-            observations='Script ran: {"counter": 5, "sorted": true}', error=None
+            observations='Script ran: {"status": "pass", "counter": 5, "sorted": true}', error=None
         )
         r = _tester_max_steps_fallback([step], 'final_answer({"task_id": "ts-1"})')
         assert r is not None
@@ -407,7 +407,7 @@ class TestTesterMaxStepsFallback:
 
         # Agent dont memory.steps contient une observation PASS.
         step = SimpleNamespace(
-            observations='result: {"sorted": true, "counter": 10}',
+            observations='result: {"status": "pass", "sorted": true, "counter": 10}',
             error=None,
             model_output="",
             code_action="",

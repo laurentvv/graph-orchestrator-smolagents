@@ -145,13 +145,13 @@ def persist_large_output(
         return output
 
 
-def apply_micro_compact(memory: AgentMemory, keep_recent: int = 3, threshold: int = 150):
-    """L2: Replace old large tool results with a placeholder.
+def apply_micro_compact(memory: AgentMemory, keep_recent: int = 2, threshold: int = 250):
+    """L2: Compaction Payload Recovery (Kilo Code / OpenCode — fiche 47).
 
-    F-101 (s08 micro_compact) : si l'observations contient un chemin persisté
-    (ligne ``Full output: …`` d'un bloc <persisted-output>), le remplacement
-    POINTE vers ce chemin — l'agent peut relire l'intégralité via read_file
-    au lieu d'un placeholder définitif.
+    Purge agressivement les anciens outputs verbeux (snapshots DOM, dumps de code,
+    grosses traces) des étapes antérieures pour éviter la saturation du contexte du 4B
+    et maintenir une vitesse de génération maximale (> 15 t/s).
+    Si l'observation contient un chemin persisté, le remplacement pointe vers ce chemin.
     """
     action_steps = [step for step in memory.steps if isinstance(step, ActionStep)]
     if len(action_steps) <= keep_recent:
@@ -159,16 +159,32 @@ def apply_micro_compact(memory: AgentMemory, keep_recent: int = 3, threshold: in
 
     # Process older steps
     for step in action_steps[:-keep_recent]:
-        if step.observations and len(str(step.observations)) > threshold:
+        obs_str = str(getattr(step, "observations", "") or "")
+        if len(obs_str) > threshold:
             saved_path = None
-            for line in str(step.observations).splitlines():
+            for line in obs_str.splitlines():
                 if line.startswith("Full output: "):
                     saved_path = line.removeprefix("Full output: ").strip()
                     break
+
             if saved_path:
                 step.observations = f"[Earlier tool result saved at {saved_path}]"
+            elif "RootWebArea" in obs_str or "## Latest page snapshot" in obs_str:
+                step.observations = "[Compacted: DOM tree snapshot inspected and verified]"
+            elif "<!DOCTYPE html" in obs_str or "<html" in obs_str:
+                step.observations = f"[Compacted: HTML/JS source code ({len(obs_str)} chars) read]"
+            elif "Console messages" in obs_str:
+                if any(k in obs_str for k in ("[error]", "TypeError", "ReferenceError", "SyntaxError", "Uncaught")):
+                    err_lines = [
+                        l.strip()
+                        for l in obs_str.splitlines()
+                        if any(k in l for k in ("[error]", "TypeError", "ReferenceError", "SyntaxError", "Uncaught"))
+                    ]
+                    step.observations = "[Compacted: Console errors observed:\n" + "\n".join(err_lines[:5]) + "]"
+                else:
+                    step.observations = "[Compacted: 0 console errors observed]"
             else:
-                step.observations = "[Compacted: Earlier tool result truncated. Re-run if needed.]"
+                step.observations = f"[Compacted: Earlier tool output ({len(obs_str)} chars) truncated. Re-run if needed.]"
 
 def apply_snip_compact(
     memory: AgentMemory,

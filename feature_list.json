@@ -1049,6 +1049,27 @@
         "F-115",
         "F-57"
       ]
+    },
+    {
+      "id": "F-125",
+      "name": "Nudge anti-gel navigateur (détection onglet gelé CDP)",
+      "description": "Post-mortem run 2026-08-19_120229 (Tetris) : onglet audité ne répondant plus au renderer (timeouts CDP ~190 s sur Page.captureScreenshot/Runtime.evaluate) pendant que les commandes browser-process répondaient ; le Coder a brûlé ~15 steps/~45 min à retenter les MÊMES outils jusqu’à l’échec définitif. Fix vision_callback : compteur d’observations d’erreur protocole consécutives (marqueurs « timed out » / « Not attached to an active page »), directive de récupération injectée à partir de 3 erreurs consécutives (list_pages + reload, corriger le fichier si re-gel immédiat, final_answer failure propre après 2 récupérations échouées). Fail-open total. Tests : tests/test_vision_nudge.py.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-126",
+      "name": "Durcissements Coder post-mortem run 1552 (anti-réécriture totale, ctx 65536+KV q8_0, preuve screenshot durable, stack traces console)",
+      "description": "Post-mortem run 2026-08-19_1552 (Tetris, « Coder crash » après 3 retries/~93 min) : bug local merge() (itération ROWS sur matrice shape 2-4 lignes) jamais trouvé car le 4B réécrivait TOUT index.html (600+ lignes, 3 fois, ~15 min de prefill/passe) → contexte inondé → 400 exceed_context_size (54 115 tokens > n_ctx 49 152). 4 fixes : R1 write_file REFUSE d’écraser un fichier EXISTANT de >100 lignes (CODER_WRITEFILE_MAX_LINES, défaut 100, 0=off ; création libre) + règle prompt « erreur console = bug LOCAL, corrige via search_replace » ; R2 FAST_CONTEXT 49152→65536 + FAST_KV_QUANT=q8_0 (65536@q8_0 consomme MOINS de VRAM KV que 49152@f16 sur RTX 3060 6 Go) ; R3 la gate F-109 utilise une preuve DURABLE de screenshot (tools._SCREENSHOT_PROOF marquée à l’exécution réelle par vision_callback, reset par nœud — fini le faux négatif « PAS utilisé take_screenshot » du scan agent.memory.steps purgé, run 1552 retry 3) ; R4 list_console_messages enrichi automatiquement des stack traces via get_console_message (fichier:ligne → directive read_file(offset=ligne-8) + search_replace chirurgical ; budget 4 erreurs/8 frames, fail-open). Tests : tests/test_f126_run1552_hardening.py (23 verts). Validation E2E à confirmer au prochain run Tetris.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-127",
+      "name": "Durcissements Testers post-mortem run 2104 (budgets steps, verdicts fantômes, découverte UI)",
+      "description": "Post-mortem run 2026-08-19_2104 (Tetris) : livrable sain (0 erreur console, vérifié en direct) rejeté 2× par des verdicts Tester fantômes — max-steps atteint en découverte d UI → final_answer en prose → rescue DSPy → « failure » générique → fail-closed. 5 fixes : (1) TESTER_MAX_STEPS 8→16 (.env, fait pendant le run — le défaut config était déjà 20 mais l override .env le neutralisait) ; (2) TARGETED_MAX_STEPS 6→10 (targeted_retest.py) ; (3) REASONING_NO_THINK_NGL=99 (.env/.env.example) — le serveur no-think (Web Tester + CODER ULTRA) chargeait en auto-fit à 7,7 t/s au lieu de ~27 ; (4) _tester_max_steps_fallback : les erreurs d OUTILS du Tester (MCP -32602, NameError sandbox, probe null sur ID inexact) ne comptent plus comme FAIL de l app — les « Uncaught » de l app restent des FAIL (règle ancrée anti-faux-positif) ; (5) helper discover_ui (inventaire canvas/boutons/inputs en 1 appel, en tête des helpers DevTools Coder+Tester) + sanitisation de l enum types de list_console_messages (_sanitize_console_kwargs) + wrapper console enrichi branché AUSSI sur le Tester (stack traces + enum valide). CODER ULTRA : maintenu, accéléré par NGL=99 — statut à réévaluer au prochain E2E. Tests : tests/test_f127_tester_hardening.py (16) + factory devtools mise à jour (6 helpers).",
+      "status": "completed",
+      "dependencies": []
     }
   ]
 }

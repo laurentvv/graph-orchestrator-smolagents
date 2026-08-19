@@ -251,28 +251,111 @@ def lint_file(path: str) -> LintResult:
 
     errors: List[str] = []
 
-    # --- tree-sitter (SyntaxError génériques, strings non fermées, structures cassées)
-    # EXCEPTION HTML : tree-sitter-html parse le CSS/JS inline comme du texte HTML →
-    # des dizaines de nœuds ERROR sur du code parfaitement valide (les #, {}, let, ; du
-    # <style>/<script> sont incompréhensibles pour le parser HTML). C'était la cause de
-    # la boucle Linter infinie sur Bubble Sort (77 faux positifs sur un HTML correct).
-    # Pour le HTML, on se fie UNIQUEMENT aux vérifs structurelles (_lint_html_structure)
-    # qui sont précises (équilibrage balises, contenu après </html>, DOCTYPE).
-    parser = _get_parser(lang)
-    if parser is not None and lang != "html":
-        err_count, miss_count = _count_tree_sitter_errors(parser, source.encode("utf-8"))
-        if err_count > 0:
-            errors.append(f"[tree-sitter] {err_count} erreur(s) de syntaxe détectée(s).")
-        if miss_count > 0:
-            errors.append(f"[tree-sitter] {miss_count} token(s) manquant(s) (MISSING).")
+    # --- tree-sitter & vérifications JavaScript / HTML / CSS / Python
+    from .js_utils import (
+        extract_script_blocks,
+        extract_style_blocks,
+        detect_python_syntax_in_js,
+        detect_const_mutation_in_js,
+        detect_unbounded_while_in_js,
+        run_node_check,
+    )
 
-    # --- py_compile (IndentationError Python — le point noir, tree-sitter l'ignore)
-    if lang == "python":
+    if lang == "html":
+        # 1. Vérifications structurelles HTML
+        errors.extend(_lint_html_structure(source))
+
+        # 2. Linting du JavaScript inline (<script>)
+        js_parser = _get_parser("javascript")
+        for sblock in extract_script_blocks(source):
+            script_code = sblock["code"]
+            start_l = sblock["start_line"]
+            # Détection de fuites de syntaxe Python dans le JS
+            errors.extend(detect_python_syntax_in_js(script_code, start_line=start_l))
+            # Détection de mutations de variables const (TypeError bloquant)
+            errors.extend(detect_const_mutation_in_js(script_code, start_line=start_l))
+            # Détection de boucles while infinies
+            errors.extend(detect_unbounded_while_in_js(script_code, start_line=start_l))
+            # AST tree-sitter JS
+            if js_parser is not None:
+                err_count, miss_count = _count_tree_sitter_errors(
+                    js_parser, script_code.encode("utf-8")
+                )
+                if err_count > 0:
+                    errors.append(
+                        f"[tree-sitter JS inline - Ligne ~{start_l}] {err_count} erreur(s) de syntaxe JS."
+                    )
+                if miss_count > 0:
+                    errors.append(
+                        f"[tree-sitter JS inline - Ligne ~{start_l}] {miss_count} token(s) manquant(s)."
+                    )
+            # node --check (si node dispo)
+            code_rc, stderr = run_node_check(script_code)
+            if code_rc != 0 and stderr.strip():
+                errors.append(
+                    f"[node --check inline - Ligne ~{start_l}] {stderr.strip()[:300]}"
+                )
+
+        # 3. Linting du CSS inline (<style>)
+        css_parser = _get_parser("css")
+        if css_parser is not None:
+            for cblock in extract_style_blocks(source):
+                style_code = cblock["code"]
+                start_l = cblock["start_line"]
+                err_count, _ = _count_tree_sitter_errors(
+                    css_parser, style_code.encode("utf-8")
+                )
+                if err_count > 0:
+                    errors.append(
+                        f"[tree-sitter CSS inline - Ligne ~{start_l}] {err_count} erreur(s) de syntaxe CSS."
+                    )
+
+    elif lang in ("javascript", "typescript", "tsx"):
+        # Détection de fuites de syntaxe Python dans le JS
+        if lang == "javascript":
+            errors.extend(detect_python_syntax_in_js(source))
+            errors.extend(detect_const_mutation_in_js(source))
+            errors.extend(detect_unbounded_while_in_js(source))
+            # node --check
+            code_rc, stderr = run_node_check(source)
+            if code_rc != 0 and stderr.strip():
+                errors.append(f"[node --check] {stderr.strip()[:300]}")
+
+        # tree-sitter
+        parser = _get_parser(lang)
+        if parser is not None:
+            err_count, miss_count = _count_tree_sitter_errors(
+                parser, source.encode("utf-8")
+            )
+            if err_count > 0:
+                errors.append(
+                    f"[tree-sitter] {err_count} erreur(s) de syntaxe détectée(s)."
+                )
+            if miss_count > 0:
+                errors.append(
+                    f"[tree-sitter] {miss_count} token(s) manquant(s) (MISSING)."
+                )
+
+    elif lang == "python":
+        parser = _get_parser("python")
+        if parser is not None:
+            err_count, miss_count = _count_tree_sitter_errors(
+                parser, source.encode("utf-8")
+            )
+            if err_count > 0:
+                errors.append(
+                    f"[tree-sitter] {err_count} erreur(s) de syntaxe détectée(s)."
+                )
         errors.extend(_lint_python_py_compile(path))
 
-    # --- Vérifs structurelles HTML (tree-sitter-html tolérant ne suffit pas)
-    if lang == "html":
-        errors.extend(_lint_html_structure(source))
+    elif lang == "css":
+        parser = _get_parser("css")
+        if parser is not None:
+            err_count, _ = _count_tree_sitter_errors(parser, source.encode("utf-8"))
+            if err_count > 0:
+                errors.append(
+                    f"[tree-sitter] {err_count} erreur(s) de syntaxe détectée(s)."
+                )
 
     return LintResult(
         path=path,

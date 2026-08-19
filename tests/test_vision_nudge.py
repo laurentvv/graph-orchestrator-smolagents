@@ -17,9 +17,11 @@ import pytest
 from graph_orchestrator import tools
 from graph_orchestrator.config import settings
 from graph_orchestrator.vision_callback import (
+    _BROWSER_STALL_THRESHOLD,
     _NUDGE_THRESHOLD,
     _ScreenshotCapturingTool,
     make_screenshot_callback,
+    reset_browser_stall,
     reset_screenshot_nudge,
 )
 
@@ -54,9 +56,11 @@ class _FakeScreenshotTool:
 def _clean_state():
     tools.reset_visual_audit()
     reset_screenshot_nudge()
+    reset_browser_stall()
     yield
     tools.reset_visual_audit()
     reset_screenshot_nudge()
+    reset_browser_stall()
 
 
 def _make_wrapper():
@@ -190,3 +194,87 @@ class TestChecklistNudge:
             self._step(cb, holder)
         step = self._step(cb, holder)  # 3e screenshot RÉEL
         assert "Screenshot #3" in step.observations
+
+
+class TestBrowserStallNudge:
+    """F-125 (post-mortem run 2026-08-19 12:02, Tetris) : onglet gelé.
+
+    Le renderer ne répondait plus (timeout CDP ~190 s sur screenshots/evaluate/
+    input) alors que list_pages répondait : le Coder a brûlé ~15 steps à retenter
+    au lieu de récupérer → « Coder crash ». Le nudge injecte une directive de
+    récupération à partir de 3 observations d'erreur protocole consécutives.
+    """
+
+    _STALLED = (
+        "Out: Error: Runtime.evaluate timed out. Increase the 'protocolTimeout' "
+        "setting in launch/connect calls for a higher timeout if needed."
+    )
+
+    def _make_callback(self, criteria: int = 0):
+        holder: list = []
+        cb = make_screenshot_callback(holder, visual_criteria_count=criteria)
+        return cb, holder
+
+    def _step(self, cb, holder, observations="Code output"):
+        # Un step gelé ne produit AUCUNE image : holder laissé vide exprès.
+        memory_step = SimpleNamespace(observations=observations, observations_images=None)
+        cb(memory_step, agent=None)
+        return memory_step
+
+    def test_pas_de_nudge_sous_le_seuil(self):
+        cb, holder = self._make_callback()
+        for _ in range(_BROWSER_STALL_THRESHOLD - 1):
+            step = self._step(cb, holder, observations=self._STALLED)
+            assert "[NAVIGATEUR GELÉ]" not in (step.observations or "")
+
+    def test_nudge_au_3e_step_gele_sans_screenshot(self):
+        """Le nudge doit agir même AUCUNE image capturée (c'est le signal même)."""
+        cb, holder = self._make_callback()
+        for _ in range(_BROWSER_STALL_THRESHOLD):
+            step = self._step(cb, holder, observations=self._STALLED)
+        assert "[NAVIGATEUR GELÉ]" in step.observations
+        assert "navigate_page" in step.observations
+        assert "final_answer" in step.observations
+        assert "3 erreurs de protocole" in step.observations
+
+    def test_page_detachee_comptee(self):
+        """Signature « Not attached to an active page » (run Tetris, step 12+)."""
+        cb, holder = self._make_callback()
+        stalled = (
+            "Out: Error: Protocol error (Page.captureScreenshot): "
+            "Not attached to an active page"
+        )
+        for _ in range(_BROWSER_STALL_THRESHOLD):
+            step = self._step(cb, holder, observations=stalled)
+        assert "[NAVIGATEUR GELÉ]" in step.observations
+
+    def test_step_sain_reset_le_compteur(self):
+        cb, holder = self._make_callback()
+        for _ in range(_BROWSER_STALL_THRESHOLD - 1):
+            self._step(cb, holder, observations=self._STALLED)
+        self._step(cb, holder, observations="Out: OK, canvas rendu")  # step sain
+        step = self._step(cb, holder, observations=self._STALLED)
+        assert "[NAVIGATEUR GELÉ]" not in step.observations  # recompté à 1
+
+    def test_reset_repart_de_zero(self):
+        cb, holder = self._make_callback()
+        for _ in range(_BROWSER_STALL_THRESHOLD):
+            self._step(cb, holder, observations=self._STALLED)
+        reset_browser_stall()
+        for _ in range(_BROWSER_STALL_THRESHOLD - 1):
+            step = self._step(cb, holder, observations=self._STALLED)
+            assert "[NAVIGATEUR GELÉ]" not in step.observations
+
+    def test_actif_aussi_pour_le_tester(self):
+        """Callback sans critères visuels (chemin Tester) : nudge anti-gel actif."""
+        cb, holder = self._make_callback(criteria=0)
+        for _ in range(_BROWSER_STALL_THRESHOLD):
+            step = self._step(cb, holder, observations=self._STALLED)
+        assert "[NAVIGATEUR GELÉ]" in step.observations
+
+    def test_observations_existantes_preservees(self):
+        cb, holder = self._make_callback()
+        for _ in range(_BROWSER_STALL_THRESHOLD):
+            step = self._step(cb, holder, observations=f"Out: …\n{self._STALLED}")
+        assert step.observations.startswith("Out: …")
+        assert "[NAVIGATEUR GELÉ]" in step.observations

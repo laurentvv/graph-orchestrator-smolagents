@@ -92,6 +92,11 @@ nextn et lit le taux d'acceptation dans le log (`draft acceptance = 0.70 ...`).
 - 256 = valeur des **presets officiels llama.cpp Qwen Coder** + reco particula.tech
   (juil. 2026) pour les agents ; 32-64 pour usage conversationnel simple.
 - Mesuré : **-10% préfill** sur charge multi-tours simulée ; validé @ctx49152.
+- ⚠️ **LIMITATION MULTIMODAL (constat 2026-08-19, F-126)** : llama-server loggue
+  `cache_reuse is not supported by multimodal, it will be disabled` — dès qu'un
+  `--mmproj` est attaché (notre Coder est multimodal), le flag est **silencieusement
+  désactivé**. Le `-10%` préfill n'est donc PAS actif pour le Coder aujourd'hui ;
+  il le reste pour tout rôle textuel sans mmproj.
 - Non testé combiné à `spec_mtp` (nous : FAST seulement, sans MTP). À bencher si un
   jour on active les deux sur le même rôle (`debug/bench_prefill_flags.py`).
 
@@ -109,8 +114,19 @@ nextn et lit le taux d'acceptation dans le log (`draft acceptance = 0.70 ...`).
   (196k tokens de KV pour un 4B @49k !) → pression VRAM massive → crash marathon
   Coder (post-mortem run #4). Nos nœuds sont séquentiels, 1 slot suffit.
 - **`--flash-attn auto`** : prérequis du KV V quantizé, accélère le préfill.
-- Contexte par rôle calibré sur les mesures réelles : Coder 49152 (32768 = trop juste,
-  400 exceed_context_size, leçon 2026-08-14).
+- Contexte par rôle calibré sur les mesures réelles : Coder **65536 + KV q8_0**
+  (F-126, post-mortem run 2026-08-19_1552 : 49152 @f16 dépassé — deux réécritures
+  complètes d'un gros fichier ont monté la requête à 54 115 tokens → 400
+  exceed_context_size → run perdu ; 65536 @q8_0 consomme MOINS de VRAM KV que
+  49152 @f16, cf. §3.2 ; 32768 = trop juste, leçon 2026-08-14).
+- **Quant Q6_K dispo pour le Coder** (`debug/bench_q6_coder.py`, 2026-08-19) : le
+  blob Qwen3.5-4B-Q6_K (3,64 Go vs 2,83 Go) **PASSE** aux flags production exacts
+  (ctx 65536 + KV q8_0 + mmproj, chargé en 8,6 s, VRAM 4423 MiB — l'auto-fit
+  délesté plus de layers sur CPU). Prix mesuré vs Q4_K_M : **-16,5% préfill**
+  (1092 → 912 tok/s) et **-39% génération** (19,3 → 11,8 t/s) → un livrable
+  complet de 12k tokens passe de ~10 à ~17 min. Levier qualité ponctuel
+  (swap `FAST_MODEL` dans .env) si le Q4 reste trop faible en correction APRÈS
+  les durcissements F-126 — pas un défaut recommandé.
 
 ## 4. Flags écartés — ne pas réessayer sans nouvelle preuve
 

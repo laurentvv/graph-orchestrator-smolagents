@@ -97,6 +97,12 @@ class WebTestRunner:
                 # détecter des bugs visuels (layout cassé, superpositions).
                 screenshot_capture: list = []
                 tester_tools = wrap_screenshot_tools(tester_tools, screenshot_capture)
+                # F-127 : enrichissement console pour le Tester AUSSI — sanitise
+                # l'enum `types` (le 9B invente "exception" → MCP -32602 → step
+                # perdu, run 2026-08-19_2104) et ajoute les stack traces des
+                # erreurs (guide le verdict). Fail-open sans get_console_message.
+                from ..vision_callback import wrap_console_enrichment
+                tester_tools = wrap_console_enrichment(tester_tools)
 
                 # F-72 (Prompt Offloading) : outils helper DevTools (clean_dom,
                 # add_visual_tags, fuzz_click_all_buttons) — encapsulent des snippets JS
@@ -277,11 +283,12 @@ Pour inspecter la structure sans surcharger ton contexte :
    principale du DOM. Utilise `verbose=True` pour le détail complet.
 2. `evaluate_script(function="async () => document.body.innerHTML.length")` (DevTools) : pour
    des checks ponctuels (nombre d'éléments, valeurs, styles calculés).
-Les outils `clean_dom()` / `add_visual_tags()` / `fuzz_click_all_buttons()` (SANS préfixe
-puppeteer_) instrumentent le navigateur DevTools actif — tu peux les utiliser librement :
-`clean_dom()` renvoie le DOM allégé (analyse sans polluer ton contexte), `add_visual_tags()`
-ajoute des badges rouges numérotés sur les éléments cliquables avant un screenshot,
-`fuzz_click_all_buttons()` réveille les bugs JS cachés en cliquant tous les `<button>`.
+Les outils `clean_dom()`, `add_visual_tags()`, `fuzz_click_all_buttons()`, `probe_canvas_activity()`, `fuzz_keyboard_controls()` instrumentent le navigateur DevTools actif :
+- `probe_canvas_activity()` : vérifie la surface peinte du Canvas (> 0 pixels) et l'animation 60 FPS (détecte les toiles inertes, vides ou coordonnées écrasées à 30px).
+- `fuzz_keyboard_controls()` : simule les touches clavier de jeu (Flèches, Espace, Z, X) et capture immédiatement toute exception JS non gérée.
+- `clean_dom()` : renvoie le DOM allégé (analyse sans polluer ton contexte).
+- `add_visual_tags()` : ajoute des badges rouges numérotés sur les éléments cliquables avant un screenshot.
+- `fuzz_click_all_buttons()` : clique tous les `<button>` pour réveiller les bugs JS cachés.
 
 Vérifie l'application web générée. N'oublie PAS l'étape 4 du skill (Functional Logic Testing) :
 identifie les comportements clés du cahier des charges ci-dessus et écris des assertions via

@@ -1059,7 +1059,17 @@ async def run_coding_workflow(
                     ))
                     return {"status": "success", "task_id": subtask.task_id}, sub_metrics
                 else:
-                    feedback = judge_res.final_feedback if judge_res else "Erreur système du juge."
+                    if judge_res and (judge_res.root_cause or judge_res.fix_instruction):
+                        blocks = []
+                        if judge_res.root_cause:
+                            blocks.append(f"🎯 CAUSE RACINE : {judge_res.root_cause}")
+                        if judge_res.fix_instruction:
+                            blocks.append(f"🛠️ INSTRUCTION DE CORRECTION : {judge_res.fix_instruction}")
+                        if judge_res.final_feedback:
+                            blocks.append(f"📝 FEEDBACK : {judge_res.final_feedback}")
+                        feedback = "\n".join(blocks)
+                    else:
+                        feedback = judge_res.final_feedback if judge_res else "Erreur système du juge."
                     print(f"    [-] {subtask.task_id} REJETÉ. Sauvegarde du bug dans DuckDB...")
                     if obs_id:
                         kg.mark_status(obs_id, "rejected")
@@ -1229,10 +1239,15 @@ async def run_coding_workflow(
         except Exception as prune_err:
             print(f"[-] Prune KG en erreur ({prune_err}) — repli silencieux.")
 
-        # Toutes les sous-tâches sont traitées : on marque le run comme terminé.
-        kg.clear_checkpoint(run_id)
-        kg.clear_idempotency(run_id)
-        print(f"\n[*] Run {run_id} terminé — checkpoint effacé.")
+        # Si TOUTES les sous-tâches ont réussi, on marque le run comme terminé et on efface le checkpoint.
+        # En cas d'échec / crash, on CONSERVE le checkpoint pour permettre la reprise (F-24) au prochain lancement.
+        all_success = bool(results) and all(r.get("status") == "success" for r in results)
+        if all_success:
+            kg.clear_checkpoint(run_id)
+            kg.clear_idempotency(run_id)
+            print(f"\n[*] Run {run_id} terminé avec SUCCÈS — checkpoint effacé.")
+        else:
+            print(f"\n[⚠️] Run {run_id} terminé avec des ÉCHECS — checkpoint CONSERVÉ pour reprise.")
 
         return {"architect_plans": len(seed_tasks), "final_results": results}, all_metrics
 

@@ -40,6 +40,50 @@ def test_ellipsis_elision():
     assert out is not None
 
 
+def test_irregular_multiline_indentation():
+    """Le LLM a des décalages d'espaces irréguliers ligne à ligne (ex: 12 sp puis 14 sp).
+    Le matching par stripped lines doit trouver le bloc unique et le remplacer."""
+    whole = (
+        "function lockPiece() {\n"
+        "    const shape = currentPiece.shape;\n"
+        "    for (let y = 0; y < shape.length; y++) {\n"
+        "        if (shape[y]) {\n"
+        "            if (currentPiece.y + y >= 0) {\n"
+        "                board[y] = 1;\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+    )
+    # Search avec des espaces irréguliers (ex: 2 espaces au lieu de 8, 10 au lieu de 12)
+    search = (
+        "function lockPiece() {\n"
+        "  const shape = currentPiece.shape;\n"
+        "    for (let y = 0; y < shape.length; y++) {\n"
+        "      if (shape[y]) {\n"
+        "         if (currentPiece.y + y >= 0) {\n"
+        "           board[y] = 1;\n"
+        "         }\n"
+        "      }\n"
+        "    }\n"
+        "}"
+    )
+    replace = (
+        "function lockPiece() {\n"
+        "    const shape = currentPiece.shape;\n"
+        "    for (let y = 0; y < shape.length; y++) {\n"
+        "        if (shape[y] && y < ROWS) {\n"
+        "            board[y] = 1;\n"
+        "        }\n"
+        "    }\n"
+        "}"
+    )
+    out = replace_most_similar_chunk(whole, search, replace)
+    assert out is not None
+    assert "y < ROWS" in out
+    assert "currentPiece.y + y >= 0" not in out
+
+
 def test_no_match_returns_none():
     whole = "alpha\nbeta\n"
     out = replace_most_similar_chunk(whole, "gamma", "delta")
@@ -55,6 +99,61 @@ def test_multiple_occurrences_fails_gracefully():
     # Le match exact ligne à ligne prend la 1ère occurrence ; on accepte un résultat
     # tant qu'il ne plante pas et reste cohérent (contient encore un 'x').
     assert out is None or out.count("x") >= 1
+
+
+# ==========================================
+# Fallback 6) sous-chaîne exacte unique
+# (post-mortem run 2026-08-19, Tetris : le 4B
+#  fournissait des blocs partiels de ligne —
+#  sans la virgule finale — et les stratégies
+#  ligne à ligne échouaient toutes)
+# ==========================================
+
+def test_substring_match_partial_line():
+    """Old_string partiel de ligne (virgule finale absente) : le texte existe mot
+    pour mot comme sous-chaîne → le fallback remplace et préserve la ponctuation
+    qui suit (la virgule de la ligne d'origine)."""
+    whole = (
+        "const PIECE_COLORS = {\n"
+        "            I: [[0, '#00ffff'], ['#00ffff', '#00ffff']],\n"
+        "            O: [[0, '#ffff00'], ['#ffff00', '#ffff00']],\n"
+        "        };\n"
+    )
+    part = "            O: [[0, '#ffff00'], ['#ffff00', '#ffff00']]"
+    repl = "            O: [[0, '#ffff00', '#ffff00'], ['#ffff00', '#ffff00', '#ffff00']]"
+    out = replace_most_similar_chunk(whole, part, repl)
+    assert out is not None
+    assert (
+        "O: [[0, '#ffff00', '#ffff00'], ['#ffff00', '#ffff00', '#ffff00']],\n" in out
+    )
+
+
+def test_substring_stripped_needle_matches():
+    """Old_string sans l'indentation de la ligne : la sous-chaîne stripped unique
+    est remplacée SANS toucher à l'indentation ni à la ponctuation environnantes."""
+    whole = "    let colors = ['#fff', '#000'];\n"
+    part = "let colors = ['#fff', '#000']"
+    repl = "let colors = ['#ffffff', '#000000']"
+    out = replace_most_similar_chunk(whole, part, repl)
+    assert out is not None
+    assert "    let colors = ['#ffffff', '#000000'];\n" == out
+
+
+def test_substring_ambiguous_returns_none():
+    """Sous-chaîne présente 2 fois : ambigu → None (pas de devinette)."""
+    whole = "a = '#ffff00'],\nb = '#ffff00'],\n"
+    part = "'#ffff00'],"
+    out = replace_most_similar_chunk(whole, part, "X")
+    assert out is None
+
+
+def test_substring_too_short_returns_none():
+    """Sous-chaîne unique mais trop courte (< 8 chars) : garde anti-aiguillage
+    générique → None."""
+    whole = "abcdefgh ijklmn\n"
+    part = "abc"
+    out = replace_most_similar_chunk(whole, part, "Z")
+    assert out is None
 
 
 # ==========================================

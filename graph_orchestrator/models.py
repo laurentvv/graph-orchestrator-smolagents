@@ -152,6 +152,8 @@ class CodeJudgeOutput(BaseModel):
     task_id: str
     is_approved: bool
     final_feedback: str
+    root_cause: str = Field(default="", description="Cause racine précise du bug ou du rejet (ex: variable hors de portée à la ligne 286).")
+    fix_instruction: str = Field(default="", description="Instruction chirurgicale de correction pour le Coder (ex: remplacer l'accès board[i][c] par une boucle for dédiée).")
     # P6 (Rubric Judge) : retours structurés par sévérité (critical/high/medium/low), ancrage
     # in-diff only (location), anti-nits (un 'low' seul ne justifie pas un rejet). Additif —
     # défaut [] = rétro-compatible avec les checkpoints existants et les tests qui construisent
