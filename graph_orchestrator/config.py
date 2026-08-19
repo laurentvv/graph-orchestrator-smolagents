@@ -228,13 +228,11 @@ class Settings:
 
     # --- Cap steps du Web Tester (optimisation durée, fix TIMINGS_ANALYSE) ---
     # Plafond de max_steps pour le WebTestRunner (ToolCallingAgent Puppeteer).
-    # 12 steps permet une séquence complète : 1 navigate + 1 console + 1 snapshot +
-    # 4-6 assertions interactives / state-diffing (touches, clics, chute, score) +
-    # 1 screenshot + 1 final_answer.
-    tester_max_steps: int = 12
+    # 20 steps permet des tests approfondis sans contrainte artificielle.
+    tester_max_steps: int = 20
     # Hard deadline wall-clock du Web Tester (smolagents ToolCallingAgent + MCP Puppeteer/
-    # DevTools). 600s (10 min) donne le filet nécessaire pour 12 steps sans timeout.
-    tester_timeout_s: int = 600
+    # DevTools). 900s (15 min) donne tout le filet nécessaire.
+    tester_timeout_s: int = 900
 
     # --- Inline des resources de skill pour le Tester (F-97 / MA-5) ---
     # Résout la progressive disclosure F-92 côté serveur : inline les resources/*.md
@@ -620,11 +618,11 @@ def load_settings() -> Settings:
         log_level=_get_str("LOG_LEVEL", "LOW"),
         fresh_start=_get_bool("FRESH_START", False),
         test_timeout_s=_get_int("TEST_TIMEOUT_S", 120),
-        tester_timeout_s=_get_int("TESTER_TIMEOUT_S", 600),
+        tester_timeout_s=_get_int("TESTER_TIMEOUT_S", 900),
         stderr_head_lines=_get_int("STDERR_HEAD_LINES", 20),
         stderr_tail_lines=_get_int("STDERR_TAIL_LINES", 20),
         feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),
-        tester_max_steps=_get_int("TESTER_MAX_STEPS", 12),
+        tester_max_steps=_get_int("TESTER_MAX_STEPS", 20),
         tester_inline_skill_resources=_get_bool("TESTER_INLINE_SKILL_RESOURCES", True),
         coder_max_steps=_get_int("CODER_MAX_STEPS", 30),
         idle_breaker_threshold=_get_int("IDLE_BREAKER_THRESHOLD", 3),
