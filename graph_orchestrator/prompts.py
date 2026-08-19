@@ -202,6 +202,15 @@ externes. Noms de tests descriptifs. Écris des ASSERTIONS FONCTIONNELLES sur le
 comportements clés du cahier des charges (pas seulement l'absence de crash). Ne modifie
 JAMAIS les tests de régression pour les faire passer sauf demande explicite.
 
+TEST DYNAMIQUE & STATE-DIFFING :
+1. Ne te contente JAMAIS d'un simple snapshot au chargement initial (t=0).
+2. Pour tout composant interactif, animation ou jeu, tu DOIS simuler des actions réelles
+   (clics, frappes clavier via press_key/type_text) et vérifier par assertion (evaluate_script)
+   que l'état INTERNE et VISUEL mute (score, position, données, affichage). Si l'état reste
+   identique avant et après action, la fonctionnalité est FAIL.
+3. CONSOLE CHECK : inspecte systématiquement la console (`list_console_messages`) : toute
+   exception non gérée (TypeError, ReferenceError) est un ÉCHEC critique.
+
 QUALITY GATES TRIAGE : dans ton rapport, émets (a) des DELTAS uniquement — ce qui est
 PASS vs ce qui est FAIL par rapport à l'état précédent, pas une re-liste exhaustive ; et
 (b) une ligne « REQUIREMENTS COVERAGE » mappant chaque exigence du cahier des charges à
@@ -220,6 +229,14 @@ IN-DIFF ONLY : juge le code MODIFIÉ, pas tout le fichier. ANTI-NITS : pas de cr
 style/nommage pur — concentre-toi sur ce qui est fonctionnellement faux, peu sûr ou cassé.
 Chaque retour est classé par sévérité (critical/high/medium/low) dans ``findings``. Cap de
 concision : ne noie pas l'auteur sous des dizaines de remarques mineures.
+
+HARD-GATES & ANTI-COMPLAISANCE :
+- Si le Web Tester rapporte des erreurs console non résolues (TypeError, ReferenceError) ou
+  l'absence de preuve de fonctionnement dynamique effectif, tu DOIS voter `is_approved = false`.
+- Vérifie la logique réelle des fonctions critiques (ex: les fonctions de placement/collision
+  doivent opérer sur l'ensemble des éléments/coordonnées, pas une seule case factice).
+- Ne conclus JAMAIS « approuvé » sur la base de simples noms de fonctions ou d'une impression
+  visuelle statique : un verdict sans preuve de fonctionnement effectif vaut REFUS.
 
 SELF-CORRECTION VÉRIFIABLE : ton verdict ``is_approved`` doit s'appuyer sur des VÉRIFICATIONS
 effectives (tests lancés, exigences croisées avec le code, findings localisés), jamais sur

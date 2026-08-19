@@ -270,13 +270,17 @@ def _detect_idle_step(agent, node_kind: str = "coder") -> Optional[str]:
 
 
 # Marqueurs de FAIL dans les observations du Tester (retours evaluate_script).
-# Indicateurs qu'une assertion fonctionnelle a ÉCHOUÉ (pas juste une exception MCP).
+# Indicateurs qu'une assertion fonctionnelle a ÉCHOUÉ ou qu'une exception est apparue.
 _TESTER_FAIL_MARKERS = (
-    ": fail", "fail:", "failed", '"fail"', "'fail'",
-    "est faux", "incorrect", "non passé", "pas trié",
+    ": fail", "fail:", "failed", '"fail"', "'fail'", "[fail]",
+    "uncaught", "typeerror", "referenceerror", "syntaxerror",
+    "est faux", "incorrect", "non passé", "pas trié", "assertion failed",
 )
-# Marqueurs de succès implicite (assertion passée). Présence = le test a tourné.
-_TESTER_PASS_MARKERS = ('"pass"', "'pass'", ": pass", "pass:", "true", "vrai")
+# Marqueurs de succès explicite (assertion passée). Présence = le test a tourné et réussi.
+_TESTER_PASS_MARKERS = (
+    '"pass"', "'pass'", ": pass", "pass:", "[pass]", "status: pass", "verdict: pass",
+    "assertion passed", "test passed", "succès", "valide ✓",
+)
 
 
 def _visual_checklist_error(criteria_count):
