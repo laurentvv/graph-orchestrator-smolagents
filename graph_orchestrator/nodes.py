@@ -585,20 +585,26 @@ async def run_with_retry(
             
             validated = extract_and_validate(raw_output, model_class, api_base=api_base_val, model_id=model_id_val)
 
-            # Fallback max_steps (Tester) : si le LLM Tester atteint max_steps sans
-            # final_answer structuré (over-exploration du 9B), extract_and_validate rend
-            # None → retries gaspillés. On scanne le step history pour dériver un verdict
-            # comportemental (FAIL observé → failure, assertions PASS sans FAIL → success).
-            # Évite la boucle de 3 retries (~15 min) puis None sans signal pour le Judge.
-            if validated is None and node_kind == "tester":
+            # Fallback & Hard-Gate (Tester) : si le LLM Tester atteint max_steps sans
+            # final_answer structuré, ou si DSPy a sauvé avec "success" alors que des erreurs
+            # critiques (TypeError, Uncaught, syntax error) existent dans les observations des steps,
+            # on applique le verdict comportemental déterministe.
+            if node_kind == "tester":
                 _fb_steps = getattr(getattr(agent, "memory", None), "steps", None) or []
                 _fallback = _tester_max_steps_fallback(_fb_steps, prompt)
                 if _fallback is not None:
-                    print(
-                        f"[i] Tester max_steps fallback activé : verdict dérivé du step "
-                        f"history (status={_fallback.status})."
-                    )
-                    validated = _fallback
+                    if validated is None or (_fallback.status == "failure" and validated.status == "success"):
+                        if validated is not None:
+                            print(
+                                f"[!] Tester Hard-Gate : écrasement du verdict complaisant par failure "
+                                f"suite à une anomalie critique détectée dans les logs ({_fallback.details[:120]}...)."
+                            )
+                        else:
+                            print(
+                                f"[i] Tester max_steps fallback activé : verdict dérivé du step "
+                                f"history (status={_fallback.status})."
+                            )
+                        validated = _fallback
 
             # Collecte métriques depuis le RunResult
             last_metrics = _metrics_from_run(agent, run_result)
