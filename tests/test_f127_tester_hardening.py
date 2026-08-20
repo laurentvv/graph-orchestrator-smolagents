@@ -44,9 +44,11 @@ def _step(obs: str):
 # ==========================================
 
 class TestTargetedBudget:
-    def test_targeted_max_steps_is_10(self):
-        """F-127 : 6 tuait le re-test ciblé en découverte d'UI → 10."""
-        assert TARGETED_MAX_STEPS == 10
+    def test_targeted_max_steps_is_16(self):
+        """F-127 : 6 tuait le re-test ciblé en découverte d'UI → 10.
+        F-141 (run 2026-08-20_1817) : 10 coupait le re-test EN PLEINE vérification
+        d'un vrai bug (pause au chargement) → timeout + Judge fail-closed → 16."""
+        assert TARGETED_MAX_STEPS == 16
 
 
 # ==========================================

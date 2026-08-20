@@ -68,6 +68,19 @@
   (Scrapling, 7e helper DevTools), F-140 reaper process (qm, registre disque
   + taskkill arbre + boot workflow). 30 nouveaux tests (test_codepur_ports +
   màj compteurs), static tester 90 passed, gate F-103 OK, contract C462-C466.
+- [x] Run #7 (1817, stoppe it.3 sur decision, ~2h20) : chaîne QA COMPLETE
+  1re fois (Coder→Linter→Static→Tester→Security→Judge fail-closed), console
+  livrable VIDE 1re fois, 0 erreur transport. P2 1 frappe (const paire fix
+  instantane), F-130 x8 (9B les IGNORE), F-99 + priorite final_answer OK.
+  Analyse profonde (analyzer 14,8M tokens in / 57 steps Coder ; 2 parsing
+  unterminated recupere par F-33-2 ; Static passe SILENCIEUX ; Tester coupe
+  a 10 steps/900s EN decouvrant le vrai bug pause-au-chargement ; ULTRA =
+  14x le MEME read_file(offset=525)).
+- [x] F-141 (4 correctifs code pur) : (A) print succes Static, (B) garde
+  sanitte plan Architect (200x80/6000x2400 detectes deterministement + retry
+  correctif unique, px vs cellules distingues), (C) TARGETED_MAX_STEPS 16 +
+  TESTER_TIMEOUT_S 1200, (D) plafond lectures identiques (3e refus + directive,
+  reset par noeud). 8 tests, gate F-103 OK, contract C467.
 - [ ] Relance run E2E (après décision utilisateur) — validation : 0 erreur
   dans les logs.
 

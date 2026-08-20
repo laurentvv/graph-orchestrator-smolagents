@@ -1201,6 +1201,13 @@
       "dependencies": [
         "F-104"
       ]
+    },
+    {
+      "id": "F-141",
+      "name": "Agent Teams & Protocoles de Runtime (deepseek-harness)",
+      "description": "Architecture expérimentale pour orchestrer des sous-agents en équipe, couplée à un protocole de communication structuré (FD3) et un PTY PowerShell persistant pour maintenir l'état du shell entre les itérations. Source: update_report 2026-08-20 (deepseek-harness).",
+      "status": "pending",
+      "dependencies": []
     }
   ]
 }
