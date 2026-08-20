@@ -1112,6 +1112,17 @@
         "F-130",
         "F-114"
       ]
+    },
+    {
+      "id": "F-132",
+      "name": "Gardes édition anti-\n littéral + anti-no-op (search_replace/edit_file/multi_replace/write_file)",
+      "description": "Post-mortem runs 2026-08-20_1028 + 1203 (Tetris, 2 runs perdus 'Coder crash') : le 4B écrivait search_replace(..., new_string=r\"\"\"...;\n...\"\"\") — le préfixe r (recommandé par le prompt pour échapper accolades/guillemets JS) rend \n LITTÉRAL (2 caractères) → le fichier reçoit 'const a = 1;\nconst b' sur UNE ligne → SyntaxError JS PERMANENT (constaté ligne 143 du livrable 1203 via Chrome). Pire : sa « correction » était old_string == new_string — un NO-OP accepté avec « Successfully edited » → le modèle croit avoir corrigé, re-teste, re-voit l'erreur, boucle jusqu'au plafond de steps (3×40 steps par run, no-ops comptés 'Successfully edited' : 6 dans le run 1203). IMPLÉMENTÉ (tools.py) : (1) _noop_rejection — rejet déterministe de toute édition old==new exact (octet pour octet) avec message pédagogique ; (2) _literal_newline_rejection — rejet du \n littéral en SÉPARATEUR DE CODE dans le texte INSÉRÉ (new_string/content) pour fichiers code (.html/.js/.css/.ts/.py/.vue/.svelte...) : regex après [;{}()\\[\\]] ou avant mot-clé (const/let/var/function/return/if/.../def/print) ; old_string volontairement NON gardé (doit pouvoir cibler une séquence fautive déjà présente pour la RÉPARER — pattern de repair testé) ; fichiers non-code (.json/.md/.env) exclus (séquence légitime) ; \n dans string JS légitime ('alpha\nbeta' sans ponctuation avant) passe. Branché sur search_replace, edit_file, multi_replace (par bloc, erreur nominative), write_file (message adapté 'content'). Fail-open total. Tests : tests/test_search_replace.py +10 (no-op, rejet \n, chemin de repair, légitime string JS, non-code épargné, 4 outils).",
+      "status": "completed",
+      "dependencies": [
+        "F-126",
+        "F-128",
+        "F-130"
+      ]
     }
   ]
 }

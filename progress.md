@@ -31,9 +31,27 @@
 - [x] F130/131-4 : Tests — **16 nouveaux PASS** (TestReadStallNudge 8 +
   TestWindDownNudge 8), fichier `test_vision_nudge.py` 46/46 ; py_compile OK.
 - [x] F130/131-5 : État disque (contract C453-C456, feature_list F-130/F-131
-  completed, ce fichier) + DuckDB + commit.
-- [ ] F130/131-6 : **Relance run E2E Tetris FRESH_START=1 (validation)** —
-  critère utilisateur : 0 erreur dans les logs.
+  completed, ce fichier) + DuckDB + commit 9178dc9.
+- [x] F130/131-6 : Run E2E validation #2 (2026-08-20_1203, ~2 h) : **échec
+  « Coder crash » identique** — 3×40 steps, mais cause racine PLUS PROFONDE
+  découverte : le livrable avait un SyntaxError JS PERMANENT causé par un
+  `\n` LITTÉRAL (backslash-n texte) inséré par search_replace r-string
+  (ligne 143 constatée dans Chrome), et la « correction » du 4B était un
+  NO-OP (old == new) accepté avec « Successfully edited » → boucle de fix
+  invincible qu'aucun nudge ne pouvait briser. Nudges F-130/131 validés en
+  câblage réel (agent smolagents + CallbackRegistry : fired=True), mais sans
+  effet sur une boucle d'édition — preuve d'observabilité console ajoutée
+  (prints « Nudge F-130/131 injecté »).
+- [x] F132-1 : Gardes outil anti-\n littéral + anti-no-op (tools.py) —
+  `_noop_rejection` (old==new exact rejeté) + `_literal_newline_rejection`
+  (\n littéral en séparateur de code dans le texte INSÉRÉ, fichiers code
+  uniquement, old_string libre pour la réparation, légitimes épargnés) sur
+  search_replace/edit_file/multi_replace/write_file. Tests +10 (72 PASS
+  cumulés avec vision_nudge).
+- [x] F132-2 : État disque (contract C457-C458, feature_list F-132, ce
+  fichier) + DuckDB + commit.
+- [ ] F132-3 : **Relance run E2E Tetris FRESH_START=1 (validation F-130/131/132)**
+  — critère utilisateur : 0 erreur dans les logs.
 
 ## Jalons de l'Itération (gouvernance backlog — grooming post-run #19, décision user 2026-08-18)
 

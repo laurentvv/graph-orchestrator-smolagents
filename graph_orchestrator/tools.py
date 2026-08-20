@@ -328,6 +328,11 @@ def write_file(path: str, content: str) -> str:
                 "ERROR: write_file 'content' looks like a placeholder, not real code. "
                 "Provide the COMPLETE implementation. The file was NOT created."
             )
+        # F-132 : \n littéral en séparateur de code dans le contenu écrit (même
+        # cause racine que search_replace : r-string → SyntaxError JS permanent).
+        _lit = _literal_newline_rejection(path, str(content))
+        if _lit:
+            return _lit.replace("'new_string'", "'content'")
         
         # Garde anti-squelette HTML (bug "incremental" des petits modèles distants).
         if bool(re.search(r"<body[^>]*>\s*(?:<!--.*?-->\s*)*</body>", stripped, re.IGNORECASE | re.DOTALL)) or (
@@ -523,9 +528,16 @@ def edit_file(path: str, old_string: str, new_string: str, replace_all: bool = F
     if _denied:
         return _denied
     try:
+        # F-132 : no-op exact + \n littéral en séparateur de code (voir search_replace).
+        _noop = _noop_rejection(old_string, new_string)
+        if _noop:
+            return _noop
+        _lit = _literal_newline_rejection(path, new_string)
+        if _lit:
+            return _lit
         with open(path, 'r', encoding='utf-8') as f:
             content = f.read()
-        
+
         if old_string not in content:
             return "Error: old_string not found exactly as written. Ensure indentation and line endings match."
         
@@ -660,6 +672,94 @@ def _post_fix_directive() -> str:
         return ""
 
 
+# =============================================================================
+# F-132 (post-mortem runs 2026-08-20_1028 + 1203, Tetris) : gardes anti-\n
+# littéral + anti-no-op sur les outils d'édition.
+# =============================================================================
+# Le 4B écrivait `search_replace(..., new_string=r"""...;\n...""")` — le
+# préfixe r (recommandé par le prompt pour échapper accolades/guillemets JS)
+# rend `\n` LITTÉRAL (2 caractères backslash+n) → le fichier reçoit
+# `const a = 1;\nconst b` sur UNE ligne → SyntaxError JS PERMANENT. Pire : sa
+# « correction » (step 40 run 1028) était old_string == new_string — un NO-OP
+# accepté avec « Successfully edited » → le modèle croit avoir corrigé,
+# re-teste, re-voit l'erreur, boucle jusqu'au plafond de steps. 2 runs perdus
+# sur ce schéma exact (ligne 143 du livrable 1203 : `;\n                const
+# shape` littéral, constaté dans Chrome).
+# =============================================================================
+# `\n` littéral utilisé comme SÉPARATEUR DE CODE : après un point-virgule /
+# accolade / parenthèse fermante, ou avant un mot-clé/identifiant JS attendu.
+_NL_KEYWORDS = (
+    "const|let|var|function|return|if|else|for|while|switch|case|class|"
+    r"new\b|document\.|window\.|addEventListener|try|catch|import|export|"
+    r"async|await|def\b|print\("
+)
+_CODE_SEPARATOR_NL_RE = re.compile(
+    r"(?:(?<=[;{}()\[\]])\\n|\\n(?=\s*(?:" + _NL_KEYWORDS + r")))"
+)
+# Fichiers où la séquence est quasi-certainement un bug d'échappement (le
+# périmètre Prompt-Vault : web vanilla + python). Hors ces extensions, la
+# séquence peut être légitime (JSON, markdown, .env) → pas de garde.
+_CODE_FILE_SUFFIXES = (
+    ".html", ".htm", ".js", ".mjs", ".cjs", ".css", ".ts", ".tsx", ".jsx",
+    ".py", ".vue", ".svelte",
+)
+
+
+def _literal_newline_rejection(path: str, new_string: str) -> str | None:
+    """Message de rejet si new_string insère un `\n` LITTÉRAL comme séparateur
+    de code dans un fichier code. None = pas de problème (ou fail-open).
+
+    On ne garde QUE new_string (le texte INSÉRÉ) : old_string doit pouvoir
+    contenir la séquence fautive pour la TROUVER dans un fichier déjà corrompu
+    par une édition précédente — c'est le pattern de réparation correct.
+    """
+    try:
+        if not new_string or not str(path).lower().endswith(_CODE_FILE_SUFFIXES):
+            return None
+        m = _CODE_SEPARATOR_NL_RE.search(new_string)
+        if not m:
+            return None
+        # Extrait autour de la 1re occurrence pour montrer le fautif.
+        start = max(0, m.start() - 40)
+        snippet = new_string[start:m.end() + 40].replace("\n", "\\n")
+        return (
+            "ERROR (garde anti-\\n littéral, F-132) : ton 'new_string' contient la "
+            "séquence LITTÉRALE backslash-n utilisée comme séparateur de code :\n"
+            f"  …{snippet}…\n"
+            "Avec un préfixe r (r\"\"\"…\"\"\"), `\\n` reste DU TEXTE (2 caractères) "
+            "dans le fichier → SyntaxError JS immédiat. Réécris 'new_string' avec de "
+            "VRAIS sauts de ligne : découpe physiquement ton string Python sur "
+            "plusieurs lignes (sans préfixe r sur les lignes contenant `\\n`, ou "
+            "enlève le préfixe r et écris les lignes réelles une par une). Le fichier "
+            "n'a PAS été modifié."
+        )
+    except Exception:
+        return None
+
+
+def _noop_rejection(old_string: str, new_string: str) -> str | None:
+    """Message de rejet si l'édition est un NO-OP exact (old == new).
+
+    Run 2026-08-20 : la « correction » du \n littéral était old_string ==
+    new_string → « Successfully edited » mensonger → le bug survivait alors que
+    le modèle croyait l'avoir corrigé. Un no-op n'est JAMAIS une correction
+    intentionnelle (l'outil n'existe que pour CHANGER le fichier).
+    """
+    try:
+        if old_string and old_string == new_string:
+            return (
+                "ERROR (garde anti-no-op, F-132) : 'new_string' est IDENTIQUE "
+                "octet pour octet à 'old_string' — cette édition ne change RIEN, "
+                "et le bug que tu crois corriger survivra. Si tu voulais remplacer "
+                "une séquence LITTÉRALE `\\n` (backslash-n texte) par un vrai saut "
+                "de ligne, 'new_string' doit contenir de VRAIES lignes différentes. "
+                "Le fichier n'a PAS été modifié."
+            )
+        return None
+    except Exception:
+        return None
+
+
 @tool
 def search_replace(path: str, old_string: str, new_string: str) -> str:
     """Surgically edits a file by replacing the 'old_string' block with the 'new_string' block.
@@ -691,6 +791,17 @@ def search_replace(path: str, old_string: str, new_string: str) -> str:
         if _is_placeholder(new_string):
             return ("ERROR: 'new_string' looks like a placeholder (TODO, '...', '// code here', "
                     "empty). Provide the COMPLETE real replacement code. File NOT modified.")
+        # F-132 : no-op exact (old == new) — une « correction » qui ne change rien
+        # est TOUJOURS une erreur (post-mortem 2026-08-20 : fix illusoire du \n).
+        _noop = _noop_rejection(old_string, new_string)
+        if _noop:
+            return _noop
+        # F-132 : \n littéral en séparateur de code dans le texte INSÉRÉ
+        # (old_string reste libre : il doit pouvoir cibler une séquence fautive
+        # déjà présente dans le fichier pour la RÉPARER).
+        _lit = _literal_newline_rejection(path, new_string)
+        if _lit:
+            return _lit
 
         lock = _file_lock(path)
         with lock:
@@ -774,7 +885,17 @@ def multi_replace(path: str, replacements: list) -> str:
                 if _is_placeholder(new_str):
                     errors.append(f"Block {i}: 'new_string' is a placeholder. Skipping.")
                     continue
-                    
+
+                # F-132 : no-op exact + \n littéral en séparateur de code.
+                _noop = _noop_rejection(old_str, new_str)
+                if _noop:
+                    errors.append(f"Block {i}: no-op exact (old == new). {(_noop.splitlines() or [''])[0]}")
+                    continue
+                _lit = _literal_newline_rejection(path, new_str)
+                if _lit:
+                    errors.append(f"Block {i}: {(_lit.splitlines() or [''])[0]}")
+                    continue
+
                 if not old_str.strip():
                     # Append if old_string is empty
                     if content and not content.endswith("\n"):

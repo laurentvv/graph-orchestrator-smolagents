@@ -222,3 +222,132 @@ def test_search_replace_tolerant_indentation_via_tool(tmp_path):
     content = f.read_text(encoding="utf-8")
     assert "new_value" in content
     assert "    result = new_value" in content  # indentation préservée
+
+
+# ==========================================
+# F-132 : gardes anti-\n littéral + anti-no-op
+# (post-mortem runs 2026-08-20_1028 + 1203 : r-string → \n littéral inséré →
+# SyntaxError JS permanent ; « fix » no-op accepté comme succès → boucle)
+# ==========================================
+
+from graph_orchestrator.tools import edit_file, multi_replace, write_file
+
+
+def _make_file(tmp_path, name="index.html"):
+    p = tmp_path / name
+    p.write_text("function a() {\n    return 1;\n}\n", encoding="utf-8")
+    return p
+
+
+def test_search_replace_noop_rejected(tmp_path):
+    p = _make_file(tmp_path)
+    before = p.read_text(encoding="utf-8")
+    old = "function a() {\n    return 1;\n}"
+    res = search_replace(path=str(p), old_string=old, new_string=old)
+    assert "anti-no-op" in res
+    assert p.read_text(encoding="utf-8") == before
+
+
+def test_search_replace_literal_newline_rejected(tmp_path):
+    p = _make_file(tmp_path)
+    before = p.read_text(encoding="utf-8")
+    # Séquence EXACTE du run 1203 : \n littéral (backslash-n texte) après ';'.
+    broken = "function a() {\\n    return 2;\\n}"
+    res = search_replace(
+        path=str(p),
+        old_string="function a() {\n    return 1;\n}",
+        new_string=broken,
+    )
+    assert "garde anti-\\n" in res
+    assert p.read_text(encoding="utf-8") == before
+
+
+def test_search_replace_repair_path_old_string_with_literal_allowed(tmp_path):
+    """old_string DOIT pouvoir contenir le \n littéral pour RÉPARER un fichier
+    déjà corrompu (seul le texte INSÉRÉ est gardé)."""
+    p = tmp_path / "index.html"
+    p.write_text("const pieceData = PIECES[piece.type];\\n                const shape = 1;\n", encoding="utf-8")
+    res = search_replace(
+        path=str(p),
+        old_string="const pieceData = PIECES[piece.type];\\n                const shape = 1;",
+        new_string="const pieceData = PIECES[piece.type];\n                const shape = 2;",
+    )
+    assert "Successfully edited" in res
+    fixed = p.read_text(encoding="utf-8")
+    assert ";\\n" not in fixed
+    assert ";\n" in fixed
+    assert "shape = 2;" in fixed
+
+
+def test_literal_newline_inside_js_string_not_rejected(tmp_path):
+    """Un \n DANS une chaîne JS légitime (pas en séparateur de code) passe."""
+    p = _make_file(tmp_path)
+    res = search_replace(
+        path=str(p),
+        old_string="function a() {\n    return 1;\n}",
+        new_string='function a() {\n    console.log("alpha\\nbeta");\n}',
+    )
+    assert "Successfully edited" in res
+
+
+def test_literal_newline_non_code_file_ignored(tmp_path):
+    """Hors extensions code (ex: .json), la séquence peut être légitime → pas de garde."""
+    p = tmp_path / "data.json"
+    p.write_text('{"a": 1}\n', encoding="utf-8")
+    res = search_replace(
+        path=str(p),
+        old_string='{"a": 1}',
+        new_string='{"a": 1,\n "b": 2}',
+    )
+    assert "Successfully edited" in res
+
+
+def test_write_file_literal_newline_rejected(tmp_path):
+    p = tmp_path / "game.js"
+    res = write_file(path=str(p), content="const a = 1;\\nconst b = 2;\n")
+    assert "garde anti-\\n" in res
+    assert "'content'" in res
+    assert not p.exists()
+
+
+def test_edit_file_noop_rejected(tmp_path):
+    p = _make_file(tmp_path)
+    before = p.read_text(encoding="utf-8")
+    old = "return 1;"
+    res = edit_file(path=str(p), old_string=old, new_string=old)
+    assert "anti-no-op" in res
+    assert p.read_text(encoding="utf-8") == before
+
+
+def test_edit_file_literal_newline_rejected(tmp_path):
+    p = _make_file(tmp_path)
+    before = p.read_text(encoding="utf-8")
+    res = edit_file(
+        path=str(p),
+        old_string="return 1;",
+        new_string="return 2;\\n",
+    )
+    assert "garde anti-\\n" in res
+    assert p.read_text(encoding="utf-8") == before
+
+
+def test_multi_replace_literal_newline_rejected(tmp_path):
+    p = _make_file(tmp_path)
+    before = p.read_text(encoding="utf-8")
+    res = multi_replace(
+        path=str(p),
+        replacements=[{"old_string": "return 1;", "new_string": "return 2;\\n"}],
+    )
+    assert "garde anti-\\n" in res
+    assert p.read_text(encoding="utf-8") == before
+
+
+def test_multi_replace_noop_rejected(tmp_path):
+    p = _make_file(tmp_path)
+    before = p.read_text(encoding="utf-8")
+    res = multi_replace(
+        path=str(p),
+        replacements=[{"old_string": "return 1;", "new_string": "return 1;"}],
+    )
+    assert "no-op" in res
+    assert p.read_text(encoding="utf-8") == before

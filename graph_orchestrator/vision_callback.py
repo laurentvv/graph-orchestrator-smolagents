@@ -881,6 +881,10 @@ def make_screenshot_callback(capture_holder: List[Any], visual_criteria_count: i
         # c'est précisément son danger (steps brûlés en silence).
         read_stall_nudge = _build_read_stall_nudge(memory_step)
         if read_stall_nudge:
+            print(
+                "[!] Nudge F-130 (lectures stériles) injecté dans les "
+                "observations du step."
+            )
             try:
                 current = getattr(memory_step, "observations", None) or ""
                 memory_step.observations = (
@@ -895,6 +899,10 @@ def make_screenshot_callback(capture_holder: List[Any], visual_criteria_count: i
             memory_step, agent, visual_criteria_count
         )
         if wind_down_nudge:
+            print(
+                "[!] Nudge F-131 (wind-down budget) injecté dans les "
+                "observations du step."
+            )
             try:
                 current = getattr(memory_step, "observations", None) or ""
                 memory_step.observations = (
