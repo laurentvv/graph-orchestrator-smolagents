@@ -910,6 +910,34 @@ def make_screenshot_callback(capture_holder: List[Any], visual_criteria_count: i
                 )
             except Exception as e:
                 logger.debug("nudge wind-down : append observations échec (%s).", e)
+        # P5/F-138 (port deer-flow tool_progress) : résultats d'outils d'ACTION
+        # quasi identiques en série (Jaccard ≥0.8) = variantes du même appel
+        # sans progrès — le fingerprint F-36 ne voit pas ce cas (args variés).
+        # Uniquement pour les steps qui appellent un outil d'action.
+        try:
+            from .tool_progress import dominant_action_tool, record_tool_result
+
+            _action_tool = dominant_action_tool(
+                str(getattr(memory_step, "code_action", "") or "")
+            )
+            if _action_tool:
+                _loop_results_nudge = record_tool_result(
+                    _action_tool,
+                    getattr(memory_step, "observations", "") or "",
+                )
+                if _loop_results_nudge:
+                    print(
+                        f"[!] Nudge P5 (résultats en boucle) injecté pour "
+                        f"{_action_tool}."
+                    )
+                    current = getattr(memory_step, "observations", None) or ""
+                    memory_step.observations = (
+                        f"{current}\n\n{_loop_results_nudge}"
+                        if current
+                        else _loop_results_nudge
+                    )
+        except Exception as e:
+            logger.debug("nudge résultats en boucle échec (%s) — ignoré.", e)
         if not capture_holder:
             return
         # On ne prend que le dernier screenshot du step (le plus pertinent : état

@@ -66,6 +66,10 @@ _CODE_SEPARATOR_NL_RE = re.compile(
     r"(?:(?<=[;{}()\[\]])\\n|\\n(?=\s*(?:" + _NL_KEYWORDS + r")))"
 )
 
+# Blocs de code fence (```…``` y compris dans <pre>) : leur contenu est
+# préservé tel quel par le repair \n (P4, port deer-flow).
+_FENCE_RE = re.compile(r"```.*?```", re.DOTALL)
+
 # Fichiers où les fixes s'appliquent (périmètre Prompt-Vault : web vanilla + py).
 _CODE_FILE_SUFFIXES = (
     ".html", ".htm", ".js", ".mjs", ".cjs", ".css", ".ts", ".tsx", ".jsx",
@@ -74,15 +78,27 @@ _CODE_FILE_SUFFIXES = (
 
 
 def _fix_literal_newline(source: str) -> tuple[str, List[str]]:
-    """Remplace chaque `\\n` littéral en séparateur de code par un vrai saut."""
+    """Remplace chaque `\\n` littéral en séparateur de code par un vrai saut.
+
+    FENCE-AWARE (P4, port deer-flow `mindie_provider.py:154`
+    `_decode_escaped_newlines_outside_fences`) : la transformation ne
+    s'applique QUE hors des blocs de code fence (```…``` — typiquement les
+    échantillons de code dans <pre>). À l'intérieur, `\\n` peut être du
+    contenu légitime (chaînes affichées) : on ne touche à rien.
+    """
+    fences = _FENCE_RE.findall(source)
+    segments = _FENCE_RE.split(source)
+    total = 0
+    out: List[str] = []
+    for i, seg in enumerate(segments):
+        total += len(_CODE_SEPARATOR_NL_RE.findall(seg))
+        out.append(_CODE_SEPARATOR_NL_RE.sub("\n", seg))
+        if i < len(fences):
+            out.append(fences[i])  # fences intactes
     changes: List[str] = []
-    # Le lookbehind/lookahead ne capturant pas, on remplace uniquement la
-    # séquence backslash-n elle-même par un vrai '\n'.
-    new_source = _CODE_SEPARATOR_NL_RE.sub("\n", source)
-    n = len(_CODE_SEPARATOR_NL_RE.findall(source))
-    if n:
-        changes.append(f"{n} séquence(s) '\\n' littérale(s) -> vrai saut de ligne")
-    return new_source, changes
+    if total:
+        changes.append(f"{total} séquence(s) '\\n' littérale(s) -> vrai saut de ligne (hors fences)")
+    return "".join(out), changes
 
 
 def apply_known_fixes(path: str, error_message: str) -> str:

@@ -239,6 +239,17 @@ def replace_most_similar_chunk(whole: str, part: str, replace: str) -> Optional[
         if res is not None:
             return res
 
+    # 5-bis) lignes vides INTERNES ignorées (P3/F-137, port aider
+    # `flexible_search_and_replace` préprocesseur "strip blank lines" :611) :
+    # le LLM insère des lignes vides parasites au milieu du bloc SEARCH — on
+    # re-tente le matching ligne à ligne après filtrage des vides des DEUX côtés.
+    _wf = [l for l in whole_lines if l.strip()]
+    _pf = [l for l in part_lines if l.strip()]
+    if len(_pf) >= 2 and len(_pf) != len(part_lines):
+        res = _replace_stripped_lines(_wf, _pf, replace_lines)
+        if res is not None:
+            return res
+
     # 6) sous-chaîne exacte (post-mortem run 2026-08-19, Tetris) : le 4B fournit
     # souvent un bloc PARTIEL de ligne — ex. sans la virgule finale — présent mot
     # pour mot comme sous-chaîne du fichier. Les stratégies ligne à ligne (1-5)

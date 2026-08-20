@@ -68,7 +68,7 @@ def test_factory_no_evaluate_script_returns_empty():
     assert build_devtools_helper_tools(tools) == []
 
 
-def test_factory_with_evaluate_script_returns_six_helpers():
+def test_factory_with_evaluate_script_returns_seven_helpers():
     """evaluate_script présent → factory retourne les 6 helpers (bons noms).
 
     F-127 : discover_ui ajouté EN TÊTE (inventaire UI à appeler en premier)."""
@@ -82,8 +82,10 @@ def test_factory_with_evaluate_script_returns_six_helpers():
         "fuzz_click_all_buttons",
         "probe_canvas_activity",
         "fuzz_keyboard_controls",
+        "heal_selector",
     ]
-    assert len(helpers) == 6
+    # P6/F-139 : heal_selector est le 7e helper (port Scrapling).
+    assert len(helpers) == 7
 
 
 # ==========================================

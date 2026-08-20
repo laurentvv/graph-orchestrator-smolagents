@@ -176,6 +176,15 @@ class _SpawnedServer:
         self.port = port
         self.proc = proc
         self.model_id = model_id  # nom logique pour le provider openai/ (le serveur s'en fiche)
+        # P7/F-140 : registre disque — si l'orchestrateur crash (kill/VRAM/OS),
+        # le context manager ne survit pas ; le reaper tuera l'orphelin au boot
+        # suivant via process_reaper.reap_orphans.
+        try:
+            from .process_reaper import register_process
+
+            register_process(proc.pid, "llama-server", f"port={port} model={model_id}")
+        except Exception:
+            pass
 
     @property
     def api_base(self) -> str:
@@ -183,6 +192,12 @@ class _SpawnedServer:
 
     def stop(self) -> None:
         if self.proc.poll() is not None:
+            try:
+                from .process_reaper import unregister_process
+
+                unregister_process(self.proc.pid)
+            except Exception:
+                pass
             return  # déjà mort
         try:
             self.proc.terminate()  # SIGTERM
@@ -200,6 +215,13 @@ class _SpawnedServer:
                         self.port, self.model_id)
         except Exception as e:
             logger.warning("[llama-server] échec stop port %s : %s", self.port, str(e)[:120])
+        finally:
+            try:
+                from .process_reaper import unregister_process
+
+                unregister_process(self.proc.pid)
+            except Exception:
+                pass
 
 
 def _build_cmd(spec: ModelSpec, port: int) -> list[str]:

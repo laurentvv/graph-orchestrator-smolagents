@@ -1134,6 +1134,73 @@
         "F-132",
         "F-128"
       ]
+    },
+    {
+      "id": "F-134",
+      "name": "Diagnostics de syntaxe déterministes injectés dans l'output des outils d'édition (P2, port kilocode)",
+      "description": "Port roadmap 'code pur' P2 (kilocode apply_patch.ts:289-323, session focus code pur 2026-08-20). Apres chaque édition RÉUSSIE d'un fichier JS/HTML (search_replace/edit_file/multi_replace/write_file), une vérification déterministe immédiate (refactor du cœur de check_js_syntax F-72 en _collect_js_syntax_errors : extraction <script> + mapping lignes + node --check + fuites Python + const-mutation + boucles while) est INJECTÉE dans le retour de l'outil si la syntaxe est cassée : '[!] SYNTAXE INVALIDE détectée JUSTE APRÈS ton édition' + erreurs bornées (3, ~400 chars, 'Ligne ~N' mappée) + directive (état intermédiaire multi-blocs → bloc suivant ; sinon search_replace ciblé MAINTENANT). Motivation post-mortem runs 2026-08-20 : les erreurs de syntaxe du 4B survivaient jusqu'au Linter = 30 min plus tard, itérations entières perdues ; le modèle l'apprend maintenant À LA SECONDE, sans appel LLM supplémentaire. Syntaxe propre → AUCUNE injection (zéro bruit). Fichiers non-JS ignorés ; fail-open total ; rétrocompat tool check_js_syntax conservée (erreur fichier introuvable restaurée, tip 'use strict' préservé).",
+      "status": "completed",
+      "dependencies": [
+        "F-72",
+        "F-132",
+        "F-133"
+      ]
+    },
+    {
+      "id": "F-135",
+      "name": "Repair \n fence-aware (P4, port deer-flow — upgrade du repair F-133)",
+      "description": "Port roadmap 'code pur' P4 (deer-flow mindie_provider.py:154-164 _decode_escaped_newlines_outside_fences). Le repair \n littéral de l'auto-fixer F-133 s'appliquait à TOUT le fichier — il pouvait dégrader du contenu où \n est légitime (échantillons de code dans fences ```…``` / <pre>). Désormais le fichier est splitté sur les fences (regex DOTALL) et la transformation ne s'applique QUE hors fences, contenus de fences reconstitués à l'identique. 10 lignes, testé en isolation (réparé hors fence / intact dans fence / tout-dans-fence = no-op).",
+      "status": "completed",
+      "dependencies": [
+        "F-133"
+      ]
+    },
+    {
+      "id": "F-136",
+      "name": "Valideur HTML monofichier stdlib — Tier 0 du Static Tester (P1, port OpenKB)",
+      "description": "Port roadmap code pur P1 (OpenKB deck/validator.py:128 validate_deck, grammaire decks adaptée en invariants de livrables vanilla). Module html_validator.py (html.parser stdlib, <100ms/100Ko, fail-open) : self-contained (toute ref <link>/<script>/<img> externe http(s):// = ERREUR, <script src> local aussi signalé — livrable monofichier attendu) ; ids dupliqués (casse-insensible) ; getElementById('x') sans id='x' dans le DOM (lien JS→DOM cassé, classe de bug renommage unilatéral du 4B) ; taille bornée 2 Mo ; warnings querySelector('#x') absent + requestAnimationFrame sans canvas + balises possiblement non fermées (stack avec void-tags). Branché en TIER 0 de static_check_html (avant Tier 1a — shift-left maximal, réfutation déterministe AVANT node --check). 8 tests.",
+      "status": "completed",
+      "dependencies": [
+        "F-49",
+        "F-100"
+      ]
+    },
+    {
+      "id": "F-137",
+      "name": "Cascade search/replace — stratégie lignes vides internes (P3, port aider)",
+      "description": "Port roadmap code pur P3 (aider flexible_search_and_replace préprocesseur strip-blank-lines :611). La cascade existante (6 stratégies : exact/whitespace/ellipses/stripped/substring) couvrait déjà l'essentiel du port aider ; ajout de la stratégie 5-bis : filtrage des lignes VIDES des deux côtés avant matching stripped-lines — le LLM insère des lignes vides parasites au milieu du bloc SEARCH. Le fuzzy SequenceMatcher de aider reste volontairement NON porté (désactivé chez aider — return mort :184 — preuve de mauvais edits). 2 tests.",
+      "status": "completed",
+      "dependencies": [
+        "F-43"
+      ]
+    },
+    {
+      "id": "F-138",
+      "name": "Moniteur Jaccard des résultats d'outils d'action (P5, port deer-flow tool_progress)",
+      "description": "Port roadmap code pur P5 (deer-flow tool_progress_middleware.py:194, jaccard_threshold=0.8). Module tool_progress.py : word_set (mots >=3 chars lowercase) + jaccard + ToolProgressMonitor — un outil d'ACTION (write/search_replace/edit/multi/check_js_syntax via dominant_action_tool) dont le RÉSULTAT est near-duplicate (Jaccard >=0.8) 3 fois de suite = variantes du même appel sans progrès — le fingerprint F-36 ne voit pas ce cas (args variés). Écart assumé vs référence : deer-flow BLOQUE l'outil (machine à états ACTIVE→WARNED→BLOCKED) ; nous injectons un NUDGE '[RÉSULTATS EN BOUCLE]' dans les observations (pattern F-114/125/130 éprouvé sur le 4B, pas de veto) avec 3 issues (applique le fix / passe à la suite du plan / final_answer honnête). Un résultat différent reset la série. Branché dans le step_callback vision (observabilité print), reset par nœud (même lifecycle). 4 tests.",
+      "status": "completed",
+      "dependencies": [
+        "F-36",
+        "F-130"
+      ]
+    },
+    {
+      "id": "F-139",
+      "name": "Outil heal_selector — self-healing de sélecteurs DOM (P6, port Scrapling)",
+      "description": "Port roadmap code pur P6 (Scrapling parser.py:530 retrieve_similar + scoring :805). DevToolsHealSelectorTool dans devtools_dom_tools (7e helper, exposé Coder+Tester via build_devtools_helper_tools) : quand un sélecteur ne trouve plus l'élément (régénéré/renommé par un fix), re-localisation par similarité via evaluate_script : score = tag exact (+0.35) + similarité texte positionnelle (+0.4) + recouvrement d'attributs 'k=v|k2=v2' (+0.25), seuil d'acceptation 0.4 (miroir Scrapling), cap 2000 éléments, retour {found, score, id, text, selector}. Évite les FAIL de test sur simple renommage → itérations Coder entières économisées. 3 tests (construction fail-open, signature nullable, délégation args).",
+      "status": "completed",
+      "dependencies": [
+        "F-72"
+      ]
+    },
+    {
+      "id": "F-140",
+      "name": "Reaper de process orphelins — registre disque + kill escaladé (P7, port qm)",
+      "description": "Port roadmap code pur P7 (qm process-reaper.ts:14 createReaperKillHook + runs/reaper.ts:47 reapExpired), adapté SANS psutil (Windows stdlib). Module process_reaper.py : registre data/.process_registry.json {pid: {kind, cmd_hint, started}} alimenté par llama_server au spawn (LlamaServer.__init__) et purgé au stop (finally) — SURVIT aux crashes de l'orchestrateur (le point du port : les context managers python ne survivent pas à un kill). reap_orphans(keep_pids) au boot du coding workflow : pid enregistré vivant n'appartenant pas au run courant = orphelin → taskkill /F /T (arbre), entrée purgée ; morts purgés silencieusement ; idempotent ; fail-open total ; aliveness via tasklist /FI. Motivation : post-mortem run #13 (10 llama-server / 0 arrêt loggé), fuites VRAM des runs interrompus (kill utilisateur 5x ce jour). 3 tests.",
+      "status": "completed",
+      "dependencies": [
+        "F-104"
+      ]
     }
   ]
 }

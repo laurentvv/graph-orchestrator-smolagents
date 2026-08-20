@@ -408,6 +408,17 @@ async def run_coding_workflow(
     print(f"  CODING WORKFLOW (Multi-Agent Playbook) — run {run_id}")
     print(f"{'='*60}")
 
+    # --- P7/F-140 : reap des process orphelins d'un run précédent ---------------
+    # (port qm process-reaper ; post-mortem run #13 : 10 llama-server / 0 arrêt).
+    # Fail-open total ; le registre vit dans data/.process_registry.json.
+    try:
+        from .process_reaper import reap_orphans
+
+        for _action in reap_orphans():
+            print(f"[~] Reaper : {_action}")
+    except Exception:
+        pass
+
     # --- Reprise après crash (Priorité 3 : Checkpoints) -----------------------
     # FRESH_START=1 → on efface tout checkpoint existant et repart de zéro.
     # Sinon, on tente de recharger l'état d'une exécution interrompue.

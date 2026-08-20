@@ -184,6 +184,83 @@ def read_python_skeleton(path: str) -> str:
         return f"Error generating skeleton for {path}: {str(e)}"
 
 
+def _collect_js_syntax_errors(path: str) -> list[str]:
+    """Collecte les erreurs de syntaxe JS d'un fichier (.js ou <script> inline
+    d'un .html) via node --check + détecteurs statiques. [] = propre.
+
+    Cœur extrait de l'outil check_js_syntax (F-72) pour être réutilisé par
+    l'injection post-édition (P2) — détection immédiate, sans attendre le
+    Linter. Fail-open total : toute erreur interne → [].
+    """
+    import shutil
+
+    try:
+        from .js_utils import (
+            run_node_check,
+            MAX_JS_CHARS,
+            extract_script_blocks,
+            detect_python_syntax_in_js,
+            detect_const_mutation_in_js,
+            detect_unbounded_while_in_js,
+        )
+
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except Exception:
+        return []
+
+    is_html = path.lower().endswith((".html", ".htm"))
+    js_blocks: list[tuple[str, int]] = []
+    if is_html:
+        for b in extract_script_blocks(content):
+            js_blocks.append((b["code"], b["start_line"]))
+        if not js_blocks:
+            return []
+    else:
+        js_blocks.append((content, 1))
+
+    all_errors: list[str] = []
+    for js_code, start_line in js_blocks:
+        all_errors.extend(detect_python_syntax_in_js(js_code, start_line=start_line))
+        all_errors.extend(detect_const_mutation_in_js(js_code, start_line=start_line))
+        all_errors.extend(detect_unbounded_while_in_js(js_code, start_line=start_line))
+        if shutil.which("node") is not None:
+            snippet = js_code[:MAX_JS_CHARS]
+            code, stderr = run_node_check(snippet)
+            if code != 0 and stderr.strip():
+                prefix = f"Ligne ~{start_line} : " if is_html else ""
+                all_errors.append(f"{prefix}{stderr.strip()[:400]}")
+    return all_errors
+
+
+def _post_edit_syntax_directive(path: str) -> str:
+    """Directive P2 (port kilocode apply_patch.ts:289) : après une édition
+    RÉUSSIE d'un fichier JS/HTML, on vérifie immédiatement la syntaxe de façon
+    déterministe et on INJECTE les erreurs dans l'output de l'outil — le
+    modèle apprend à la seconde qu'il a cassé la syntaxe, au lieu de
+    l'apprendre au Linter 30 min plus tard (post-mortem runs 2026-08-20 :
+    erreurs de syntaxe survivant jusqu'au Shift-Left = itérations entières
+    perdues). Vide si syntaxe propre ou fichier non-JS. Fail-open total.
+    """
+    try:
+        if not str(path).lower().endswith((".html", ".htm", ".js", ".mjs", ".cjs")):
+            return ""
+        errs = _collect_js_syntax_errors(str(path))
+        if not errs:
+            return ""
+        shown = "\n".join(f"  - {e}" for e in errs[:3])
+        extra = f"\n  (+{len(errs) - 3} autre(s))" if len(errs) > 3 else ""
+        return (
+            f"\n\n[!] SYNTAXE INVALIDE détectée JUSTE APRÈS ton édition :\n{shown}{extra}\n"
+            f"Si c'est un état intermédiaire d'une édition multi-blocs, termine le bloc "
+            f"suivant IMMÉDIATEMENT. Sinon corrige MAINTENANT par search_replace ciblé "
+            f"(la ligne ~ est indiquée) — n'attends pas le Linter, chaque tour d'attente "
+            f"est un step perdu. Console propre uniquement si node --check est satisfait."
+        )
+    except Exception:
+        return ""
+
+
 @tool
 def check_js_syntax(path: str) -> str:
     """Vérifie instantanément la syntaxe JavaScript (.js ou <script> inline dans un fichier .html).
@@ -201,63 +278,12 @@ def check_js_syntax(path: str) -> str:
     _denied = ensure_read_allowed(path)
     if _denied:
         return _denied
+    import os
 
-    try:
-        from .js_utils import (
-            run_node_check,
-            MAX_JS_CHARS,
-            extract_script_blocks,
-            detect_python_syntax_in_js,
-            detect_const_mutation_in_js,
-            detect_unbounded_while_in_js,
-            has_use_strict,
-        )
+    if not os.path.isfile(path):
+        return f"Erreur de lecture de {path} : fichier introuvable."
 
-        with open(path, "r", encoding="utf-8", errors="replace") as f:
-            content = f.read()
-    except OSError as e:
-        return f"Erreur de lecture de {path} : {str(e)}"
-
-    is_html = path.lower().endswith((".html", ".htm"))
-    js_blocks: list[tuple[str, int]] = []
-
-    if is_html:
-        extracted = extract_script_blocks(content)
-        if not extracted:
-            return f"ℹ️ Aucun bloc <script> trouvé dans {path}."
-        for b in extracted:
-            js_blocks.append((b["code"], b["start_line"]))
-    else:
-        js_blocks.append((content, 1))
-
-    all_errors: list[str] = []
-    strict_missing: list[int] = []
-
-    for js_code, start_line in js_blocks:
-        # 1. Détection des fuites Python en JS
-        leaks = detect_python_syntax_in_js(js_code, start_line=start_line)
-        all_errors.extend(leaks)
-
-        # 2. Détection de mutations de constantes (TypeError bloquant)
-        const_errs = detect_const_mutation_in_js(js_code, start_line=start_line)
-        all_errors.extend(const_errs)
-
-        # 3. Détection de boucles while infinies
-        while_errs = detect_unbounded_while_in_js(js_code, start_line=start_line)
-        all_errors.extend(while_errs)
-
-        # 2. Mode strict
-        if not has_use_strict(js_code):
-            strict_missing.append(start_line)
-
-        # 3. Validation AST via node --check
-        if shutil.which("node") is not None:
-            snippet = js_code[:MAX_JS_CHARS]
-            code, stderr = run_node_check(snippet)
-            if code != 0 and stderr.strip():
-                prefix = f"Ligne ~{start_line} : " if is_html else ""
-                all_errors.append(f"{prefix}{stderr.strip()[:600]}")
-
+    all_errors = _collect_js_syntax_errors(path)
     if all_errors:
         err_list = "\n".join(f"- {e}" for e in all_errors)
         return f"❌ Erreur de syntaxe dans {path} :\n{err_list}"
@@ -266,8 +292,21 @@ def check_js_syntax(path: str) -> str:
         return f"ℹ️ `node` non disponible — vérification de syntaxe ignorée pour {path}."
 
     msg = f"✅ Syntaxe JS 100% valide : {path}"
-    if strict_missing:
-        msg += "\n💡 Conseil (Nanocode) : Ajoute `'use strict';` au début de tes scripts pour sécuriser les variables."
+    # Tip rétro-compat : 'use strict' manquant (informatif, pas une erreur).
+    try:
+        from .js_utils import has_use_strict, extract_script_blocks
+
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+        blocks = (
+            [(b["code"], b["start_line"]) for b in extract_script_blocks(content)]
+            if path.lower().endswith((".html", ".htm"))
+            else [(content, 1)]
+        )
+        if any(not has_use_strict(js) for js, _ in blocks):
+            msg += "\n💡 Conseil (Nanocode) : Ajoute `'use strict';` au début de tes scripts pour sécuriser les variables."
+    except Exception:
+        pass
     return msg
 
 @tool
@@ -394,7 +433,7 @@ def write_file(path: str, content: str) -> str:
                 )
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
-        return f"Successfully wrote to {path} ({len(content)} chars)"
+        return f"Successfully wrote to {path} ({len(content)} chars)" + _post_edit_syntax_directive(path)
     except Exception as e:
         return f"Error writing to file {path}: {str(e)}"
 
@@ -554,7 +593,12 @@ def edit_file(path: str, old_string: str, new_string: str, replace_all: bool = F
             f.write(new_content)
 
         # F-128 : rappel post-fix si des erreurs console attendent re-vérification.
-        return f"Successfully updated {path} ({'all ' + str(occurrences) if replace_all else '1'} occurrences replaced)." + _post_fix_directive()
+        # P2 : diagnostics de syntaxe immédiats.
+        return (
+            f"Successfully updated {path} ({'all ' + str(occurrences) if replace_all else '1'} occurrences replaced)."
+            + _post_fix_directive()
+            + _post_edit_syntax_directive(path)
+        )
     except Exception as e:
         return f"Error editing file {path}: {str(e)}"
 
@@ -840,7 +884,13 @@ def search_replace(path: str, old_string: str, new_string: str) -> str:
                 f.write(new_content)
 
         # F-128 : rappel post-fix si des erreurs console attendent re-vérification.
-        return f"Successfully edited {path} via SEARCH/REPLACE." + _post_fix_directive()
+        # P2 : diagnostics de syntaxe injectés immédiatement (kilocode) — le
+        # modèle sait à la seconde s'il a cassé la syntaxe.
+        return (
+            f"Successfully edited {path} via SEARCH/REPLACE."
+            + _post_fix_directive()
+            + _post_edit_syntax_directive(path)
+        )
     except FileNotFoundError:
         return (f"ERROR: file '{path}' does not exist. Use write_file to CREATE a new file, "
                 "or check the path.")
@@ -927,7 +977,7 @@ def multi_replace(path: str, replacements: list) -> str:
         msg = f"Successfully applied {success_count}/{len(replacements)} replacements to {path}."
         if errors:
             msg += "\nSome errors occurred:\n" + "\n".join(errors)
-        return msg + _post_fix_directive()
+        return msg + _post_fix_directive() + _post_edit_syntax_directive(path)
         
     except FileNotFoundError:
         return (f"ERROR: file '{path}' does not exist. Use write_file to CREATE a new file.")

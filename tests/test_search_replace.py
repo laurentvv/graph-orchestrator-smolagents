@@ -3,6 +3,8 @@
 Couvre les stratégies portées d'Aider : match exact, tolérant indentation,
 ellipses, échec avec feedback. Aucun appel LLM (tests déterministes du parser).
 """
+import pytest
+
 from graph_orchestrator.tools import search_replace
 from graph_orchestrator.search_replace_utils import replace_most_similar_chunk
 
@@ -351,3 +353,81 @@ def test_multi_replace_noop_rejected(tmp_path):
     )
     assert "no-op" in res
     assert p.read_text(encoding="utf-8") == before
+
+
+# ==========================================
+# P2 : diagnostics de syntaxe injectés dans l'output des outils d'édition
+# (port kilocode apply_patch.ts:289 — le modèle sait immédiatement)
+# ==========================================
+
+from graph_orchestrator.tools import _post_edit_syntax_directive
+
+
+def _needs_node():
+    import shutil
+    return shutil.which("node") is None
+
+
+def test_edit_cassant_js_declenche_directive(tmp_path):
+    if _needs_node():
+        pytest.skip("node absent")
+    p = tmp_path / "game.js"
+    p.write_text("const a = 1;\n", encoding="utf-8")
+    res = search_replace(
+        path=str(p),
+        old_string="const a = 1;",
+        new_string="function broken( {",
+    )
+    assert "Successfully edited" in res
+    assert "SYNTAXE INVALIDE" in res
+    assert "search_replace" in res
+
+
+def test_edit_saine_aucune_directive(tmp_path):
+    if _needs_node():
+        pytest.skip("node absent")
+    p = tmp_path / "game.js"
+    p.write_text("const a = 1;\n", encoding="utf-8")
+    res = search_replace(
+        path=str(p),
+        old_string="const a = 1;",
+        new_string="const a = 2;",
+    )
+    assert "Successfully edited" in res
+    assert "SYNTAXE INVALIDE" not in res
+
+
+def test_directive_mapping_ligne_html(tmp_path):
+    if _needs_node():
+        pytest.skip("node absent")
+    p = tmp_path / "index.html"
+    p.write_text(
+        "<html><body>\n<script>\nlet x = 1;\nlet y = 2;\n</script>\n</body></html>\n",
+        encoding="utf-8",
+    )
+    res = search_replace(
+        path=str(p),
+        old_string="let y = 2;",
+        new_string="function broken( {",
+    )
+    assert "SYNTAXE INVALIDE" in res
+    assert "Ligne ~" in res  # mappée au numéro de ligne du bloc script
+
+
+def test_directive_ignore_fichiers_non_js(tmp_path):
+    p = tmp_path / "styles.css"
+    p.write_text(".a { color: red; }\n", encoding="utf-8")
+    assert _post_edit_syntax_directive(str(p)) == ""
+
+
+def test_directive_fichier_absent_fail_open(tmp_path):
+    assert _post_edit_syntax_directive(str(tmp_path / "absent.js")) == ""
+
+
+def test_write_file_cassant_declenche_directive(tmp_path):
+    if _needs_node():
+        pytest.skip("node absent")
+    p = tmp_path / "game.js"
+    res = write_file(path=str(p), content="function broken( {\n")
+    assert "Successfully wrote" in res
+    assert "SYNTAXE INVALIDE" in res

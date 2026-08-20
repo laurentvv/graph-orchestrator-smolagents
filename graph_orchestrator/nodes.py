@@ -1484,6 +1484,13 @@ Code prêt pour la production, respectant les conventions du langage.
         reset_browser_stall()
         reset_nav_freeze_nudge()
         reset_read_stall()
+        # P5/F-138 : reset du moniteur de résultats en boule (même lifecycle).
+        try:
+            from .tool_progress import reset_tool_progress
+
+            reset_tool_progress()
+        except Exception:
+            pass
         # F-128 : reset de l'état « erreurs console en attente de re-vérification »
         # (même lifecycle que les autres resets vision).
         from .vision_callback import reset_console_pending

@@ -56,12 +56,20 @@
   WebTestRunner + consigne prompt (fix → reload+console → CONTINUE le test ;
   sinon verdict normal) ; 10 tests PASS, gate F-103 OK. État disque (contract
   C459, feature_list F-133) + commit.
-- [ ] F133-2/Run #6 (1500) en cours : itération 1 a passé la checklist
-  visuelle complète (PREMIÈRE fois), Linter a trouvé des erreurs de syntaxe
-  résiduelles → itération 2/3 en cours. F-130 tiré en prod (lectures
-  stériles), F-131 tiré ×3 au run #4. Itérations 5/6 (Q6) avortées : Q6 trop
-  lent (write ~25 min > timeout), retour Q4 + LLM_TIMEOUT_S=1800 +
-  CODER_MAX_STEPS=48. Validation : 0 erreur dans les logs.
+- [x] Focus « code pur » (décision utilisateur post-run #6 stoppé ~2h40) :
+  minage references/ par 2 agents → docs/references-audit/CODE_PUR_ROADMAP.md
+  (26 patterns, P1-P7). Ports P2+F-134 (diagnostics syntaxe déterministes
+  injectés dans l'output des 4 outils d'édition — port kilocode, cœur
+  refactoré de check_js_syntax F-72) et P4+F-135 (repair \n fence-aware —
+  port deer-flow). 63 tests ciblés PASS, gate F-103 OK, contract C460-C461.
+- [x] Ports P1-P7 COMPLETS (décision utilisateur « on fait tout d'un coup ») :
+  F-136 valideur HTML Tier 0 (OpenKB), F-137 cascade lignes-vides (aider),
+  F-138 moniteur Jaccard résultats (deer-flow, nudge), F-139 heal_selector
+  (Scrapling, 7e helper DevTools), F-140 reaper process (qm, registre disque
+  + taskkill arbre + boot workflow). 30 nouveaux tests (test_codepur_ports +
+  màj compteurs), static tester 90 passed, gate F-103 OK, contract C462-C466.
+- [ ] Relance run E2E (après décision utilisateur) — validation : 0 erreur
+  dans les logs.
 
 ## Jalons de l'Itération (gouvernance backlog — grooming post-run #19, décision user 2026-08-18)
 

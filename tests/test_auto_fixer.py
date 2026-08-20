@@ -117,3 +117,28 @@ class TestToolWrapper:
         res = fix_known_error(path=p, error_message="Assignment to constant variable 'score'")
         assert "FIX AUTO APPLIQUÉ" in res
         assert "let score" in open(p, encoding="utf-8").read()
+
+
+class TestFenceAwareRepair:
+    """P4 (port deer-flow) : le repair \n ne touche PAS le contenu des fences."""
+
+    def test_n_dans_fence_preserve(self, tmp_path):
+        p = tmp_path / "index.html"
+        p.write_text(
+            "const a = 1;\\nconst b = 2;\n<pre>```\nconst demo = 1;\\nconst x = 2;\n```</pre>\n",
+            encoding="utf-8",
+        )
+        res = apply_known_fixes(str(p), "Uncaught SyntaxError: Invalid or unexpected token")
+        assert "FIX AUTO APPLIQUÉ" in res
+        fixed = p.read_text(encoding="utf-8")
+        # Hors fence : réparé (vrai saut de ligne).
+        assert fixed.startswith("const a = 1;\nconst b = 2;\n")
+        # Dans la fence : la séquence backslash-n littérale est intacte.
+        assert "const demo = 1;\\nconst x = 2;\n" in fixed
+
+    def test_tout_dans_fence_aucun_changement(self, tmp_path):
+        p = tmp_path / "notes.html"
+        p.write_text("```\nconst a = 1;\\nconst b = 2;\n```\n", encoding="utf-8")
+        res = apply_known_fixes(str(p), "Uncaught SyntaxError: Invalid or unexpected token")
+        assert "PAS DE FIX AUTO" in res or "AUCUNE occurrence" in res
+        assert "\\n" in p.read_text(encoding="utf-8")

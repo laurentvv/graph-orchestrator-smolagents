@@ -261,6 +261,91 @@ class DevToolsDiscoverUiTool(Tool):
         return self._eval(function=_DISCOVER_UI_JS)
 
 
+# P6/F-139 (port Scrapling retrieve_similar, parser.py:530) : JS de scoring
+# de similarité pour re-localiser un élément disparu. Score = tag exact
+# (+0.35) + similarité texte (rapport longueur commune, jusqu'à +0.4) +
+# recouvrement d'attributs clés (id/class/data-*, jusqu'à +0.25). Seuil
+# d'acceptation 0.4 (miroir Scrapling AUTO_MATCH). Cap 2000 éléments.
+_HEAL_SELECTOR_JS = """
+(tag, textHint, attrHint) => {
+  const MAX = 2000;
+  const els = Array.from(document.querySelectorAll('*')).slice(0, MAX);
+  const norm = (s) => (s || '').toLowerCase().trim();
+  const textHintN = norm(textHint);
+  const attrHintN = norm(attrHint);
+  let best = null;
+  for (const el of els) {
+    if (el.tagName.toLowerCase() !== String(tag).toLowerCase()) continue;
+    let score = 0.35;
+    const t = norm(el.textContent).slice(0, 200);
+    if (textHintN) {
+      const a = textHintN.slice(0, 200);
+      let common = 0;
+      for (let i = 0; i < Math.min(a.length, t.length); i++) {
+        if (a[i] === t[i]) common++;
+      }
+      const denom = Math.max(a.length, t.length) || 1;
+      if (Math.max(a.length, t.length) < 8) score += (a === t) ? 0.4 : 0;
+      else score += 0.4 * (common / denom);
+    }
+    if (attrHintN) {
+      const attrs = Array.from(el.attributes).map(
+        (at) => at.name + '=' + norm(at.value)
+      ).join('|');
+      let hits = 0;
+      for (const part of attrHintN.split('|')) {
+        if (part && attrs.includes(part)) hits++;
+      }
+      const total = attrHintN.split('|').filter(Boolean).length || 1;
+      score += 0.25 * (hits / total);
+    }
+    if (!best || score > best.score) {
+      best = {
+        score: Math.round(score * 100) / 100,
+        tag: el.tagName.toLowerCase(),
+        id: el.id || null,
+        text: (el.textContent || '').trim().slice(0, 80),
+        selector: el.id ? ('#' + el.id) : (
+          el.className && typeof el.className === 'string'
+            ? (el.tagName.toLowerCase() + '.' + el.className.trim().split(/\\s+/).join('.'))
+            : el.tagName.toLowerCase()
+        )
+      };
+    }
+  }
+  if (!best || best.score < 0.4) {
+    return JSON.stringify({ found: false, message: 'Aucun candidat >= 0.4' });
+  }
+  return JSON.stringify({ found: true, ...best });
+}
+"""
+
+
+class DevToolsHealSelectorTool(Tool):
+    name = "heal_selector"
+    description = (
+        "Self-healing de sélecteur (port Scrapling) : quand ton sélecteur (ex: '#startBtn') "
+        "ne trouve PLUS l'élément (régénéré/renommé par un fix), re-localise-le par similarité. "
+        "Args : tag (ex: 'button'), text_hint (texte visible de l'élément, ex: 'Start'), "
+        "attr_hint (attributs attendus 'class=btn primary|data-action=start', optionnel). "
+        "Retourne le meilleur candidat (score >= 0.4) avec son sélecteur — évite un FAIL de test "
+        "sur un simple renommage."
+    )
+    inputs = {
+        "tag": {"type": "string", "description": "tag HTML de l'élément cherché"},
+        "text_hint": {"type": "string", "description": "texte visible attendu", "nullable": True},
+        "attr_hint": {"type": "string", "description": "attributs attendus, 'k=v|k2=v2'", "nullable": True},
+    }
+    output_type = "string"
+
+    def __init__(self, evaluate_script_tool: Tool):
+        super().__init__()
+        self._eval = evaluate_script_tool
+
+    def forward(self, tag: str, text_hint: str = "", attr_hint: str = "") -> str:
+        return self._eval(function=_HEAL_SELECTOR_JS, args=[tag, text_hint, attr_hint])
+
+
 def build_devtools_helper_tools(cdt_tools: List[Tool]) -> List[Tool]:
     """Factory fail-open : instancie les helpers DevTools si ``evaluate_script`` est dispo.
 
@@ -283,4 +368,5 @@ def build_devtools_helper_tools(cdt_tools: List[Tool]) -> List[Tool]:
         DevToolsFuzzClickTool(eval_tool),
         DevToolsProbeCanvasTool(eval_tool),
         DevToolsFuzzKeyboardTool(eval_tool),
+        DevToolsHealSelectorTool(eval_tool),
     ]
