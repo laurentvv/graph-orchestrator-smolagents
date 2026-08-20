@@ -80,7 +80,9 @@
   sanitte plan Architect (200x80/6000x2400 detectes deterministement + retry
   correctif unique, px vs cellules distingues), (C) TARGETED_MAX_STEPS 16 +
   TESTER_TIMEOUT_S 1200, (D) plafond lectures identiques (3e refus + directive,
-  reset par noeud). 8 tests, gate F-103 OK, contract C467.
+  reset par noeud). 8 tests, gate F-103 OK, contract C467. Entré dans
+  feature_list.json sous **F-144** (2026-08-20, décision user) : le numéro
+  F-141 était pris par l'entrée références deepseek-harness (union PR #98/#99).
 - [ ] Relance run E2E (après décision utilisateur) — validation : 0 erreur
   dans les logs.
 

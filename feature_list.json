@@ -1213,6 +1213,13 @@
       "description": "Suivi strict du budget de tokens et gestion de l'incertitude du LLM (uncertainty.py) lors des revues de code, permettant de dégrader gracieusement ou d'alerter plutôt que d'halluciner. Source: update_report 2026-08-20 (code-review-graph).",
       "status": "pending",
       "dependencies": []
+    },
+    {
+      "id": "F-144",
+      "name": "Correctifs code pur post-mortem run 2026-08-20_1817 (ex-F-141 hardening)",
+      "description": "4 correctifs déterministes post-mortem run #7 : (A) print succès Static Tester (détails tronqués 110 chars, workflows.py) ; (B) garde sanité plan Architect (_plan_sanity_violations : dimension > 4000px OU grille > 120 cellules détectées déterministement + UNE re-demande Architect correctrice, px vs cellules distingués) ; (C) budgets Tester TARGETED_MAX_STEPS 16 + TESTER_TIMEOUT_S 1200 ; (D) plafond lectures identiques (3e lecture strictement identique path+offset+limit refusée + directive AGIS, reset par nœud). 8 tests, gate F-103 OK, contract C467. Référencé « F-141 » dans le code/tests/contract/progress d'origine ; renommé F-144 le 2026-08-20 (décision user) car le numéro F-141 était pris par l'entrée références deepseek-harness lors de l'union des PR #98/#99.",
+      "status": "completed",
+      "dependencies": []
     }
   ]
 }
