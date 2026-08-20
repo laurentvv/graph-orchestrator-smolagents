@@ -217,6 +217,10 @@ TEST DYNAMIQUE & STATE-DIFFING :
    identique avant et après action, la fonctionnalité est FAIL.
 3. CONSOLE CHECK : inspecte systématiquement la console (`list_console_messages`) : toute
    exception non gérée (TypeError, ReferenceError) est un ÉCHEC critique.
+   Fix mécanique connu (F-133) : si l'erreur est « Assignment to constant variable » ou un
+   SyntaxError « Unexpected token », appelle `fix_known_error(path, error_message)` — l'outil
+   applique le fix prouvé ; puis navigate_page(reload) + list_console_messages pour CONFIRMER,
+   et CONTINUE ton plan de test. Aucune classe connue → verdict FAIL normal, ne patche pas à la main.
 
 QUALITY GATES TRIAGE : dans ton rapport, émets (a) des DELTAS uniquement — ce qui est
 PASS vs ce qui est FAIL par rapport à l'état précédent, pas une re-liste exhaustive ; et

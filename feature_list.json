@@ -1123,6 +1123,17 @@
         "F-128",
         "F-130"
       ]
+    },
+    {
+      "id": "F-133",
+      "name": "Auto-fixer déterministe pluggé au Tester (trouve → fix prouvé → re-test → continue)",
+      "description": "Proposition utilisateur session 2026-08-20 (post-mortems runs 1028/1203/1344) : quand le Tester trouve une erreur console à fix MÉCANIQUE PRUVÉ, il la fait corriger par un outil déterministe puis CONTINUE son test au lieu d'échouer l'itération entière (cycle Coder ~30 min GPU économisé). Module graph_orchestrator/auto_fixer.py (Python pur, 0 LLM, fail-closed) : classe 1 'Assignment to constant variable X' → toutes les déclarations const X = du fichier en let X = (l'erreur PROUVE la réassignation — le fix ghostY a coûté plusieurs steps au 4B au run 1500) ; classe 2 SyntaxError/Unexpected token par \n littéral en séparateur de code → repair par vrai saut de ligne (même regex que la garde F-132, mode réparation — le fix que le 4B a échoué à poser 3 fois). Activée SEULEMENT si le message évoque SyntaxError (anti faux positifs) ; fichiers code uniquement ; pattern reconnu mais déjà réparé → message explicite ; journalisation DuckDB de chaque application (traçabilité Judge/post-mortem) ; jamais d'exception. Outil @tool fix_known_error(path, error_message) dans tools.py + branché au WebTestRunner (testers/web_tester.py) + consigne prompt Tester (3 lignes, gate F-103 OK) : fix → navigate(reload) + console CONFIRM → CONTINUE le plan ; aucune classe connue → verdict FAIL normal, pas de patch manuel. Le diagnostic LLM (X is not defined, undefined property, logique) reste au Coder. Tests : tests/test_auto_fixer.py 10 nouveaux PASS.",
+      "status": "completed",
+      "dependencies": [
+        "F-126",
+        "F-132",
+        "F-128"
+      ]
     }
   ]
 }

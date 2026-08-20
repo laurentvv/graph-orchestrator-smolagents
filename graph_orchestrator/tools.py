@@ -935,6 +935,28 @@ def multi_replace(path: str, replacements: list) -> str:
         return f"Error editing file {path}: {str(e)}"
 
 @tool
+def fix_known_error(path: str, error_message: str) -> str:
+    """Applies a DETERMINISTIC fix for mechanically-known error classes (F-133).
+
+    Use when a console/linter error has a PROVEN mechanical fix:
+      - "Assignment to constant variable 'X'" → all `const X =` become `let X =`
+        (the error itself proves the reassignment);
+      - "SyntaxError / Unexpected token" caused by a literal \\n separator
+        (backslash-n text) → replaced by real newlines.
+    ALWAYS re-test after: navigate_page(reload) + list_console_messages, then
+    CONTINUE your test plan. If no known class matches, the tool says so —
+    report the bug via your normal verdict instead of patching blindly.
+
+    Args:
+        path: The code file to fix (html/js/css/ts/py/vue/svelte only).
+        error_message: The exact console/linter error text (verbatim).
+    """
+    from .auto_fixer import apply_known_fixes
+
+    return apply_known_fixes(path, error_message)
+
+
+@tool
 def log_event(event_type: str, details: str) -> str:
     """Logs a major event in the execution history.
     Use this to keep a trace of the execution instead of writing to a text file.

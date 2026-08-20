@@ -50,8 +50,18 @@
   cumulés avec vision_nudge).
 - [x] F132-2 : État disque (contract C457-C458, feature_list F-132, ce
   fichier) + DuckDB + commit.
-- [ ] F132-3 : **Relance run E2E Tetris FRESH_START=1 (validation F-130/131/132)**
-  — critère utilisateur : 0 erreur dans les logs.
+- [x] F133-1 (proposition utilisateur) : Auto-fixer déterministe pluggé au
+  Tester — module auto_fixer.py (const réassignée → let prouvé ; \n littéral
+  → repair, même regex que F-132) ; outil fix_known_error branché au
+  WebTestRunner + consigne prompt (fix → reload+console → CONTINUE le test ;
+  sinon verdict normal) ; 10 tests PASS, gate F-103 OK. État disque (contract
+  C459, feature_list F-133) + commit.
+- [ ] F133-2/Run #6 (1500) en cours : itération 1 a passé la checklist
+  visuelle complète (PREMIÈRE fois), Linter a trouvé des erreurs de syntaxe
+  résiduelles → itération 2/3 en cours. F-130 tiré en prod (lectures
+  stériles), F-131 tiré ×3 au run #4. Itérations 5/6 (Q6) avortées : Q6 trop
+  lent (write ~25 min > timeout), retour Q4 + LLM_TIMEOUT_S=1800 +
+  CODER_MAX_STEPS=48. Validation : 0 erreur dans les logs.
 
 ## Jalons de l'Itération (gouvernance backlog — grooming post-run #19, décision user 2026-08-18)
 

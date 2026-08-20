@@ -73,7 +73,7 @@ class WebTestRunner:
             from ..context7_tool import context7_tools
             from ..chrome_devtools_tool import chrome_devtools_tools
             from ..vision_callback import wrap_screenshot_tools, make_screenshot_callback
-            from ..tools import read_file, list_directory
+            from ..tools import read_file, list_directory, fix_known_error
             with context7_tools() as c7_tools, chrome_devtools_tools() as cdt_tools:
                 # F-45 : on cumule Puppeteer (skill dédié, assertions puppeteer_evaluate)
                 # ET Chrome DevTools (console structurée avec source maps, Lighthouse,
@@ -90,6 +90,12 @@ class WebTestRunner:
                 # Diagnostiqué sur run 2026-08-05_1507_bubble_sort (bs-001, 6 steps
                 # gaspillés en "Forbidden function evaluation: 'open'/'read_file'").
                 tester_tools.extend([read_file, list_directory])
+                # F-133 (proposition utilisateur, session 2026-08-20) : le Tester
+                # trouve une erreur mécanique → l'outil applique le fix prouvé →
+                # il recharge et CONTINUE son test au lieu d'échouer l'itération
+                # entière (cycle Coder ~30 min économisé). Classes couvertes :
+                # const réassignée, \n littéral — tout le reste reste au verdict.
+                tester_tools.append(fix_known_error)
                 # F-45 : wrap les outils de screenshot (puppeteer_screenshot ET
                 # take_screenshot DevTools) pour faire remonter l'image au LLM via
                 # observations_images. Sinon le Tester "rend" le screenshot sans le
