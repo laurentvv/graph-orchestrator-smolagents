@@ -243,3 +243,90 @@ class TestProcessReaper:
         actions = pr.reap_orphans()
         assert killed == [pid]
         assert any(f"pid={pid}" in a for a in actions)
+
+
+# ==========================================
+# F-141 (post-mortem run 2026-08-20_1817)
+# ==========================================
+
+class TestPlanSanity:
+    def _mk(self, plan, sub=None):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(global_architecture=plan, subtasks=sub or [])
+
+    def test_plan_aberrant_200x80_detecte(self):
+        from graph_orchestrator.workflows import _plan_sanity_violations
+
+        plan = ("Single-file autonomous Tetris game. Canvas-based rendering (200x80 grid "
+                "cells, 30px each = 6000x2400px playable area) with CSS overlay for HUD.")
+        v = _plan_sanity_violations(self._mk(plan))
+        assert any("grille 200x80" in x for x in v)
+        assert any("6000x2400" in x for x in v)
+
+    def test_plan_standard_passe(self):
+        from graph_orchestrator.workflows import _plan_sanity_violations
+
+        plan = ("Canvas 10x20 grid, 32px cells = 320x640px, responsive via CSS max-width. "
+                "1920x1080 layout dashboard acceptable.")
+        assert _plan_sanity_violations(self._mk(plan)) == []
+
+    def test_grande_dimension_sans_mot_grid_passe(self):
+        """1920x1080 sans contexte grid/cell = layout légitime, pas de violation."""
+        from graph_orchestrator.workflows import _plan_sanity_violations
+
+        assert _plan_sanity_violations(self._mk("layout 3840x2160 retina")) == []
+
+    def test_subtasks_sont_scannees_aussi(self):
+        from graph_orchestrator.workflows import _plan_sanity_violations
+
+        v = _plan_sanity_violations(self._mk("plan ok", [{"strategy": "grid 300x150 cells game"}]))
+        assert any("300x150" in x for x in v)
+
+
+class TestIdenticalReadGate:
+    def test_troisieme_lecture_identique_refusee(self, tmp_path):
+        from graph_orchestrator.tools import read_file, reset_read_supply
+
+        reset_read_supply()
+        p = tmp_path / "index.html"
+        p.write_text("ligne %d\n" * 100 % tuple(range(100)), encoding="utf-8")
+        r1 = read_file(path=str(p), offset=50, limit=10)
+        r2 = read_file(path=str(p), offset=50, limit=10)
+        assert "garde lectures identiques" not in r1
+        assert "garde lectures identiques" not in r2
+        r3 = read_file(path=str(p), offset=50, limit=10)
+        assert "garde lectures identiques" in r3
+        assert "AGIS" in r3
+        # Le refus ne lit PAS le fichier : persister ne grossit plus le contexte.
+        r4 = read_file(path=str(p), offset=50, limit=10)
+        assert "garde lectures identiques" in r4
+
+    def test_offsets_differents_libres(self, tmp_path):
+        from graph_orchestrator.tools import read_file, reset_read_supply
+
+        reset_read_supply()
+        p = tmp_path / "game.js"
+        p.write_text("code %d\n" * 60 % tuple(range(60)), encoding="utf-8")
+        for off in (0, 10, 20, 0, 10, 20):  # chaque offset vu 2 fois seulement
+            r = read_file(path=str(p), offset=off, limit=5)
+            assert "garde lectures identiques" not in r
+
+    def test_reset_repart_de_zero(self, tmp_path):
+        from graph_orchestrator.tools import read_file, reset_read_supply
+
+        reset_read_supply()
+        p = tmp_path / "a.js"
+        p.write_text("x\n" * 30, encoding="utf-8")
+        read_file(path=str(p), offset=5, limit=5)
+        read_file(path=str(p), offset=5, limit=5)
+        reset_read_supply()
+        r = read_file(path=str(p), offset=5, limit=5)
+        assert "garde lectures identiques" not in r
+
+
+class TestTargetedBudget:
+    def test_targeted_max_steps_releve(self):
+        from graph_orchestrator.targeted_retest import TARGETED_MAX_STEPS
+
+        assert TARGETED_MAX_STEPS == 16

@@ -126,11 +126,50 @@ def _file_lock(path: str) -> threading.Lock:
         return _FILE_LOCKS[norm]
 
 
+# F-141 (post-mortem run 2026-08-20_1817) : plafond d'approvisionnement des
+# lectures IDENTIQUES. Le 9B ULTRA a exécuté 14× le MÊME read_file(offset=525)
+# mot pour mot, ignorant les 8 nudges F-130 (les nudges n'ont pas de bras armé
+# sur un modèle insensible ; le LoopGuard F-36 exempte read_file). On coupe la
+# SOURCE : à partir de la 3e lecture STRICTEMENT identique (même path+offset+
+# limit) au sein d'une exécution de nœud, le contenu est REFUSÉ et remplacé par
+# une directive — le step ne coûte plus NI IO NI croissance de contexte. Les
+# lectures variées (offsets différents) restent libres (couvertes par le nudge
+# F-130, qui convainc le 4B). Lifecycle : reset par nœud (reset_read_supply).
+_IDENT_READ_THRESHOLD = 3
+_IDENT_READ_STATE: dict = {}
+
+
+def reset_read_supply() -> None:
+    """Réinitialise le compteur de lectures identiques (une exécution de nœud)."""
+    _IDENT_READ_STATE.clear()
+
+
+def _identical_read_gate(path: str, offset: int, limit: int) -> str | None:
+    """Message de refus si c'est la N-ième lecture STRICTEMENT identique, sinon None."""
+    try:
+        key = f"{os.path.normcase(os.path.abspath(path))}|{offset}|{limit}"
+        n = _IDENT_READ_STATE.get(key, 0) + 1
+        _IDENT_READ_STATE[key] = n
+        if n < _IDENT_READ_THRESHOLD:
+            return None
+        return (
+            f"ERROR (garde lectures identiques, F-141) : tu as déjà lu CETTE section "
+            f"({path}, offset={offset}, limit={limit}) {n} fois À L'IDENTIQUE — le contenu "
+            f"est DÉJÀ dans ton contexte, le relire ne peut rien apporter. AGIS : "
+            f"(1) bug identifié → search_replace ciblé MAINTENANT ; (2) code correct → "
+            f"re-teste la PAGE (navigate_page(reload) + list_console_messages), pas le "
+            f"fichier ; (3) checklist → screenshot + visual_check ×N + final_answer. "
+            f"Ce refus ne consomme ni IO ni contexte : persister ne fait que brûler des steps."
+        )
+    except Exception:
+        return None
+
+
 @tool
 def read_file(path: str, offset: int = 0, limit: int = -1) -> str:
     """Reads a file and returns its content with line numbers.
     Useful for inspecting the codebase before editing.
-    
+
     Args:
         path: The absolute or relative path to the file.
         offset: The starting line number (0-indexed). Defaults to 0.
@@ -144,6 +183,10 @@ def read_file(path: str, offset: int = 0, limit: int = -1) -> str:
     _denied = ensure_read_allowed(path)
     if _denied:
         return _denied
+    # F-141 : refuser le contenu dès la 3e lecture strictement identique.
+    _gate = _identical_read_gate(path, offset, limit)
+    if _gate:
+        return _gate
     try:
         with open(path, 'r', encoding='utf-8') as f:
             lines = f.readlines()

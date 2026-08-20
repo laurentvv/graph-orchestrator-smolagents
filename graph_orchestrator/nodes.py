@@ -1491,6 +1491,13 @@ Code prêt pour la production, respectant les conventions du langage.
             reset_tool_progress()
         except Exception:
             pass
+        # F-141 : reset du plafond de lectures identiques (même lifecycle).
+        try:
+            from .tools import reset_read_supply
+
+            reset_read_supply()
+        except Exception:
+            pass
         # F-128 : reset de l'état « erreurs console en attente de re-vérification »
         # (même lifecycle que les autres resets vision).
         from .vision_callback import reset_console_pending

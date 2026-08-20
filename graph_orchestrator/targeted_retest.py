@@ -31,7 +31,12 @@ logger = logging.getLogger(__name__)
 # découverte d'UI (IDs canvas à deviner) → final_answer en prose au max-steps →
 # rejet fantôme d'un livrable sain. 10 couvrent : navigate(1) + discover_ui(1)
 # + console smoke(1) + 3-4 assertions ciblées + screenshot + final_answer.
-TARGETED_MAX_STEPS = 10
+# F-141 (post-mortem run 2026-08-20_1817) : le re-test ciblé a découvert un VRAI
+# bug (jeu en pause au chargement) et a été coupé à 10 steps EN PLEINE vérification
+# (reprise clavier + clic Resume + assertion post-reprise) → timeout + Judge
+# fail-closed sur un livrable pourtant propre. 16 couvrent découverte →
+# interaction corrective → re-assertion.
+TARGETED_MAX_STEPS = 16
 
 
 def extract_bug_points(refutations: List[dict], max_chars: int = 1200) -> Optional[str]:
