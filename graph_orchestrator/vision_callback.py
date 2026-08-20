@@ -164,6 +164,191 @@ def _build_nav_freeze_nudge(observations: str) -> Optional[str]:
         return None
 
 
+# ===========================================================================
+# F-130 (post-mortem run 2026-08-20_1028, Tetris) : stall d'investigation par
+# lectures stériles. Le Coder 4B a localisé un TypeError console (stack F-126
+# exacte : drawNextPiece ligne 653) mais est parti lire les MAUVAISES lignes
+# (406-411, hallucination) puis a re-déclaré 5+ fois la même intention (« Let me
+# check where the game initialization happens ») en enchaînant les read_file —
+# ~25 steps brûlés en lectures, 40/40 atteint SANS final_answer → Pydantic KO →
+# sauvetage DSPy → checklist 6/6 non audités → 3 tentatives identiques → run
+# perdu. AUCUNE garde ne voyait cette boucle : read_file est EXEMPT du LoopGuard
+# (lecture « légitime »), le Stall Detector F-88 ne hashe que les écritures, et
+# le nudge checklist F-114 exige un screenshot (2 seulement pris). On compte
+# ici les lectures PAR FICHIER sans modification depuis : une modification
+# ré-arme le compteur du fichier (la garde Read-Before-Write force une relecture
+# avant CHAQUE édition — le pattern read→edit→read→edit reste donc légitime).
+# Fail-open total (jamais d'exception).
+# ===========================================================================
+_READ_TOOLS = ("read_file",)
+_EDIT_TOOLS = (
+    "write_file", "append_file", "edit_file", "search_replace", "multi_replace",
+)
+_READ_STALL_THRESHOLD = 5
+_READ_STALL_STATE = {"files": {}}
+
+# Extraction du path= nommé OU positionnel dans le source Python du step
+# (CodeAgent) : read_file(path="index.html", offset=…) comme read_file("x").
+_CALL_PATH_RES = {
+    tool: re.compile(re.escape(tool) + r"\(\s*path\s*=\s*[\"']([^\"']+)[\"']")
+    for tool in _READ_TOOLS + _EDIT_TOOLS
+}
+_CALL_PATH_POS_RES = {
+    tool: re.compile(re.escape(tool) + r"\(\s*[\"']([^\"']+)[\"']")
+    for tool in _READ_TOOLS + _EDIT_TOOLS
+}
+
+
+def reset_read_stall() -> None:
+    """Réinitialise les compteurs de lectures stériles (une exécution de nœud = un cycle).
+
+    Comme les autres resets vision : appelé au montage du nœud Coder, le compteur
+    traverse volontairement les retries de run_with_retry (20 lectures à la
+    tentative 1 doivent déclencher immédiatement à la tentative 2).
+    """
+    _READ_STALL_STATE["files"] = {}
+
+
+def _normalize_step_path(path: str) -> str:
+    """Normalise un chemin pour agréger les variantes cas/séparateurs (Windows)."""
+    import os
+
+    return os.path.normcase(str(path).strip())
+
+
+def _step_tool_paths(memory_step) -> tuple:
+    """Extrait (fichiers lus, fichiers modifiés) du step courant.
+
+    Couvre les deux formes smolagents : CodeAgent (`code_action` = source Python
+    qui appelle les @tool) et ToolCallingAgent (`tool_calls` = ToolCall
+    structurés .name/.arguments). Best-effort : échec de parsing = rien.
+    """
+    reads: set = set()
+    edits: set = set()
+    code = str(getattr(memory_step, "code_action", "") or "")
+    if code:
+        for tool in _READ_TOOLS + _EDIT_TOOLS:
+            found = set(_CALL_PATH_RES[tool].findall(code)) | set(
+                _CALL_PATH_POS_RES[tool].findall(code)
+            )
+            if not found:
+                continue
+            if tool in _READ_TOOLS:
+                reads |= {_normalize_step_path(p) for p in found}
+            else:
+                edits |= {_normalize_step_path(p) for p in found}
+    for tc in getattr(memory_step, "tool_calls", None) or []:
+        name = str(getattr(tc, "name", "") or "")
+        if name not in _READ_TOOLS + _EDIT_TOOLS:
+            continue
+        args = getattr(tc, "arguments", None)
+        path = args.get("path") if isinstance(args, dict) else None
+        if not path:
+            continue
+        if name in _READ_TOOLS:
+            reads.add(_normalize_step_path(path))
+        else:
+            edits.add(_normalize_step_path(path))
+    return reads, edits
+
+
+def _build_read_stall_nudge(memory_step) -> Optional[str]:
+    """Directive d'action si le même fichier est relu N fois sans modification.
+
+    Retourne None sous le seuil ou si le step courant modifie le fichier (une
+    édition ré-arme le droit de lecture). Best-effort total : jamais d'exception.
+    """
+    try:
+        reads, edits = _step_tool_paths(memory_step)
+        files = _READ_STALL_STATE["files"]
+        for path in edits:
+            files.pop(path, None)
+        triggered = None
+        for path in sorted(reads):
+            files[path] = files.get(path, 0) + 1
+            if files[path] >= _READ_STALL_THRESHOLD:
+                triggered = path
+        if triggered is None:
+            return None
+        n = files[triggered]
+        return (
+            f"[LECTURES STÉRILES] « {triggered} » lu {n} fois SANS modification depuis "
+            f"(seuil {_READ_STALL_THRESHOLD}). Tu as TOUT le matériau nécessaire — "
+            f"AGIS maintenant :\n"
+            f"(1) bug identifié → search_replace CHIRURGICAL (la garde "
+            f"Read-Before-Write exigera au pire une relecture courte de la section "
+            f"visée juste avant l'édition — c'est la seule relecture utile) ;\n"
+            f"(2) code déjà correct → re-teste la PAGE (navigate_page(reload) puis "
+            f"list_console_messages), PAS le fichier : la console seule prouve le fix ;\n"
+            f"(3) puis screenshot + visual_check pour chaque critère manquant + "
+            f"final_answer.\n"
+            f"Chaque lecture supplémentaire = un step brûlé pour zéro information "
+            f"nouvelle — et au plafond de steps, final_answer sera REFUSÉ."
+        )
+    except Exception as e:  # pragma: no cover - fail-open garanti
+        logger.debug("nudge lectures stériles échec (%s) — ignoré.", e)
+        return None
+
+
+# ===========================================================================
+# F-131 (post-mortem run 2026-08-20_1028, Tetris) : non-convergence au
+# plafond de steps. Les 3 tentatives Coder sont mortes à « Reached max steps »
+# avec pour DERNIER geste un read_file d'exploration (pas de final_answer) →
+# sortie non parsable → sauvetage DSPy sans audit visuel → gate F-109 → run
+# perdu. L'agent n'a aucune conscience du budget restant (smolagents ne
+# l'annonce qu'au step fatal). Ce nudge injecte la contrainte AVANT : à
+# `_WIND_DOWN_REMAINING` steps du plafond, tant que la checklist visuelle est
+# incomplète, une directive de convergence stricte (fix minimal SI localisé →
+# preuve console → screenshot → visual_check ×N → final_answer). Verdict=False
+# honnête explicitement permis : un échec prouvé vaut mieux qu'un run brûlé.
+# Sans état (dérivé de step_number à chaque step). Fail-open total.
+# ===========================================================================
+_WIND_DOWN_REMAINING = 5
+
+
+def _build_wind_down_nudge(memory_step, agent, criteria_count: int) -> Optional[str]:
+    """Directive de convergence quand le budget de steps est presque épuisé.
+
+    Inactif sans critères visuels (Tester / opt-out) ou checklist déjà complète.
+    Best-effort total : jamais d'exception.
+    """
+    if criteria_count <= 0:
+        return None
+    try:
+        max_steps = getattr(agent, "max_steps", None)
+        step_number = getattr(memory_step, "step_number", None)
+        if not isinstance(max_steps, int) or not isinstance(step_number, int):
+            return None
+        remaining = max_steps - step_number
+        if remaining <= 0 or remaining > _WIND_DOWN_REMAINING:
+            return None
+        from .tools import get_visual_audit  # import local (état module-level)
+
+        audited = {a.get("criterion_number") for a in get_visual_audit()}
+        missing = sorted(set(range(1, criteria_count + 1)) - audited)
+        if not missing:
+            return None
+        return (
+            f"[BUDGET : {remaining} step(s) restant(s) sur {max_steps}] CONVERGENCE "
+            f"IMMÉDIATE exigée — au plafond, un step sans final_answer = tentative "
+            f"PERDUE (checklist {len(missing)}/{criteria_count} non audités : {missing}). "
+            f"Ordre strict, rien d'autre :\n"
+            f"(1) SI un bug console est déjà localisé, applique LE fix minimal (un "
+            f"seul search_replace ciblé) ; SINON passe directement au test, sans "
+            f"nouvelle lecture d'exploration ;\n"
+            f"(2) navigate_page(reload) + list_console_messages : la preuve que la "
+            f"console est propre (ou le constat d'échec) ;\n"
+            f"(3) take_screenshot ;\n"
+            f"(4) visual_check(criterion_number=i, verdict=True|False, "
+            f'observation="ce que tu vois") pour CHAQUE critère manquant — un '
+            f"verdict False honnête est ACCEPTÉ ;\n"
+            f"(5) final_answer immédiatement."
+        )
+    except Exception as e:  # pragma: no cover - fail-open garanti
+        logger.debug("nudge wind-down échec (%s) — ignoré.", e)
+        return None
+
+
 def _build_checklist_nudge(criteria_count: int) -> Optional[str]:
     """Construit le rappel checklist si le pattern « screenshots sans audit » est détecté.
 
@@ -691,6 +876,32 @@ def make_screenshot_callback(capture_holder: List[Any], visual_criteria_count: i
                 )
             except Exception as e:
                 logger.debug("nudge anti-gel : append observations échec (%s).", e)
+        # F-130 : nudge lectures stériles — AVANT l'early-return capture : le
+        # stall d'investigation ne produit NI screenshot NI erreur protocole,
+        # c'est précisément son danger (steps brûlés en silence).
+        read_stall_nudge = _build_read_stall_nudge(memory_step)
+        if read_stall_nudge:
+            try:
+                current = getattr(memory_step, "observations", None) or ""
+                memory_step.observations = (
+                    f"{current}\n\n{read_stall_nudge}" if current else read_stall_nudge
+                )
+            except Exception as e:
+                logger.debug("nudge lectures stériles : append observations échec (%s).", e)
+        # F-131 : wind-down budget — idem, indépendant des screenshots ; Coder
+        # uniquement (criteria_count > 0). Se répète sur les derniers steps tant
+        # que la checklist est incomplète (pression graduée, ~100 tokens/step).
+        wind_down_nudge = _build_wind_down_nudge(
+            memory_step, agent, visual_criteria_count
+        )
+        if wind_down_nudge:
+            try:
+                current = getattr(memory_step, "observations", None) or ""
+                memory_step.observations = (
+                    f"{current}\n\n{wind_down_nudge}" if current else wind_down_nudge
+                )
+            except Exception as e:
+                logger.debug("nudge wind-down : append observations échec (%s).", e)
         if not capture_holder:
             return
         # On ne prend que le dernier screenshot du step (le plus pertinent : état

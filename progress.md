@@ -1,5 +1,40 @@
 # État d'Avancement du Sprint
 
+## Jalons de l'Itération (cycle F-130/131 — post-mortem run 2026-08-20_1028 Tetris, session « run de 0 »)
+> Objectif utilisateur : run Tetris de 0 → analyser/corriger si problème →
+> relancer → validé si 0 erreur dans les logs. Run 2026-08-20_1028 (~65 min,
+> FRESH_START post-swap llama.cpp b10509) : **failure « Coder crash »** — les
+> 3 tentatives Coder meurent à « Reached max steps » en boucle de lectures
+> stériles : TypeError console réelle (bag numérique vs SHAPES lettré,
+> `drawNextPiece:653` donné par la stack F-126) poursuivie sur les MAUVAISES
+> lignes (406-411 hallucinées) via ~25 read_file sans modification ; step 41
+> forcé = encore un read_file → Pydantic KO → sauvetage DSPy → checklist 6/6
+> non audités ×3 → circuit-breaker idle. Le livrable final appelle bien
+> createGrid() mais garde le TypeError (vérifié Chrome : stack exacte 653).
+
+- [x] F130/131-1 : Diagnostic 3 couches — (a) read_file EXEMPT du LoopGuard
+  F-36 ; (b) Stall Detector F-88 ne hashe que les écritures ; (c) nudge F-114
+  exige un screenshot (2 seulement pris). Aucune garde ne voyait la boucle
+  d'investigation.
+- [x] F130-2 : Nudge lectures stériles (`vision_callback._build_read_stall_nudge`)
+  — compteur PAR FICHIER (code_action + tool_calls, path nommé/positionnel),
+  modification → ré-arme, seuil 5 → directive AGIS (search_replace / re-test
+  page / checklist+final_answer) ; reset par nœud, traverse les retries ;
+  actif Coder+Tester ; fail-open.
+- [x] F131-2 : Nudge wind-down budget (`_build_wind_down_nudge`) — remaining
+  ∈ [1,5] + checklist incomplète → directive convergence stricte à chaque
+  dernier step (fix minimal → console → screenshot → visual_check ×N verdict
+  False honnête PERMIS → final_answer) ; sans état ; Coder uniquement ;
+  fail-open.
+- [x] F130/131-3 : Branchement `make_screenshot_callback` AVANT l'early-return
+  capture + resets nodes.py (même bloc lifecycle F-114/125/128/129).
+- [x] F130/131-4 : Tests — **16 nouveaux PASS** (TestReadStallNudge 8 +
+  TestWindDownNudge 8), fichier `test_vision_nudge.py` 46/46 ; py_compile OK.
+- [x] F130/131-5 : État disque (contract C453-C456, feature_list F-130/F-131
+  completed, ce fichier) + DuckDB + commit.
+- [ ] F130/131-6 : **Relance run E2E Tetris FRESH_START=1 (validation)** —
+  critère utilisateur : 0 erreur dans les logs.
+
 ## Jalons de l'Itération (gouvernance backlog — grooming post-run #19, décision user 2026-08-18)
 
 - [x] GOV-1 : Arbitrage des 18 features pending sur les besoins réels démontrés

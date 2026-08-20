@@ -20,10 +20,12 @@ from graph_orchestrator.vision_callback import (
     _BROWSER_STALL_THRESHOLD,
     _NAV_TIMEOUT_MARKER,
     _NUDGE_THRESHOLD,
+    _READ_STALL_THRESHOLD,
     _ScreenshotCapturingTool,
     make_screenshot_callback,
     reset_browser_stall,
     reset_nav_freeze_nudge,
+    reset_read_stall,
     reset_screenshot_nudge,
 )
 
@@ -59,10 +61,12 @@ def _clean_state():
     tools.reset_visual_audit()
     reset_screenshot_nudge()
     reset_browser_stall()
+    reset_read_stall()
     yield
     tools.reset_visual_audit()
     reset_screenshot_nudge()
     reset_browser_stall()
+    reset_read_stall()
 
 
 def _make_wrapper():
@@ -380,3 +384,166 @@ class TestNavFreezeNudge:
         assert "[NAVIGATEUR GELÉ]" in step.observations
         assert _NAV_TIMEOUT_MARKER == "Navigation timeout"
         assert _BROWSER_STALL_STATE["count"] >= _BROWSER_STALL_THRESHOLD
+
+
+class TestReadStallNudge:
+    """F-130 (post-mortem run 2026-08-20_1028) : lectures stériles du même fichier.
+
+    Le Coder 4B a relu index.html ~10 fois sans le modifier (mauvaise piste sur
+    un TypeError console) jusqu'au plafond de steps. Le nudge doit déclencher au
+    seuil de lectures SANS modification, être ré-armé par une édition, et rester
+    inactif pour des fichiers différents.
+    """
+
+    def _cb(self, criteria: int = 0):
+        return make_screenshot_callback([], visual_criteria_count=criteria)
+
+    def _step(self, cb, code: str = "", observations: str = "Out: …"):
+        memory_step = SimpleNamespace(
+            observations=observations,
+            observations_images=None,
+            code_action=code,
+            tool_calls=None,
+            step_number=1,
+        )
+        cb(memory_step, agent=SimpleNamespace(max_steps=40))
+        return memory_step
+
+    def test_pas_de_nudge_sous_le_seuil(self):
+        cb = self._cb()
+        for _ in range(_READ_STALL_THRESHOLD - 1):
+            step = self._step(cb, code='c = read_file(path="index.html")')
+            assert "[LECTURES STÉRILES]" not in (step.observations or "")
+
+    def test_nudge_au_seuil(self):
+        cb = self._cb()
+        for _ in range(_READ_STALL_THRESHOLD - 1):
+            self._step(cb, code='c = read_file(path="index.html")')
+        step = self._step(cb, code='c = read_file(path="index.html")')
+        assert "[LECTURES STÉRILES]" in step.observations
+        assert "index.html" in step.observations
+        assert "search_replace" in step.observations
+        assert "list_console_messages" in step.observations
+
+    def test_fichiers_differents_non_sommes(self):
+        cb = self._cb()
+        for i in range(_READ_STALL_THRESHOLD - 1):
+            path = "a.js" if i % 2 else "b.js"
+            step = self._step(cb, code=f'c = read_file(path="{path}")')
+            assert "[LECTURES STÉRILES]" not in (step.observations or "")
+
+    def test_edit_rearme_le_compteur_du_fichier(self):
+        cb = self._cb()
+        for _ in range(_READ_STALL_THRESHOLD - 1):
+            self._step(cb, code='c = read_file(path="index.html")')
+        # Une modification ré-arme le droit de lecture (pattern read→edit légitime
+        # imposé par la garde Read-Before-Write).
+        self._step(
+            cb,
+            code='search_replace(path="index.html", old_string=r"""a""", new_string=r"""b""")',
+        )
+        step = self._step(cb, code='c = read_file(path="index.html")')
+        assert "[LECTURES STÉRILES]" not in (step.observations or "")
+
+    def test_forme_positionnelle_codeagent(self):
+        cb = self._cb()
+        step = self._step(cb, code='read_file("styles.css")')
+        assert "[LECTURES STÉRILES]" not in (step.observations or "")
+
+    def test_forme_tool_calls_tca(self):
+        cb = self._cb()
+        memory_step = SimpleNamespace(
+            observations="Out: …",
+            observations_images=None,
+            code_action="",
+            tool_calls=[
+                SimpleNamespace(name="read_file", arguments={"path": "styles.css"}),
+                SimpleNamespace(name="read_file", arguments={"path": "styles.css"}),
+            ],
+            step_number=1,
+        )
+        cb(memory_step, agent=SimpleNamespace(max_steps=40))
+        # 2 lectures d'un coup : comptées, mais sous le seuil.
+        assert "[LECTURES STÉRILES]" not in (memory_step.observations or "")
+
+    def test_reset_repart_de_zero(self):
+        cb = self._cb()
+        for _ in range(_READ_STALL_THRESHOLD):
+            self._step(cb, code='c = read_file(path="x.py")')
+        reset_read_stall()
+        for _ in range(_READ_STALL_THRESHOLD - 1):
+            step = self._step(cb, code='c = read_file(path="x.py")')
+            assert "[LECTURES STÉRILES]" not in (step.observations or "")
+
+    def test_actif_aussi_pour_le_tester(self):
+        """Callback sans critères visuels (chemin Tester) : nudge actif aussi —
+        le stall de lectures est du gaspillage pour tout agent outillé."""
+        cb = self._cb(criteria=0)
+        for _ in range(_READ_STALL_THRESHOLD - 1):
+            self._step(cb, code='c = read_file(path="script.js")')
+        step = self._step(cb, code='c = read_file(path="script.js")')
+        assert "[LECTURES STÉRILES]" in step.observations
+
+
+class TestWindDownNudge:
+    """F-131 (post-mortem run 2026-08-20_1028) : convergence au plafond de steps.
+
+    Les 3 tentatives Coder sont mortes à « Reached max steps » en exploration.
+    À ≤5 steps du plafond avec checklist incomplète → directive de convergence.
+    """
+
+    def _step(self, criteria: int, step_number: int, max_steps: int = 40, audited=()):
+        for n in audited:
+            tools._VISUAL_AUDIT.append(
+                {"criterion_number": n, "verdict": True, "observation": "ok"}
+            )
+        cb = make_screenshot_callback([], visual_criteria_count=criteria)
+        memory_step = SimpleNamespace(
+            observations="Out: …",
+            observations_images=None,
+            code_action="",
+            tool_calls=None,
+            step_number=step_number,
+        )
+        cb(memory_step, agent=SimpleNamespace(max_steps=max_steps))
+        return memory_step
+
+    def test_nudge_dans_les_5_derniers_steps(self):
+        step = self._step(criteria=6, step_number=36)  # 4 restants
+        assert "[BUDGET" in step.observations
+        assert "4 step(s) restant(s)" in step.observations
+        assert "final_answer" in step.observations
+
+    def test_nudge_au_dernier_step(self):
+        step = self._step(criteria=6, step_number=39)  # 1 restant
+        assert "[BUDGET" in step.observations
+        assert "1 step(s) restant(s)" in step.observations
+
+    def test_pas_de_nudge_loin_du_plafond(self):
+        step = self._step(criteria=6, step_number=30)  # 10 restants
+        assert "[BUDGET" not in (step.observations or "")
+
+    def test_pas_de_nudge_step_fatal(self):
+        """Au step ATTEIGNANT le plafond (0 restant), il est trop tard : pas de bruit."""
+        step = self._step(criteria=6, step_number=40)
+        assert "[BUDGET" not in (step.observations or "")
+
+    def test_inactif_sans_critères(self):
+        """Tester (criteria=0) : pas de wind-down (le fallback max-steps F-61
+        couvre déjà la sortie du Tester)."""
+        step = self._step(criteria=0, step_number=38)
+        assert "[BUDGET" not in (step.observations or "")
+
+    def test_pas_de_nudge_checklist_complete(self):
+        step = self._step(criteria=6, step_number=38, audited=range(1, 7))
+        assert "[BUDGET" not in (step.observations or "")
+
+    def test_message_liste_les_manquants(self):
+        step = self._step(criteria=6, step_number=37, audited=(1, 2))
+        assert "[3, 4, 5, 6]" in step.observations
+        assert "CONVERGENCE" in step.observations
+
+    def test_verdict_false_explicitement_permis(self):
+        """Le message doit ACCEPTER un verdict honnête False (échec prouvé > run brûlé)."""
+        step = self._step(criteria=6, step_number=38)
+        assert "verdict" in step.observations.lower()

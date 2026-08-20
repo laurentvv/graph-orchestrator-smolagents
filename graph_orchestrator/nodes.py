@@ -1477,11 +1477,13 @@ Code prêt pour la production, respectant les conventions du langage.
         from .vision_callback import (
             reset_browser_stall,
             reset_nav_freeze_nudge,
+            reset_read_stall,
             reset_screenshot_nudge,
         )
         reset_screenshot_nudge()
         reset_browser_stall()
         reset_nav_freeze_nudge()
+        reset_read_stall()
         # F-128 : reset de l'état « erreurs console en attente de re-vérification »
         # (même lifecycle que les autres resets vision).
         from .vision_callback import reset_console_pending

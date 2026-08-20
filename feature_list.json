@@ -1090,6 +1090,28 @@
         "F-125",
         "F-128"
       ]
+    },
+    {
+      "id": "F-130",
+      "name": "Nudge lectures stériles (même fichier relu sans modification)",
+      "description": "Post-mortem run 2026-08-20_1028 (Tetris, FRESH_START post-swap llama.cpp b10509) : le Coder 4B a localisé un TypeError console (stack F-126 exacte : drawNextPiece:653) mais est parti lire les MAUVAISESES lignes (406-411, hallucination), puis a re-déclaré 5+ fois la même intention en enchaînant les read_file (~25 steps brûlés, jusqu'à 938k tokens input/step) — 40/40 atteint SANS final_answer → Pydantic KO → sauvetage DSPy sans audit visuel → gate F-109 (6/6 non audités) → 3 tentatives identiques → circuit-breaker idle → run perdu 'Coder crash'. AUCUNE garde ne voyait la boucle : read_file EXEMPT du LoopGuard F-36 (lecture 'légitime'), Stall Detector F-88 ne hashe que les écritures, nudge checklist F-114 exige un screenshot (2 seulement pris). IMPLÉMENTÉ : nudge _build_read_stall_nudge dans vision_callback — compteur de lectures PAR FICHIER (code_action CodeAgent + tool_calls TCA, path nommé ou positionnel, normcase) ; une modification du fichier par un outil d'édition RÉ-ARME son compteur (le pattern read→edit imposé par la garde Read-Before-Write reste légitime) ; au seuil (5 lectures sans modification) directive injectée dans memory_step.observations : search_replace chirurgical OU re-test page (navigate+console, pas le fichier) OU checklist+final_answer ; reset par nœud (reset_read_stall, nodes.py même bloc lifecycle que F-114/125/128/129), traverse volontairement les retries ; actif Coder ET Tester ; fail-open total. Tests : tests/test_vision_nudge.py TestReadStallNudge 8 nouveaux.",
+      "status": "completed",
+      "dependencies": [
+        "F-126",
+        "F-128",
+        "F-114"
+      ]
+    },
+    {
+      "id": "F-131",
+      "name": "Nudge wind-down budget (convergence forcée à l'approche du plafond de steps)",
+      "description": "Post-mortem run 2026-08-20_1028 (suite F-130) : les 3 tentatives Coder sont mortes à 'Reached max steps' avec pour DERNIER geste un read_file d'exploration (jamais de final_answer) — l'agent n'a aucune conscience du budget restant (smolagents ne l'annonce qu'au step fatal, trop tard pour agir). IMPLÉMENTÉ : nudge _build_wind_down_nudge dans vision_callback — quand remaining = max_steps - step_number <= 5 ET > 0 ET checklist visuelle incomplète (gate F-109), directive de convergence stricte injectée dans memory_step.observations À CHAQUE dernier step : (1) fix minimal SI bug localisé, sinon direct au test ; (2) navigate(reload)+list_console_messages ; (3) screenshot ; (4) visual_check ×N avec verdict=True|False HONNÊTE explicitement accepté (un échec prouvé vaut mieux qu'un run brûlé) ; (5) final_answer immédiat. Sans état (dérivé de step_number/agent.max_steps, réarmé naturellement par attempt car smolagents remet step_number à 0 par run()) ; inactif sans critères visuels (Tester couvert par le fallback F-61) ou checklist complète ; fail-open total. Tests : tests/test_vision_nudge.py TestWindDownNudge 8 nouveaux.",
+      "status": "completed",
+      "dependencies": [
+        "F-109",
+        "F-130",
+        "F-114"
+      ]
     }
   ]
 }
