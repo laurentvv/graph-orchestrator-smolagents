@@ -3,7 +3,7 @@
 > Document de référence lié à [`AGENTS.md`](../AGENTS.md) (F-123, 2026-08-17). Source de
 > vérité pour choisir les flags `llama-server` quand on ajoute ou change un modèle GGUF.
 > Tout flag cité ici a été **mesuré sur notre matériel** (RTX 3060 Laptop 6 Go, CUDA 13,
-> build b10472) ou sourcé des docs officielles llama.cpp/Qwen — pas copié d'exemples
+> build b10509) ou sourcé des docs officielles llama.cpp/Qwen — pas copié d'exemples
 > trouvés sur internet sans vérification (leçon `--spec-default`, cf. §4).
 
 ## 1. Où vivent les flags dans ce projet
@@ -36,7 +36,11 @@ Aucun flag n'est écrit en dur dans une commande shell : tout passe par `ModelSp
 | REASONING (Architect) | Ornith-1.0-9B-MTP Q4_K_M | `draft-mtp + n-max 2 + KV q8_0`, ngl 99 | **~+50%** tok/s (18,2 → 27,2 @ctx32k), acceptance 0,70 |
 | REASONING_NO_THINK (Judge, Security, Tester…) | Ornith-1.0-9B-MTP Q4_K_M | idem | idem |
 
-Build vendé : `vendor/llamacpp-cuda13/` (**b10472, CUDA 13.3**). **Mise à jour** (releases
+Build vendé : `vendor/llamacpp-cuda13/` (**b10509, CUDA 13.3** — monté depuis b10472 le
+2026-08-20, validation post-swap : MTP reasoning COMPATIBLE spec-mtp -1 % / spec-kvq8
+-8 % vs baseline, 8/8 tests flags ; nouveautés b10472→b10509 surtout mtmd/vision
+robustesse + ggml 0.20.2, aucun impact flags — détail événement DuckDB #1693).
+**Mise à jour** (releases
 llama.cpp quasi-quotidiennes, veille hebdo programmée) :
 `uv run python scripts/update_llamacpp.py` vérifie sans rien toucher (exit 2 si
 nouvelle version) ; `--apply` télécharge build+cudart `cuda-13.3`, vérifie version ET
