@@ -22,7 +22,8 @@ async def main():
     
     target_file = sys.argv[1] if len(sys.argv) > 1 else "runs/2026-08-19_0029_tetris_modern_onefile/index.html"
     abs_target = os.path.abspath(target_file)
-    target_url = f"file:///{abs_target.replace(os.sep, '/')}"
+    import pathlib
+    target_url = pathlib.Path(abs_target).as_uri()
     
     print(f"[*] Cible : {target_file} ({target_url})")
     

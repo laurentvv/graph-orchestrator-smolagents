@@ -2496,3 +2496,10 @@ Coder est appliquée correctement par Qwen3.5-9B.
 - [ ] Issue du run en cours : verdict final (Coder era pre-F-129 sur page
       gelée → issue attendue entre correction par relecture fortuite,
       échec propre fail-closed, ou burn-out des tentatives) → post-mortem.
+
+## Jalons de l'Itération (update références 2026-08-20)
+
+- [x] Exécution de `update_references.py` sur les 51 dépôts de références.
+- [x] Analyse de `update_report.md` et extraction des nouveautés majeures (Agent Teams, FD3 Protocol, Claude Design Skills, Token Budget, Gatekeeper Context).
+- [x] Mise à jour de `feature_list.json` avec les nouvelles fonctionnalités (F-141 à F-143).
+- [x] Mise à jour de `plan_usine_logicielle.md` (ajout de la priorité P17 avec les 5 références principales).
