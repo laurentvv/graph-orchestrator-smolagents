@@ -68,13 +68,24 @@ def test_factory_no_evaluate_script_returns_empty():
     assert build_devtools_helper_tools(tools) == []
 
 
-def test_factory_with_evaluate_script_returns_three_helpers():
-    """evaluate_script présent → factory retourne exactement les 3 helpers (bons noms)."""
+def test_factory_with_evaluate_script_returns_seven_helpers():
+    """evaluate_script présent → factory retourne les 6 helpers (bons noms).
+
+    F-127 : discover_ui ajouté EN TÊTE (inventaire UI à appeler en premier)."""
     eval_tool = _FakeEval()
     helpers = build_devtools_helper_tools([_OtherTool(), eval_tool])
     names = [getattr(h, "name", "") for h in helpers]
-    assert names == ["clean_dom", "add_visual_tags", "fuzz_click_all_buttons"]
-    assert len(helpers) == 3
+    assert names == [
+        "discover_ui",
+        "clean_dom",
+        "add_visual_tags",
+        "fuzz_click_all_buttons",
+        "probe_canvas_activity",
+        "fuzz_keyboard_controls",
+        "heal_selector",
+    ]
+    # P6/F-139 : heal_selector est le 7e helper (port Scrapling).
+    assert len(helpers) == 7
 
 
 # ==========================================
@@ -87,6 +98,8 @@ def test_helper_tools_metadata():
         (DevToolsCleanDomTool, "clean_dom"),
         (DevToolsAddVisualTagsTool, "add_visual_tags"),
         (DevToolsFuzzClickTool, "fuzz_click_all_buttons"),
+        (devtools_dom_tools.DevToolsProbeCanvasTool, "probe_canvas_activity"),
+        (devtools_dom_tools.DevToolsFuzzKeyboardTool, "fuzz_keyboard_controls"),
     ]:
         t = cls(eval_tool)
         assert t.name == expected_name

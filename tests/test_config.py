@@ -83,11 +83,11 @@ def test_tester_max_steps_default_and_override(monkeypatch):
     steps » du prompt web_tester.py qui force le regroupement des assertions)."""
     monkeypatch.delenv("TESTER_MAX_STEPS", raising=False)
     s = load_settings()
-    assert s.tester_max_steps == 8
+    assert s.tester_max_steps == 20
     # Override via env.
-    monkeypatch.setenv("TESTER_MAX_STEPS", "20")
+    monkeypatch.setenv("TESTER_MAX_STEPS", "25")
     s2 = load_settings()
-    assert s2.tester_max_steps == 20
+    assert s2.tester_max_steps == 25
 
 
 def test_turn_checkpoint_enabled_default_and_override(monkeypatch):

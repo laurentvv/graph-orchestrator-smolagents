@@ -69,6 +69,31 @@ def get_visual_audit() -> list[dict]:
     return list(_VISUAL_AUDIT)
 
 
+# F-126 (post-mortem run 2026-08-19_1552, retry 3) : preuve DURABLE de screenshot.
+# Le gate F-109 historique scannait agent.memory.steps (mémoire VOLATILE : purge
+# F-101, retry, compaction) → faux négatif « PAS utilisé take_screenshot » alors
+# que le screenshot avait bien été exécuté (étape 7 du retry, refusé à l'étape 41).
+# Le wrapper vision (vision_callback) marque ce flag à l'EXÉCUTION réelle de
+# take_screenshot — même lifecycle que _VISUAL_AUDIT (reset par exécution de nœud
+# Coder, traverse les retries).
+_SCREENSHOT_PROOF = {"taken": False}
+
+
+def mark_screenshot_taken() -> None:
+    """Marque qu'un take_screenshot a réellement été exécuté (appelé par vision_callback)."""
+    _SCREENSHOT_PROOF["taken"] = True
+
+
+def screenshot_was_taken() -> bool:
+    """True si un take_screenshot a été exécuté depuis le dernier reset (gate F-109)."""
+    return bool(_SCREENSHOT_PROOF["taken"])
+
+
+def reset_screenshot_proof() -> None:
+    """Réinitialise la preuve de screenshot (une exécution de nœud Coder = un cycle)."""
+    _SCREENSHOT_PROOF["taken"] = False
+
+
 @tool
 def visual_check(criterion_number: int, verdict: bool, observation: str) -> str:
     """À appeler pour CHAQUE critère de validation visuelle, APRÈS le screenshot.
@@ -101,11 +126,50 @@ def _file_lock(path: str) -> threading.Lock:
         return _FILE_LOCKS[norm]
 
 
+# F-141 (post-mortem run 2026-08-20_1817) : plafond d'approvisionnement des
+# lectures IDENTIQUES. Le 9B ULTRA a exécuté 14× le MÊME read_file(offset=525)
+# mot pour mot, ignorant les 8 nudges F-130 (les nudges n'ont pas de bras armé
+# sur un modèle insensible ; le LoopGuard F-36 exempte read_file). On coupe la
+# SOURCE : à partir de la 3e lecture STRICTEMENT identique (même path+offset+
+# limit) au sein d'une exécution de nœud, le contenu est REFUSÉ et remplacé par
+# une directive — le step ne coûte plus NI IO NI croissance de contexte. Les
+# lectures variées (offsets différents) restent libres (couvertes par le nudge
+# F-130, qui convainc le 4B). Lifecycle : reset par nœud (reset_read_supply).
+_IDENT_READ_THRESHOLD = 3
+_IDENT_READ_STATE: dict = {}
+
+
+def reset_read_supply() -> None:
+    """Réinitialise le compteur de lectures identiques (une exécution de nœud)."""
+    _IDENT_READ_STATE.clear()
+
+
+def _identical_read_gate(path: str, offset: int, limit: int) -> str | None:
+    """Message de refus si c'est la N-ième lecture STRICTEMENT identique, sinon None."""
+    try:
+        key = f"{os.path.normcase(os.path.abspath(path))}|{offset}|{limit}"
+        n = _IDENT_READ_STATE.get(key, 0) + 1
+        _IDENT_READ_STATE[key] = n
+        if n < _IDENT_READ_THRESHOLD:
+            return None
+        return (
+            f"ERROR (garde lectures identiques, F-141) : tu as déjà lu CETTE section "
+            f"({path}, offset={offset}, limit={limit}) {n} fois À L'IDENTIQUE — le contenu "
+            f"est DÉJÀ dans ton contexte, le relire ne peut rien apporter. AGIS : "
+            f"(1) bug identifié → search_replace ciblé MAINTENANT ; (2) code correct → "
+            f"re-teste la PAGE (navigate_page(reload) + list_console_messages), pas le "
+            f"fichier ; (3) checklist → screenshot + visual_check ×N + final_answer. "
+            f"Ce refus ne consomme ni IO ni contexte : persister ne fait que brûler des steps."
+        )
+    except Exception:
+        return None
+
+
 @tool
 def read_file(path: str, offset: int = 0, limit: int = -1) -> str:
     """Reads a file and returns its content with line numbers.
     Useful for inspecting the codebase before editing.
-    
+
     Args:
         path: The absolute or relative path to the file.
         offset: The starting line number (0-indexed). Defaults to 0.
@@ -119,9 +183,18 @@ def read_file(path: str, offset: int = 0, limit: int = -1) -> str:
     _denied = ensure_read_allowed(path)
     if _denied:
         return _denied
+    # F-141 : refuser le contenu dès la 3e lecture strictement identique.
+    _gate = _identical_read_gate(path, offset, limit)
+    if _gate:
+        return _gate
     try:
         with open(path, 'r', encoding='utf-8') as f:
             lines = f.readlines()
+        
+        if not lines:
+            return f"File {path} is empty."
+        if offset >= len(lines):
+            return f"Note: offset {offset} is beyond the end of file ({path} has {len(lines)} lines total). Specify an offset between 0 and {len(lines) - 1}."
         
         if limit == -1:
             limit = len(lines)
@@ -154,17 +227,92 @@ def read_python_skeleton(path: str) -> str:
         return f"Error generating skeleton for {path}: {str(e)}"
 
 
+def _collect_js_syntax_errors(path: str) -> list[str]:
+    """Collecte les erreurs de syntaxe JS d'un fichier (.js ou <script> inline
+    d'un .html) via node --check + détecteurs statiques. [] = propre.
+
+    Cœur extrait de l'outil check_js_syntax (F-72) pour être réutilisé par
+    l'injection post-édition (P2) — détection immédiate, sans attendre le
+    Linter. Fail-open total : toute erreur interne → [].
+    """
+    import shutil
+
+    try:
+        from .js_utils import (
+            run_node_check,
+            MAX_JS_CHARS,
+            extract_script_blocks,
+            detect_python_syntax_in_js,
+            detect_const_mutation_in_js,
+            detect_unbounded_while_in_js,
+        )
+
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            content = f.read()
+    except Exception:
+        return []
+
+    is_html = path.lower().endswith((".html", ".htm"))
+    js_blocks: list[tuple[str, int]] = []
+    if is_html:
+        for b in extract_script_blocks(content):
+            js_blocks.append((b["code"], b["start_line"]))
+        if not js_blocks:
+            return []
+    else:
+        js_blocks.append((content, 1))
+
+    all_errors: list[str] = []
+    for js_code, start_line in js_blocks:
+        all_errors.extend(detect_python_syntax_in_js(js_code, start_line=start_line))
+        all_errors.extend(detect_const_mutation_in_js(js_code, start_line=start_line))
+        all_errors.extend(detect_unbounded_while_in_js(js_code, start_line=start_line))
+        if shutil.which("node") is not None:
+            snippet = js_code[:MAX_JS_CHARS]
+            code, stderr = run_node_check(snippet)
+            if code != 0 and stderr.strip():
+                prefix = f"Ligne ~{start_line} : " if is_html else ""
+                all_errors.append(f"{prefix}{stderr.strip()[:400]}")
+    return all_errors
+
+
+def _post_edit_syntax_directive(path: str) -> str:
+    """Directive P2 (port kilocode apply_patch.ts:289) : après une édition
+    RÉUSSIE d'un fichier JS/HTML, on vérifie immédiatement la syntaxe de façon
+    déterministe et on INJECTE les erreurs dans l'output de l'outil — le
+    modèle apprend à la seconde qu'il a cassé la syntaxe, au lieu de
+    l'apprendre au Linter 30 min plus tard (post-mortem runs 2026-08-20 :
+    erreurs de syntaxe survivant jusqu'au Shift-Left = itérations entières
+    perdues). Vide si syntaxe propre ou fichier non-JS. Fail-open total.
+    """
+    try:
+        if not str(path).lower().endswith((".html", ".htm", ".js", ".mjs", ".cjs")):
+            return ""
+        errs = _collect_js_syntax_errors(str(path))
+        if not errs:
+            return ""
+        shown = "\n".join(f"  - {e}" for e in errs[:3])
+        extra = f"\n  (+{len(errs) - 3} autre(s))" if len(errs) > 3 else ""
+        return (
+            f"\n\n[!] SYNTAXE INVALIDE détectée JUSTE APRÈS ton édition :\n{shown}{extra}\n"
+            f"Si c'est un état intermédiaire d'une édition multi-blocs, termine le bloc "
+            f"suivant IMMÉDIATEMENT. Sinon corrige MAINTENANT par search_replace ciblé "
+            f"(la ligne ~ est indiquée) — n'attends pas le Linter, chaque tour d'attente "
+            f"est un step perdu. Console propre uniquement si node --check est satisfait."
+        )
+    except Exception:
+        return ""
+
+
 @tool
 def check_js_syntax(path: str) -> str:
-    """Vérifie instantanément la syntaxe d'un fichier JavaScript via `node --check`.
-    Retourne un message ✅ si la syntaxe est valide, ou ❌ avec l'erreur du parseur
-    (ligne/colonne) s'il y a une SyntaxError. À appeler AVANT final_answer sur tout
-    fichier .js généré ou modifié : c'est 1 step et ça évite un rejet du Linter.
-    Dégradation gracieuse : si `node` est absent du PATH, retourne un message
-    informatif (ne bloque pas l'agent — le Linter/Static Tester prend le relais).
+    """Vérifie instantanément la syntaxe JavaScript (.js ou <script> inline dans un fichier .html).
+    Détecte les erreurs de syntaxe (Node.js AST / node --check), les fuites de syntaxe Python
+    (ex: tuples `[(x, y)]` au lieu de `[[x, y]]`, `None/True/False`), et la présence de 'use strict'.
+    À appeler AVANT final_answer sur tout fichier généré ou modifié.
 
     Args:
-        path: Chemin du fichier JavaScript à valider (relatif ou absolu).
+        path: Chemin du fichier (.js ou .html) à valider (relatif ou absolu).
     """
     import shutil
 
@@ -173,21 +321,36 @@ def check_js_syntax(path: str) -> str:
     _denied = ensure_read_allowed(path)
     if _denied:
         return _denied
+    import os
+
+    if not os.path.isfile(path):
+        return f"Erreur de lecture de {path} : fichier introuvable."
+
+    all_errors = _collect_js_syntax_errors(path)
+    if all_errors:
+        err_list = "\n".join(f"- {e}" for e in all_errors)
+        return f"❌ Erreur de syntaxe dans {path} :\n{err_list}"
+
     if shutil.which("node") is None:
         return f"ℹ️ `node` non disponible — vérification de syntaxe ignorée pour {path}."
+
+    msg = f"✅ Syntaxe JS 100% valide : {path}"
+    # Tip rétro-compat : 'use strict' manquant (informatif, pas une erreur).
     try:
-        from .js_utils import run_node_check, MAX_JS_CHARS
+        from .js_utils import has_use_strict, extract_script_blocks
 
         with open(path, "r", encoding="utf-8", errors="replace") as f:
-            js = f.read()
-    except OSError as e:
-        return f"Erreur de lecture de {path} : {str(e)}"
-    if len(js) > MAX_JS_CHARS:
-        js = js[:MAX_JS_CHARS]  # sécurité : éviter une ligne de commande trop longue.
-    code, stderr = run_node_check(js)
-    if code == 0:
-        return f"✅ Syntaxe JS valide : {path}"
-    return f"❌ Erreur de syntaxe dans {path} :\n{stderr.strip()[:2000]}"
+            content = f.read()
+        blocks = (
+            [(b["code"], b["start_line"]) for b in extract_script_blocks(content)]
+            if path.lower().endswith((".html", ".htm"))
+            else [(content, 1)]
+        )
+        if any(not has_use_strict(js) for js, _ in blocks):
+            msg += "\n💡 Conseil (Nanocode) : Ajoute `'use strict';` au début de tes scripts pour sécuriser les variables."
+    except Exception:
+        pass
+    return msg
 
 @tool
 def list_directory(path: str = ".") -> str:
@@ -247,6 +410,11 @@ def write_file(path: str, content: str) -> str:
                 "ERROR: write_file 'content' looks like a placeholder, not real code. "
                 "Provide the COMPLETE implementation. The file was NOT created."
             )
+        # F-132 : \n littéral en séparateur de code dans le contenu écrit (même
+        # cause racine que search_replace : r-string → SyntaxError JS permanent).
+        _lit = _literal_newline_rejection(path, str(content))
+        if _lit:
+            return _lit.replace("'new_string'", "'content'")
         
         # Garde anti-squelette HTML (bug "incremental" des petits modèles distants).
         if bool(re.search(r"<body[^>]*>\s*(?:<!--.*?-->\s*)*</body>", stripped, re.IGNORECASE | re.DOTALL)) or (
@@ -277,9 +445,38 @@ def write_file(path: str, content: str) -> str:
                 f"de travail EST déjà le dossier de run. Utilise le chemin COURT : "
                 f"'{short}'. Le fichier N'A PAS été créé."
             )
+        # F-126 (post-mortem run 2026-08-19_1552, Tetris) : garde anti-réécriture
+        # totale. Le 4B « corrigeait » un bug local en réécrivant TOUT le fichier
+        # (600+ lignes, 3 fois) → ~15 min de prefill par passe + contexte inondé →
+        # overflow n_ctx → run perdu. Un fichier EXISTANT de plus de N lignes ne
+        # peut plus être écrasé : la correction est CHIRURGICALE (search_replace /
+        # multi_replace). La création d'un nouveau fichier reste libre. Seuil
+        # configurable CODER_WRITEFILE_MAX_LINES (0 = désactivé). Fail-open :
+        # compte de lignes illisible → on laisse passer (les gardes amont ont déjà
+        # filtré).
+        from .config import settings as _settings
+        _max_lines = int(getattr(_settings, "coder_writefile_max_lines", 100) or 0)
+        if _max_lines > 0 and os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8", errors="replace") as f:
+                    existing_line_count = sum(1 for _ in f)
+            except OSError:
+                existing_line_count = 0
+            if existing_line_count > _max_lines:
+                return (
+                    f"REFUS : '{path}' existe déjà ({existing_line_count} lignes > "
+                    f"{_max_lines}). Écraser un gros fichier existant est INTERDIT : "
+                    "une réécriture complète noie le contexte et corrige rarement la "
+                    "cause racine. Procédure de correction d'un bug LOCAL : "
+                    "1) read_file(path, offset=..., limit=...) pour voir la zone fautive "
+                    "(la stack trace des erreurs console donne fichier:ligne) ; "
+                    "2) search_replace(path, old_string=..., new_string=...) pour le fix, "
+                    "ou multi_replace pour plusieurs retouches. "
+                    "Le fichier N'A PAS été modifié."
+                )
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
-        return f"Successfully wrote to {path} ({len(content)} chars)"
+        return f"Successfully wrote to {path} ({len(content)} chars)" + _post_edit_syntax_directive(path)
     except Exception as e:
         return f"Error writing to file {path}: {str(e)}"
 
@@ -413,9 +610,16 @@ def edit_file(path: str, old_string: str, new_string: str, replace_all: bool = F
     if _denied:
         return _denied
     try:
+        # F-132 : no-op exact + \n littéral en séparateur de code (voir search_replace).
+        _noop = _noop_rejection(old_string, new_string)
+        if _noop:
+            return _noop
+        _lit = _literal_newline_rejection(path, new_string)
+        if _lit:
+            return _lit
         with open(path, 'r', encoding='utf-8') as f:
             content = f.read()
-        
+
         if old_string not in content:
             return "Error: old_string not found exactly as written. Ensure indentation and line endings match."
         
@@ -430,8 +634,14 @@ def edit_file(path: str, old_string: str, new_string: str, replace_all: bool = F
         
         with open(path, 'w', encoding='utf-8') as f:
             f.write(new_content)
-            
-        return f"Successfully updated {path} ({'all ' + str(occurrences) if replace_all else '1'} occurrences replaced)."
+
+        # F-128 : rappel post-fix si des erreurs console attendent re-vérification.
+        # P2 : diagnostics de syntaxe immédiats.
+        return (
+            f"Successfully updated {path} ({'all ' + str(occurrences) if replace_all else '1'} occurrences replaced)."
+            + _post_fix_directive()
+            + _post_edit_syntax_directive(path)
+        )
     except Exception as e:
         return f"Error editing file {path}: {str(e)}"
 
@@ -534,6 +744,109 @@ def _is_placeholder(text: str) -> bool:
     return stripped in _PLACEHOLDER_TOKENS
 
 
+def _post_fix_directive() -> str:
+    """Directive F-128 à coller au retour d'un edit réussi (fail-open : '' si rien).
+
+    Post-mortem run 2026-08-19_2250 : le Coder corrigeait une erreur console mais
+    ne re-testait jamais la page → boucle lecture/stall sans fin. Si des erreurs
+    console attendent une re-vérification (état tenu par vision_callback), on
+    rappelle AU MOMENT du fix qu'il faut re-naviguer + re-consoler.
+    """
+    try:
+        from .vision_callback import pending_post_fix_directive
+        return pending_post_fix_directive() or ""
+    except Exception:
+        return ""
+
+
+# =============================================================================
+# F-132 (post-mortem runs 2026-08-20_1028 + 1203, Tetris) : gardes anti-\n
+# littéral + anti-no-op sur les outils d'édition.
+# =============================================================================
+# Le 4B écrivait `search_replace(..., new_string=r"""...;\n...""")` — le
+# préfixe r (recommandé par le prompt pour échapper accolades/guillemets JS)
+# rend `\n` LITTÉRAL (2 caractères backslash+n) → le fichier reçoit
+# `const a = 1;\nconst b` sur UNE ligne → SyntaxError JS PERMANENT. Pire : sa
+# « correction » (step 40 run 1028) était old_string == new_string — un NO-OP
+# accepté avec « Successfully edited » → le modèle croit avoir corrigé,
+# re-teste, re-voit l'erreur, boucle jusqu'au plafond de steps. 2 runs perdus
+# sur ce schéma exact (ligne 143 du livrable 1203 : `;\n                const
+# shape` littéral, constaté dans Chrome).
+# =============================================================================
+# `\n` littéral utilisé comme SÉPARATEUR DE CODE : après un point-virgule /
+# accolade / parenthèse fermante, ou avant un mot-clé/identifiant JS attendu.
+_NL_KEYWORDS = (
+    "const|let|var|function|return|if|else|for|while|switch|case|class|"
+    r"new\b|document\.|window\.|addEventListener|try|catch|import|export|"
+    r"async|await|def\b|print\("
+)
+_CODE_SEPARATOR_NL_RE = re.compile(
+    r"(?:(?<=[;{}()\[\]])\\n|\\n(?=\s*(?:" + _NL_KEYWORDS + r")))"
+)
+# Fichiers où la séquence est quasi-certainement un bug d'échappement (le
+# périmètre Prompt-Vault : web vanilla + python). Hors ces extensions, la
+# séquence peut être légitime (JSON, markdown, .env) → pas de garde.
+_CODE_FILE_SUFFIXES = (
+    ".html", ".htm", ".js", ".mjs", ".cjs", ".css", ".ts", ".tsx", ".jsx",
+    ".py", ".vue", ".svelte",
+)
+
+
+def _literal_newline_rejection(path: str, new_string: str) -> str | None:
+    """Message de rejet si new_string insère un `\n` LITTÉRAL comme séparateur
+    de code dans un fichier code. None = pas de problème (ou fail-open).
+
+    On ne garde QUE new_string (le texte INSÉRÉ) : old_string doit pouvoir
+    contenir la séquence fautive pour la TROUVER dans un fichier déjà corrompu
+    par une édition précédente — c'est le pattern de réparation correct.
+    """
+    try:
+        if not new_string or not str(path).lower().endswith(_CODE_FILE_SUFFIXES):
+            return None
+        m = _CODE_SEPARATOR_NL_RE.search(new_string)
+        if not m:
+            return None
+        # Extrait autour de la 1re occurrence pour montrer le fautif.
+        start = max(0, m.start() - 40)
+        snippet = new_string[start:m.end() + 40].replace("\n", "\\n")
+        return (
+            "ERROR (garde anti-\\n littéral, F-132) : ton 'new_string' contient la "
+            "séquence LITTÉRALE backslash-n utilisée comme séparateur de code :\n"
+            f"  …{snippet}…\n"
+            "Avec un préfixe r (r\"\"\"…\"\"\"), `\\n` reste DU TEXTE (2 caractères) "
+            "dans le fichier → SyntaxError JS immédiat. Réécris 'new_string' avec de "
+            "VRAIS sauts de ligne : découpe physiquement ton string Python sur "
+            "plusieurs lignes (sans préfixe r sur les lignes contenant `\\n`, ou "
+            "enlève le préfixe r et écris les lignes réelles une par une). Le fichier "
+            "n'a PAS été modifié."
+        )
+    except Exception:
+        return None
+
+
+def _noop_rejection(old_string: str, new_string: str) -> str | None:
+    """Message de rejet si l'édition est un NO-OP exact (old == new).
+
+    Run 2026-08-20 : la « correction » du \n littéral était old_string ==
+    new_string → « Successfully edited » mensonger → le bug survivait alors que
+    le modèle croyait l'avoir corrigé. Un no-op n'est JAMAIS une correction
+    intentionnelle (l'outil n'existe que pour CHANGER le fichier).
+    """
+    try:
+        if old_string and old_string == new_string:
+            return (
+                "ERROR (garde anti-no-op, F-132) : 'new_string' est IDENTIQUE "
+                "octet pour octet à 'old_string' — cette édition ne change RIEN, "
+                "et le bug que tu crois corriger survivra. Si tu voulais remplacer "
+                "une séquence LITTÉRALE `\\n` (backslash-n texte) par un vrai saut "
+                "de ligne, 'new_string' doit contenir de VRAIES lignes différentes. "
+                "Le fichier n'a PAS été modifié."
+            )
+        return None
+    except Exception:
+        return None
+
+
 @tool
 def search_replace(path: str, old_string: str, new_string: str) -> str:
     """Surgically edits a file by replacing the 'old_string' block with the 'new_string' block.
@@ -565,6 +878,17 @@ def search_replace(path: str, old_string: str, new_string: str) -> str:
         if _is_placeholder(new_string):
             return ("ERROR: 'new_string' looks like a placeholder (TODO, '...', '// code here', "
                     "empty). Provide the COMPLETE real replacement code. File NOT modified.")
+        # F-132 : no-op exact (old == new) — une « correction » qui ne change rien
+        # est TOUJOURS une erreur (post-mortem 2026-08-20 : fix illusoire du \n).
+        _noop = _noop_rejection(old_string, new_string)
+        if _noop:
+            return _noop
+        # F-132 : \n littéral en séparateur de code dans le texte INSÉRÉ
+        # (old_string reste libre : il doit pouvoir cibler une séquence fautive
+        # déjà présente dans le fichier pour la RÉPARER).
+        _lit = _literal_newline_rejection(path, new_string)
+        if _lit:
+            return _lit
 
         lock = _file_lock(path)
         with lock:
@@ -602,7 +926,14 @@ def search_replace(path: str, old_string: str, new_string: str) -> str:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(new_content)
 
-        return f"Successfully edited {path} via SEARCH/REPLACE."
+        # F-128 : rappel post-fix si des erreurs console attendent re-vérification.
+        # P2 : diagnostics de syntaxe injectés immédiatement (kilocode) — le
+        # modèle sait à la seconde s'il a cassé la syntaxe.
+        return (
+            f"Successfully edited {path} via SEARCH/REPLACE."
+            + _post_fix_directive()
+            + _post_edit_syntax_directive(path)
+        )
     except FileNotFoundError:
         return (f"ERROR: file '{path}' does not exist. Use write_file to CREATE a new file, "
                 "or check the path.")
@@ -647,7 +978,17 @@ def multi_replace(path: str, replacements: list) -> str:
                 if _is_placeholder(new_str):
                     errors.append(f"Block {i}: 'new_string' is a placeholder. Skipping.")
                     continue
-                    
+
+                # F-132 : no-op exact + \n littéral en séparateur de code.
+                _noop = _noop_rejection(old_str, new_str)
+                if _noop:
+                    errors.append(f"Block {i}: no-op exact (old == new). {(_noop.splitlines() or [''])[0]}")
+                    continue
+                _lit = _literal_newline_rejection(path, new_str)
+                if _lit:
+                    errors.append(f"Block {i}: {(_lit.splitlines() or [''])[0]}")
+                    continue
+
                 if not old_str.strip():
                     # Append if old_string is empty
                     if content and not content.endswith("\n"):
@@ -674,16 +1015,39 @@ def multi_replace(path: str, replacements: list) -> str:
                 
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
-                
+
+        # F-128 : rappel post-fix si des erreurs console attendent re-vérification.
         msg = f"Successfully applied {success_count}/{len(replacements)} replacements to {path}."
         if errors:
             msg += "\nSome errors occurred:\n" + "\n".join(errors)
-        return msg
+        return msg + _post_fix_directive() + _post_edit_syntax_directive(path)
         
     except FileNotFoundError:
         return (f"ERROR: file '{path}' does not exist. Use write_file to CREATE a new file.")
     except Exception as e:
         return f"Error editing file {path}: {str(e)}"
+
+@tool
+def fix_known_error(path: str, error_message: str) -> str:
+    """Applies a DETERMINISTIC fix for mechanically-known error classes (F-133).
+
+    Use when a console/linter error has a PROVEN mechanical fix:
+      - "Assignment to constant variable 'X'" → all `const X =` become `let X =`
+        (the error itself proves the reassignment);
+      - "SyntaxError / Unexpected token" caused by a literal \\n separator
+        (backslash-n text) → replaced by real newlines.
+    ALWAYS re-test after: navigate_page(reload) + list_console_messages, then
+    CONTINUE your test plan. If no known class matches, the tool says so —
+    report the bug via your normal verdict instead of patching blindly.
+
+    Args:
+        path: The code file to fix (html/js/css/ts/py/vue/svelte only).
+        error_message: The exact console/linter error text (verbatim).
+    """
+    from .auto_fixer import apply_known_fixes
+
+    return apply_known_fixes(path, error_message)
+
 
 @tool
 def log_event(event_type: str, details: str) -> str:

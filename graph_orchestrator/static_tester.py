@@ -1122,6 +1122,20 @@ def static_check_html(
 
     errors: List[str] = []
 
+    # --- Tier 0 (P1/F-136, port OpenKB deck/validator) : invariants structurels
+    # du livrable monofichier en stdlib pur — AVANT tout le reste (shift-left
+    # maximal) : ressources externes interdites, ids dupliqués, getElementById
+    # sur id inexistant, taille bornée. Fail-open total.
+    try:
+        from .html_validator import validate_html_monofile
+
+        _v = validate_html_monofile(path)
+        errors.extend(_v.errors)
+        if _v.warnings:
+            logger.debug("Tier 0 warnings (%s) : %s", path, "; ".join(_v.warnings))
+    except Exception:
+        pass
+
     js = extract_all_js(html, path)
 
     # --- Tier 1 (toujours, statique pur) ---

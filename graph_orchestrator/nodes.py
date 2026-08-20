@@ -26,7 +26,7 @@ from .models import (
     CoderOutput,
     extract_and_validate,
 )
-from .tools import record_run_error, _RUN_ERRORS, reset_visual_audit, get_visual_audit
+from .tools import record_run_error, _RUN_ERRORS, reset_visual_audit, get_visual_audit, reset_screenshot_proof, screenshot_was_taken
 from .skills_loader import (
     build_conditional_skills_block,
     enforce_skill_budget,
@@ -270,13 +270,32 @@ def _detect_idle_step(agent, node_kind: str = "coder") -> Optional[str]:
 
 
 # Marqueurs de FAIL dans les observations du Tester (retours evaluate_script).
-# Indicateurs qu'une assertion fonctionnelle a ÉCHOUÉ (pas juste une exception MCP).
+# Indicateurs qu'une assertion fonctionnelle a ÉCHOUÉ ou qu'une exception est apparue.
 _TESTER_FAIL_MARKERS = (
-    ": fail", "fail:", "failed", '"fail"', "'fail'",
-    "est faux", "incorrect", "non passé", "pas trié",
+    ": fail", "fail:", "failed", '"fail"', "'fail'", "[fail]",
+    "uncaught", "typeerror", "referenceerror", "syntaxerror",
+    "est faux", "incorrect", "non passé", "pas trié", "assertion failed",
 )
-# Marqueurs de succès implicite (assertion passée). Présence = le test a tourné.
-_TESTER_PASS_MARKERS = ('"pass"', "'pass'", ": pass", "pass:", "true", "vrai")
+# Marqueurs de succès explicite (assertion passée). Présence = le test a tourné et réussi.
+_TESTER_PASS_MARKERS = (
+    '"pass"', "'pass'", ": pass", "pass:", "[pass]", "status: pass", "verdict: pass",
+    "assertion passed", "test passed", "succès", "valide ✓",
+)
+# F-127 (post-mortem run 2026-08-19_2104) : signatures d'échecs des OUTILS du Tester
+# lui-même — ≠ bug de l'app testée. Les 2 rejets fantômes du run venaient de lignes
+# de ce type matchées par _TESTER_FAIL_MARKERS ("typeerror", "failed"...) alors que
+# le livrable était sain (0 erreur console) :
+#  - le probe interroge un ID DOM inexistant → "Error: Cannot read properties of null"
+#  - appel MCP invalide (enum types) → "MCP error -32602: ... Invalid enum value"
+#  - le code Python du Tester → NameError/InterpreterError/Forbidden (sandbox)
+# Ces lignes sont EXCLUES du scan FAIL (une vraie erreur d'app se voit dans les
+# entrées console "[error] Uncaught ..." ou les verdicts FAIL explicites, qui restent
+# couverts par les marqueurs ci-dessus).
+_TESTER_TOOL_ERROR_MARKERS = (
+    "mcp error", "nameerror", "interpretererror", "forbidden access",
+    "forbidden function", "is not defined", "code parsing failed",
+    "invalid enum value", "error in generating model output", "access denied",
+)
 
 
 def _visual_checklist_error(criteria_count):
@@ -401,15 +420,36 @@ def _tester_max_steps_fallback(steps, prompt: str):
         if err:
             obs_blob += "\n" + str(err)
 
-    obs_lower = obs_blob.lower()
-    has_fail = any(marker in obs_lower for marker in _TESTER_FAIL_MARKERS)
-    has_pass = any(marker in obs_lower for marker in _TESTER_PASS_MARKERS)
+    # F-127 : on filtre les lignes = erreurs des OUTILS du Tester (probe sur ID
+    # inexistant, MCP -32602, NameError sandbox...) — elles ne prouvent PAS un
+    # échec de l'app testée. Le scan FAIL/PASS porte sur le reste.
+    # NB : « Uncaught » (erreur console de l'APP) n'est JAMAIS exclu, et le
+    # pattern du probe null est ANCRÉ en tête de ligne (« Error: Cannot read
+    # properties of null » tel que le retourne evaluate_script) pour ne pas
+    # masquer un « Uncaught TypeError: ... properties of null » de l'app.
+    def _is_tool_error_line(line_lower: str) -> bool:
+        if "uncaught" in line_lower:
+            return False
+        if any(m in line_lower for m in _TESTER_TOOL_ERROR_MARKERS):
+            return True
+        stripped = line_lower.lstrip()
+        return stripped.startswith("error: cannot read properties of null") or (
+            stripped.startswith("out: error: cannot read properties of null")
+        )
+
+    app_lines = [
+        ln for ln in obs_blob.splitlines()
+        if ln.strip() and not _is_tool_error_line(ln.lower())
+    ]
+    app_blob = "\n".join(app_lines).lower()
+    has_fail = any(marker in app_blob for marker in _TESTER_FAIL_MARKERS)
+    has_pass = any(marker in app_blob for marker in _TESTER_PASS_MARKERS)
 
     if has_fail:
         # Un échec explicite a été observé → verdict failure + feedback.
         # Extrait un extrait de l'observation contenant le FAIL (pour guider le Coder).
         snippet = ""
-        for line in obs_blob.splitlines():
+        for line in app_lines:
             ll = line.lower()
             if any(marker in ll for marker in _TESTER_FAIL_MARKERS):
                 snippet = line.strip()[:300]
@@ -581,20 +621,26 @@ async def run_with_retry(
             
             validated = extract_and_validate(raw_output, model_class, api_base=api_base_val, model_id=model_id_val)
 
-            # Fallback max_steps (Tester) : si le LLM Tester atteint max_steps sans
-            # final_answer structuré (over-exploration du 9B), extract_and_validate rend
-            # None → retries gaspillés. On scanne le step history pour dériver un verdict
-            # comportemental (FAIL observé → failure, assertions PASS sans FAIL → success).
-            # Évite la boucle de 3 retries (~15 min) puis None sans signal pour le Judge.
-            if validated is None and node_kind == "tester":
+            # Fallback & Hard-Gate (Tester) : si le LLM Tester atteint max_steps sans
+            # final_answer structuré, ou si DSPy a sauvé avec "success" alors que des erreurs
+            # critiques (TypeError, Uncaught, syntax error) existent dans les observations des steps,
+            # on applique le verdict comportemental déterministe.
+            if node_kind == "tester":
                 _fb_steps = getattr(getattr(agent, "memory", None), "steps", None) or []
                 _fallback = _tester_max_steps_fallback(_fb_steps, prompt)
                 if _fallback is not None:
-                    print(
-                        f"[i] Tester max_steps fallback activé : verdict dérivé du step "
-                        f"history (status={_fallback.status})."
-                    )
-                    validated = _fallback
+                    if validated is None or (_fallback.status == "failure" and validated.status == "success"):
+                        if validated is not None:
+                            print(
+                                f"[!] Tester Hard-Gate : écrasement du verdict complaisant par failure "
+                                f"suite à une anomalie critique détectée dans les logs ({_fallback.details[:120]}...)."
+                            )
+                        else:
+                            print(
+                                f"[i] Tester max_steps fallback activé : verdict dérivé du step "
+                                f"history (status={_fallback.status})."
+                            )
+                        validated = _fallback
 
             # Collecte métriques depuis le RunResult
             last_metrics = _metrics_from_run(agent, run_result)
@@ -649,13 +695,19 @@ async def run_with_retry(
                 if hasattr(validated, "vision_ok") and node_kind == "coder":
                     is_frontend = any(t.name == "take_screenshot" for t in getattr(agent, "tools", {}).values())
                     if is_frontend:
-                        used_vision = False
-                        steps = getattr(getattr(agent, "memory", None), "steps", None) or []
-                        for step in steps:
-                            code = str(getattr(step, "model_output", "")) + str(getattr(step, "code_action", ""))
-                            if "take_screenshot" in code:
-                                used_vision = True
-                                break
+                        # F-126 : preuve DURABLE d'abord — le flag est posé à
+                        # l'EXÉCUTION réelle par vision_callback, insensible à la
+                        # compaction/purge qui vidait agent.memory.steps (run
+                        # 2026-08-19_1552 : screenshot étape 7, refusé étape 41).
+                        # Le scan mémoire reste en fallback (agents sans wrapper).
+                        used_vision = screenshot_was_taken()
+                        if not used_vision:
+                            steps = getattr(getattr(agent, "memory", None), "steps", None) or []
+                            for step in steps:
+                                code = str(getattr(step, "model_output", "")) + str(getattr(step, "code_action", ""))
+                                if "take_screenshot" in code:
+                                    used_vision = True
+                                    break
                         if not used_vision:
                             error_msg = "ERREUR FATALE: Tu as déclaré la tâche terminée mais tu n'as PAS utilisé 'take_screenshot' pour vérifier visuellement ton UI. C'est OBLIGATOIRE. Recommence, navigue sur la page, prends le screenshot, et vérifie que ça marche vraiment."
                         elif visual_criteria_count > 0:
@@ -1038,6 +1090,7 @@ Workflow de validation (À FAIRE après avoir créé les fichiers, AVANT final_a
 3. FUZZING UI OBLIGATOIRE : Exécute `fuzz_click_all_buttons()` pour cliquer sur tous les boutons et réveiller les bugs JS cachés (monkey testing en 1 appel, encapsule le snippet JS).
 4. `list_console_messages()` — OBLIGATOIRE EN DERNIER. Vérifie 0 erreur JS (SyntaxError, undefined, Uncaught). Sans l'étape 3, tu rateras 80% des erreurs !
 5. Si erreur : CORRIGE via `search_replace` (jamais de rewrite total), puis recommence le cycle (navigate, screenshot, fuzzing, console).
+⚠️ Si `navigate_page` TIMEOUT sur ta page LOCALE : le JS bloque le thread (boucle while/do-while infinie — un fichier local se charge en <1s). Relire le code, corriger la boucle via search_replace, re-naviguer — ne JAMAIS retenter la navigation à l'identique.
 {criteria_note}
 
 URL exacte de ta page (primary target) : {primary_url}
@@ -1062,7 +1115,7 @@ async def execute_coder_node(
     from smolagents import DuckDuckGoSearchTool
     from .context7_tool import context7_tools
     from .chrome_devtools_tool import chrome_devtools_tools
-    from .vision_callback import wrap_screenshot_tools, make_screenshot_callback
+    from .vision_callback import wrap_screenshot_tools, make_screenshot_callback, wrap_console_enrichment
 
     import sys
     if sys.stdout.encoding.lower() != 'utf-8':
@@ -1110,6 +1163,11 @@ async def execute_coder_node(
         # voit jamais. capture_holder est partagé entre le wrapper et le callback.
         screenshot_capture: list = []
         coder_tools = wrap_screenshot_tools(coder_tools, screenshot_capture)
+        # F-126 : enrichit list_console_messages avec les stack traces des erreurs
+        # (fichier:ligne → guide le 4B vers le bug LOCAL au lieu de réécrire tout
+        # le fichier — post-mortem run 2026-08-19_1552). Fail-open si l'outil
+        # détail get_console_message est absent.
+        coder_tools = wrap_console_enrichment(coder_tools)
         # F-66 (Read-Before-Write Gate) : bloque write_file / search_replace / edit_file /
         # multi_replace / append_file sur un fichier EXISTANT dont le contenu n'a pas été
         # lu (hash SHA256 du contenu complet). Inspiré de Deer Flow (issue #3857). Mode
@@ -1341,7 +1399,7 @@ NOTE CRITIQUE : "linter_ok" doit être True SEULEMENT si tu as vérifié ton cod
         {devtools_preview_block}
 
 ### OUTILS DISPONIBLES
-- `write_file(path, content)` : CRÉE/ÉCRASE un fichier complet. Sous-dossiers créés auto.
+- `write_file(path, content)` : CRÉE un fichier complet (sous-dossiers créés auto). REFUSÉ sur un fichier EXISTANT de plus de ~100 lignes — la correction d'un gros fichier passe par search_replace/multi_replace.
 - `append_file(path, content)` : AJOUTE un bloc à la FIN d'un fichier existant (garde anti-doublon).
 - `multi_replace(path, replacements)` : MODIFIE un ou plusieurs fragments (matching tolérant). À utiliser après read_file.
 - `search_replace(path, old_string, new_string)` : MODIFIE un fragment unique.
@@ -1364,6 +1422,8 @@ Code prêt pour la production, respectant les conventions du langage.
 - AGIS via des appels d'outils Python, ne raconte pas.
 - Chaque bloc syntaxiquement complet, ≤ 60 lignes ou découpe via append_file.
 - AUCUN placeholder. final_answer quand les fichiers cibles sont créés.
+- Une erreur console = un bug LOCAL (stack trace fichier:ligne) : corrige via search_replace, JAMAIS en réécrivant tout le fichier.
+- Après un fix : re-teste la PAGE (navigate_page + list_console_messages) AVANT de relire le code — seule la console prouve que l'erreur a disparu. Console propre → final_answer.
 """
         # P3 (Anti-Loop Cryptographique) : instancie un guard pour CETTE exécution
         # du Coder. Seul le Coder appelle des outils d'écriture → seul candidat
@@ -1408,10 +1468,40 @@ Code prêt pour la production, respectant les conventions du langage.
         # comptage des critères F-90 que l'enforcement va exiger (0 = gate
         # inactive, ex. opt-out config ou tâche sans critères).
         reset_visual_audit()
+        # F-126 : reset de la preuve durable de screenshot (même lifecycle que
+        # l'audit visuel — traverse volontairement les retries de run_with_retry).
+        reset_screenshot_proof()
         # F-114 : reset du compteur de screenshots du nudge checklist (même
         # lifecycle que l'audit visuel ; traverse volontairement les retries).
-        from .vision_callback import reset_screenshot_nudge
+        # F-125 : reset du compteur anti-gel navigateur (même lifecycle).
+        from .vision_callback import (
+            reset_browser_stall,
+            reset_nav_freeze_nudge,
+            reset_read_stall,
+            reset_screenshot_nudge,
+        )
         reset_screenshot_nudge()
+        reset_browser_stall()
+        reset_nav_freeze_nudge()
+        reset_read_stall()
+        # P5/F-138 : reset du moniteur de résultats en boule (même lifecycle).
+        try:
+            from .tool_progress import reset_tool_progress
+
+            reset_tool_progress()
+        except Exception:
+            pass
+        # F-141 : reset du plafond de lectures identiques (même lifecycle).
+        try:
+            from .tools import reset_read_supply
+
+            reset_read_supply()
+        except Exception:
+            pass
+        # F-128 : reset de l'état « erreurs console en attente de re-vérification »
+        # (même lifecycle que les autres resets vision).
+        from .vision_callback import reset_console_pending
+        reset_console_pending()
         _vc = task.get("visual_success_criteria") or []
         visual_criteria_count = (
             len([c for c in _vc if str(c).strip()]) if settings.visual_audit_enabled else 0

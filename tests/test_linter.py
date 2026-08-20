@@ -200,3 +200,60 @@ def test_execute_linter_node_empty_targets(tmp_path):
     """Pas de fichiers cibles → success (rien à linter, ne bloque pas)."""
     res, metrics = execute_linter_node({"id": "st1", "target_files": []}, settings=None)
     assert res.status == "success"
+
+
+# ==========================================
+# HTML Inline JS / CSS & Détection Fuites Python
+# ==========================================
+def test_html_inline_js_python_tuples(tmp_path):
+    """HTML contenant du JS avec des tuples Python [(0,0), ...] → rejeté."""
+    html = """<!DOCTYPE html>
+<html>
+<head><title>Test</title></head>
+<body>
+    <script>
+        const kicks = [(0,0), (1,0), (-1,0)];
+    </script>
+</body>
+</html>"""
+    p = _write(tmp_path, "index.html", html)
+    r = lint_file(p)
+    assert r.language == "html"
+    assert not r.is_valid
+    assert any("Tuples Python" in e for e in r.errors)
+
+
+def test_html_inline_js_valid(tmp_path):
+    """HTML contenant du JS vanilla valide → accepté."""
+    html = """<!DOCTYPE html>
+<html>
+<head><title>Test</title></head>
+<body>
+    <script>
+        'use strict';
+        const kicks = [[0, 0], [1, 0], [-1, 0]];
+        console.log(kicks.length);
+    </script>
+</body>
+</html>"""
+    p = _write(tmp_path, "index.html", html)
+    r = lint_file(p)
+    assert r.language == "html"
+    assert r.is_valid
+    assert len(r.errors) == 0
+
+
+def test_js_python_keywords_leak(tmp_path):
+    """JS pur contenant des mots-clés Python → rejeté."""
+    js = """
+    let x = None;
+    if (x == True) {
+        console.log("bad");
+    }
+    """
+    p = _write(tmp_path, "app.js", js)
+    r = lint_file(p)
+    assert r.language == "javascript"
+    assert not r.is_valid
+    assert any("None" in e or "True" in e for e in r.errors)
+

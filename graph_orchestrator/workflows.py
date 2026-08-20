@@ -386,6 +386,41 @@ async def run_exploration_workflow(
     return final_result, all_metrics
 
 
+# --- Garde sanité du plan (F-141) ---------------------------------------------
+# Dimensions max plausibles pour un livrable web monofichier lisible sur écran.
+# Post-mortem runs 2026-08-20_1344/1817 : l'Architect 9B a produit 2× une
+# grille 200×80 / canvas 6000×2400px → fichier géant → méga-writes de 25 min.
+_PLAN_MAX_PX = 4000       # dimension canvas/layout max (1920/2560/3840 OK)
+_PLAN_MAX_GRID_CELLS = 120  # axes de grille de jeu max (Tetris 10×20, démineur 30×16)
+
+
+def _plan_sanity_violations(architect_result) -> list:
+    """Dimensions aberrantes dans le texte du plan (détection déterministe, 0 LLM).
+
+    Retourne une liste de descriptions ; vide = plan plausible. Best-effort :
+    toute erreur interne = liste vide (fail-open).
+    """
+    try:
+        texts = [str(getattr(architect_result, "global_architecture", "") or "")]
+        for st in getattr(architect_result, "subtasks", None) or []:
+            texts.append(" ".join(str(v) for v in (st.values() if isinstance(st, dict) else [st])))
+        text = "\n".join(texts)
+        violations = []
+        for m in re.finditer(r"(\d{2,5})\s*(?:x|×)\s*(\d{2,5})", text):
+            a, b = int(m.group(1)), int(m.group(2))
+            ctx = text[max(0, m.start() - 40):m.end() + 40].replace("\n", " ").strip()
+            is_px = re.match(r"\s*px|pixels?", text[m.end():m.end() + 8], re.IGNORECASE) or "px" in text[m.end():m.end() + 3]
+            if a > _PLAN_MAX_PX or b > _PLAN_MAX_PX:
+                violations.append(f"dimension {a}x{b} > {_PLAN_MAX_PX}px : …{ctx[:90]}…")
+            elif not is_px and (a > _PLAN_MAX_GRID_CELLS or b > _PLAN_MAX_GRID_CELLS) and re.search(
+                r"grid|cell|colonne|ligne", ctx, re.IGNORECASE
+            ):
+                violations.append(f"grille {a}x{b} > {_PLAN_MAX_GRID_CELLS} cellules : …{ctx[:90]}…")
+        return violations
+    except Exception:
+        return []
+
+
 async def run_coding_workflow(
     seed_tasks: List[dict],
     settings: Settings = default_settings,
@@ -407,6 +442,17 @@ async def run_coding_workflow(
     print(f"\n{'='*60}")
     print(f"  CODING WORKFLOW (Multi-Agent Playbook) — run {run_id}")
     print(f"{'='*60}")
+
+    # --- P7/F-140 : reap des process orphelins d'un run précédent ---------------
+    # (port qm process-reaper ; post-mortem run #13 : 10 llama-server / 0 arrêt).
+    # Fail-open total ; le registre vit dans data/.process_registry.json.
+    try:
+        from .process_reaper import reap_orphans
+
+        for _action in reap_orphans():
+            print(f"[~] Reaper : {_action}")
+    except Exception:
+        pass
 
     # --- Reprise après crash (Priorité 3 : Checkpoints) -----------------------
     # FRESH_START=1 → on efface tout checkpoint existant et repart de zéro.
@@ -951,6 +997,12 @@ async def run_coding_workflow(
                 if m_st:
                     sub_metrics.append(m_st)
 
+                # F-141 : le SUCCÈS imprimait RIEN (post-mortem run 1817 : impossible
+                # de confirmer post-hoc que le Tier 0/F-136 avait tourné). Une ligne
+                # suffit à tracer la chaîne complète Linter→Static→Tester dans le log.
+                if static_res and static_res.status != "failure":
+                    print(f"    [+] Static Tester : {str(static_res.details)[:110]}")
+
                 if static_res and static_res.status == "failure":
                     print(f"    [⚠] Static Tester a détecté un bug web évident sur "
                           f"{subtask.task_id} — court-circuit du Tester LLM (économie cycle).")
@@ -1059,7 +1111,17 @@ async def run_coding_workflow(
                     ))
                     return {"status": "success", "task_id": subtask.task_id}, sub_metrics
                 else:
-                    feedback = judge_res.final_feedback if judge_res else "Erreur système du juge."
+                    if judge_res and (judge_res.root_cause or judge_res.fix_instruction):
+                        blocks = []
+                        if judge_res.root_cause:
+                            blocks.append(f"🎯 CAUSE RACINE : {judge_res.root_cause}")
+                        if judge_res.fix_instruction:
+                            blocks.append(f"🛠️ INSTRUCTION DE CORRECTION : {judge_res.fix_instruction}")
+                        if judge_res.final_feedback:
+                            blocks.append(f"📝 FEEDBACK : {judge_res.final_feedback}")
+                        feedback = "\n".join(blocks)
+                    else:
+                        feedback = judge_res.final_feedback if judge_res else "Erreur système du juge."
                     print(f"    [-] {subtask.task_id} REJETÉ. Sauvegarde du bug dans DuckDB...")
                     if obs_id:
                         kg.mark_status(obs_id, "rejected")
@@ -1171,6 +1233,37 @@ async def run_coding_workflow(
                 print(f"[-] L'Architecte a échoué à planifier la tâche {task['id']}.")
                 continue
 
+            # --- Garde sanité du plan (F-141, post-mortem runs 2026-08-20) --------
+            # L'Architecte (9B) a produit 2× un plan aberrant « grille 200×80,
+            # canvas 6000×2400px » → fichier géant → méga-writes de 25 min +
+            # canvas démesuré. Détection déterministe des dimensions dans le
+            # plan + UNE re-demande avec contrainte corrective ; si le retry
+            # reste aberrant, on garde (fail-open — le Judge arbitre au fond).
+            if not (checkpoint and checkpoint.get("architect_result")):
+                _viol = _plan_sanity_violations(architect_result)
+                if _viol:
+                    print(f"[⚠] Garde sanité plan (F-141) : {len(_viol)} dimension(s) aberrante(s) "
+                          f"→ re-demande à l'Architecte avec contrainte corrective.")
+                    for v in _viol[:3]:
+                        print(f"    - {v}")
+                    _retry_task = dict(task)
+                    _retry_task["content"] = (
+                        str(task.get("content", ""))
+                        + "\n\nCONSTRAINTE PLAN (garde sanité déterministe) : les dimensions du plan "
+                        "précédent (" + " ; ".join(_viol[:3]) + ") sont aberrantes pour un livrable web "
+                        "monofichier lisible sur écran. Replanifie avec des dimensions STANDARD : grille "
+                        "de jeu ≤ 40x60 cellules, canvas ≤ 1600px de large (la mise à l'échelle se fait "
+                        "en CSS), HUD compact."
+                    )
+                    _retry_result, _retry_metrics = await execute_architect_node(_retry_task, reasoning_model, settings)
+                    if _retry_metrics:
+                        all_metrics.append(_retry_metrics)
+                    if _retry_result is not None and not _plan_sanity_violations(_retry_result):
+                        print("[+] Garde sanité plan : plan CORRIGÉ au retry.")
+                        architect_result = _retry_result
+                    else:
+                        print("[i] Garde sanité plan : retry toujours aberrant → plan initial conservé (fail-open).")
+
             # Persiste le plan (premier checkpoint utile : sauve l'appel Architect).
             coding_state["architect_result"] = architect_result.model_dump()
 
@@ -1229,10 +1322,15 @@ async def run_coding_workflow(
         except Exception as prune_err:
             print(f"[-] Prune KG en erreur ({prune_err}) — repli silencieux.")
 
-        # Toutes les sous-tâches sont traitées : on marque le run comme terminé.
-        kg.clear_checkpoint(run_id)
-        kg.clear_idempotency(run_id)
-        print(f"\n[*] Run {run_id} terminé — checkpoint effacé.")
+        # Si TOUTES les sous-tâches ont réussi, on marque le run comme terminé et on efface le checkpoint.
+        # En cas d'échec / crash, on CONSERVE le checkpoint pour permettre la reprise (F-24) au prochain lancement.
+        all_success = bool(results) and all(r.get("status") == "success" for r in results)
+        if all_success:
+            kg.clear_checkpoint(run_id)
+            kg.clear_idempotency(run_id)
+            print(f"\n[*] Run {run_id} terminé avec SUCCÈS — checkpoint effacé.")
+        else:
+            print(f"\n[⚠️] Run {run_id} terminé avec des ÉCHECS — checkpoint CONSERVÉ pour reprise.")
 
         return {"architect_plans": len(seed_tasks), "final_results": results}, all_metrics
 

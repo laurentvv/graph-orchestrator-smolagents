@@ -34,6 +34,13 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 VENDOR_DIR = PROJECT_ROOT / "vendor" / "llamacpp-cuda13"
 RELEASES_API = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"
@@ -145,21 +152,28 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true", help="télécharge + vérifie mais ne swappe pas")
     args = ap.parse_args()
 
+    if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+        try:
+            sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+            sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+        except Exception:
+            pass
+
     cur = current_build()
     if cur is None:
-        print("[!] aucun build courant détecté (vendor/llamacpp-cuda13/llama-server.exe)")
+        print("[!] aucun build courant detecte (vendor/llamacpp-cuda13/llama-server.exe)")
         return 1
     try:
         latest, assets = latest_release(args.flavor)
     except Exception as e:
-        print(f"[!] échec requête GitHub API : {e}")
+        print(f"[!] echec requete GitHub API : {e}")
         return 1
 
     print(f"Courant : b{cur} | Dernier : b{latest} ({args.flavor}, {len(assets)} asset(s))")
     if latest <= cur:
-        print("[ok] build à jour")
+        print("[ok] build a jour")
         return 0
-    print(f"[↑] NOUVELLE VERSION disponible : b{cur} → b{latest}")
+    print(f"[+] NOUVELLE VERSION disponible : b{cur} -> b{latest}")
     if not assets:
         print(f"[!] aucun asset {args.flavor} dans la release — checker --flavor cuda-12.4")
         return 1

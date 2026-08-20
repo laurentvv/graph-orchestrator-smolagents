@@ -21,6 +21,7 @@ sans casser le comportement original (l'image est quand même retournée à l'ag
 """
 
 import logging
+import re
 from typing import Any, List, Optional
 
 from smolagents import Tool
@@ -44,6 +45,62 @@ _CAPTURE_ATTR = "_last_screenshot"
 _NUDGE_THRESHOLD = 3
 _SCREENSHOT_NUDGE_STATE = {"count": 0}
 
+# F-125 (post-mortem run 2026-08-19 12:02, Tetris) : détection onglet gelé.
+# L'onglet audité ne répondait plus au renderer — timeout CDP ~190 s sur
+# Page.captureScreenshot / Runtime.evaluate / Input.dispatchKeyEvent — tandis que
+# list_pages / list_console_messages répondaient (commandes browser-process).
+# Le Coder a brûlé ~15 steps / ~45 min à retenter les MÊMES outils au lieu de
+# récupérer, jusqu'à l'échec définitif (« Coder crash », run perdu). Même pattern
+# que F-114 : compteur d'observations d'erreur protocole CONSECUTIVES, directive
+# de récupération injectée à partir du seuil. Fail-open total (jamais d'exception).
+_BROWSER_STALL_THRESHOLD = 3
+_BROWSER_STALL_STATE = {"count": 0}
+# Signatures d'erreur observées dans le run : "Runtime.evaluate timed out.",
+# "Page.captureScreenshot timed out.", "Input.dispatchKeyEvent timed out.",
+# "Protocol error (Page.captureScreenshot): Not attached to an active page".
+# F-129 : « Navigation timeout » (gel AU CHARGEMENT, run 2026-08-20_0901) —
+# avant, ce message ne matchait AUCUN marqueur → le compteur ne voyait pas
+# les timeouts de navigate_page.
+_BROWSER_STALL_MARKERS = ("timed out", "Not attached to an active page", "Navigation timeout")
+
+
+def reset_browser_stall() -> None:
+    """Réinitialise le compteur anti-gel (même lifecycle que reset_screenshot_nudge)."""
+    _BROWSER_STALL_STATE["count"] = 0
+
+
+def _build_browser_stall_nudge(observations: str) -> Optional[str]:
+    """Directive de récupération si l'onglet semble gelé (erreurs protocole consécutives).
+
+    Retourne None tant que le seuil n'est pas atteint ou que le step courant n'est
+    pas en erreur protocole (le compteur repart de zéro au premier step sain).
+    Best-effort total : jamais d'exception (fail-open).
+    """
+    try:
+        text = observations or ""
+        if not any(m in text for m in _BROWSER_STALL_MARKERS):
+            _BROWSER_STALL_STATE["count"] = 0
+            return None
+        _BROWSER_STALL_STATE["count"] += 1
+        if _BROWSER_STALL_STATE["count"] < _BROWSER_STALL_THRESHOLD:
+            return None
+        n = _BROWSER_STALL_STATE["count"]
+        return (
+            f"[NAVIGATEUR GELÉ] {n} erreurs de protocole consécutives (timeout / page "
+            f"détachée) : l'onglet ne répond plus au renderer. NE RETENTE PAS tel quel "
+            f"take_screenshot / evaluate_script / press_key — chaque essai coûte ~3 min. "
+            f"Récupération dans l'ordre : (1) list_pages() puis "
+            f'navigate_page(type="reload") ; si plusieurs onglets pointent sur le même '
+            f"fichier, ferme les doublons via close_page ; (2) si la page re-gèle "
+            f"aussitôt, c'est TON code qui bloque le renderer (boucle while infinie "
+            f"sans rendu) : corrige le fichier AVANT de re-tester ; (3) après 2 "
+            f'récupérations échouées, final_answer avec status="failure" et '
+            f'details="renderer gelé" — un échec propre vaut mieux que brûler le budget.'
+        )
+    except Exception as e:  # pragma: no cover - fail-open garanti
+        logger.debug("nudge anti-gel échec (%s) — ignoré.", e)
+        return None
+
 
 def reset_screenshot_nudge() -> None:
     """Réinitialise le compteur de screenshots du nudge (une exécution de nœud Coder = un cycle).
@@ -54,6 +111,242 @@ def reset_screenshot_nudge() -> None:
     à la tentative 2, pas après 3 nouveaux screenshots.
     """
     _SCREENSHOT_NUDGE_STATE["count"] = 0
+
+
+# F-129 (post-mortem run 2026-08-20_0901, Tetris) : gel AU CHARGEMENT.
+# navigate_page vers index.html répondait « Navigation timeout of 10000 ms
+# exceeded » dès la PREMIÈRE navigation : le JS bloquait le thread principal
+# avant l'événement load (do...while de rejet contre un sac contenant TOUS les
+# types de pièces — condition jamais fausse, jamais terminant). Le nudge F-125
+# ne détectait pas ce cas : (a) son marqueur "timed out" ne matche pas
+# « Navigation timeout » ; (b) les commandes saines du browser-process
+# (list_console_messages vide — un gel est SILENCIEUX) remettaient son compteur
+# à zéro → jamais 3 erreurs protocole « consécutives ». Un timeout de
+# navigation sur un fichier LOCAL est TOUJOURS pathologique (chargement <1s)
+# → directive immédiate, sans seuil, dès la 1re occurrence. Fail-open total.
+_NAV_TIMEOUT_MARKER = "Navigation timeout"
+_NAV_FREEZE_STATE = {"count": 0}
+
+
+def reset_nav_freeze_nudge() -> None:
+    """Réinitialise le compteur de gels au chargement (même lifecycle que les autres)."""
+    _NAV_FREEZE_STATE["count"] = 0
+
+
+def _build_nav_freeze_nudge(observations: str) -> Optional[str]:
+    """Directive immédiate si la navigation vers la page LOCALE timeout (gel du thread JS).
+
+    Un fichier statique local se charge en <1s : un Navigation timeout signifie
+    que le script bloque le renderer AVANT l'événement load (boucle synchrone
+    infinie). La console reste vide (gel silencieux) et screenshot/evaluate
+    timeout aussi — aucun retry navigateur n'aide. Best-effort total.
+    """
+    try:
+        text = observations or ""
+        if _NAV_TIMEOUT_MARKER not in text:
+            return None
+        _NAV_FREEZE_STATE["count"] += 1
+        n = _NAV_FREEZE_STATE["count"]
+        return (
+            f"[GEL AU CHARGEMENT #{n}] Navigation timeout sur ta page LOCALE = ton JS "
+            f"bloque le thread principal (boucle while/do-while infinie) — ce n'est NI "
+            f"un problème de navigateur NI un délai : un fichier local se charge en <1s. "
+            f"La console restera vide (gel silencieux) et take_screenshot/evaluate_script "
+            f"timeout aussi : NE RETENTE PAS la navigation telle quelle. Diagnostic : "
+            f"(1) read_file du JS ; (2) cherche les boucles while(...)/do...while dont "
+            f"la condition ne peut JAMAIS devenir fausse (ex : rejet contre une liste "
+            f"contenant TOUS les cas possibles, while(true) sans break atteignable) ; "
+            f"(3) corrige par search_replace ; (4) navigate_page à nouveau pour "
+            f"CONFIRMER le dégel (console + screenshot)."
+        )
+    except Exception as e:  # pragma: no cover - fail-open garanti
+        logger.debug("nudge gel chargement échec (%s) — ignoré.", e)
+        return None
+
+
+# ===========================================================================
+# F-130 (post-mortem run 2026-08-20_1028, Tetris) : stall d'investigation par
+# lectures stériles. Le Coder 4B a localisé un TypeError console (stack F-126
+# exacte : drawNextPiece ligne 653) mais est parti lire les MAUVAISES lignes
+# (406-411, hallucination) puis a re-déclaré 5+ fois la même intention (« Let me
+# check where the game initialization happens ») en enchaînant les read_file —
+# ~25 steps brûlés en lectures, 40/40 atteint SANS final_answer → Pydantic KO →
+# sauvetage DSPy → checklist 6/6 non audités → 3 tentatives identiques → run
+# perdu. AUCUNE garde ne voyait cette boucle : read_file est EXEMPT du LoopGuard
+# (lecture « légitime »), le Stall Detector F-88 ne hashe que les écritures, et
+# le nudge checklist F-114 exige un screenshot (2 seulement pris). On compte
+# ici les lectures PAR FICHIER sans modification depuis : une modification
+# ré-arme le compteur du fichier (la garde Read-Before-Write force une relecture
+# avant CHAQUE édition — le pattern read→edit→read→edit reste donc légitime).
+# Fail-open total (jamais d'exception).
+# ===========================================================================
+_READ_TOOLS = ("read_file",)
+_EDIT_TOOLS = (
+    "write_file", "append_file", "edit_file", "search_replace", "multi_replace",
+)
+_READ_STALL_THRESHOLD = 5
+_READ_STALL_STATE = {"files": {}}
+
+# Extraction du path= nommé OU positionnel dans le source Python du step
+# (CodeAgent) : read_file(path="index.html", offset=…) comme read_file("x").
+_CALL_PATH_RES = {
+    tool: re.compile(re.escape(tool) + r"\(\s*path\s*=\s*[\"']([^\"']+)[\"']")
+    for tool in _READ_TOOLS + _EDIT_TOOLS
+}
+_CALL_PATH_POS_RES = {
+    tool: re.compile(re.escape(tool) + r"\(\s*[\"']([^\"']+)[\"']")
+    for tool in _READ_TOOLS + _EDIT_TOOLS
+}
+
+
+def reset_read_stall() -> None:
+    """Réinitialise les compteurs de lectures stériles (une exécution de nœud = un cycle).
+
+    Comme les autres resets vision : appelé au montage du nœud Coder, le compteur
+    traverse volontairement les retries de run_with_retry (20 lectures à la
+    tentative 1 doivent déclencher immédiatement à la tentative 2).
+    """
+    _READ_STALL_STATE["files"] = {}
+
+
+def _normalize_step_path(path: str) -> str:
+    """Normalise un chemin pour agréger les variantes cas/séparateurs (Windows)."""
+    import os
+
+    return os.path.normcase(str(path).strip())
+
+
+def _step_tool_paths(memory_step) -> tuple:
+    """Extrait (fichiers lus, fichiers modifiés) du step courant.
+
+    Couvre les deux formes smolagents : CodeAgent (`code_action` = source Python
+    qui appelle les @tool) et ToolCallingAgent (`tool_calls` = ToolCall
+    structurés .name/.arguments). Best-effort : échec de parsing = rien.
+    """
+    reads: set = set()
+    edits: set = set()
+    code = str(getattr(memory_step, "code_action", "") or "")
+    if code:
+        for tool in _READ_TOOLS + _EDIT_TOOLS:
+            found = set(_CALL_PATH_RES[tool].findall(code)) | set(
+                _CALL_PATH_POS_RES[tool].findall(code)
+            )
+            if not found:
+                continue
+            if tool in _READ_TOOLS:
+                reads |= {_normalize_step_path(p) for p in found}
+            else:
+                edits |= {_normalize_step_path(p) for p in found}
+    for tc in getattr(memory_step, "tool_calls", None) or []:
+        name = str(getattr(tc, "name", "") or "")
+        if name not in _READ_TOOLS + _EDIT_TOOLS:
+            continue
+        args = getattr(tc, "arguments", None)
+        path = args.get("path") if isinstance(args, dict) else None
+        if not path:
+            continue
+        if name in _READ_TOOLS:
+            reads.add(_normalize_step_path(path))
+        else:
+            edits.add(_normalize_step_path(path))
+    return reads, edits
+
+
+def _build_read_stall_nudge(memory_step) -> Optional[str]:
+    """Directive d'action si le même fichier est relu N fois sans modification.
+
+    Retourne None sous le seuil ou si le step courant modifie le fichier (une
+    édition ré-arme le droit de lecture). Best-effort total : jamais d'exception.
+    """
+    try:
+        reads, edits = _step_tool_paths(memory_step)
+        files = _READ_STALL_STATE["files"]
+        for path in edits:
+            files.pop(path, None)
+        triggered = None
+        for path in sorted(reads):
+            files[path] = files.get(path, 0) + 1
+            if files[path] >= _READ_STALL_THRESHOLD:
+                triggered = path
+        if triggered is None:
+            return None
+        n = files[triggered]
+        return (
+            f"[LECTURES STÉRILES] « {triggered} » lu {n} fois SANS modification depuis "
+            f"(seuil {_READ_STALL_THRESHOLD}). Tu as TOUT le matériau nécessaire — "
+            f"AGIS maintenant :\n"
+            f"(1) bug identifié → search_replace CHIRURGICAL (la garde "
+            f"Read-Before-Write exigera au pire une relecture courte de la section "
+            f"visée juste avant l'édition — c'est la seule relecture utile) ;\n"
+            f"(2) code déjà correct → re-teste la PAGE (navigate_page(reload) puis "
+            f"list_console_messages), PAS le fichier : la console seule prouve le fix ;\n"
+            f"(3) puis screenshot + visual_check pour chaque critère manquant + "
+            f"final_answer.\n"
+            f"Chaque lecture supplémentaire = un step brûlé pour zéro information "
+            f"nouvelle — et au plafond de steps, final_answer sera REFUSÉ."
+        )
+    except Exception as e:  # pragma: no cover - fail-open garanti
+        logger.debug("nudge lectures stériles échec (%s) — ignoré.", e)
+        return None
+
+
+# ===========================================================================
+# F-131 (post-mortem run 2026-08-20_1028, Tetris) : non-convergence au
+# plafond de steps. Les 3 tentatives Coder sont mortes à « Reached max steps »
+# avec pour DERNIER geste un read_file d'exploration (pas de final_answer) →
+# sortie non parsable → sauvetage DSPy sans audit visuel → gate F-109 → run
+# perdu. L'agent n'a aucune conscience du budget restant (smolagents ne
+# l'annonce qu'au step fatal). Ce nudge injecte la contrainte AVANT : à
+# `_WIND_DOWN_REMAINING` steps du plafond, tant que la checklist visuelle est
+# incomplète, une directive de convergence stricte (fix minimal SI localisé →
+# preuve console → screenshot → visual_check ×N → final_answer). Verdict=False
+# honnête explicitement permis : un échec prouvé vaut mieux qu'un run brûlé.
+# Sans état (dérivé de step_number à chaque step). Fail-open total.
+# ===========================================================================
+_WIND_DOWN_REMAINING = 5
+
+
+def _build_wind_down_nudge(memory_step, agent, criteria_count: int) -> Optional[str]:
+    """Directive de convergence quand le budget de steps est presque épuisé.
+
+    Inactif sans critères visuels (Tester / opt-out) ou checklist déjà complète.
+    Best-effort total : jamais d'exception.
+    """
+    if criteria_count <= 0:
+        return None
+    try:
+        max_steps = getattr(agent, "max_steps", None)
+        step_number = getattr(memory_step, "step_number", None)
+        if not isinstance(max_steps, int) or not isinstance(step_number, int):
+            return None
+        remaining = max_steps - step_number
+        if remaining <= 0 or remaining > _WIND_DOWN_REMAINING:
+            return None
+        from .tools import get_visual_audit  # import local (état module-level)
+
+        audited = {a.get("criterion_number") for a in get_visual_audit()}
+        missing = sorted(set(range(1, criteria_count + 1)) - audited)
+        if not missing:
+            return None
+        return (
+            f"[BUDGET : {remaining} step(s) restant(s) sur {max_steps}] CONVERGENCE "
+            f"IMMÉDIATE exigée — au plafond, un step sans final_answer = tentative "
+            f"PERDUE (checklist {len(missing)}/{criteria_count} non audités : {missing}). "
+            f"Ordre strict, rien d'autre :\n"
+            f"(1) SI un bug console est déjà localisé, applique LE fix minimal (un "
+            f"seul search_replace ciblé) ; SINON passe directement au test, sans "
+            f"nouvelle lecture d'exploration ;\n"
+            f"(2) navigate_page(reload) + list_console_messages : la preuve que la "
+            f"console est propre (ou le constat d'échec) ;\n"
+            f"(3) take_screenshot ;\n"
+            f"(4) visual_check(criterion_number=i, verdict=True|False, "
+            f'observation="ce que tu vois") pour CHAQUE critère manquant — un '
+            f"verdict False honnête est ACCEPTÉ ;\n"
+            f"(5) final_answer immédiatement."
+        )
+    except Exception as e:  # pragma: no cover - fail-open garanti
+        logger.debug("nudge wind-down échec (%s) — ignoré.", e)
+        return None
 
 
 def _build_checklist_nudge(criteria_count: int) -> Optional[str]:
@@ -83,6 +376,33 @@ def _build_checklist_nudge(criteria_count: int) -> Optional[str]:
         return None
 
 
+def _mark_screenshot_proof(name: str, result: Any) -> None:
+    """Marque la preuve de screenshot pour la gate F-109 durable — fail-open total.
+
+    Seuls les vrais outils de capture comptent (take_snapshot = arbre a11y texte,
+    evaluate_script = JS arbitraire : ni l'un ni l'autre ne prouvent un audit
+    visuel). Succès = image PIL retournée, ou texte sans signature d'échec
+    (access denied, timeout, page détachée).
+    """
+    if name not in ("take_screenshot", "puppeteer_screenshot"):
+        return
+    try:
+        from .tools import mark_screenshot_taken
+
+        import PIL.Image as _PILImage
+        if isinstance(result, _PILImage.Image):
+            mark_screenshot_taken()
+            return
+        text = str(result or "")
+        if text and not any(
+            m in text.lower()
+            for m in ("error", "timed out", "access denied", "not attached")
+        ):
+            mark_screenshot_taken()
+    except Exception as e:  # pragma: no cover - fail-open garanti
+        logger.debug("mark_screenshot_proof échec (%s) — ignoré.", e)
+
+
 class _ScreenshotCapturingTool(Tool):
     """Wrapper non-intrusif autour d'un outil MCP : capture les retours PIL.Image.
 
@@ -104,6 +424,9 @@ class _ScreenshotCapturingTool(Tool):
     # Noms d'outils MCP Chrome DevTools / Puppeteer pouvant produire une image.
     SCREENSHOT_TOOL_NAMES = {
         "take_screenshot",        # Chrome DevTools MCP
+        "take_snapshot",          # Chrome DevTools MCP (F-50/F-90 fix filePath)
+        "take_heapsnapshot",      # Chrome DevTools MCP
+        "evaluate_script",        # Chrome DevTools MCP (F-50/F-90 fix filePath="")
         "puppeteer_screenshot",   # Puppeteer MCP (Tester)
         "performance_stop_trace", # peut retourner une image dans certains cas
     }
@@ -132,20 +455,17 @@ class _ScreenshotCapturingTool(Tool):
         _patch_forward_for_image(wrapped)
 
     def forward(self, *args, **kwargs):
-        # F-50/F-90 fix : strip filePath des screenshots. chrome-devtools-mcp --isolated
+        # F-50/F-90 fix : strip filePath des outils DevTools. chrome-devtools-mcp --isolated
         # rejette toute écriture disque (pas de workspace root configuré) → l'outil
-        # échoue AVANT de retourner l'image → la callback vision ne capture rien → le
-        # Coder boucle sur l'erreur (run 2026-08-11 : 36 erreurs, 25 steps / 510k tokens).
-        # Or l'image revient DE TOUTE FAÇON via observations_images
-        # (make_screenshot_callback) : le filePath est donc à la fois inutile ET cassant.
-        # On le retire silencieusement (best-effort, jamais d'exception). Le wrapper voit
-        # kwargs déjà typés car le sanitizer (F-42) tourne avant/après ce proxy.
-        if "filePath" in kwargs:
-            kwargs.pop("filePath", None)
-            logger.debug(
-                "vision_callback: filePath strippé (fix screenshot loop) — "
-                "capture via observations_images, pas d'écriture disque."
-            )
+        # échoue avec Access denied.
+        for _fp in ("filePath", "file_path"):
+            if _fp in kwargs:
+                kwargs.pop(_fp, None)
+                logger.debug(
+                    "vision_callback: %s strippé pour %s (fix isolated DevTools MCP).",
+                    _fp,
+                    self.name,
+                )
         # F-114 (post-mortem run #9) : cap fullPage. Le Coder appelle
         # take_screenshot(fullPage=True) → images de plusieurs milliers de pixels
         # de haut (jusqu'à 1265×9315 observés) → prompt processing vision de
@@ -163,6 +483,11 @@ class _ScreenshotCapturingTool(Tool):
                         _key,
                     )
         result = self.wrapped.forward(*args, **kwargs)
+        # F-126 : preuve durable pour la gate F-109 (tools._SCREENSHOT_PROOF).
+        # Marquée à l'EXÉCUTION réelle de l'outil — insensible à la compaction
+        # F-101 / purge de mémoire qui rendait le scan mémoire faux-négatif
+        # (run 2026-08-19_1552 : screenshot étape 7, gate « PAS utilisé » à la 41).
+        _mark_screenshot_proof(self.name, result)
         # Capture si c'est une image (PIL.Image.Image). On importe PIL ici (pas au
         # niveau module) car PIL est une dépendance optionnelle via smolagents.
         try:
@@ -280,6 +605,218 @@ def wrap_screenshot_tools(tools: List[Tool], capture_holder: List[Any]) -> List[
     return wrapped_list
 
 
+# ===========================================================================
+# F-126 (post-mortem run 2026-08-19_1552) : enrichment des erreurs console.
+# ===========================================================================
+# `list_console_messages` formate les erreurs SANS localisation ("msgid=1
+# [error] Uncaught TypeError ... (0 args)") → le 4B soupçonnait les mauvaises
+# fonctions (isCollision/rotation) pendant que le vrai bug (merge()) était à
+# 60 lignes de ses lectures → 3 réécritures complètes, run perdu.
+# `get_console_message(msgid)` expose la stack complète ("at isCollision
+# (index.html:352:58)") : on l'append automatiquement au retour de
+# list_console_messages avec la directive read_file ciblée. Fail-open total.
+# ===========================================================================
+_CONSOLE_LIST_TOOL = "list_console_messages"
+_CONSOLE_DETAIL_TOOL = "get_console_message"
+_CONSOLE_ERROR_RE = re.compile(r"msgid=(\d+) \[error\]")
+_CONSOLE_FRAME_RE = re.compile(r"\(([^()]+?):(\d+):\d+\)")
+_CONSOLE_MAX_ERRORS = 4
+_CONSOLE_MAX_FRAMES = 8
+# F-127 (post-mortem run 2026-08-19_2104) : enum `types` valide de chrome-devtools
+# MCP. Le modèle passe des valeurs inventées (ex "exception") → MCP -32602 → step
+# perdu. Le wrapper filtre avant délégation (et retire l'arg si tout est invalide).
+_CONSOLE_VALID_TYPES = frozenset({
+    "log", "debug", "info", "error", "warn", "dir", "dirxml", "table", "trace",
+    "clear", "startgroup", "startgroupcollapsed", "endgroup", "assert", "profile",
+    "profileend", "count", "timeend", "verbose", "issue",
+})
+
+
+def _sanitize_console_kwargs(kwargs: dict) -> dict:
+    """Filtre l'enum `types` de list_console_messages sur les valeurs valides (F-127).
+
+    Retire l'argument si aucune valeur ne survit (l'absence de filtre = tous les
+    types, comportement MCP par défaut). Ne touche à rien d'autre.
+    """
+    types = kwargs.get("types")
+    if not isinstance(types, (list, tuple)):
+        return kwargs
+    valid = [str(t) for t in types if str(t).lower() in _CONSOLE_VALID_TYPES]
+    out = dict(kwargs)
+    if valid:
+        out["types"] = valid
+    else:
+        out.pop("types", None)
+    return out
+
+
+# F-128 (post-mortem run 2026-08-19_2250) : « boucle de vérification sans
+# terminaison ». Le 4B corrigeait le bug (4 search_replace chirurgicaux, guidés
+# par les stacks R4) mais NE RE-TESTAIT PAS la page : il relisait le fichier à
+# la place → jamais la preuve que l'erreur avait disparu → 17 turns de stall,
+# 2×40 steps épuisés, run perdu alors que le livrable était sain. Ce module
+# maintient « des erreurs console ont été vues et pas encore re-vérifiées » ;
+# les outils d'édition (search_replace/multi_replace/edit_file) collent alors
+# une directive post-fix au retour, au moment EXACT du comportement fautif
+# (même pattern que les nudges F-114/F-125).
+_CONSOLE_PENDING = {"pending": False, "hint": ""}
+
+
+def reset_console_pending() -> None:
+    """Réinitialise l'état post-fix (une exécution de nœud = un cycle)."""
+    _CONSOLE_PENDING["pending"] = False
+    _CONSOLE_PENDING["hint"] = ""
+
+
+def _update_console_pending(errors_found: bool, hint: str = "") -> None:
+    """Met à jour l'état après CHAQUE list_console_messages : erreurs vues →
+    attente d'un fix puis re-vérification ; console propre → attente levée."""
+    _CONSOLE_PENDING["pending"] = bool(errors_found)
+    _CONSOLE_PENDING["hint"] = hint if errors_found else ""
+
+
+def pending_post_fix_directive() -> Optional[str]:
+    """Directive à coller au retour d'un outil d'édition si des erreurs console
+    attendent une re-vérification. None si rien en attente (fail-open total)."""
+    if not _CONSOLE_PENDING.get("pending"):
+        return None
+    hint = f" (dernière localisation : {_CONSOLE_PENDING['hint']})" if _CONSOLE_PENDING.get("hint") else ""
+    return (
+        f"\n\n➡️ FIX APPLIQUÉ sur un fichier qui avait des erreurs console{hint}. "
+        "PROCHAINE ACTION OBLIGATOIRE : re-teste la PAGE — navigate_page puis "
+        "list_console_messages — pour CONFIRMER que l'erreur a disparu. NE relis "
+        "PAS le fichier : le code source ne prouve rien, seule la console le peut. "
+        "Console propre → visual_check restants + final_answer immédiatement."
+    )
+
+
+def _extract_stack_frames(detail: str) -> List[str]:
+    """Extrait les frames `at fn (file:line:col)` du retour de get_console_message."""
+    frames: List[str] = []
+    in_stack = False
+    for raw in (detail or "").splitlines():
+        line = raw.strip()
+        if line.startswith("### Stack trace"):
+            in_stack = True
+            continue
+        if not in_stack:
+            continue
+        if line.startswith("Note:") or line.startswith("###"):
+            break
+        if line.startswith("at "):
+            frames.append(line)
+    return frames
+
+
+def _enrich_console_output(text: str, detail_tool) -> str:
+    """Append les stack traces des erreurs console + directive de correction ciblée.
+
+    Retourne `text` inchangé si aucune erreur / pas d'outil détail / aucune stack
+    (fail-open). Budget borné : max 4 erreurs, 8 frames chacune.
+    """
+    if not text or detail_tool is None:
+        return text
+    msgids = [int(m) for m in _CONSOLE_ERROR_RE.findall(text)]
+    # F-128 : chaque check console rafraîchit l'état « erreurs en attente de
+    # re-vérification » (consommé par les outils d'édition via directive).
+    _update_console_pending(bool(msgids))
+    if not msgids:
+        return text
+    blocks: List[str] = []
+    first_frame: Optional[str] = None
+    for msgid in msgids[:_CONSOLE_MAX_ERRORS]:
+        detail = str(detail_tool(msgid=msgid) or "")
+        frames = _extract_stack_frames(detail)
+        if not frames:
+            continue
+        blocks.append(
+            f"[msgid={msgid}]\n" + "\n".join(f"  {f}" for f in frames[:_CONSOLE_MAX_FRAMES])
+        )
+        if first_frame is None:
+            first_frame = frames[0]
+    # F-128 : mémorise la localisation fraîche pour la directive post-fix.
+    if first_frame:
+        _CONSOLE_PENDING["hint"] = first_frame
+    if not blocks:
+        return text
+    guidance = ""
+    if first_frame:
+        m = _CONSOLE_FRAME_RE.search(first_frame)
+        if m:
+            fname, line = m.group(1), int(m.group(2))
+            guidance = (
+                f'\n→ Bug LOCAL dans "{fname}" autour de la ligne {line} : '
+                f'read_file(path="{fname}", offset={max(0, line - 8)}, limit=20), '
+                "puis search_replace CHIRURGICAL (vérifie la fonction fautive ET "
+                "ses appelants)."
+            )
+    extra = len(msgids) - _CONSOLE_MAX_ERRORS
+    extra_note = (
+        f"\n(+{extra} erreur(s) non détaillée(s) — get_console_message(msgid=N) pour les voir)"
+        if extra > 0
+        else ""
+    )
+    return (
+        f"{text}\n\n### 📍 STACK TRACES COMPLÈTES (get_console_message)\n"
+        + "\n".join(blocks)
+        + extra_note
+        + guidance
+        + "\n⚠️ Une erreur console = un bug LOCAL : NE réécris PAS tout le fichier "
+        "(write_file sur un gros fichier existant est REFUSÉ)."
+    )
+
+
+class _ConsoleEnrichingTool(Tool):
+    """Wrapper autour de list_console_messages : enrichit les [error] de leur stack trace.
+
+    Même pattern que _ScreenshotCapturingTool : copie l'identité de l'outil wrappé
+    (l'agent voit le même nom/description/inputs) et délègue via forward().
+    """
+
+    def __init__(self, wrapped: Tool, detail_tool: Optional[Tool]):
+        self.name = wrapped.name
+        self.description = wrapped.description
+        self.inputs = wrapped.inputs
+        self.output_type = wrapped.output_type
+        self.wrapped = wrapped
+        self.detail_tool = detail_tool
+        self.is_initialized = True
+        self.skip_forward_signature_validation = True
+        for attr in ("output_schema", "structured_output"):
+            if hasattr(wrapped, attr):
+                setattr(self, attr, getattr(wrapped, attr))
+
+    def forward(self, *args, **kwargs):
+        # F-127 : sanitise l'enum types AVANT délégation (évite le MCP -32602).
+        kwargs = _sanitize_console_kwargs(kwargs)
+        result = self.wrapped.forward(*args, **kwargs)
+        try:
+            return _enrich_console_output(str(result or ""), self.detail_tool)
+        except Exception as e:  # pragma: no cover - fail-open garanti
+            logger.debug("enrich_console_output échec (%s) — retour brut.", e)
+            return result
+
+
+def wrap_console_enrichment(tools: List[Tool]) -> List[Tool]:
+    """Wrappe list_console_messages pour enrichir les erreurs console (F-126).
+
+    Ne fait rien si list_console_messages OU get_console_message est absent de la
+    liste (fail-open, ex. serveur DevTools partiel).
+    """
+    detail = next(
+        (t for t in tools if getattr(t, "name", "") == _CONSOLE_DETAIL_TOOL), None
+    )
+    if detail is None:
+        return tools
+    out: List[Tool] = []
+    for t in tools:
+        if getattr(t, "name", "") == _CONSOLE_LIST_TOOL:
+            out.append(_ConsoleEnrichingTool(t, detail))
+        else:
+            out.append(t)
+    return out
+
+
 def make_screenshot_callback(capture_holder: List[Any], visual_criteria_count: int = 0):
     """Fabrique un step_callback smolagents qui peuple observations_images.
 
@@ -310,6 +847,97 @@ def make_screenshot_callback(capture_holder: List[Any], visual_criteria_count: i
         Une fonction callback(memory_step, agent) -> None.
     """
     def _callback(memory_step, agent) -> None:
+        # F-129 : nudge gel au chargement — détection IMMÉDIATE (un timeout de
+        # navigation sur fichier local est toujours pathologique), AVANT le
+        # nudge anti-gel F-125 qui requiert 3 erreurs protocole consécutives
+        # (compteur remis à zéro par les commandes browser-process saines).
+        nav_freeze = _build_nav_freeze_nudge(
+            getattr(memory_step, "observations", "") or ""
+        )
+        if nav_freeze:
+            try:
+                current = getattr(memory_step, "observations", None) or ""
+                memory_step.observations = (
+                    f"{current}\n\n{nav_freeze}" if current else nav_freeze
+                )
+            except Exception as e:
+                logger.debug("nudge gel chargement : append observations échec (%s).", e)
+        # F-125 : nudge anti-gel — AVANT l'early-return capture : un step en erreur
+        # protocole ne produit AUCUNE image (holder vide), c'est précisément le
+        # signal. Le checklist-nudge F-114 reste, lui, conditionné aux screenshots.
+        stall_nudge = _build_browser_stall_nudge(
+            getattr(memory_step, "observations", "") or ""
+        )
+        if stall_nudge:
+            try:
+                current = getattr(memory_step, "observations", None) or ""
+                memory_step.observations = (
+                    f"{current}\n\n{stall_nudge}" if current else stall_nudge
+                )
+            except Exception as e:
+                logger.debug("nudge anti-gel : append observations échec (%s).", e)
+        # F-130 : nudge lectures stériles — AVANT l'early-return capture : le
+        # stall d'investigation ne produit NI screenshot NI erreur protocole,
+        # c'est précisément son danger (steps brûlés en silence).
+        read_stall_nudge = _build_read_stall_nudge(memory_step)
+        if read_stall_nudge:
+            print(
+                "[!] Nudge F-130 (lectures stériles) injecté dans les "
+                "observations du step."
+            )
+            try:
+                current = getattr(memory_step, "observations", None) or ""
+                memory_step.observations = (
+                    f"{current}\n\n{read_stall_nudge}" if current else read_stall_nudge
+                )
+            except Exception as e:
+                logger.debug("nudge lectures stériles : append observations échec (%s).", e)
+        # F-131 : wind-down budget — idem, indépendant des screenshots ; Coder
+        # uniquement (criteria_count > 0). Se répète sur les derniers steps tant
+        # que la checklist est incomplète (pression graduée, ~100 tokens/step).
+        wind_down_nudge = _build_wind_down_nudge(
+            memory_step, agent, visual_criteria_count
+        )
+        if wind_down_nudge:
+            print(
+                "[!] Nudge F-131 (wind-down budget) injecté dans les "
+                "observations du step."
+            )
+            try:
+                current = getattr(memory_step, "observations", None) or ""
+                memory_step.observations = (
+                    f"{current}\n\n{wind_down_nudge}" if current else wind_down_nudge
+                )
+            except Exception as e:
+                logger.debug("nudge wind-down : append observations échec (%s).", e)
+        # P5/F-138 (port deer-flow tool_progress) : résultats d'outils d'ACTION
+        # quasi identiques en série (Jaccard ≥0.8) = variantes du même appel
+        # sans progrès — le fingerprint F-36 ne voit pas ce cas (args variés).
+        # Uniquement pour les steps qui appellent un outil d'action.
+        try:
+            from .tool_progress import dominant_action_tool, record_tool_result
+
+            _action_tool = dominant_action_tool(
+                str(getattr(memory_step, "code_action", "") or "")
+            )
+            if _action_tool:
+                _loop_results_nudge = record_tool_result(
+                    _action_tool,
+                    getattr(memory_step, "observations", "") or "",
+                )
+                if _loop_results_nudge:
+                    print(
+                        f"[!] Nudge P5 (résultats en boucle) injecté pour "
+                        f"{_action_tool}."
+                    )
+                    current = getattr(memory_step, "observations", None) or ""
+                    memory_step.observations = (
+                        f"{current}\n\n{_loop_results_nudge}"
+                        if current
+                        else _loop_results_nudge
+                    )
+        except Exception as e:
+            logger.debug("nudge résultats en boucle échec (%s) — ignoré.", e)
         if not capture_holder:
             return
         # On ne prend que le dernier screenshot du step (le plus pertinent : état

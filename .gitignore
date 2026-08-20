@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+.pytest_tmp*/
 .pytest_tmp/
 .pytest_basetemp/
 .mypy_cache/
@@ -90,3 +91,7 @@ models/
 !data/graph_orchestrator.db
 data/*.wal
 data/*.bak.*
+
+# Scratch de bench/tests locaux (F-126..F-128)
+temp_pytest/
+debug/coder_isolation_out_v1/

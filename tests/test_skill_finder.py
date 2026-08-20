@@ -431,3 +431,4 @@ class TestConfigAndGate:
         src = inspect.getsource(dspy_nodes.execute_architect_node)
         assert "skill_finder_enabled" in src  # le gate existe
         assert "triggers" in src  # le wrapper propage les hints mots-clés
+        assert "Recherche de skills dynamiques" in src  # fail-open try-except présent

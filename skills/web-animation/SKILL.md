@@ -102,3 +102,4 @@ Pour aller plus loin (race conditions, requestAnimationFrame, state machines) :
 - [resources/3_pattern_b_animation_fluide_avec_requestanimationframe_id_al_pour_le_mouvement_continu.md](file:///D:/GIT/graph-orchestrator-smolagents/skills/web-animation/resources/3_pattern_b_animation_fluide_avec_requestanimationframe_id_al_pour_le_mouvement_continu.md)
 - [resources/4_gestion_de_l_tat_state_machine.md](file:///D:/GIT/graph-orchestrator-smolagents/skills/web-animation/resources/4_gestion_de_l_tat_state_machine.md)
 - [resources/5_port_e_des_variables_scope.md](file:///D:/GIT/graph-orchestrator-smolagents/skills/web-animation/resources/5_port_e_des_variables_scope.md)
+- [resources/6_coordonnees_et_grille_canvas.md](file:///D:/GIT/graph-orchestrator-smolagents/skills/web-animation/resources/6_coordonnees_et_grille_canvas.md)

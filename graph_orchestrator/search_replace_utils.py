@@ -20,6 +20,11 @@ allégée (pas de fuzzy edit-distance, qui est neutralisé dans aider lui-même)
 import re
 from typing import Optional
 
+# Longueur minimale de la sous-chaîne pour le fallback 6) de
+# replace_most_similar_chunk : en dessous, une occurrence unique est trop
+# probablement un aiguillage générique (identifiant court, ponctuation...).
+_SUBSTRING_MIN_LEN = 8
+
 
 def _prep(text: str) -> tuple[str, list[str]]:
     """Normalise : garantit un newline final, renvoie (texte, lignes)."""
@@ -94,6 +99,71 @@ def _perfect_or_whitespace(
     return _replace_part_with_missing_leading_whitespace(whole_lines, part_lines, replace_lines)
 
 
+def _replace_stripped_lines(
+    whole_lines: list[str], part_lines: list[str], replace_lines: list[str]
+) -> Optional[str]:
+    """Matching tolérant par normalisation des lignes (OpenCode / Aider fuzzy fallback).
+
+    Si toutes les lignes non vides de `part_lines` correspondent exactement aux lignes
+    de `whole_lines` une fois débarrassées de leurs espaces (stripped), et que cette
+    séquence est UNIQUE dans le fichier, le remplacement est appliqué en alignant
+    l'indentation de base de `replace_lines` sur celle de la cible.
+    """
+    p_stripped = [p.strip() for p in part_lines if p.strip()]
+    if not p_stripped:
+        return None
+
+    matches: list[tuple[int, int]] = []
+    num_p = len(p_stripped)
+
+    for i in range(len(whole_lines)):
+        matched_indices = []
+        p_idx = 0
+        for j in range(i, len(whole_lines)):
+            w_line = whole_lines[j].strip()
+            if not w_line:
+                continue
+            if w_line == p_stripped[p_idx]:
+                matched_indices.append(j)
+                p_idx += 1
+                if p_idx == num_p:
+                    break
+            else:
+                break
+        if p_idx == num_p and matched_indices:
+            start_j = matched_indices[0]
+            end_j = matched_indices[-1] + 1
+            matches.append((start_j, end_j))
+
+    if len(matches) != 1:
+        return None
+
+    start_idx, end_idx = matches[0]
+    target_lines = whole_lines[start_idx:end_idx]
+
+    first_target = next((w for w in target_lines if w.strip()), "")
+    base_indent = first_target[: len(first_target) - len(first_target.lstrip())]
+
+    first_part = next((p for p in part_lines if p.strip()), "")
+    part_base_indent = first_part[: len(first_part) - len(first_part.lstrip())]
+
+    new_replace: list[str] = []
+    for r in replace_lines:
+        if not r.strip():
+            new_replace.append(r if r.endswith("\n") else r + "\n")
+        else:
+            r_indent = r[: len(r) - len(r.lstrip())]
+            r_content = r.lstrip()
+            if r_indent.startswith(part_base_indent):
+                rel_indent = r_indent[len(part_base_indent):]
+                reindented = base_indent + rel_indent + r_content
+            else:
+                reindented = base_indent + r_indent + r_content
+            new_replace.append(reindented if reindented.endswith("\n") else reindented + "\n")
+
+    return "".join(whole_lines[:start_idx] + new_replace + whole_lines[end_idx:])
+
+
 def _try_dotdotdots(whole: str, part: str, replace: str) -> Optional[str]:
     """Gère les ellipses `...` que le modèle insère pour éluder du code.
     Adapté d'aider try_dotdotdots (l.190). Lève ValueError si incohérent."""
@@ -131,14 +201,14 @@ def _try_dotdotdots(whole: str, part: str, replace: str) -> Optional[str]:
 
 def replace_most_similar_chunk(whole: str, part: str, replace: str) -> Optional[str]:
     """Recherche `part` dans `whole` et le remplace par `replace`, avec dégradation
-    gracieuse : match exact → tolérant indentation → ellipses. Renvoie le nouveau
-    `whole` ou None si rien ne matche. Porté d'aider (l.157), sans fuzzy edit-distance.
+    gracieuse : match exact → tolérant indentation → ellipses → match stripped lines.
+    Renvoie le nouveau `whole` ou None si rien ne matche. Porté d'aider (l.157), sans fuzzy edit-distance.
     """
     whole, whole_lines = _prep(whole)
     part, part_lines = _prep(part)
     replace, replace_lines = _prep(replace)
 
-    # 1) exact ou tolérant indentation
+    # 1) exact ou tolérant indentation uniforme
     res = _perfect_or_whitespace(whole_lines, part_lines, replace_lines)
     if res is not None:
         return res
@@ -157,6 +227,42 @@ def replace_most_similar_chunk(whole: str, part: str, replace: str) -> Optional[
             return res
     except ValueError:
         pass
+
+    # 4) tolérance souple sur l'indentation ligne à ligne (OpenCode/Aider fallback)
+    res = _replace_stripped_lines(whole_lines, part_lines, replace_lines)
+    if res is not None:
+        return res
+
+    # 5) stripped lines en ignorant une première ligne vide
+    if len(part_lines) > 2 and not part_lines[0].strip():
+        res = _replace_stripped_lines(whole_lines, part_lines[1:], replace_lines)
+        if res is not None:
+            return res
+
+    # 5-bis) lignes vides INTERNES ignorées (P3/F-137, port aider
+    # `flexible_search_and_replace` préprocesseur "strip blank lines" :611) :
+    # le LLM insère des lignes vides parasites au milieu du bloc SEARCH — on
+    # re-tente le matching ligne à ligne après filtrage des vides des DEUX côtés.
+    _wf = [l for l in whole_lines if l.strip()]
+    _pf = [l for l in part_lines if l.strip()]
+    if len(_pf) >= 2 and len(_pf) != len(part_lines):
+        res = _replace_stripped_lines(_wf, _pf, replace_lines)
+        if res is not None:
+            return res
+
+    # 6) sous-chaîne exacte (post-mortem run 2026-08-19, Tetris) : le 4B fournit
+    # souvent un bloc PARTIEL de ligne — ex. sans la virgule finale — présent mot
+    # pour mot comme sous-chaîne du fichier. Les stratégies ligne à ligne (1-5)
+    # échouent toutes sur un écart d'un caractère en bout de ligne, alors que le
+    # texte existe : le Coder peut alors brûler 15+ steps sur le même échec
+    # (anti-loop) jusqu'à l'échec du nœud. On remplace la sous-chaîne si elle est
+    # UNIQUE et assez longue (garde anti-aiguillage générique) ; l'ambiguïté
+    # (0 ou 2+ occurrences) continue d'échouer proprement avec le feedback didactique.
+    if len(part) >= _SUBSTRING_MIN_LEN and whole.count(part) == 1:
+        return whole.replace(part, replace, 1)
+    needle = part.strip()
+    if len(needle) >= _SUBSTRING_MIN_LEN and whole.count(needle) == 1:
+        return whole.replace(needle, replace.strip(), 1)
 
     return None
 

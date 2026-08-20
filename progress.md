@@ -1,5 +1,89 @@
 # État d'Avancement du Sprint
 
+## Jalons de l'Itération (cycle F-130/131 — post-mortem run 2026-08-20_1028 Tetris, session « run de 0 »)
+> Objectif utilisateur : run Tetris de 0 → analyser/corriger si problème →
+> relancer → validé si 0 erreur dans les logs. Run 2026-08-20_1028 (~65 min,
+> FRESH_START post-swap llama.cpp b10509) : **failure « Coder crash »** — les
+> 3 tentatives Coder meurent à « Reached max steps » en boucle de lectures
+> stériles : TypeError console réelle (bag numérique vs SHAPES lettré,
+> `drawNextPiece:653` donné par la stack F-126) poursuivie sur les MAUVAISES
+> lignes (406-411 hallucinées) via ~25 read_file sans modification ; step 41
+> forcé = encore un read_file → Pydantic KO → sauvetage DSPy → checklist 6/6
+> non audités ×3 → circuit-breaker idle. Le livrable final appelle bien
+> createGrid() mais garde le TypeError (vérifié Chrome : stack exacte 653).
+
+- [x] F130/131-1 : Diagnostic 3 couches — (a) read_file EXEMPT du LoopGuard
+  F-36 ; (b) Stall Detector F-88 ne hashe que les écritures ; (c) nudge F-114
+  exige un screenshot (2 seulement pris). Aucune garde ne voyait la boucle
+  d'investigation.
+- [x] F130-2 : Nudge lectures stériles (`vision_callback._build_read_stall_nudge`)
+  — compteur PAR FICHIER (code_action + tool_calls, path nommé/positionnel),
+  modification → ré-arme, seuil 5 → directive AGIS (search_replace / re-test
+  page / checklist+final_answer) ; reset par nœud, traverse les retries ;
+  actif Coder+Tester ; fail-open.
+- [x] F131-2 : Nudge wind-down budget (`_build_wind_down_nudge`) — remaining
+  ∈ [1,5] + checklist incomplète → directive convergence stricte à chaque
+  dernier step (fix minimal → console → screenshot → visual_check ×N verdict
+  False honnête PERMIS → final_answer) ; sans état ; Coder uniquement ;
+  fail-open.
+- [x] F130/131-3 : Branchement `make_screenshot_callback` AVANT l'early-return
+  capture + resets nodes.py (même bloc lifecycle F-114/125/128/129).
+- [x] F130/131-4 : Tests — **16 nouveaux PASS** (TestReadStallNudge 8 +
+  TestWindDownNudge 8), fichier `test_vision_nudge.py` 46/46 ; py_compile OK.
+- [x] F130/131-5 : État disque (contract C453-C456, feature_list F-130/F-131
+  completed, ce fichier) + DuckDB + commit 9178dc9.
+- [x] F130/131-6 : Run E2E validation #2 (2026-08-20_1203, ~2 h) : **échec
+  « Coder crash » identique** — 3×40 steps, mais cause racine PLUS PROFONDE
+  découverte : le livrable avait un SyntaxError JS PERMANENT causé par un
+  `\n` LITTÉRAL (backslash-n texte) inséré par search_replace r-string
+  (ligne 143 constatée dans Chrome), et la « correction » du 4B était un
+  NO-OP (old == new) accepté avec « Successfully edited » → boucle de fix
+  invincible qu'aucun nudge ne pouvait briser. Nudges F-130/131 validés en
+  câblage réel (agent smolagents + CallbackRegistry : fired=True), mais sans
+  effet sur une boucle d'édition — preuve d'observabilité console ajoutée
+  (prints « Nudge F-130/131 injecté »).
+- [x] F132-1 : Gardes outil anti-\n littéral + anti-no-op (tools.py) —
+  `_noop_rejection` (old==new exact rejeté) + `_literal_newline_rejection`
+  (\n littéral en séparateur de code dans le texte INSÉRÉ, fichiers code
+  uniquement, old_string libre pour la réparation, légitimes épargnés) sur
+  search_replace/edit_file/multi_replace/write_file. Tests +10 (72 PASS
+  cumulés avec vision_nudge).
+- [x] F132-2 : État disque (contract C457-C458, feature_list F-132, ce
+  fichier) + DuckDB + commit.
+- [x] F133-1 (proposition utilisateur) : Auto-fixer déterministe pluggé au
+  Tester — module auto_fixer.py (const réassignée → let prouvé ; \n littéral
+  → repair, même regex que F-132) ; outil fix_known_error branché au
+  WebTestRunner + consigne prompt (fix → reload+console → CONTINUE le test ;
+  sinon verdict normal) ; 10 tests PASS, gate F-103 OK. État disque (contract
+  C459, feature_list F-133) + commit.
+- [x] Focus « code pur » (décision utilisateur post-run #6 stoppé ~2h40) :
+  minage references/ par 2 agents → docs/references-audit/CODE_PUR_ROADMAP.md
+  (26 patterns, P1-P7). Ports P2+F-134 (diagnostics syntaxe déterministes
+  injectés dans l'output des 4 outils d'édition — port kilocode, cœur
+  refactoré de check_js_syntax F-72) et P4+F-135 (repair \n fence-aware —
+  port deer-flow). 63 tests ciblés PASS, gate F-103 OK, contract C460-C461.
+- [x] Ports P1-P7 COMPLETS (décision utilisateur « on fait tout d'un coup ») :
+  F-136 valideur HTML Tier 0 (OpenKB), F-137 cascade lignes-vides (aider),
+  F-138 moniteur Jaccard résultats (deer-flow, nudge), F-139 heal_selector
+  (Scrapling, 7e helper DevTools), F-140 reaper process (qm, registre disque
+  + taskkill arbre + boot workflow). 30 nouveaux tests (test_codepur_ports +
+  màj compteurs), static tester 90 passed, gate F-103 OK, contract C462-C466.
+- [x] Run #7 (1817, stoppe it.3 sur decision, ~2h20) : chaîne QA COMPLETE
+  1re fois (Coder→Linter→Static→Tester→Security→Judge fail-closed), console
+  livrable VIDE 1re fois, 0 erreur transport. P2 1 frappe (const paire fix
+  instantane), F-130 x8 (9B les IGNORE), F-99 + priorite final_answer OK.
+  Analyse profonde (analyzer 14,8M tokens in / 57 steps Coder ; 2 parsing
+  unterminated recupere par F-33-2 ; Static passe SILENCIEUX ; Tester coupe
+  a 10 steps/900s EN decouvrant le vrai bug pause-au-chargement ; ULTRA =
+  14x le MEME read_file(offset=525)).
+- [x] F-141 (4 correctifs code pur) : (A) print succes Static, (B) garde
+  sanitte plan Architect (200x80/6000x2400 detectes deterministement + retry
+  correctif unique, px vs cellules distingues), (C) TARGETED_MAX_STEPS 16 +
+  TESTER_TIMEOUT_S 1200, (D) plafond lectures identiques (3e refus + directive,
+  reset par noeud). 8 tests, gate F-103 OK, contract C467.
+- [ ] Relance run E2E (après décision utilisateur) — validation : 0 erreur
+  dans les logs.
+
 ## Jalons de l'Itération (gouvernance backlog — grooming post-run #19, décision user 2026-08-18)
 
 - [x] GOV-1 : Arbitrage des 18 features pending sur les besoins réels démontrés
@@ -2294,3 +2378,121 @@ Coder est appliquée correctement par Qwen3.5-9B.
       1 skipped** (1110 baseline + 88 nouveaux, 0 régression). État disque synchronisé
       (feature_list F-105 completed, contract critères 386-390, plan case cochée, ce
       bloc, README §Guardrails, événements DuckDB run_id f-105).
+
+## Jalons de l'Itération (F-126 — durcissements Coder post-mortem run 1552)
+
+> Post-mortem run 2026-08-19_1552 (Tetris) : « Coder crash » après 3 retries
+> (~93 min, 98 steps). Bug local `merge()` (ROWS itéré sur matrice shape 2-4
+> lignes → TypeError au 1er posage) jamais trouvé : le 4B réécrivait TOUT
+> index.html (3 réécritures ~15 min/passe) → contexte inondé → 400
+> exceed_context_size (54 115 > n_ctx 49 152) ; gate screenshot F-109 faux
+> négatif (scan mémoire purgée) ; erreurs console sans localisation. Décision
+> utilisateur : « Go » sur les 4 recommandations R1-R4 (branche
+> fix/coder-hardening-run1552, base fix/architect-skillfinder-failopen).
+
+- [x] F126-1 (R1) : garde anti-réécriture totale dans `tools.write_file` — REFUS
+      d'écraser un fichier EXISTANT de >100 lignes (message pédagogique →
+      read_file ciblé + search_replace/multi_replace ; création libre ; seuil
+      CODER_WRITEFILE_MAX_LINES, 0=off ; fail-open OSError). Settings
+      `coder_writefile_max_lines` (config.py). Prompt : description write_file
+      mise à jour (OUTILS DISPONIBLES) + règle « erreur console = bug LOCAL »
+      dans le RAPPEL récence.
+- [x] F126-2 (R2) : FAST_CONTEXT 49152→65536 + FAST_KV_QUANT=q8_0 dans .env et
+      .env.example (65536@q8_0 = MOINS de VRAM KV que 49152@f16 sur RTX 3060
+      6 Go) + docs/LLAMA_SERVER_FLAGS.md §3.5 mis à jour (leçon run 1552).
+- [x] F126-3 (R3) : preuve durable de screenshot — `tools._SCREENSHOT_PROOF`
+      (mark_screenshot_taken/screenshot_was_taken/reset_screenshot_proof),
+      marquée à l'EXÉCUTION réelle par vision_callback (_mark_screenshot_proof :
+      image PIL ou texte sans signature d'échec ; take_snapshot exclu). Gate
+      nodes.py : flag durable PRIMAIRE, scan agent.memory.steps conservé en
+      fallback. Reset au même endroit que reset_visual_audit (traverse les
+      retries).
+- [x] F126-4 (R4) : enrichissement console — wrapper _ConsoleEnrichingTool +
+      wrap_console_enrichment (vision_callback) : après list_console_messages,
+      chaque [error] msgid (max 4) est détaillé via get_console_message →
+      stack frames (max 8) + directive read_file(path, offset=ligne-8,
+      limit=20) + search_replace chirurgical + avertissement anti-réécriture.
+      Branché dans execute_coder_node. Fail-open total.
+- [x] F126-5 : Tests — nouveau tests/test_f126_run1552_hardening.py (23 verts :
+      garde write_file 5, config 3, preuve screenshot 6 dont 2 via
+      run_with_retry en conditions purgées, enrichment console 8) + entrées
+      feature_list F-125 (rattrapage session précédente) et F-126 +
+      check_agent_guidance 0 erreur. Validation E2E : à confirmer au prochain
+      run Tetris.
+
+## Jalons de l'Itération (post-mortem run 2026-08-19_2104 — validation F-126 à chaud)
+
+> Run Tetris FRESH_START interrompu à ~72 min sur décision utilisateur (dernière
+> tentative CODER ULTRA stérile). Verdict central : **livrable sain, Testers
+> fautifs** — 2 rejets sur verdicts fantômes (max-steps → prose → rescue →
+> « failure ») alors que le jeu tourne (0 erreur console, vérifié en direct).
+
+- [x] F-126 VALIDÉ en production : R1 zéro réécriture totale (itération 2 =
+      read_file + search_replace chirurgical, 7 steps/5 min) ; R2 ctx 65536 +
+      KV q8_0 sans overflow (10,9 M tokens in vs 39 M au run 1552) ; R3/R4
+      sans stress (checklists passées, 0 erreur console à enrichir).
+- [x] Constat Tester (cause racine des 2 rejets) : budget 8/6 steps brûlé en
+      découverte d'UI (ID canvas) + erreurs d'outils propres (-32602 enum,
+      NameError evaluate_script) → final_answer en prose au max-steps →
+      verdict « failure » générique → fail-closed. AUCUN bug réel identifié.
+- [x] Correctif immédiat appliqué : TESTER_MAX_STEPS 8 → 16 (.env + .env.example,
+      prompt tester auto-adaptatif via settings).
+- [x] F-127 appliqué (feu vert utilisateur « go ») : TARGETED_MAX_STEPS 6 → 10 ;
+      REASONING_NO_THINK_NGL=99 dans .env + .env.example (serveur Tester/Ultra en
+      full offload, était bridé à 7,7 t/s en auto-fit) ; `_tester_max_steps_fallback`
+      n'attribute plus les erreurs d'OUTILS du Tester (MCP -32602, NameError sandbox,
+      probe null) à l'app — les « Uncaught » de l'app restent des FAIL (règle ancrée,
+      testée) ; helper `discover_ui()` (inventaire canvas/boutons/inputs en 1 appel,
+      en tête des helpers DevTools, Coder + Tester) ; `_sanitize_console_kwargs` filtre
+      l'enum `types` avant l'appel MCP ; wrapper console enrichi branché aussi sur le
+      Tester. CODER ULTRA : maintenu + accéléré par NGL=99, statut à réévaluer au
+      prochain E2E. Tests : tests/test_f127_tester_hardening.py (16 verts) +
+      factory devtools 5→6 helpers.
+- [x] CODER ULTRA (footnote) : modèle trop lourd à 7,7 t/s — 3 tentatives mortes
+      (cap 1200 s, stall step 26, tuée). Décision modèle à revoir à froid.
+
+## Jalons de l'Itération (run 2026-08-20_0901 — gel au chargement, F-128 rattrapé + F-129)
+
+> Relance E2E Tetris (suite note fin de session 02h : « tout est prêt, rien
+> d'autre à faire avant »). FRESH_START=1 — pas de reprise iter 2 du run coupé
+> 000845 (livrable iter 1 déjà sain ; reprendre = nourrir le failure mode
+> connu des gros search_replace sur du déjà-fixé). Run en cours PENDANT ce
+> cycle : les fixes ci-dessous s'appliquent au PROCHAIN run (code chargé en
+> mémoire au démarrage du process).
+
+- [x] Diagnostic en direct (question utilisateur « pas d'affichage dans le
+      chrome, ça mouline ») : reproduction indépendante (Chrome session
+      assistant : Navigation timeout) + exécution du JS extrait sous watchdog
+      Node `vm` (debug/repro_freeze_tetris.js) + instrumentation des boucles
+      (repro_freeze_tetris2.js) → **BOUCLE INFINIE ligne 299** :
+      `do { piece = random } while (bag.includes(piece))` dans
+      `getRandomPiece()` — le sac 7-bag rechargé à 14 pièces (2×7 types)
+      contient TOUS les types après 2 pops → le rejet est éternel → le thread
+      principal gèle avant l'événement load (spinner infini, 0 erreur console
+      car un gel est SILENCIEUX, tous les appels CDP renderer timeout).
+- [x] Constat pipeline : le nudge F-125 n'a PAS détecté ce cas — (a) marqueur
+      "timed out" ne matche pas « Navigation timeout », (b) les commandes
+      saines du browser-process (console vide) remettent son compteur à zéro
+      → jamais 3 erreurs consécutives. Le Coder a brûlé ~15 steps (10→190 s
+      chacune) à retenter navigate/new_page/screenshot sans jamais relire son
+      code. Gate F-109 (preuve screenshot) = fail-closed garanti : aucune
+      fausse approbation possible sur une page gelée.
+- [x] F-128 RATTRAPAGE (implémenté hier 00h08, validé en prod au run 000845,
+      jamais synchronisé sur disque — fin de session 02h) : feature_list
+      F-128 + contract C450 ajoutés.
+- [x] F-129 NOUVEAU (proposition utilisateur « un prompt qui dit que si une
+      page html timeout risque de boucle dans un js ? » — doctrine F-33 :
+      prompt + garde logicielle) : (1) nudge `_build_nav_freeze_nudge` —
+      directive IMMÉDIATE dès « Navigation timeout » (un timeout de
+      navigation sur fichier LOCAL est TOUJOURS pathologique) : diagnostic
+      boucle while/do-while jamais fausse + read_file + search_replace +
+      re-navigate pour CONFIRMER ; actif Coder ET Tester ; (2) fix marqueur
+      F-125 (« Navigation timeout » compte désormais dans les erreurs
+      protocole) ; (3) ligne ⚠️ prompt Coder + règle 4-bis prompt Tester
+      (conclure failure « page gelée » immédiatement). Tests : 9 nouveaux
+      TestNavFreezeNudge (30/30 fichier, 92 passed suites voisines basetemp
+      dédié) ; gate F-103 : 29 surfaces, 0 erreur, 0 warning. Contract C451-
+      C452, feature_list F-129.
+- [ ] Issue du run en cours : verdict final (Coder era pre-F-129 sur page
+      gelée → issue attendue entre correction par relecture fortuite,
+      échec propre fail-closed, ou burn-out des tentatives) → post-mortem.

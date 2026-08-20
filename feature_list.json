@@ -1049,6 +1049,165 @@
         "F-115",
         "F-57"
       ]
+    },
+    {
+      "id": "F-125",
+      "name": "Nudge anti-gel navigateur (détection onglet gelé CDP)",
+      "description": "Post-mortem run 2026-08-19_120229 (Tetris) : onglet audité ne répondant plus au renderer (timeouts CDP ~190 s sur Page.captureScreenshot/Runtime.evaluate) pendant que les commandes browser-process répondaient ; le Coder a brûlé ~15 steps/~45 min à retenter les MÊMES outils jusqu’à l’échec définitif. Fix vision_callback : compteur d’observations d’erreur protocole consécutives (marqueurs « timed out » / « Not attached to an active page »), directive de récupération injectée à partir de 3 erreurs consécutives (list_pages + reload, corriger le fichier si re-gel immédiat, final_answer failure propre après 2 récupérations échouées). Fail-open total. Tests : tests/test_vision_nudge.py.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-126",
+      "name": "Durcissements Coder post-mortem run 1552 (anti-réécriture totale, ctx 65536+KV q8_0, preuve screenshot durable, stack traces console)",
+      "description": "Post-mortem run 2026-08-19_1552 (Tetris, « Coder crash » après 3 retries/~93 min) : bug local merge() (itération ROWS sur matrice shape 2-4 lignes) jamais trouvé car le 4B réécrivait TOUT index.html (600+ lignes, 3 fois, ~15 min de prefill/passe) → contexte inondé → 400 exceed_context_size (54 115 tokens > n_ctx 49 152). 4 fixes : R1 write_file REFUSE d’écraser un fichier EXISTANT de >100 lignes (CODER_WRITEFILE_MAX_LINES, défaut 100, 0=off ; création libre) + règle prompt « erreur console = bug LOCAL, corrige via search_replace » ; R2 FAST_CONTEXT 49152→65536 + FAST_KV_QUANT=q8_0 (65536@q8_0 consomme MOINS de VRAM KV que 49152@f16 sur RTX 3060 6 Go) ; R3 la gate F-109 utilise une preuve DURABLE de screenshot (tools._SCREENSHOT_PROOF marquée à l’exécution réelle par vision_callback, reset par nœud — fini le faux négatif « PAS utilisé take_screenshot » du scan agent.memory.steps purgé, run 1552 retry 3) ; R4 list_console_messages enrichi automatiquement des stack traces via get_console_message (fichier:ligne → directive read_file(offset=ligne-8) + search_replace chirurgical ; budget 4 erreurs/8 frames, fail-open). Tests : tests/test_f126_run1552_hardening.py (23 verts). Validation E2E à confirmer au prochain run Tetris.",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-127",
+      "name": "Durcissements Testers post-mortem run 2104 (budgets steps, verdicts fantômes, découverte UI)",
+      "description": "Post-mortem run 2026-08-19_2104 (Tetris) : livrable sain (0 erreur console, vérifié en direct) rejeté 2× par des verdicts Tester fantômes — max-steps atteint en découverte d UI → final_answer en prose → rescue DSPy → « failure » générique → fail-closed. 5 fixes : (1) TESTER_MAX_STEPS 8→16 (.env, fait pendant le run — le défaut config était déjà 20 mais l override .env le neutralisait) ; (2) TARGETED_MAX_STEPS 6→10 (targeted_retest.py) ; (3) REASONING_NO_THINK_NGL=99 (.env/.env.example) — le serveur no-think (Web Tester + CODER ULTRA) chargeait en auto-fit à 7,7 t/s au lieu de ~27 ; (4) _tester_max_steps_fallback : les erreurs d OUTILS du Tester (MCP -32602, NameError sandbox, probe null sur ID inexact) ne comptent plus comme FAIL de l app — les « Uncaught » de l app restent des FAIL (règle ancrée anti-faux-positif) ; (5) helper discover_ui (inventaire canvas/boutons/inputs en 1 appel, en tête des helpers DevTools Coder+Tester) + sanitisation de l enum types de list_console_messages (_sanitize_console_kwargs) + wrapper console enrichi branché AUSSI sur le Tester (stack traces + enum valide). CODER ULTRA : maintenu, accéléré par NGL=99 — statut à réévaluer au prochain E2E. Tests : tests/test_f127_tester_hardening.py (16) + factory devtools mise à jour (6 helpers).",
+      "status": "completed",
+      "dependencies": []
+    },
+    {
+      "id": "F-128",
+      "name": "Nudge post-fix console (anti boucle de re-lecture sans fin)",
+      "description": "Post-mortem run 2026-08-19_2250 (Tetris, coupé ~65 min, itération 1 jamais bouclée) : le 4B corrigeait le bug console mais NE RE-TESTAIT PAS la page — il relisait le fichier (17 turns de stall) sans jamais re-naviguer, ne voyait jamais l'erreur disparue → 40 steps × 2 tentatives épuisés. FAILURE MODE 'boucle de vérification sans terminaison' : le Coder ne sait pas que le combat est gagné. IMPLÉMENTÉ dans vision_callback.py : état 'erreurs console vues non re-vérifiées' (maj à chaque list_console_messages enrichi, hint = 1re frame stack) ; search_replace/multi_replace/edit_file collent une directive post-fix au retour ('re-teste la PAGE : navigate_page + list_console_messages, NE relis PAS le fichier, console propre → final_answer') ; reset par nœud Coder (même lifecycle que les resets vision) ; ligne RAPPEL dans le prompt Coder. Tests : test_f128_post_fix_nudge.py 9 verts. VALIDÉ EN PROD au run 2026-08-20_000845 : bug collides corrigé, console propre constatée par le modèle PUIS checklist 6/6 complétée + final_answer en tentative 3 — la boucle de re-lecture est morte.",
+      "status": "completed",
+      "dependencies": [
+        "F-126",
+        "F-127"
+      ]
+    },
+    {
+      "id": "F-129",
+      "name": "Nudge gel au chargement (Navigation timeout = boucle JS infinie)",
+      "description": "Post-mortem run 2026-08-20_0901 (Tetris) : navigate_page répondait 'Navigation timeout of 10000 ms exceeded' dès la PREMIÈRE navigation — le JS bloquait le thread principal avant l'événement load (do...while de rejet contre un sac contenant TOUS les types de pièces : condition jamais fausse ; cause racine isolée par repro indépendante Chrome + Node vm watchdog, debug/repro_freeze_tetris*.js). Le Coder a brûlé ~15 steps à retenter navigate/new_page/screenshot (chaque essai 10-190 s) sans jamais lire son code : un gel est SILENCIEUX (0 erreur console) et les commandes saines du browser-process remettaient à zéro le compteur du nudge F-125 (dont le marqueur 'timed out' ne matchait d'ailleurs pas 'Navigation timeout'). IMPLÉMENTÉ : (1) nudge F-129 _build_nav_freeze_nudge — directive IMMÉDIATE (sans seuil : un timeout de navigation sur fichier LOCAL est toujours pathologique, chargement <1s) injectée dans memory_step.observations : diagnostic boucle while/do-while jamais fausse + read_file + search_replace + re-navigate pour CONFIRMER ; reset par nœud (reset_nav_freeze_nudge) ; actif Coder ET Tester (callback partagé). (2) Fix marqueur F-125 : 'Navigation timeout' ajoute aux _BROWSER_STALL_MARKERS (les timeouts de navigation comptent désormais dans le compteur d'erreurs protocole). (3) Ligne prompt Coder (bloc VALIDATION VISUELLE) + règle 4-bis prompt Tester (conclure failure 'page gelée' immédiatement au lieu de brûler le budget). Tests : tests/test_vision_nudge.py TestNavFreezeNudge 9 nouveaux (immédiateté, pas de nudge sain, directives du message, console silencieuse, reset, répétition comptée, observations préservées, chemin Tester, comptage F-125) — 30/30 fichier. Gate F-103 : 29 surfaces, 0 erreur, 0 warning.",
+      "status": "completed",
+      "dependencies": [
+        "F-125",
+        "F-128"
+      ]
+    },
+    {
+      "id": "F-130",
+      "name": "Nudge lectures stériles (même fichier relu sans modification)",
+      "description": "Post-mortem run 2026-08-20_1028 (Tetris, FRESH_START post-swap llama.cpp b10509) : le Coder 4B a localisé un TypeError console (stack F-126 exacte : drawNextPiece:653) mais est parti lire les MAUVAISESES lignes (406-411, hallucination), puis a re-déclaré 5+ fois la même intention en enchaînant les read_file (~25 steps brûlés, jusqu'à 938k tokens input/step) — 40/40 atteint SANS final_answer → Pydantic KO → sauvetage DSPy sans audit visuel → gate F-109 (6/6 non audités) → 3 tentatives identiques → circuit-breaker idle → run perdu 'Coder crash'. AUCUNE garde ne voyait la boucle : read_file EXEMPT du LoopGuard F-36 (lecture 'légitime'), Stall Detector F-88 ne hashe que les écritures, nudge checklist F-114 exige un screenshot (2 seulement pris). IMPLÉMENTÉ : nudge _build_read_stall_nudge dans vision_callback — compteur de lectures PAR FICHIER (code_action CodeAgent + tool_calls TCA, path nommé ou positionnel, normcase) ; une modification du fichier par un outil d'édition RÉ-ARME son compteur (le pattern read→edit imposé par la garde Read-Before-Write reste légitime) ; au seuil (5 lectures sans modification) directive injectée dans memory_step.observations : search_replace chirurgical OU re-test page (navigate+console, pas le fichier) OU checklist+final_answer ; reset par nœud (reset_read_stall, nodes.py même bloc lifecycle que F-114/125/128/129), traverse volontairement les retries ; actif Coder ET Tester ; fail-open total. Tests : tests/test_vision_nudge.py TestReadStallNudge 8 nouveaux.",
+      "status": "completed",
+      "dependencies": [
+        "F-126",
+        "F-128",
+        "F-114"
+      ]
+    },
+    {
+      "id": "F-131",
+      "name": "Nudge wind-down budget (convergence forcée à l'approche du plafond de steps)",
+      "description": "Post-mortem run 2026-08-20_1028 (suite F-130) : les 3 tentatives Coder sont mortes à 'Reached max steps' avec pour DERNIER geste un read_file d'exploration (jamais de final_answer) — l'agent n'a aucune conscience du budget restant (smolagents ne l'annonce qu'au step fatal, trop tard pour agir). IMPLÉMENTÉ : nudge _build_wind_down_nudge dans vision_callback — quand remaining = max_steps - step_number <= 5 ET > 0 ET checklist visuelle incomplète (gate F-109), directive de convergence stricte injectée dans memory_step.observations À CHAQUE dernier step : (1) fix minimal SI bug localisé, sinon direct au test ; (2) navigate(reload)+list_console_messages ; (3) screenshot ; (4) visual_check ×N avec verdict=True|False HONNÊTE explicitement accepté (un échec prouvé vaut mieux qu'un run brûlé) ; (5) final_answer immédiat. Sans état (dérivé de step_number/agent.max_steps, réarmé naturellement par attempt car smolagents remet step_number à 0 par run()) ; inactif sans critères visuels (Tester couvert par le fallback F-61) ou checklist complète ; fail-open total. Tests : tests/test_vision_nudge.py TestWindDownNudge 8 nouveaux.",
+      "status": "completed",
+      "dependencies": [
+        "F-109",
+        "F-130",
+        "F-114"
+      ]
+    },
+    {
+      "id": "F-132",
+      "name": "Gardes édition anti-\n littéral + anti-no-op (search_replace/edit_file/multi_replace/write_file)",
+      "description": "Post-mortem runs 2026-08-20_1028 + 1203 (Tetris, 2 runs perdus 'Coder crash') : le 4B écrivait search_replace(..., new_string=r\"\"\"...;\n...\"\"\") — le préfixe r (recommandé par le prompt pour échapper accolades/guillemets JS) rend \n LITTÉRAL (2 caractères) → le fichier reçoit 'const a = 1;\nconst b' sur UNE ligne → SyntaxError JS PERMANENT (constaté ligne 143 du livrable 1203 via Chrome). Pire : sa « correction » était old_string == new_string — un NO-OP accepté avec « Successfully edited » → le modèle croit avoir corrigé, re-teste, re-voit l'erreur, boucle jusqu'au plafond de steps (3×40 steps par run, no-ops comptés 'Successfully edited' : 6 dans le run 1203). IMPLÉMENTÉ (tools.py) : (1) _noop_rejection — rejet déterministe de toute édition old==new exact (octet pour octet) avec message pédagogique ; (2) _literal_newline_rejection — rejet du \n littéral en SÉPARATEUR DE CODE dans le texte INSÉRÉ (new_string/content) pour fichiers code (.html/.js/.css/.ts/.py/.vue/.svelte...) : regex après [;{}()\\[\\]] ou avant mot-clé (const/let/var/function/return/if/.../def/print) ; old_string volontairement NON gardé (doit pouvoir cibler une séquence fautive déjà présente pour la RÉPARER — pattern de repair testé) ; fichiers non-code (.json/.md/.env) exclus (séquence légitime) ; \n dans string JS légitime ('alpha\nbeta' sans ponctuation avant) passe. Branché sur search_replace, edit_file, multi_replace (par bloc, erreur nominative), write_file (message adapté 'content'). Fail-open total. Tests : tests/test_search_replace.py +10 (no-op, rejet \n, chemin de repair, légitime string JS, non-code épargné, 4 outils).",
+      "status": "completed",
+      "dependencies": [
+        "F-126",
+        "F-128",
+        "F-130"
+      ]
+    },
+    {
+      "id": "F-133",
+      "name": "Auto-fixer déterministe pluggé au Tester (trouve → fix prouvé → re-test → continue)",
+      "description": "Proposition utilisateur session 2026-08-20 (post-mortems runs 1028/1203/1344) : quand le Tester trouve une erreur console à fix MÉCANIQUE PRUVÉ, il la fait corriger par un outil déterministe puis CONTINUE son test au lieu d'échouer l'itération entière (cycle Coder ~30 min GPU économisé). Module graph_orchestrator/auto_fixer.py (Python pur, 0 LLM, fail-closed) : classe 1 'Assignment to constant variable X' → toutes les déclarations const X = du fichier en let X = (l'erreur PROUVE la réassignation — le fix ghostY a coûté plusieurs steps au 4B au run 1500) ; classe 2 SyntaxError/Unexpected token par \n littéral en séparateur de code → repair par vrai saut de ligne (même regex que la garde F-132, mode réparation — le fix que le 4B a échoué à poser 3 fois). Activée SEULEMENT si le message évoque SyntaxError (anti faux positifs) ; fichiers code uniquement ; pattern reconnu mais déjà réparé → message explicite ; journalisation DuckDB de chaque application (traçabilité Judge/post-mortem) ; jamais d'exception. Outil @tool fix_known_error(path, error_message) dans tools.py + branché au WebTestRunner (testers/web_tester.py) + consigne prompt Tester (3 lignes, gate F-103 OK) : fix → navigate(reload) + console CONFIRM → CONTINUE le plan ; aucune classe connue → verdict FAIL normal, pas de patch manuel. Le diagnostic LLM (X is not defined, undefined property, logique) reste au Coder. Tests : tests/test_auto_fixer.py 10 nouveaux PASS.",
+      "status": "completed",
+      "dependencies": [
+        "F-126",
+        "F-132",
+        "F-128"
+      ]
+    },
+    {
+      "id": "F-134",
+      "name": "Diagnostics de syntaxe déterministes injectés dans l'output des outils d'édition (P2, port kilocode)",
+      "description": "Port roadmap 'code pur' P2 (kilocode apply_patch.ts:289-323, session focus code pur 2026-08-20). Apres chaque édition RÉUSSIE d'un fichier JS/HTML (search_replace/edit_file/multi_replace/write_file), une vérification déterministe immédiate (refactor du cœur de check_js_syntax F-72 en _collect_js_syntax_errors : extraction <script> + mapping lignes + node --check + fuites Python + const-mutation + boucles while) est INJECTÉE dans le retour de l'outil si la syntaxe est cassée : '[!] SYNTAXE INVALIDE détectée JUSTE APRÈS ton édition' + erreurs bornées (3, ~400 chars, 'Ligne ~N' mappée) + directive (état intermédiaire multi-blocs → bloc suivant ; sinon search_replace ciblé MAINTENANT). Motivation post-mortem runs 2026-08-20 : les erreurs de syntaxe du 4B survivaient jusqu'au Linter = 30 min plus tard, itérations entières perdues ; le modèle l'apprend maintenant À LA SECONDE, sans appel LLM supplémentaire. Syntaxe propre → AUCUNE injection (zéro bruit). Fichiers non-JS ignorés ; fail-open total ; rétrocompat tool check_js_syntax conservée (erreur fichier introuvable restaurée, tip 'use strict' préservé).",
+      "status": "completed",
+      "dependencies": [
+        "F-72",
+        "F-132",
+        "F-133"
+      ]
+    },
+    {
+      "id": "F-135",
+      "name": "Repair \n fence-aware (P4, port deer-flow — upgrade du repair F-133)",
+      "description": "Port roadmap 'code pur' P4 (deer-flow mindie_provider.py:154-164 _decode_escaped_newlines_outside_fences). Le repair \n littéral de l'auto-fixer F-133 s'appliquait à TOUT le fichier — il pouvait dégrader du contenu où \n est légitime (échantillons de code dans fences ```…``` / <pre>). Désormais le fichier est splitté sur les fences (regex DOTALL) et la transformation ne s'applique QUE hors fences, contenus de fences reconstitués à l'identique. 10 lignes, testé en isolation (réparé hors fence / intact dans fence / tout-dans-fence = no-op).",
+      "status": "completed",
+      "dependencies": [
+        "F-133"
+      ]
+    },
+    {
+      "id": "F-136",
+      "name": "Valideur HTML monofichier stdlib — Tier 0 du Static Tester (P1, port OpenKB)",
+      "description": "Port roadmap code pur P1 (OpenKB deck/validator.py:128 validate_deck, grammaire decks adaptée en invariants de livrables vanilla). Module html_validator.py (html.parser stdlib, <100ms/100Ko, fail-open) : self-contained (toute ref <link>/<script>/<img> externe http(s):// = ERREUR, <script src> local aussi signalé — livrable monofichier attendu) ; ids dupliqués (casse-insensible) ; getElementById('x') sans id='x' dans le DOM (lien JS→DOM cassé, classe de bug renommage unilatéral du 4B) ; taille bornée 2 Mo ; warnings querySelector('#x') absent + requestAnimationFrame sans canvas + balises possiblement non fermées (stack avec void-tags). Branché en TIER 0 de static_check_html (avant Tier 1a — shift-left maximal, réfutation déterministe AVANT node --check). 8 tests.",
+      "status": "completed",
+      "dependencies": [
+        "F-49",
+        "F-100"
+      ]
+    },
+    {
+      "id": "F-137",
+      "name": "Cascade search/replace — stratégie lignes vides internes (P3, port aider)",
+      "description": "Port roadmap code pur P3 (aider flexible_search_and_replace préprocesseur strip-blank-lines :611). La cascade existante (6 stratégies : exact/whitespace/ellipses/stripped/substring) couvrait déjà l'essentiel du port aider ; ajout de la stratégie 5-bis : filtrage des lignes VIDES des deux côtés avant matching stripped-lines — le LLM insère des lignes vides parasites au milieu du bloc SEARCH. Le fuzzy SequenceMatcher de aider reste volontairement NON porté (désactivé chez aider — return mort :184 — preuve de mauvais edits). 2 tests.",
+      "status": "completed",
+      "dependencies": [
+        "F-43"
+      ]
+    },
+    {
+      "id": "F-138",
+      "name": "Moniteur Jaccard des résultats d'outils d'action (P5, port deer-flow tool_progress)",
+      "description": "Port roadmap code pur P5 (deer-flow tool_progress_middleware.py:194, jaccard_threshold=0.8). Module tool_progress.py : word_set (mots >=3 chars lowercase) + jaccard + ToolProgressMonitor — un outil d'ACTION (write/search_replace/edit/multi/check_js_syntax via dominant_action_tool) dont le RÉSULTAT est near-duplicate (Jaccard >=0.8) 3 fois de suite = variantes du même appel sans progrès — le fingerprint F-36 ne voit pas ce cas (args variés). Écart assumé vs référence : deer-flow BLOQUE l'outil (machine à états ACTIVE→WARNED→BLOCKED) ; nous injectons un NUDGE '[RÉSULTATS EN BOUCLE]' dans les observations (pattern F-114/125/130 éprouvé sur le 4B, pas de veto) avec 3 issues (applique le fix / passe à la suite du plan / final_answer honnête). Un résultat différent reset la série. Branché dans le step_callback vision (observabilité print), reset par nœud (même lifecycle). 4 tests.",
+      "status": "completed",
+      "dependencies": [
+        "F-36",
+        "F-130"
+      ]
+    },
+    {
+      "id": "F-139",
+      "name": "Outil heal_selector — self-healing de sélecteurs DOM (P6, port Scrapling)",
+      "description": "Port roadmap code pur P6 (Scrapling parser.py:530 retrieve_similar + scoring :805). DevToolsHealSelectorTool dans devtools_dom_tools (7e helper, exposé Coder+Tester via build_devtools_helper_tools) : quand un sélecteur ne trouve plus l'élément (régénéré/renommé par un fix), re-localisation par similarité via evaluate_script : score = tag exact (+0.35) + similarité texte positionnelle (+0.4) + recouvrement d'attributs 'k=v|k2=v2' (+0.25), seuil d'acceptation 0.4 (miroir Scrapling), cap 2000 éléments, retour {found, score, id, text, selector}. Évite les FAIL de test sur simple renommage → itérations Coder entières économisées. 3 tests (construction fail-open, signature nullable, délégation args).",
+      "status": "completed",
+      "dependencies": [
+        "F-72"
+      ]
+    },
+    {
+      "id": "F-140",
+      "name": "Reaper de process orphelins — registre disque + kill escaladé (P7, port qm)",
+      "description": "Port roadmap code pur P7 (qm process-reaper.ts:14 createReaperKillHook + runs/reaper.ts:47 reapExpired), adapté SANS psutil (Windows stdlib). Module process_reaper.py : registre data/.process_registry.json {pid: {kind, cmd_hint, started}} alimenté par llama_server au spawn (LlamaServer.__init__) et purgé au stop (finally) — SURVIT aux crashes de l'orchestrateur (le point du port : les context managers python ne survivent pas à un kill). reap_orphans(keep_pids) au boot du coding workflow : pid enregistré vivant n'appartenant pas au run courant = orphelin → taskkill /F /T (arbre), entrée purgée ; morts purgés silencieusement ; idempotent ; fail-open total ; aliveness via tasklist /FI. Motivation : post-mortem run #13 (10 llama-server / 0 arrêt loggé), fuites VRAM des runs interrompus (kill utilisateur 5x ce jour). 3 tests.",
+      "status": "completed",
+      "dependencies": [
+        "F-104"
+      ]
+    },
+    {
+      "id": "F-141",
+      "name": "Agent Teams & Protocoles de Runtime (deepseek-harness)",
+      "description": "Architecture expérimentale pour orchestrer des sous-agents en équipe, couplée à un protocole de communication structuré (FD3) et un PTY PowerShell persistant pour maintenir l'état du shell entre les itérations. Source: update_report 2026-08-20 (deepseek-harness).",
+      "status": "pending",
+      "dependencies": []
     }
   ]
 }
