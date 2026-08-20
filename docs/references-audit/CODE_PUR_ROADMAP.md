@@ -95,3 +95,26 @@ Complète nos checkpoints git côté process (llama-server/Chrome orphelins,
 crush loop-detection ≈ F-36 · loopx material-hash ≈ F-88 · open-swe
 timeout-wrapup ≈ wind-down F-131 · OpenKB mutation/rollback ≈ checkpoints git +
 fs_tx · OpenSandbox retry transport ≈ F-104.
+
+## Vague 3 — Gestion de contexte/mémoire déterministe (minage 2026-08-20, agent 3)
+
+> Problème cible : le Coder atteint 900k-1,2M tokens d'INPUT par step (writes
+> monolithiques + relectures empilées). Déjà porté avant ce minage : F-101
+> (compaction 5 couches + archives + persisted-output + overflow guard).
+
+| # | Projet | file:line | Ce que ça fait | Complexité |
+|---|---|---|---|---|
+| C1 | learn-claude-code | `s08_context_compact/code.py:271` `unseen_tool_result_positions` + :343 `micro_compact` | Tool_results déjà « vus » (antérieurs à la dernière réponse) remplacés par `[Earlier tool result saved at <path>]`, sauf les 3 derniers — tue les relectures empilées | **Faible** |
+| C2 | learn-claude-code | idem :305 `tool_result_budget` (:230 constantes batch 200k/large 30k) | Budget de chars sur le BATCH du tour : trie par taille, persiste+preview les plus gros AVANT l'appel LLM — prévention du 900k input | **Faible** |
+| C3 | kilocode | `session/compaction.ts:269` `prune` (:40 PRUNE_PROTECT=40k / MINIMUM=20k / PROTECTED_TOOLS) | Fenêtre glissante par outil avec seuil de rentabilité + protection par nom d'outil, idempotent, frontières cache-validantes | Moyenne |
+| C4 | kilocode | idem :97 `preserveRecentBudget` + :207 `select` + `message-v2.ts:417` truncateToolOutput 2000c | Budget du récent = clamp(2k..8k, 25% ctx) ; coupe INTRA-step (un step n'est pas insécable) ; rendu modèle tranché à 2000 chars | Moyenne |
+| C5 | deepseek-harness | `compaction-tool-result-pruner/src/index.ts:83` | Pruning tête/milieu/queue par tool result + accounting « shadow-price » (ce que la compaction masque) | **Faible** |
+| C6 | loopx | `run_context_retention.py:229` + `run_compaction.py:75` | Rétention « dernier-par-type » (une seule observation par catégorie sémantique) + whitelists de champs par type de payload | **Faible** |
+| C7 | open-swe | `middleware/plan_mode.py:78` | Liste d'outils recalculée par appel modèle, mutateurs retirés en phase plan, reset par run — schemas d'outils inutiles hors payload | **Faible** |
+| C8 | deepseek-harness | tool-ralph `maxHandoffChars=16384` | Agent frais par round, workspace = état, handoff structuré borné (échec plutôt que troncature silencieuse) | Moyenne |
+| C9 | deepseek-harness | `session-reference/src/config.ts:3` | Handoff inter-sessions borné en OCTETS, projection user/assistant uniquement, stats omittedBytes | Moyenne |
+| C10 | learn-claude-code | `s07_skill_loading/code.py:108` | Catalogue lazy dans le system prompt (≈100 tokens/skill), corps à la demande — miroir de notre F-57 pour les TOOLS | **Faible** |
+
+Bonus : hermes `trajectory_compressor.py:526` boundary snapping (coupes pair-safe pour notre compaction existante) · browser-use `agent/views.py:157` `ActionLoopDetector` (fenêtre 20 hashes SHA256 + fingerprints de page, nudges 5/8/12) · kilocode `DiffFull.detail` (table d'état fichiers : statut+numstat in-context, diff complet lazy) · deepseek-harness token-meter (budgets ancrés sur la vraie usage provider).
+
+**ROI max immédiat pour notre 1M/step** : C1 + C2 (faibles, learn-claude-code, complémentaires : C1 nettoie l'existant, C2 prévient le futur), puis C6 (dernier-par-type sur les observations de fichiers).
