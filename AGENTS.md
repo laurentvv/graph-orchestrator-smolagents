@@ -86,9 +86,10 @@ Prompts de test classés par difficulté dans `references/Prompt-Vault/` (clone 
 Boucle de feedback hybride Humain + IA (pas d'agent local autonome) :
 1. **Exécution autonome** : c'est TOI (l'assistant) qui lances `uv run python scripts/run_analyzer.py` après un run E2E ou à la demande (chaque run est journalisé dans `logs/run-<timestamp>-<mode>.log`).
 2. **Analyse** : lire la sortie, repérer les problèmes récurrents (ex. parsing Pydantic, top-level `await`, crashes d'outils MCP).
-3. **Validation humaine** : JAMAIS modifier les règles à l'aveugle — résumé clair + solution proposée (ex. « durcir cette règle dans `nodes.py` »), attendre le feu vert.
-4. **Application** : intervenir dans le code source pour durcir prompts ou skills.
-*Exemples réels* : interdiction du top-level `await` Puppeteer + déclarations de fonction pour `evaluate_script` ; triples quotes `r"""…"""` + Monkey Testing pour stabiliser le 4B.
+3. **Code pur d'abord** (principe directeur, session Tetris 2026-08-20) : AVANT d'envisager prompt/modèle/config, se demander systématiquement « ce problème peut-il être résolu par du code PUR ? » — garde déterministe, sonde, auto-fixer. Le LLM ne fait pas tout, et le plus simple/robuste est du Python : ce jour-là, TOUTES les victoires réelles furent déterministes (F-126 stacks console, F-130/131 nudges, F-132 gardes édition, F-133 auto-fixer const→let et repair `\n` — le 4B a échoué toute la journée sur ces deux fixes que Python applique en 1 ligne), pendant que le levier « meilleur modèle » (Q6) a échoué sur l'infra. Heuristique de tri : fix MÉCANIQUE prouvé par l'erreur elle-même → code pur ; DIAGNOSTIC (quelle cause ? quelle ligne ?) → LLM ; jugement qualitatif → LLM.
+4. **Validation humaine** : JAMAIS modifier les règles à l'aveugle — résumé clair + solution proposée (ex. « durcir cette règle dans `nodes.py` »), attendre le feu vert.
+5. **Application** : intervenir dans le code source pour durcir prompts ou skills.
+*Exemples réels* : interdiction du top-level `await` Puppeteer + déclarations de fonction pour `evaluate_script` ; triples quotes `r"""…"""` + Monkey Testing pour stabiliser le 4B ; auto-fixer `fix_known_error` pluggé au Tester (F-133) — trouve l'erreur mécanique, l'outil l'applique, le test continue.
 
 ## 9. Tests Rapides par Nœud (Isolation LLM — F-89)
 Un run E2E complet dure 30-40 min GPU-local ; valider la modif d'UN seul nœud (prompt, skill, config, logique) se fait en **secondes/minutes** via le script d'isolation du dossier `debug/` : chacun appelle la VRAIE fonction de production (0 mock) avec des entrées figées. C'est la boucle de debug itérative recommandée, AVANT tout run E2E. Convention complète : `debug/isolation/README.md`.
