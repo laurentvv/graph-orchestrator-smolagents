@@ -148,15 +148,6 @@
     },
     {
       "id": "F-20",
-      "name": "Mutex sur les fichiers",
-      "description": "Système de verrou par fichier pour éviter l'édition concurrente et les corruptions croisées. IMPLÉMENTÉ : threading.Lock via _FILE_LOCKS dans tools.py (inspiré openfox).",
-      "status": "completed",
-      "dependencies": [
-        "F-19"
-      ]
-    },
-    {
-      "id": "F-20",
       "name": "Tester fonctionnel (assertions comportementales)",
       "description": "Le tester ne testait que l'absence de crash (console JS), pas le comportement attendu → bugs de logique validés à tort (run Bubble Sort: SUCCESS sur un bug visuel). IMPLÉMENTÉ : (1) skill web-tester réécrit avec noms puppeteer_* corrects (avant: noms Chrome-DevTools-MCP inexistants) + étape 'Functional Logic Testing' via puppeteer_evaluate (scripts d'assertion sur les comportements clés du cahier des charges). (2) Propagation du cahier des charges complet (original_content) au tester via workflows.py → sub_dict → prompt bloc 'CAHIER DES CHARGES COMPLET'. (3) Judge (CodeJudgeSignature) reçoint task_requirements pour juger couverture/comportement. (4) max_steps tester 20→24 (marge pour les assertions). Verdict success requiert 0 erreur console + TOUTES assertions passent. 11 tests PASS.",
       "status": "completed",
@@ -1208,7 +1199,6 @@
       "description": "Architecture expérimentale pour orchestrer des sous-agents en équipe, couplée à un protocole de communication structuré (FD3) et un PTY PowerShell persistant pour maintenir l'état du shell entre les itérations. Source: update_report 2026-08-20 (deepseek-harness).",
       "status": "pending",
       "dependencies": []
-<<<<<<< HEAD
     },
     {
       "id": "F-142",
@@ -1223,8 +1213,6 @@
       "description": "Suivi strict du budget de tokens et gestion de l'incertitude du LLM (uncertainty.py) lors des revues de code, permettant de dégrader gracieusement ou d'alerter plutôt que d'halluciner. Source: update_report 2026-08-20 (code-review-graph).",
       "status": "pending",
       "dependencies": []
-=======
->>>>>>> origin/main
     }
   ]
 }
