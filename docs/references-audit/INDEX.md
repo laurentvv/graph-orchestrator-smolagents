@@ -8,18 +8,18 @@
 
 | Métrique | Valeur |
 |---|---|
-| **Date de l'audit** | 2026-08-17 |
-| **Projets/dossiers audités** | 47 |
-| **Entrées de fichiers inventoriées** | 634 (inventaire machine : [`inventory.json`](./inventory.json)) |
-| **Fichiers pertinents scannés** (base) | ~11 770 (hors `.git/`, `node_modules/`, médias, fixtures) |
-| **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css`) + JSON/YAML de spec/contrat |
+| **Date de l'audit** | 2026-08-20 |
+| **Projets/dossiers audités** | 51 |
+| **Entrées de fichiers inventoriées** | 668 (inventaire machine : [`inventory.json`](./inventory.json)) |
+| **Fichiers pertinents scannés** (base) | ~13 300 (hors `.git/`, `node_modules/`, médias, fixtures) |
+| **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css/.rs/.java`) + JSON/YAML de spec/contrat |
 | **Exclusions** | `.git/` (~730 MB), `node_modules/`, médias (1 293 SVG, 16 mp4…), fixtures de tests, traductions de README (1 conservée/projet) |
 
 **Projet cible** : `graph-orchestrator-smolagents` — orchestrateur multi-agent (Routeur → Architect → Coders fan-out → Tester → Judge), persistance DuckDB (knowledge graph de claims/refutations), test polyvalent (web Puppeteer + Python pytest), Context7. Stack Python (DSPy "Brains" + smolagents "Hands").
 
 ---
 
-## 🧭 Navigation — les 47 fiches
+## 🧭 Navigation — les 51 fiches
 
 | # | Projet | Réutilisabilité | Fiche | Résumé en 1 ligne |
 |---|---|---|---|---|
@@ -70,19 +70,23 @@
 | 45 | **OpenSandbox** | 🟢 Haute | [45-OpenSandbox](./projects/45-OpenSandbox.md) | Plateforme de sandbox pour agents IA (ex-Alibaba) — transport retry Python pur (P8), spec lifecycle snapshot/restore (P8-bis), AGENTS.md hiérarchiques (P0), request-id ContextVar (P11) |
 | 46 | **deepseek-harness** | 🟢 Haute | [46-deepseek-harness](./projects/46-deepseek-harness.md) | Harness d'agent « everything is a plugin » (TS/Cordis, DeepSeek) — anti-loop + boucle ralph (P3), retry durable (P8), compaction checkpoint 8 sections (P9), event stream typé (P11) |
 | 47 | **kilocode** | 🟢 Haute | [47-kilocode](./projects/47-kilocode.md) | Agent de coding multi-surface (CLI/VS Code/JetBrains) — Agent Manager multi-worktrees (P12/P3), compaction payload recovery & chunks (P9), CodeMode confiné (P8-bis/P8), kilo-memory (P6/P11) |
+| 48 | **ponytail** | 🟢 Haute | [48-ponytail](./projects/48-ponytail.md) | Doctrine & framework anti-over-engineering (The lazy senior dev mode, MIT) — échelle YAGNI 7 rungs (-54% LOC, -22% tokens, 100% safe) + format 1 ligne/finding pour le Judge |
+| 49 | **obscura** | 🟢 Haute | [49-obscura](./projects/49-obscura.md) | Navigateur headless Rust ultra-léger (~30 Mo RAM, 85 ms load) — serveur MCP avec identifiants stables `interactive_refs`, limite de tokens `DEFAULT_TEXT_LIMIT = 4000`, serveur CDP |
+| 50 | **hunk** | 🟢 Haute | [50-hunk](./projects/50-hunk.md) | Visualiseur/réviseur de diffs TUI pour agents IA (OpenTUI) — annotations inline IA pour le Judge (`agentAnnotations.ts`), `workspaceWriteGuard` et daemon `session-broker` |
+| 51 | **bytechef** | 🟡 Moyenne | [51-bytechef](./projects/51-bytechef.md) | Plateforme d'intégration & orchestration d'agents IA (Java/Spring Boot) — batterie de 12 guardrails modulaires (secrets, PII, sanitization, topical alignment), MCP et coordinateur de tâches |
 
 ---
 
 ## 🗂️ Synthèse thématique — 3 familles
 
 ### 1. 🤖 Coding agents CLI (code lourd, peu portable)
-`aider` (Python, mature), `crush` (Go), `nanocode` (Python, 1 fichier), `opencode` (TS, gigantesque), `openfox` (TS, local-LLM-first). → Valeur : edit-formats robustes (aider), anti-loop (crush), patterns d'outils minimaux (nanocode), specs de protocole (opencode), persistance event-sourcing (openfox).
+`aider` (Python, mature), `crush` (Go), `nanocode` (Python, 1 fichier), `opencode` (TS, gigantesque), `openfox` (TS, local-LLM-first), `kilocode` (TS/SolidJS, multi-worktrees). → Valeur : edit-formats robustes (aider), anti-loop (crush), patterns d'outils minimaux (nanocode), specs de protocole (opencode), persistance event-sourcing (openfox), Agent Manager & worktrees isolés (kilocode).
 
 ### 2. 🔧 Frameworks d'orchestration d'agents (mixte code + docs)
-`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code), `loopx` (control plane — anti-loop déterministe + event sourcing + compaction, stdlib pure), `code-review-graph` (analyse d'impact + risk score composite), `pi` (agent stateful TS), `hermes-agent` (agent auto-amélioré Python Nous Research — compaction + SQLite FTS5 + skills + sécurité + middleware), `cloudflare-os` (architecture Gatekeepers, human in the loop asynchrone), `browser-use` (automatisation web Python), `deepseek-harness` (harness TS/Cordis « everything is a plugin » — anti-loop ralph + retry durable + compaction checkpoint + event log typé), `OpenSandbox` (plateforme de sandbox ex-Alibaba — transport retry Python + spec lifecycle snapshot/restore). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm, pi, hermes-agent, browser-use, deepseek-harness)**, **patterns harness Python natifs (learn-claude-code, hermes-agent)**, **anti-loop déterministe + event ledger (loopx)**, **anti-loop par agents frais + détecteur de répétitions (deepseek-harness)**, **branch summarization (pi)**, **persistance SQLite FTS5 + event-sourcing (hermes-agent)**, **sécurité multi-couches Python pur (hermes-agent)**, **Gatekeepers (cloudflare-os)**, **compaction du DOM et prompts system vision (browser-use)**, **retry transport résilient + lifecycle sandbox rejouable (OpenSandbox)**.
+`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code), `loopx` (control plane — anti-loop déterministe + event sourcing + compaction, stdlib pure), `code-review-graph` (analyse d'impact + risk score composite), `pi` (agent stateful TS), `hermes-agent` (agent auto-amélioré Python Nous Research — compaction + SQLite FTS5 + skills + sécurité + middleware), `cloudflare-os` (architecture Gatekeepers, human in the loop asynchrone), `browser-use` (automatisation web Python), `deepseek-harness` (harness TS/Cordis « everything is a plugin » — anti-loop ralph + retry durable + compaction checkpoint + event log typé), `OpenSandbox` (plateforme de sandbox ex-Alibaba — transport retry Python + spec lifecycle snapshot/restore), `obscura` (navigateur headless Rust ultra-léger ~30 Mo + serveur MCP + CDP), `hunk` (diff viewer TUI agent-first + inline AI annotations + session broker), `bytechef` (plateforme d'orchestration & intégration d'entreprise + 12 guardrails modulaires). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm, pi, hermes-agent, browser-use, deepseek-harness, kilocode)**, **patterns harness Python natifs (learn-claude-code, hermes-agent)**, **anti-loop déterministe + event ledger (loopx, deepseek-harness)**, **isolation d'itérations par worktrees (kilocode)**, **annotations inline d'agents IA pour le Judge (hunk)**, **serveur MCP web ultra-léger avec identifiants stables (obscura)**, **batterie de 12 guardrails modulaires d'entrée/sortie (bytechef)**.
 
 ### 3. 📚 Ressources & outils
-`Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante), `claude-code-unified-agents` (prompts de spécialisation), `system-prompts-and-models-of-ai-tools` (**bibliothèque de system prompts** d'outils commerciaux/open-source), `awesome-claude-skills` (**doctrine du format SKILL.md** + outillage), `davidondrej-skills` (denylist 27 regex + hooks anti-crash), `mattpocock-skills` (**doctrine d'authoring formelle** + engineering skills), `llm-council` (pattern council anonymisé).
+`Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante), `claude-code-unified-agents` (prompts de spécialisation), `system-prompts-and-models-of-ai-tools` (**bibliothèque de system prompts** d'outils commerciaux/open-source), `awesome-claude-skills` (**doctrine du format SKILL.md** + outillage), `davidondrej-skills` (denylist 27 regex + hooks anti-crash), `mattpocock-skills` (**doctrine d'authoring formelle** + engineering skills), `llm-council` (pattern council anonymisé), `ponytail` (**doctrine de concision anti-over-engineering** + échelle YAGNI 7 rungs + format 1 ligne/finding).
 
 ---
 
@@ -297,6 +301,44 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | `references/kilocode/packages/opencode/src/kilocode/snapshot/diff-full.ts` | `DiffFull.batch`, `MAX_DETAIL_SIZE` | **Calcul de diff git natif par tranches de 500 fichiers** (contournement limite Windows 8191 chars) avec repli doux (P1+P6) |
 | `references/kilocode/packages/opencode/src/kilocode/permission/config-paths.ts` | `ConfigProtection`, `CONFIG_ROOT_FILES` | **Garde-fou interdisant au LLM d'auto-modifier ses fichiers de règles** (`kilo.json`, `AGENTS.md`) sans validation humaine (P0-bis+P8) |
 
+### Concision & Anti-Over-Engineering (ponytail)
+> ✂️ **La doctrine universelle de sobriété pour agents de coding.** Benchmarks prouvés (-54% LOC, -22% tokens, 100% safe) et format 1 ligne/finding pour le Judge.
+
+| Fichier | Symbole(s) clé(s) | Apport |
+|---|---|---|
+| `references/ponytail/.agents/rules/ponytail.md` | `The Ponytail Ladder` (Rungs 1-7), `Bug fix = root cause` | **Échelle de décision YAGNI en 7 rungs** : directives de parcimonie à injecter dans les prompts Coder/Drafter |
+| `references/ponytail/.openclaw/skills/ponytail-review/SKILL.md` | `ponytail-review`, `delete:`, `stdlib:`, `native:`, `yagni:`, `shrink:`, `net: -<N> lines` | **Format de revue de diff concis** (1 ligne par finding) pour le Judge |
+| `references/ponytail/.openclaw/skills/ponytail-audit/SKILL.md` | `ponytail-audit`, `Hunt`, `Output` | **Audit statique de complexité** pour traquer le code mort et les wrappers inutiles |
+
+### Navigateur Headless Léger & Serveur MCP (obscura)
+> 🌐 **L'alternative légère à Chromium (~30 Mo RAM, 85 ms load) avec serveur MCP stable.**
+
+| Fichier | Symbole(s) clé(s) | Apport |
+|---|---|---|
+| `references/obscura/crates/obscura-mcp/src/lib.rs` | `BrowserState`, `DEFAULT_TEXT_LIMIT = 4000`, `interactive_refs` (`e3`, `e4`), `page_mut` | **Serveur MCP pour agent** : identifiants stables par snapshot au lieu de sélecteurs CSS fragiles + plafond strict 4000 chars |
+| `references/obscura/crates/obscura-browser/src/lifecycle.rs` | `PageLifecycle`, `NavigationState`, `waitFor` | **Machine à états de cycle de vie de page** (DOM ready, network idle) pour éliminer les flaky tests |
+| `references/obscura/crates/obscura-render/src/paint.rs` | `Renderer`, `paint_tree`, `capture_frame` | **Rendu graphique 2D pur (tiny-skia)** sans GPU lourd pour capture de screenshots |
+
+### TUI Diff Review & Annotations IA (hunk)
+> 📝 **Standard d'annotations inline pour agents IA et protection du workspace.**
+
+| Fichier | Symbole(s) clé(s) | Apport |
+|---|---|---|
+| `references/hunk/src/ui/lib/agentAnnotations.ts` | `AgentAnnotation`, `AgentNote`, `AgentAnnotationSeverity` | **Modèle de données d'annotations inline IA** (ligne/hunk, sévérité, ancrage) pour le Judge |
+| `references/hunk/src/ui/lib/workspaceWriteGuard.ts` | `WorkspaceWriteGuard`, `assertWritable`, `acquireWriteLock` | **Garde-fou d'écriture** : verrouillage du workspace pendant les passes de review et de test |
+| `references/hunk/src/ui/highlights/reconcile.ts` | `reconcileHighlights`, `mapLinePositions` | **Réconciliation de positions de lignes** lors de modifications de patchs |
+| `references/hunk/packages/session-broker/src/broker.ts` | `SessionBroker`, `registerSession`, `routeMessage` | **Démon broker de sessions** avec baux temporisés pour revue concurrente |
+
+### Guardrails Modulaires & Sécurité Entrée/Sortie (bytechef)
+> 🛡️ **Batterie complète de 12 guardrails pour sécuriser les flux agents.**
+
+| Fichier | Symbole(s) clé(s) | Apport |
+|---|---|---|
+| `references/bytechef/server/libs/core/guardrails/guardrails-impl/src/main/java/com/bytechef/guardrails/util/SecretKeyDetectorUtils.java` | `SecretKeyDetectorUtils`, `detectSecrets`, `isLikelySecret` | **Détection haute précision de clés d'API et tokens** dans les invites et sorties LLM |
+| `references/bytechef/server/libs/core/guardrails/guardrails-impl/src/main/java/com/bytechef/guardrails/util/PiiDetectorUtils.java` | `PiiDetectorUtils`, `detectPii`, `maskPii` | **Détection et masquage PII** (emails, téléphones, identifiants) |
+| `references/bytechef/server/libs/core/guardrails/guardrails-impl/src/main/java/com/bytechef/guardrails/advisor/CheckForViolationsAdvisor.java` | `CheckForViolationsAdvisor`, `validateInputOutput`, `collectViolations` | **Advisor d'interception d'invites/sorties** compilant l'ensemble des violations de sécurité |
+| `references/bytechef/server/ee/libs/platform/platform-mcp/platform-mcp-impl/src/main/java/com/bytechef/platform/mcp/McpServerFacade.java` | `McpServerFacade`, `listTools`, `executeTool` | **Façade MCP bidirectionnelle** pour consommation et exposition d'outils |
+
 ---
 
 ## 📊 Matrice réutilisabilité croisée
@@ -334,9 +376,13 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | **OpenSandbox** | **14** | **7** | **1** | 🟢 **Haute** |
 | **deepseek-harness** | **13** | **9** | **2** | 🟢 **Haute** |
 | **kilocode** | **14** | **5** | **0** | 🟢 **Haute** |
-| **Total** | **265** | **209** | **87** | — |
+| **ponytail** | **4** | **4** | **0** | 🟢 **Haute** |
+| **obscura** | **6** | **3** | **0** | 🟢 **Haute** |
+| **hunk** | **9** | **0** | **0** | 🟢 **Haute** |
+| **bytechef** | **6** | **2** | **0** | 🟡 **Moyenne** |
+| **Total** | **290** | **218** | **87** | — |
 
-> ℹ️ Le total de la matrice (561 = 265+209+87) couvre les fiches 01-28 et 45-47. Les fiches 29-44 (ajout en masse du 2026-08-12) n'ont pas été intégrées à la matrice — leurs comptes par projet sont consultables programmatiquement dans [`inventory.json`](./inventory.json), qui fait foi : **634 entrées machine au total (313 H / 232 M / 87 L / 2 non classées)**.
+> ℹ️ Le total de la matrice (595 = 290+218+87) couvre les fiches 01-28 et 45-51. Les fiches 29-44 (ajout en masse du 2026-08-12) n'ont pas été intégrées à la matrice — leurs comptes par projet sont consultables programmatiquement dans [`inventory.json`](./inventory.json), qui fait foi : **668 entrées machine au total (338 H / 241 M / 87 L / 2 non classées)**.
 
 **Constats** :
 - **axon** (23 Haute) et **aider** (17 Haute) restent les mines d'or côté Python.
@@ -359,6 +405,10 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 - **OpenSandbox** (14 Haute, 🟢 **Haute** — 2026-08-14) : le **complément d'infrastructure d'exécution** qui manquait au dossier. Ce n'est pas un orchestrateur (pas de Judge/TDD) mais la plateforme qui **exécute** le code généré de façon isolée/timeoutée/snapshotable/rejouable — exactement P8-bis. La pépite : le module `transport/` du SDK Python est **LE middleware P8 en Python pur copiable** (classification pré/post-send, jitter décorrélé, deadline mur-mur, `Retry-After` plafonné — design documenté OSEP-0017). La spec OpenAPI `sandbox-lifecycle.yml` fournit le **contrat** du rejouable (202 Biss+polling, TTL renew, snapshot/restore, endpoints signés) quand qm (14) fournissait l'idempotence applicative. Bonus P0 : AGENTS.md hiérarchiques (« le plus proche gagne » + Guardrails Always/Ask-first/Never). Runtime Go/K8s ignoré — on prend le contrat et le client.
 - **deepseek-harness** (13 Haute, 🟢 **Haute** — 2026-08-14) : **la meilleure référence de design sur P3 et P11**. Anti-loop en deux couches complémentaires : `repeat-tool-reminder` (détection douce de répétitions consécutives, escalade sans veto — le complément humain à notre LoopGuard F-36 et au stall detector loopx 19) et la **boucle ralph à agents frais** (contexte remis à zéro chaque round + handoff borné — la contre-mesure radicale). P11 : l'event log de session est **le plus abouti du dossier** (types extensibles par declaration merging, provenance `sourceEventSeqs`, flag `ignorable` = fail-closed sur type inconnu, convention « Model-visible ⟺ logged »). P9 : le prompt de checkpoint **8 sections** avec réutilisation du KV cache. P8 : retry durable **dont le compteur survit à un crash** (persisté dans le log) + spec des 5 waterfalls d'exécution d'outil. TypeScript/Cordis : on porte l'intention, pas la syntaxe ; P6 explicitement absent (self-declaration documentée comme limite — argument de plus pour notre Judge indépendant).
 - **kilocode** (14 Haute, 🟢 **Haute** — 2026-08-17) : **mine d'or architecturale pour l'isolation multi-worktrees, la compaction résiliente aux médias et le confinement d'outils**. (1) L'**Agent Manager** (`WorktreeManager`) fournit le blueprint complet pour exécuter des sessions de génération/test parallèles dans des git worktrees indépendants (`.kilo/worktrees/`) sans collision (P12/P3). (2) `KiloCompactionPayloadRecovery` résout les context overflows de 4MB dus à l'accumulation de screenshots/médias par stripping des tool outputs achevés et substitution en placeholders texte (P9). (3) `KiloCompactionChunks` apporte la compaction hiérarchique récursive par chunks (arbre profondeur 3, ratio 0.6) avec requêtes synthétiques de rejeu (P9). (4) `codemode` fournit un interpréteur JS confiné par AST walk avec quotas stricts (timeout, max tool calls) et diagnostics normalisés (P8-bis/P8). (5) `ConfigProtection` interdit au LLM de modifier ses propres fichiers de règles (`kilo.json`, `AGENTS.md`) sans validation humaine explicite (P0-bis/P8).
+- **ponytail** (4 Haute, 🟢 **Haute** — 2026-08-20) : **doctrine de sobriété et de concision anti-over-engineering**. Apporte l'échelle YAGNI en 7 rungs (YAGNI -> codebase -> stdlib -> platform -> installed deps -> one-line -> minimal code) prouvée scientifiquement par benchmarks agentiques (-54% LOC, -22% tokens, 100% safe), et le format 1 ligne/finding (`delete:`, `stdlib:`, `native:`, `yagni:`, `shrink:`) pour le Judge.
+- **obscura** (6 Haute, 🟢 **Haute** — 2026-08-20) : **moteur de navigateur headless ultra-léger (~30 Mo RAM vs 200+ Mo Chromium)** écrit en Rust avec V8. Apporte la table d'identifiants stables `interactive_refs` (`e3`, `e4`) évitant les sélecteurs CSS fragiles, le plafond strict `DEFAULT_TEXT_LIMIT = 4000` anti-saturation de contexte LLM, et le rendu 2D pur (tiny-skia) sans GPU.
+- **hunk** (9 Haute, 🟢 **Haute** — 2026-08-20) : **visualiseur et réviseur de diffs en terminal (TUI) conçu pour agents IA**. Apporte le standard de données d'annotations inline pour le Judge (`agentAnnotations.ts`), le verrouillage strict du workspace en lecture (`workspaceWriteGuard.ts`), et le daemon `session-broker` pour le multiplexage de flux de revue.
+- **bytechef** (6 Haute, 🟡 **Moyenne** — 2026-08-20) : **plateforme d'orchestration d'entreprise et 12 guardrails modulaires**. Apporte des détecteurs de pointe pour les clés d'API / secrets (`SecretKeyDetectorUtils`), les données PII (`PiiDetectorUtils`), l'alignement thématique (`TopicalAlignment`) et l'assainissement de texte (`SanitizeTextAdvisor`).
 
 
 ---
@@ -454,6 +504,17 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | Une **mémoire persistante structurée avec journal des décisions** | Fiche **47-kilocode** → `packages/kilo-memory/src/memory.ts` (`Memory`, `MemoryDecisions`) |
 | **Protéger les fichiers de configuration** contre l'auto-altération LLM | Fiche **47-kilocode** → `packages/opencode/src/kilocode/permission/config-paths.ts` (`ConfigProtection`) |
 | Un **calcul de diff git natif par tranches de 500 fichiers** (guard Windows) | Fiche **47-kilocode** → `packages/opencode/src/kilocode/snapshot/diff-full.ts` (`DiffFull.batch`) |
+| Une **doctrine anti-over-engineering (échelle YAGNI 7 rungs)** | Fiche **48-ponytail** → `.agents/rules/ponytail.md` (`The Ponytail Ladder`, `Bug fix = root cause`) |
+| Un **format de revue de diff concis 1 ligne/finding** | Fiche **48-ponytail** → `.openclaw/skills/ponytail-review/SKILL.md` (`delete:`, `stdlib:`, `native:`, `yagni:`) |
+| Un **audit de complexité et traque de code mort** | Fiche **48-ponytail** → `.openclaw/skills/ponytail-audit/SKILL.md` (`ponytail-audit`, `Hunt`) |
+| Un **serveur MCP de navigation web ultra-léger avec identifiants stables** | Fiche **49-obscura** → `crates/obscura-mcp/src/lib.rs` (`interactive_refs`, `DEFAULT_TEXT_LIMIT = 4000`) |
+| Un **moteur de rendu 2D pur (tiny-skia) sans GPU** pour captures web | Fiche **49-obscura** → `crates/obscura-render/src/paint.rs` (`paint_tree`, `capture_frame`) |
+| Un **modèle d'annotations inline IA pour le Judge** | Fiche **50-hunk** → `src/ui/lib/agentAnnotations.ts` (`AgentAnnotation`, `AgentNote`, `AgentAnnotationSeverity`) |
+| Un **garde-fou de verrouillage en écriture du workspace** | Fiche **50-hunk** → `src/ui/lib/workspaceWriteGuard.ts` (`WorkspaceWriteGuard`, `assertWritable`) |
+| Un **démon broker de sessions avec baux de revue** | Fiche **50-hunk** → `packages/session-broker/src/broker.ts` (`SessionBroker`, `registerSession`) |
+| Des **détecteurs de secrets/API keys et masquage PII** | Fiche **51-bytechef** → `SecretKeyDetectorUtils.java`, `PiiDetectorUtils.java` |
+| Un **advisor de vérification d'invites/sorties multi-violations** | Fiche **51-bytechef** → `CheckForViolationsAdvisor.java` (`validateInputOutput`, `collectViolations`) |
+| Une **façade MCP bidirectionnelle** (tools discovery + execution) | Fiche **51-bytechef** → `McpServerFacade.java` (`listTools`, `executeTool`) |
 
 ---
 
@@ -463,8 +524,8 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 docs/references-audit/
 ├── README.md              ← Mode d'emploi (start ici)
 ├── INDEX.md               ← CE DOCUMENT (navigation + synthèse + Hall of Fame)
-├── inventory.json         ← Inventaire machine-lisible (634 entrées, filtrable)
-└── projects/              ← 47 fiches détaillées (1 par projet)
+├── inventory.json         ← Inventaire machine-lisible (668 entrées, filtrable)
+└── projects/              ← 51 fiches détaillées (1 par projet)
     ├── 01-prompt-vault.md
     ├── 02-aider.md
     ├── ...
@@ -502,7 +563,11 @@ docs/references-audit/
     ├── 44-sentrux.md
     ├── 45-OpenSandbox.md
     ├── 46-deepseek-harness.md
-    └── 47-kilocode.md
+    ├── 47-kilocode.md
+    ├── 48-ponytail.md
+    ├── 49-obscura.md
+    ├── 50-hunk.md
+    └── 51-bytechef.md
 ```
 
 **Pour recherche programmatique** : `inventory.json` est consommable directement :

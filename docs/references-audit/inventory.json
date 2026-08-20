@@ -1,5 +1,5 @@
 {
-  "audit_date": "2026-08-17",
+  "audit_date": "2026-08-20",
   "scope": "filtered-useful (docs + code + specs; excludes .git/node_modules/media/fixtures/translated-READMEs)",
   "projects": [
     {
@@ -6945,7 +6945,7 @@
       "path": "references/kilocode",
       "category": "agent-platform",
       "reuse_rating": "high",
-      "summary": "(ajouté par update_inventory.py)",
+      "summary": "Plateforme d'agent de coding multi-surface (fork OpenCode + Kilo additions, Apache-2.0/MIT). Mine d'or pour l'architecture et les algorithmes de résilience : (1) Agent Manager & WorktreeManager pour l'isolation de sessions parallèles dans des git worktrees indépendants (.kilo/worktrees/) et multi-versioning (P12/P3), (2) compaction payload recovery pour sauver les context overflows de 4MB dus aux screenshots et compaction hiérarchique par chunks (P9), (3) CodeMode interpréteur JS confiné par AST walk avec quotas stricts et diagnostics typés (P8-bis/P8), (4) kilo-memory avec capture structurée et decisions tracking (P6/P11), (5) diff unifié git-native optimisé Windows et slow-repo guard (P1/P6), (6) protections strictes de configuration ConfigProtection et trust validation des skills (P0-bis/P10).",
       "files": [
         {
           "path": "references/kilocode/packages/kilo-vscode/src/agent-manager/WorktreeManager.ts",
@@ -7195,7 +7195,445 @@
           "description": "Doctrine formelle de minimisation des diffs pour la maintenance d'un fork en aval avec balisage strict et vérification statique."
         }
       ]
+    },
+    {
+      "id": "ponytail",
+      "name": "ponytail",
+      "path": "references/ponytail",
+      "category": "prompting-rules-skills",
+      "reuse_rating": "high",
+      "summary": "Doctrine et framework anti-over-engineering pour agents de coding ('The lazy senior dev mode', MIT). Échelle YAGNI universelle en 7 échelons (YAGNI -> codebase -> stdlib -> platform -> installed deps -> one-line -> minimal code).",
+      "files": [
+        {
+          "path": "references/ponytail/AGENTS.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [
+            "The Ponytail Ladder",
+            "Lazy senior dev",
+            "Rungs 1-7"
+          ],
+          "description": "Charte opérationnelle d'ingénierie : formalisation des 7 échelons de décision (YAGNI -> codebase -> stdlib -> platform -> installed deps -> one-line -> minimal code) et discipline de sobriété pour agents de coding."
+        },
+        {
+          "path": "references/ponytail/.agents/rules/ponytail.md",
+          "type": "prompt",
+          "reuse": "high",
+          "key_symbols": [
+            "The Ponytail Ladder",
+            "Bug fix = root cause",
+            "Rules",
+            "ponytail: comment"
+          ],
+          "description": "Règle universelle de prompting : directives anti-over-engineering, interdiction des abstractions spéculatives et privilège du diff le plus court possible après compréhension de la cause racine."
+        },
+        {
+          "path": "references/ponytail/.openclaw/skills/ponytail-review/SKILL.md",
+          "type": "skill",
+          "reuse": "high",
+          "key_symbols": [
+            "ponytail-review",
+            "delete:",
+            "stdlib:",
+            "native:",
+            "yagni:",
+            "shrink:",
+            "net: -<N> lines"
+          ],
+          "description": "Skill d'analyse de diff pour détecter la sur-ingénierie : format strict en 1 ligne par constat et bilan net de réduction de lignes. Directement utilisable par le nœud Judge."
+        },
+        {
+          "path": "references/ponytail/.openclaw/skills/ponytail-audit/SKILL.md",
+          "type": "skill",
+          "reuse": "high",
+          "key_symbols": [
+            "ponytail-audit",
+            "Hunt",
+            "Output",
+            "net: -<N> lines, -<M> deps"
+          ],
+          "description": "Skill d'audit global de dépôt pour traquer le code mort, les abstractions à implémentation unique et les réinventions de bibliothèques standard."
+        },
+        {
+          "path": "references/ponytail/.openclaw/skills/ponytail-debt/SKILL.md",
+          "type": "skill",
+          "reuse": "medium",
+          "key_symbols": [
+            "ponytail-debt",
+            "Debt categories",
+            "Remediation"
+          ],
+          "description": "Skill de cartographie de dette technique de complexité (sur-empaquetage, sur-typage, wrappers inutiles)."
+        },
+        {
+          "path": "references/ponytail/.openclaw/skills/ponytail-gain/SKILL.md",
+          "type": "skill",
+          "reuse": "medium",
+          "key_symbols": [
+            "ponytail-gain",
+            "LOC diff",
+            "Token reduction"
+          ],
+          "description": "Skill d'estimation et de mesure des gains de concision et de réduction de complexité."
+        },
+        {
+          "path": "references/ponytail/.opencode/plugins/ponytail-frontmatter.cjs",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "transformFrontmatter",
+            "stripMetadata"
+          ],
+          "description": "Plugin de normalisation et d'injection de frontmatter pour l'interopérabilité des règles entre formats d'agents."
+        },
+        {
+          "path": "references/ponytail/.opencode/plugins/ponytail.mjs",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "registerPlugin",
+            "onPreToolCall"
+          ],
+          "description": "Intercepteur d'appels d'outils appliquant les garde-fous de concision avant modification de fichiers."
+        }
+      ]
+    },
+    {
+      "id": "obscura",
+      "name": "obscura",
+      "path": "references/obscura",
+      "category": "browser-automation",
+      "reuse_rating": "high",
+      "summary": "Moteur de navigateur headless ultra-léger et furtif écrit en Rust (Apache-2.0, ~30 Mo RAM vs 200+ Mo Chromium, load time 85 ms). Serveur MCP avec identifiants d'éléments stables interactive_refs et plafond strict de tokens DEFAULT_TEXT_LIMIT = 4000.",
+      "files": [
+        {
+          "path": "references/obscura/AGENTS.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [
+            "Obscura Architecture",
+            "BrowserContext",
+            "Safety invariants"
+          ],
+          "description": "Charte d'architecture et invariants du moteur headless Obscura pour agents autonomes."
+        },
+        {
+          "path": "references/obscura/crates/obscura-mcp/src/lib.rs",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "BrowserState",
+            "DEFAULT_TEXT_LIMIT",
+            "interactive_refs",
+            "RpcMessage",
+            "RpcResponse",
+            "RpcError",
+            "page_mut"
+          ],
+          "description": "Serveur MCP complet pour navigateur : table d'identifiants d'éléments stables (interactive_refs type e3, e4), plafond strict de tokens (4000 chars) et gestion multi-onglets ordonnée en BTreeMap."
+        },
+        {
+          "path": "references/obscura/crates/obscura-mcp/src/http.rs",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "HttpServer",
+            "handle_sse",
+            "handle_post"
+          ],
+          "description": "Transport MCP combinant flux SSE et requêtes HTTP POST pour agents distants."
+        },
+        {
+          "path": "references/obscura/crates/obscura-browser/src/context.rs",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "BrowserContext",
+            "stealth",
+            "proxy",
+            "with_options"
+          ],
+          "description": "Gestion du contexte de navigation avec options d'isolation, profils, proxying et furtivité."
+        },
+        {
+          "path": "references/obscura/crates/obscura-browser/src/page.rs",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "Page",
+            "navigate",
+            "evaluate",
+            "screenshot",
+            "pdf",
+            "content"
+          ],
+          "description": "Contrôleur de cycle de vie de page web avec exécution JS, injection de scripts et capture d'écran sans Chromium."
+        },
+        {
+          "path": "references/obscura/crates/obscura-browser/src/lifecycle.rs",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "PageLifecycle",
+            "NavigationState",
+            "waitFor"
+          ],
+          "description": "Machine à états de cycle de vie de page (chargement, DOM ready, network idle) avec timeouts configurables."
+        },
+        {
+          "path": "references/obscura/crates/obscura-cdp/src/server.rs",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "CdpServer",
+            "start",
+            "handle_connection"
+          ],
+          "description": "Serveur Chrome DevTools Protocol autonome multiplexant les connexions CDP WebSocket pour compatibilité Puppeteer/Playwright."
+        },
+        {
+          "path": "references/obscura/crates/obscura-render/src/paint.rs",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "Renderer",
+            "paint_tree",
+            "capture_frame"
+          ],
+          "description": "Moteur de rendu graphique 2D pur (tiny-skia) permettant le rendu de page et la capture sans GPU lourd."
+        },
+        {
+          "path": "references/obscura/crates/obscura-dom/src/lib.rs",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "DomTree",
+            "NodeId",
+            "querySelector",
+            "querySelectorAll"
+          ],
+          "description": "Arbre DOM léger en mémoire avec moteur de requêtes de sélecteurs CSS optimisé."
+        }
+      ]
+    },
+    {
+      "id": "hunk",
+      "name": "hunk",
+      "path": "references/hunk",
+      "category": "diff-viewer-tui",
+      "reuse_rating": "high",
+      "summary": "Visualiseur et réviseur de diffs en terminal (TUI) conçu pour les changesets d'agents IA (OpenTUI + Pierre diffs, MIT). Modèle d'annotations IA inline, workspaceWriteGuard et session-broker daemon.",
+      "files": [
+        {
+          "path": "references/hunk/AGENTS.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [
+            "OpenTUI standards",
+            "Reactive state",
+            "Review stream"
+          ],
+          "description": "Charte opérationnelle d'ingénierie du dépôt Hunk : standards TUI, invariants de typage, gestion des états réactifs et architecture de flux de revue."
+        },
+        {
+          "path": "references/hunk/src/ui/lib/agentAnnotations.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "AgentAnnotation",
+            "AgentNote",
+            "AgentAnnotationSeverity",
+            "createAgentAnnotation",
+            "filterAnnotationsByFile"
+          ],
+          "description": "Modèle de données pour les annotations de code émises par des agents IA (positions de lignes, sévérité, contenu, ancrage de hunk)."
+        },
+        {
+          "path": "references/hunk/src/ui/lib/agentNoteGeometry.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "computeAgentNoteGeometry",
+            "calculatePopoverBounds",
+            "fitInViewport"
+          ],
+          "description": "Calcul géométrique du positionnement des notes d'agents à côté des lignes modifiées sans débordement de viewport."
+        },
+        {
+          "path": "references/hunk/src/ui/lib/workspaceWriteGuard.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "WorkspaceWriteGuard",
+            "assertWritable",
+            "acquireWriteLock",
+            "releaseWriteLock",
+            "ReadOnlyViolationError"
+          ],
+          "description": "Garde-fou d'intégrité interdisant toute écriture sur le système de fichiers lors des opérations de consultation ou de review."
+        },
+        {
+          "path": "references/hunk/src/ui/highlights/reconcile.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "reconcileHighlights",
+            "mapLinePositions",
+            "shiftHighlights"
+          ],
+          "description": "Algorithme de réconciliation des positions de lignes et des highlights après application ou modification de hunks."
+        },
+        {
+          "path": "references/hunk/src/ui/diff/useHighlightedDiff.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "useHighlightedDiff",
+            "parseDiffHunks",
+            "computeDiffMetrics"
+          ],
+          "description": "Moteur d'analyse et de décomposition de diffs unifiés en structures hiérarchiques exploitables."
+        },
+        {
+          "path": "references/hunk/packages/session-broker/src/broker.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "SessionBroker",
+            "registerSession",
+            "routeMessage",
+            "closeSession"
+          ],
+          "description": "Démon broker gérant le routage de messages et la coordination entre sessions de revue concurrentes."
+        },
+        {
+          "path": "references/hunk/packages/session-broker-core/src/brokerState.ts",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "BrokerState",
+            "SessionEntry",
+            "LeaseStatus",
+            "pruneExpiredLeases"
+          ],
+          "description": "Gestionnaire d'état du broker avec baux temporisés (lease) et purge automatique des sessions expirées."
+        },
+        {
+          "path": "references/hunk/skills/hunk-review/SKILL.md",
+          "type": "skill",
+          "reuse": "high",
+          "key_symbols": [
+            "hunk-review",
+            "ReviewStrategy",
+            "InlineNoteFormat"
+          ],
+          "description": "Skill d'agent spécialisée pour la revue de code et la génération d'annotations sur des changements git."
+        }
+      ]
+    },
+    {
+      "id": "bytechef",
+      "name": "bytechef",
+      "path": "references/bytechef",
+      "category": "agent-orchestration-platform",
+      "reuse_rating": "medium",
+      "summary": "Plateforme d'intégration et d'automatisation open-source unifiant agents IA, workflows et 180+ connecteurs. 12 guardrails modulaires (secrets, PII, sanitization, topical alignment), coordinateur d'état de tâches et MCP.",
+      "files": [
+        {
+          "path": "references/bytechef/AGENTS.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [
+            "Architecture guidelines",
+            "Component lifecycle",
+            "Guardrails contracts"
+          ],
+          "description": "Guide d'architecture globale et invariants de contribution pour ByteChef."
+        },
+        {
+          "path": "references/bytechef/server/libs/modules/components/ai/agent/guardrails/src/main/java/com/bytechef/component/ai/agent/guardrails/util/SecretKeyDetectorUtils.java",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "SecretKeyDetectorUtils",
+            "detectSecrets",
+            "isLikelySecret",
+            "sanitizeSecretTokens"
+          ],
+          "description": "Détecteur haute précision de clés d'API, tokens d'authentification et secrets dans les invites et sorties LLM."
+        },
+        {
+          "path": "references/bytechef/server/libs/modules/components/ai/agent/guardrails/src/main/java/com/bytechef/component/ai/agent/guardrails/util/PiiDetectorUtils.java",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "PiiDetectorUtils",
+            "detectPii",
+            "maskPii",
+            "PiiEntity"
+          ],
+          "description": "Détecteur et masqueur d'informations personnelles identifiables (adresses emails, téléphones, sécurité sociale)."
+        },
+        {
+          "path": "references/bytechef/server/libs/modules/components/ai/agent/guardrails/src/main/java/com/bytechef/component/ai/agent/guardrails/advisor/CheckForViolationsAdvisor.java",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "CheckForViolationsAdvisor",
+            "validateInputOutput",
+            "collectViolations",
+            "onViolation"
+          ],
+          "description": "Advisor d'interception d'invites et de complétions vérifiant l'ensemble des règles de sécurité avant transmission."
+        },
+        {
+          "path": "references/bytechef/server/libs/modules/components/ai/agent/guardrails/src/main/java/com/bytechef/component/ai/agent/guardrails/advisor/SanitizeTextAdvisor.java",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "SanitizeTextAdvisor",
+            "sanitize",
+            "stripDisallowedPatterns"
+          ],
+          "description": "Assainisseur de texte éliminant les motifs d'injection, balises dangereuses et sorties malformées."
+        },
+        {
+          "path": "references/bytechef/server/libs/platform/platform-coordinator/src/main/java/com/bytechef/platform/coordinator/config/PlatformCoordinatorConfiguration.java",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "PlatformCoordinatorConfiguration",
+            "taskExecutionCoordinator",
+            "workflowStateDispatcher"
+          ],
+          "description": "Moteur de coordination d'état de tâches et dispatching d'événements de workflow."
+        },
+        {
+          "path": "references/bytechef/server/libs/core/tenant/tenant-api/src/main/java/com/bytechef/tenant/TenantContext.java",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "TenantContext",
+            "getTenantId",
+            "withTenant",
+            "clear"
+          ],
+          "description": "Gestionnaire de contexte d'isolation multi-tenant via stockage contextuel thread-local / asynchrone."
+        },
+        {
+          "path": "references/bytechef/server/libs/platform/platform-mcp/platform-mcp-api/src/main/java/com/bytechef/platform/mcp/facade/McpServerFacade.java",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "McpServerFacade",
+            "listTools",
+            "executeTool",
+            "registerServer"
+          ],
+          "description": "Façade de gestion et de proxying pour les serveurs et outils du Model Context Protocol (MCP)."
+        }
+      ]
     }
   ],
-  "projects_audited": 47
+  "projects_audited": 51
 }
