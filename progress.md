@@ -2366,3 +2366,49 @@ Coder est appliquée correctement par Qwen3.5-9B.
       factory devtools 5→6 helpers.
 - [x] CODER ULTRA (footnote) : modèle trop lourd à 7,7 t/s — 3 tentatives mortes
       (cap 1200 s, stall step 26, tuée). Décision modèle à revoir à froid.
+
+## Jalons de l'Itération (run 2026-08-20_0901 — gel au chargement, F-128 rattrapé + F-129)
+
+> Relance E2E Tetris (suite note fin de session 02h : « tout est prêt, rien
+> d'autre à faire avant »). FRESH_START=1 — pas de reprise iter 2 du run coupé
+> 000845 (livrable iter 1 déjà sain ; reprendre = nourrir le failure mode
+> connu des gros search_replace sur du déjà-fixé). Run en cours PENDANT ce
+> cycle : les fixes ci-dessous s'appliquent au PROCHAIN run (code chargé en
+> mémoire au démarrage du process).
+
+- [x] Diagnostic en direct (question utilisateur « pas d'affichage dans le
+      chrome, ça mouline ») : reproduction indépendante (Chrome session
+      assistant : Navigation timeout) + exécution du JS extrait sous watchdog
+      Node `vm` (debug/repro_freeze_tetris.js) + instrumentation des boucles
+      (repro_freeze_tetris2.js) → **BOUCLE INFINIE ligne 299** :
+      `do { piece = random } while (bag.includes(piece))` dans
+      `getRandomPiece()` — le sac 7-bag rechargé à 14 pièces (2×7 types)
+      contient TOUS les types après 2 pops → le rejet est éternel → le thread
+      principal gèle avant l'événement load (spinner infini, 0 erreur console
+      car un gel est SILENCIEUX, tous les appels CDP renderer timeout).
+- [x] Constat pipeline : le nudge F-125 n'a PAS détecté ce cas — (a) marqueur
+      "timed out" ne matche pas « Navigation timeout », (b) les commandes
+      saines du browser-process (console vide) remettent son compteur à zéro
+      → jamais 3 erreurs consécutives. Le Coder a brûlé ~15 steps (10→190 s
+      chacune) à retenter navigate/new_page/screenshot sans jamais relire son
+      code. Gate F-109 (preuve screenshot) = fail-closed garanti : aucune
+      fausse approbation possible sur une page gelée.
+- [x] F-128 RATTRAPAGE (implémenté hier 00h08, validé en prod au run 000845,
+      jamais synchronisé sur disque — fin de session 02h) : feature_list
+      F-128 + contract C450 ajoutés.
+- [x] F-129 NOUVEAU (proposition utilisateur « un prompt qui dit que si une
+      page html timeout risque de boucle dans un js ? » — doctrine F-33 :
+      prompt + garde logicielle) : (1) nudge `_build_nav_freeze_nudge` —
+      directive IMMÉDIATE dès « Navigation timeout » (un timeout de
+      navigation sur fichier LOCAL est TOUJOURS pathologique) : diagnostic
+      boucle while/do-while jamais fausse + read_file + search_replace +
+      re-navigate pour CONFIRMER ; actif Coder ET Tester ; (2) fix marqueur
+      F-125 (« Navigation timeout » compte désormais dans les erreurs
+      protocole) ; (3) ligne ⚠️ prompt Coder + règle 4-bis prompt Tester
+      (conclure failure « page gelée » immédiatement). Tests : 9 nouveaux
+      TestNavFreezeNudge (30/30 fichier, 92 passed suites voisines basetemp
+      dédié) ; gate F-103 : 29 surfaces, 0 erreur, 0 warning. Contract C451-
+      C452, feature_list F-129.
+- [ ] Issue du run en cours : verdict final (Coder era pre-F-129 sur page
+      gelée → issue attendue entre correction par relecture fortuite,
+      échec propre fail-closed, ou burn-out des tentatives) → post-mortem.

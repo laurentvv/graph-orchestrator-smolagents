@@ -18,10 +18,12 @@ from graph_orchestrator import tools
 from graph_orchestrator.config import settings
 from graph_orchestrator.vision_callback import (
     _BROWSER_STALL_THRESHOLD,
+    _NAV_TIMEOUT_MARKER,
     _NUDGE_THRESHOLD,
     _ScreenshotCapturingTool,
     make_screenshot_callback,
     reset_browser_stall,
+    reset_nav_freeze_nudge,
     reset_screenshot_nudge,
 )
 
@@ -278,3 +280,103 @@ class TestBrowserStallNudge:
             step = self._step(cb, holder, observations=f"Out: …\n{self._STALLED}")
         assert step.observations.startswith("Out: …")
         assert "[NAVIGATEUR GELÉ]" in step.observations
+
+
+class TestNavFreezeNudge:
+    """F-129 (post-mortem run 2026-08-20_0901, Tetris) : gel AU CHARGEMENT.
+
+    navigate_page répondait « Navigation timeout of 10000 ms exceeded » dès la
+    1re navigation (JS bloquant le thread avant l'événement load — do...while
+    de rejet jamais terminant). Le nudge F-125 ne détectait pas ce cas : marqueur
+    "timed out" sans match + compteur remis à zéro par les commandes saines du
+    browser-process. F-129 = directive immédiate dès la 1re occurrence.
+    """
+
+    # Message exact observé dans le run 2026-08-20_0901 (step 12).
+    _NAV_TIMEOUT = (
+        "Out: Unable to navigate in the selected page: Navigation timeout "
+        "of 10000 ms exceeded."
+    )
+
+    def _make_callback(self, criteria: int = 0):
+        holder: list = []
+        cb = make_screenshot_callback(holder, visual_criteria_count=criteria)
+        return cb, holder
+
+    def _step(self, cb, holder, observations="Code output"):
+        memory_step = SimpleNamespace(observations=observations, observations_images=None)
+        cb(memory_step, agent=None)
+        return memory_step
+
+    def setup_method(self):
+        reset_nav_freeze_nudge()
+        reset_browser_stall()
+
+    def test_nudge_immediat_premiere_occurrence(self):
+        """Pas de seuil : un timeout de navigation locale est TOUJOURS pathologique."""
+        cb, holder = self._make_callback()
+        step = self._step(cb, holder, observations=self._NAV_TIMEOUT)
+        assert "[GEL AU CHARGEMENT #1]" in step.observations
+
+    def test_pas_de_nudge_sur_step_sain(self):
+        cb, holder = self._make_callback()
+        step = self._step(cb, holder, observations="Out: page chargée, 0 erreur console")
+        assert "[GEL AU CHARGEMENT" not in (step.observations or "")
+
+    def test_message_dirige_vers_le_code_pas_le_navigateur(self):
+        cb, holder = self._make_callback()
+        step = self._step(cb, holder, observations=self._NAV_TIMEOUT)
+        obs = step.observations
+        # Diagnostic : lire le code, chercher les boucles, corriger chirurgicalement.
+        assert "read_file" in obs
+        assert "while" in obs
+        assert "search_replace" in obs
+        assert "NE RETENTE PAS" in obs
+
+    def test_message_mentionne_console_silencieuse(self):
+        """Un gel ne produit AUCUNE erreur console — piège constaté step 15 du run."""
+        cb, holder = self._make_callback()
+        step = self._step(cb, holder, observations=self._NAV_TIMEOUT)
+        assert "silencieux" in step.observations or "silencieuse" in step.observations
+
+    def test_reset_repart_de_zero(self):
+        cb, holder = self._make_callback()
+        self._step(cb, holder, observations=self._NAV_TIMEOUT)
+        reset_nav_freeze_nudge()
+        step = self._step(cb, holder, observations="Out: sain")
+        assert "[GEL AU CHARGEMENT" not in step.observations
+
+    def test_occurrences_multiples_comptees(self):
+        """Le compteur croît (observabilité) et le nudge se répète (pattern F-128)."""
+        cb, holder = self._make_callback()
+        step = self._step(cb, holder, observations=self._NAV_TIMEOUT)
+        assert "[GEL AU CHARGEMENT #1]" in step.observations
+        step = self._step(cb, holder, observations=self._NAV_TIMEOUT)
+        assert "[GEL AU CHARGEMENT #2]" in step.observations
+
+    def test_observations_existantes_preservees(self):
+        cb, holder = self._make_callback()
+        step = self._step(cb, holder, observations=f"Out: …\n{self._NAV_TIMEOUT}")
+        assert step.observations.startswith("Out: …")
+        assert "[GEL AU CHARGEMENT #1]" in step.observations
+
+    def test_actif_aussi_pour_le_tester(self):
+        """Callback sans critères visuels (chemin Tester) : nudge actif aussi."""
+        cb, holder = self._make_callback(criteria=0)
+        step = self._step(cb, holder, observations=self._NAV_TIMEOUT)
+        assert "[GEL AU CHARGEMENT #1]" in step.observations
+
+    def test_navigation_timeout_compte_dans_stall_f125(self):
+        """Fix marqueur : « Navigation timeout » incrémente AUSSI le compteur F-125
+        (avant, ce message ne matchait aucun marqueur → jamais compté)."""
+        from graph_orchestrator.vision_callback import _BROWSER_STALL_STATE
+
+        cb, holder = self._make_callback()
+        # 1 timeout navigation + 2 erreurs protocole classiques = 3 marqueurs.
+        self._step(cb, holder, observations=self._NAV_TIMEOUT)
+        stalled = "Out: Error: Page.captureScreenshot timed out."
+        self._step(cb, holder, observations=stalled)
+        step = self._step(cb, holder, observations=stalled)
+        assert "[NAVIGATEUR GELÉ]" in step.observations
+        assert _NAV_TIMEOUT_MARKER == "Navigation timeout"
+        assert _BROWSER_STALL_STATE["count"] >= _BROWSER_STALL_THRESHOLD

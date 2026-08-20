@@ -58,7 +58,10 @@ _BROWSER_STALL_STATE = {"count": 0}
 # Signatures d'erreur observées dans le run : "Runtime.evaluate timed out.",
 # "Page.captureScreenshot timed out.", "Input.dispatchKeyEvent timed out.",
 # "Protocol error (Page.captureScreenshot): Not attached to an active page".
-_BROWSER_STALL_MARKERS = ("timed out", "Not attached to an active page")
+# F-129 : « Navigation timeout » (gel AU CHARGEMENT, run 2026-08-20_0901) —
+# avant, ce message ne matchait AUCUN marqueur → le compteur ne voyait pas
+# les timeouts de navigate_page.
+_BROWSER_STALL_MARKERS = ("timed out", "Not attached to an active page", "Navigation timeout")
 
 
 def reset_browser_stall() -> None:
@@ -108,6 +111,57 @@ def reset_screenshot_nudge() -> None:
     à la tentative 2, pas après 3 nouveaux screenshots.
     """
     _SCREENSHOT_NUDGE_STATE["count"] = 0
+
+
+# F-129 (post-mortem run 2026-08-20_0901, Tetris) : gel AU CHARGEMENT.
+# navigate_page vers index.html répondait « Navigation timeout of 10000 ms
+# exceeded » dès la PREMIÈRE navigation : le JS bloquait le thread principal
+# avant l'événement load (do...while de rejet contre un sac contenant TOUS les
+# types de pièces — condition jamais fausse, jamais terminant). Le nudge F-125
+# ne détectait pas ce cas : (a) son marqueur "timed out" ne matche pas
+# « Navigation timeout » ; (b) les commandes saines du browser-process
+# (list_console_messages vide — un gel est SILENCIEUX) remettaient son compteur
+# à zéro → jamais 3 erreurs protocole « consécutives ». Un timeout de
+# navigation sur un fichier LOCAL est TOUJOURS pathologique (chargement <1s)
+# → directive immédiate, sans seuil, dès la 1re occurrence. Fail-open total.
+_NAV_TIMEOUT_MARKER = "Navigation timeout"
+_NAV_FREEZE_STATE = {"count": 0}
+
+
+def reset_nav_freeze_nudge() -> None:
+    """Réinitialise le compteur de gels au chargement (même lifecycle que les autres)."""
+    _NAV_FREEZE_STATE["count"] = 0
+
+
+def _build_nav_freeze_nudge(observations: str) -> Optional[str]:
+    """Directive immédiate si la navigation vers la page LOCALE timeout (gel du thread JS).
+
+    Un fichier statique local se charge en <1s : un Navigation timeout signifie
+    que le script bloque le renderer AVANT l'événement load (boucle synchrone
+    infinie). La console reste vide (gel silencieux) et screenshot/evaluate
+    timeout aussi — aucun retry navigateur n'aide. Best-effort total.
+    """
+    try:
+        text = observations or ""
+        if _NAV_TIMEOUT_MARKER not in text:
+            return None
+        _NAV_FREEZE_STATE["count"] += 1
+        n = _NAV_FREEZE_STATE["count"]
+        return (
+            f"[GEL AU CHARGEMENT #{n}] Navigation timeout sur ta page LOCALE = ton JS "
+            f"bloque le thread principal (boucle while/do-while infinie) — ce n'est NI "
+            f"un problème de navigateur NI un délai : un fichier local se charge en <1s. "
+            f"La console restera vide (gel silencieux) et take_screenshot/evaluate_script "
+            f"timeout aussi : NE RETENTE PAS la navigation telle quelle. Diagnostic : "
+            f"(1) read_file du JS ; (2) cherche les boucles while(...)/do...while dont "
+            f"la condition ne peut JAMAIS devenir fausse (ex : rejet contre une liste "
+            f"contenant TOUS les cas possibles, while(true) sans break atteignable) ; "
+            f"(3) corrige par search_replace ; (4) navigate_page à nouveau pour "
+            f"CONFIRMER le dégel (console + screenshot)."
+        )
+    except Exception as e:  # pragma: no cover - fail-open garanti
+        logger.debug("nudge gel chargement échec (%s) — ignoré.", e)
+        return None
 
 
 def _build_checklist_nudge(criteria_count: int) -> Optional[str]:
@@ -608,6 +662,21 @@ def make_screenshot_callback(capture_holder: List[Any], visual_criteria_count: i
         Une fonction callback(memory_step, agent) -> None.
     """
     def _callback(memory_step, agent) -> None:
+        # F-129 : nudge gel au chargement — détection IMMÉDIATE (un timeout de
+        # navigation sur fichier local est toujours pathologique), AVANT le
+        # nudge anti-gel F-125 qui requiert 3 erreurs protocole consécutives
+        # (compteur remis à zéro par les commandes browser-process saines).
+        nav_freeze = _build_nav_freeze_nudge(
+            getattr(memory_step, "observations", "") or ""
+        )
+        if nav_freeze:
+            try:
+                current = getattr(memory_step, "observations", None) or ""
+                memory_step.observations = (
+                    f"{current}\n\n{nav_freeze}" if current else nav_freeze
+                )
+            except Exception as e:
+                logger.debug("nudge gel chargement : append observations échec (%s).", e)
         # F-125 : nudge anti-gel — AVANT l'early-return capture : un step en erreur
         # protocole ne produit AUCUNE image (holder vide), c'est précisément le
         # signal. Le checklist-nudge F-114 reste, lui, conditionné aux screenshots.

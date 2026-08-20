@@ -1090,6 +1090,7 @@ Workflow de validation (À FAIRE après avoir créé les fichiers, AVANT final_a
 3. FUZZING UI OBLIGATOIRE : Exécute `fuzz_click_all_buttons()` pour cliquer sur tous les boutons et réveiller les bugs JS cachés (monkey testing en 1 appel, encapsule le snippet JS).
 4. `list_console_messages()` — OBLIGATOIRE EN DERNIER. Vérifie 0 erreur JS (SyntaxError, undefined, Uncaught). Sans l'étape 3, tu rateras 80% des erreurs !
 5. Si erreur : CORRIGE via `search_replace` (jamais de rewrite total), puis recommence le cycle (navigate, screenshot, fuzzing, console).
+⚠️ Si `navigate_page` TIMEOUT sur ta page LOCALE : le JS bloque le thread (boucle while/do-while infinie — un fichier local se charge en <1s). Relire le code, corriger la boucle via search_replace, re-naviguer — ne JAMAIS retenter la navigation à l'identique.
 {criteria_note}
 
 URL exacte de ta page (primary target) : {primary_url}
@@ -1473,9 +1474,14 @@ Code prêt pour la production, respectant les conventions du langage.
         # F-114 : reset du compteur de screenshots du nudge checklist (même
         # lifecycle que l'audit visuel ; traverse volontairement les retries).
         # F-125 : reset du compteur anti-gel navigateur (même lifecycle).
-        from .vision_callback import reset_browser_stall, reset_screenshot_nudge
+        from .vision_callback import (
+            reset_browser_stall,
+            reset_nav_freeze_nudge,
+            reset_screenshot_nudge,
+        )
         reset_screenshot_nudge()
         reset_browser_stall()
+        reset_nav_freeze_nudge()
         # F-128 : reset de l'état « erreurs console en attente de re-vérification »
         # (même lifecycle que les autres resets vision).
         from .vision_callback import reset_console_pending

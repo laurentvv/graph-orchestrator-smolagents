@@ -1070,6 +1070,26 @@
       "description": "Post-mortem run 2026-08-19_2104 (Tetris) : livrable sain (0 erreur console, vérifié en direct) rejeté 2× par des verdicts Tester fantômes — max-steps atteint en découverte d UI → final_answer en prose → rescue DSPy → « failure » générique → fail-closed. 5 fixes : (1) TESTER_MAX_STEPS 8→16 (.env, fait pendant le run — le défaut config était déjà 20 mais l override .env le neutralisait) ; (2) TARGETED_MAX_STEPS 6→10 (targeted_retest.py) ; (3) REASONING_NO_THINK_NGL=99 (.env/.env.example) — le serveur no-think (Web Tester + CODER ULTRA) chargeait en auto-fit à 7,7 t/s au lieu de ~27 ; (4) _tester_max_steps_fallback : les erreurs d OUTILS du Tester (MCP -32602, NameError sandbox, probe null sur ID inexact) ne comptent plus comme FAIL de l app — les « Uncaught » de l app restent des FAIL (règle ancrée anti-faux-positif) ; (5) helper discover_ui (inventaire canvas/boutons/inputs en 1 appel, en tête des helpers DevTools Coder+Tester) + sanitisation de l enum types de list_console_messages (_sanitize_console_kwargs) + wrapper console enrichi branché AUSSI sur le Tester (stack traces + enum valide). CODER ULTRA : maintenu, accéléré par NGL=99 — statut à réévaluer au prochain E2E. Tests : tests/test_f127_tester_hardening.py (16) + factory devtools mise à jour (6 helpers).",
       "status": "completed",
       "dependencies": []
+    },
+    {
+      "id": "F-128",
+      "name": "Nudge post-fix console (anti boucle de re-lecture sans fin)",
+      "description": "Post-mortem run 2026-08-19_2250 (Tetris, coupé ~65 min, itération 1 jamais bouclée) : le 4B corrigeait le bug console mais NE RE-TESTAIT PAS la page — il relisait le fichier (17 turns de stall) sans jamais re-naviguer, ne voyait jamais l'erreur disparue → 40 steps × 2 tentatives épuisés. FAILURE MODE 'boucle de vérification sans terminaison' : le Coder ne sait pas que le combat est gagné. IMPLÉMENTÉ dans vision_callback.py : état 'erreurs console vues non re-vérifiées' (maj à chaque list_console_messages enrichi, hint = 1re frame stack) ; search_replace/multi_replace/edit_file collent une directive post-fix au retour ('re-teste la PAGE : navigate_page + list_console_messages, NE relis PAS le fichier, console propre → final_answer') ; reset par nœud Coder (même lifecycle que les resets vision) ; ligne RAPPEL dans le prompt Coder. Tests : test_f128_post_fix_nudge.py 9 verts. VALIDÉ EN PROD au run 2026-08-20_000845 : bug collides corrigé, console propre constatée par le modèle PUIS checklist 6/6 complétée + final_answer en tentative 3 — la boucle de re-lecture est morte.",
+      "status": "completed",
+      "dependencies": [
+        "F-126",
+        "F-127"
+      ]
+    },
+    {
+      "id": "F-129",
+      "name": "Nudge gel au chargement (Navigation timeout = boucle JS infinie)",
+      "description": "Post-mortem run 2026-08-20_0901 (Tetris) : navigate_page répondait 'Navigation timeout of 10000 ms exceeded' dès la PREMIÈRE navigation — le JS bloquait le thread principal avant l'événement load (do...while de rejet contre un sac contenant TOUS les types de pièces : condition jamais fausse ; cause racine isolée par repro indépendante Chrome + Node vm watchdog, debug/repro_freeze_tetris*.js). Le Coder a brûlé ~15 steps à retenter navigate/new_page/screenshot (chaque essai 10-190 s) sans jamais lire son code : un gel est SILENCIEUX (0 erreur console) et les commandes saines du browser-process remettaient à zéro le compteur du nudge F-125 (dont le marqueur 'timed out' ne matchait d'ailleurs pas 'Navigation timeout'). IMPLÉMENTÉ : (1) nudge F-129 _build_nav_freeze_nudge — directive IMMÉDIATE (sans seuil : un timeout de navigation sur fichier LOCAL est toujours pathologique, chargement <1s) injectée dans memory_step.observations : diagnostic boucle while/do-while jamais fausse + read_file + search_replace + re-navigate pour CONFIRMER ; reset par nœud (reset_nav_freeze_nudge) ; actif Coder ET Tester (callback partagé). (2) Fix marqueur F-125 : 'Navigation timeout' ajoute aux _BROWSER_STALL_MARKERS (les timeouts de navigation comptent désormais dans le compteur d'erreurs protocole). (3) Ligne prompt Coder (bloc VALIDATION VISUELLE) + règle 4-bis prompt Tester (conclure failure 'page gelée' immédiatement au lieu de brûler le budget). Tests : tests/test_vision_nudge.py TestNavFreezeNudge 9 nouveaux (immédiateté, pas de nudge sain, directives du message, console silencieuse, reset, répétition comptée, observations préservées, chemin Tester, comptage F-125) — 30/30 fichier. Gate F-103 : 29 surfaces, 0 erreur, 0 warning.",
+      "status": "completed",
+      "dependencies": [
+        "F-125",
+        "F-128"
+      ]
     }
   ]
 }
