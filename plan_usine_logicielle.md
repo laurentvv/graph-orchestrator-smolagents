@@ -531,3 +531,13 @@ Plus d'information : `system_prompts_analysis.md`
   3. **Matrice de compatibilité** : surveillance des dépendances critiques (DSPy, smolagents, LiteLLM, FastAPI, WebSockets).
 - **Statut** : ✅ **FAIT** — Script `scripts/upgrade_stack.py` opérationnel (gestion `uv lock`, parsing diff, encodage Windows, rapport markdown et options pytest) + Section 11 dans `AGENTS.md`.
 
+
+
+### P17 : Nouvelles architectures et prompts (Mise à jour 2026-08-20)
+*Intégration des découvertes de la synchronisation des références (update_report.md)*
+
+- [ ] *(update références 2026-08-20)* **Agent Teams & Multi-agent Packages** : `deepseek-harness` introduit une architecture expérimentale d'équipes d'agents et le chargement dynamique de packages. — *Référence : fiche **46-deepseek-harness** → `experimental-agent-teams-packages.md`.*
+- [ ] *(update références 2026-08-20)* **Persistent PTY & FD3 Protocol** : `deepseek-harness` maintient l'état du shell (PowerShell PTY persistant) entre les appels d'outils et utilise le descripteur de fichier FD3 pour un protocole structuré avec le runtime Python. — *Référence : fiche **46-deepseek-harness** → `pwsh-persistent-pty.md`, `code-runtime-python-fd3-protocol.md`.*
+- [ ] *(update références 2026-08-20)* **Design Skills & Output Styles** : Le corpus Anthropic (`system_prompts_leaks`) formalise des templates stricts pour le style de réponse (`concise.md`, `explanatory.md`) et de nouvelles skills pour le wireframing et prototypage interactif. À utiliser pour spécialiser le Web Tester. — *Référence : fiche **29-system-prompts-leaks** → `Anthropic/claude-design/`, `Anthropic/claude-code/output-styles/`.*
+- [ ] *(update références 2026-08-20)* **Gestion Token Budget & Incertitude** : `code-review-graph` introduit `token_budget.py` et `uncertainty.py` pour un suivi explicite des tokens restants et de l'incertitude du LLM lors des revues (dégradation gracieuse au lieu d'hallucinations). — *Référence : fiche **28-code-review-graph** → `code_review_graph/token_budget.py`, `uncertainty.py`.*
+- [ ] *(update références 2026-08-20)* **Gatekeeper Context Storage** : `cloudflare-os` implémente `context-storage.ts` et `artifact-sync.ts` pour une gestion durable et synchronisée des contextes des sous-agents. — *Référence : fiche **47-cloudflare-os** → `packages/gatekeeper-context/`.*
