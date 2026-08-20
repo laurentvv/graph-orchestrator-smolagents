@@ -5,6 +5,10 @@
 const fs = require('fs');
 const vm = require('vm');
 
+if (process.argv.length < 3) {
+  console.error('Usage: node repro_freeze_tetris.js <path-to-html>');
+  process.exit(1);
+}
 const html = fs.readFileSync(process.argv[2], 'utf8');
 const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]);
 const code = scripts.join('\n;\n');
