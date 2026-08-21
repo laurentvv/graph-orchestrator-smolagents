@@ -461,6 +461,11 @@ async def run_coding_workflow(
     if settings.fresh_start:
         kg.clear_checkpoint(run_id)
         kg.clear_idempotency(run_id)
+        # Goulot 2026-08-21 : sans cette purge, les réfutations des runs
+        # précédents de la MÊME tâche (run_id stable par hash de contenu)
+        # étaient réinjectées au Coder dès l'itération 2 — il « corrigeait »
+        # des bugs fantômes (faux positifs déjà éliminés du code).
+        kg.clear_refutations(run_id)
         print("[*] FRESH_START=1 : checkpoint existant effacé, exécution fraîche.")
     else:
         checkpoint = kg.load_checkpoint(run_id)
