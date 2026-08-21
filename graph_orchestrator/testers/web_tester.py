@@ -143,11 +143,21 @@ class WebTestRunner:
                 tester_skills = task.get("tester_skills", [])
                 if not tester_skills:
                     tester_skills = ["web-tester"] # Repli statique par défaut
-                
+
+                # Goulot 2026-08-21 (décision user : skill forcé OBLIGATOIRE pour
+                # Coder ET Tester) : le mode d'emploi des outils DevTools
+                # (devtools-preview — navigate→console→screenshot, anti-IIFE,
+                # pièges) ne peut pas dépendre de la sélection LLM de
+                # l'Architect (le golden #19 l'avait, les runs ratés l'ont
+                # perdu). Le WebTester pilote les MÊMES outils DevTools MCP —
+                # garantie déterministe, avant le budget (priorité mode d'emploi).
+                if "devtools-preview" not in tester_skills:
+                    tester_skills.insert(0, "devtools-preview")
+
                 # Budgétisation pour le Tester (socle "web-tester" toujours conservé)
                 tester_skills = enforce_skill_budget(
-                    tester_skills, 
-                    budget_tokens=settings.skill_budget_tokens, 
+                    tester_skills,
+                    budget_tokens=settings.skill_budget_tokens,
                     always_skills={"web-tester"}
                 )
                 
