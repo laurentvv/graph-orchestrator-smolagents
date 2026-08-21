@@ -285,6 +285,38 @@ formule une leçon concrète pour un run futur.""",
 }
 
 
+# ==========================================
+# Doctrine ponytail (fiche 48, F-116 — réduction à la source)
+# ==========================================
+# Port compact du ladder YAGNI 7 rungs (references/ponytail/.agents/rules/
+# ponytail.md + fallback ~1.5k chars de hooks/ponytail-instructions.js).
+# Appliquée UNIQUEMENT aux rôles qui écrivent du code livrable : l'Architect
+# garde son « NIVEAU GRAPHIQUE MAXIMAL » (F-124) — la doctrine réduit le CODE,
+# pas les exigences visuelles négociées sur les runs #14→#19.
+
+PONYTAIL_ROLES = ("coder", "coder_frontend")
+
+PONYTAIL_LADDER = """### DOCTRINE PONYTAIL — LE CODE MINIMUM QUI FONCTIONNE
+Tu es un développeur senior « paresseux » : paresseux = EFFICACE, jamais négligent.
+Le meilleur code est celui qu'on n'écrit pas. Avant CHAQUE ajout, descends l'échelle :
+1. Est-ce nécessaire tout court ? (YAGNI → sinon abstiens-toi)
+2. Existe-t-il déjà dans ce projet ? → réutilise-le
+3. La bibliothèque standard le fait-elle ? → stdlib
+4. La plateforme le fait-elle nativement ? (HTML/CSS natif plutôt que JS,
+   <input type="date"> plutôt qu'un date-picker)
+5. Une dépendance DÉJÀ installée le fait-elle ? → jamais de nouvelle dépendance
+6. Peut-ce tenir en UNE ligne ? → une ligne
+7. Seulement alors : le code minimum qui fonctionne.
+RÈGLES : zéro abstraction non demandée (pas d'interface à 1 implémentation), zéro
+boilerplate non demandé, SUPPRIMER plutôt qu'ajouter. Le diff le plus court qui
+fonctionne gagne — mais l'échelle court APRÈS la compréhension du problème, jamais
+à la place. Correction = cause racine, pas symptôme.
+INTOUCHABLE (jamais simplifiés) : les fonctionnalités EXPLICITEMENT demandées par la
+spec (la checklist est sacrée), la robustesse aux entrées, la sécurité. « Minimal »
+décrit le CODE, pas le PÉRIMÈTRE : une sous-fonctionnalité est un ÉCHEC, pas de la
+concision."""
+
+
 def build_role_header(role: str) -> str:
     """Assemble l'en-tête de prompt pour les nœuds smolagents (Coder, WebTester).
 
@@ -292,11 +324,24 @@ def build_role_header(role: str) -> str:
     complet par f-string et doivent appeler cette fonction en tête pour garantir que les
     invariants sont présents (cohérence avec les nœuds DSPy qui les injectent via __doc__).
 
+    F-116 : les rôles CODER embarquent en plus la doctrine ponytail (réduction
+    à la source — le meilleur code pour le contexte est celui qu'on n'écrit
+    pas ; -54 % LOC / -22 % tokens mesurés par la référence).
+
     Renvoie une chaîne vide si le rôle est inconnu (robustesse : un nœud qui n'a pas de
     rôle dédié récupère juste les invariants — cf. ``build_invariants_header``).
     """
     block = ROLE_BLOCKS.get(role, "")
-    return f"{block}\n\n{UNIVERSAL_INVARIANTS}" if block else UNIVERSAL_INVARIANTS
+    parts = [
+        p
+        for p in (
+            block,
+            PONYTAIL_LADDER if role in PONYTAIL_ROLES else None,
+            UNIVERSAL_INVARIANTS,
+        )
+        if p
+    ]
+    return "\n\n".join(parts)
 
 
 def build_invariants_header() -> str:

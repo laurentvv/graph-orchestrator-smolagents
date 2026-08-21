@@ -1,5 +1,56 @@
 # État d'Avancement du Sprint
 
+## Jalons de l'Itération (cycle F-116 — compaction résiliente + chunks + ponytail)
+> PRIORITÉ 1 du backlog (gouvernance 2026-08-18). Le mur démontré des runs
+> #13/#16 : thrash 772k-990k tokens/step (~24k/step), ~40 min perdues. Plan
+> approuvé user : 4 volets (A déterministe kilocode, B branchement nodes,
+> C LLM opt-in ex-F-86, D ponytail fiche 48 à la source). Validation E2E
+> prévue sur bubble-sort-multifile-v6 (étalon run #11).
+
+- [x] F116-1 : Diagnostic affiné (vérifié code, pas hypothèse) — le trou n°1
+  n'est PAS les images (apply_image_purge F-101 déjà active pendant #13/#16)
+  mais le **model_output** des CodeAgents : pensée + bloc de code complet
+  (fichiers entiers à write_file) envoyé à l'API à chaque step, JAMAIS compacté
+  par les 5 couches F-101 (qui ne touchent que observations). + purge totale
+  `steps=[]` au boundary de retry (rituel visuel rejoué ×3) + zéro preflight.
+- [x] F116-2 (volet A, compaction.py v3, 0 LLM) : `apply_model_output_clip`
+  (steps anciens > 2000 chars clippés head 600/tail 250, version intégrale
+  persistée `.transcripts/mo_step_*.txt`) ; `apply_image_purge` v2 perte-zéro
+  (archive `.transcripts/images/*.png` + placeholder `[Screenshot archivé: …]`) ;
+  `render_transcript_block` (chunks kilocode : trace bornée 3000 chars dans le
+  marqueur de snip) ; `collect_dead_ends` (tombstones « CULS-DE-SAC » ex-F-86
+  sans LLM) ; `apply_soft_retry_reset` (archive tout l'évincé, step-synthèse,
+  queue 4 conservée clippée ; `drop_task_steps` au boundary car smolagents
+  ré-appose un TaskStep frais à chaque run — agents.py:488) ;
+  `estimate_history_tokens` + preflight kilocode needed() ×1.3 (> 26000 →
+  escalade AVANT l'envoi).
+- [x] F116-3 (volet B, nodes.py) : overflow → `_f116_compact_memory` (LLM
+  opt-in d'abord, repli soft reset) au lieu du wipe ; boundary
+  `COMPACTION_RETRY_MODE=soft` (défaut) / `hard` (historique) ; flag
+  anti double-compaction ; OverflowGuard failure_drain inchangé.
+- [x] F116-4 (volet C, ex-F-86 opt-in désactivé) : `compaction_llm.py` —
+  branche les dormants F-101 (build_summary_prompt + select_head_recent) ;
+  **CompactionBudget hermes enfin branché** (verdict sur usage provider réel,
+  remboursement, breaker). Pas de Mermaid L2 ni cascade par score (documenté).
+- [x] F116-5 (volet D, ponytail) : `PONYTAIL_LADDER` (7 rungs YAGNI) injecté
+  via build_role_header pour coder/coder_frontend SEULEMENT (Architect épargné
+  — il garde son NIVEAU GRAPHIQUE MAXIMAL F-124) + clause anti-sous-livraison
+  (« minimal décrit le CODE pas le PÉRIMÈTRE : sous-fonctionnalité = ÉCHEC »).
+- [x] F116-6 : Config (6 settings COMPACTION_*) + .env + .env.example ; gate
+  F-103 : **29 surfaces, 0 erreur, 0 warning** (prompts.py ~23.8 Ko < soft
+  24 Ko) ; py_compile 4 fichiers.
+- [x] F116-7 : Tests — **45 nouveaux PASS** (`tests/test_compaction_f116.py` :
+  purge v2 ×6, clip ×6, transcript ×4, dead-ends ×4, soft reset ×7, estimate
+  ×2, preflight pipeline ×2, wiring nodes ×3, LLM compact ×7, ponytail ×4) ;
+  suite complète **1757 passed / 0 failed / 7 skipped** (baseline 1712 + 45,
+  0 régression ; flaky minute-boundary PASSÉ cette exécution).
+- [x] F116-8 : État disque (contract C473-C481, feature_list F-116 completed,
+  ce fichier, README) + DuckDB + commit + PR.
+- [ ] F116-9 : Validation E2E bubble-sort-multifile-v6 (après merge — étalon
+  run #11 : ~23 min, 14,3 M tokens ; critères : livrable complet, PAS de
+  croissance ~24k tokens/step, zéro exceed_context_size, archives
+  .transcripts/ présentes, ponytail visible dans le prompt Coder).
+
 ## Jalons de l'Itération (cycle F-145 — sondes de preuve de mouvement, post-mortem run #8)
 > Origine : bug ghostY du run #8 (pièce Tetris dessinée à `(ghostY+r)` au lieu de
 > `(currentPiece.y+r)` + `drawGhost()` cassé — AUCUNE animation de chute, invisible

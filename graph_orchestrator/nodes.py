@@ -37,7 +37,9 @@ from .skills_loader import load_skill_body
 from .loop_guard import LoopGuard, extract_tool_calls_from_step
 from .stall_detector import StallDetector, classify_turn, dominant_material_hash
 from .goal_enforcer import GoalAction, GoalEnforcer
-from .compaction_guards import OverflowGuard, is_context_overflow_error
+from .compaction import apply_soft_retry_reset
+from .compaction_guards import CompactionBudget, OverflowGuard, is_context_overflow_error
+from .compaction_llm import llm_compact_history
 from .llama_server import model_lifecycle
 from .orphan_repair import repair_orphan_steps
 from .sanitizer import sanitize_tools
@@ -493,6 +495,46 @@ def _tester_max_steps_fallback(steps, prompt: str):
     )
 
 
+def _resolve_transcript_dir():
+    """Dossier d'archive du run pour les resets F-116 (None si opt-out).
+
+    Miroir de la résolution de ``CompactingCodeAgent.write_memory_to_messages``
+    (cwd = dossier du run via chdir F-40) — les resets opérés côté nœud
+    archivent au même endroit que la compaction intra-step.
+    """
+    try:
+        from .config import settings
+
+        if settings.compaction_archive_enabled:
+            from pathlib import Path as _P
+
+            return _P.cwd() / ".transcripts"
+    except Exception:
+        pass
+    return None
+
+
+def _f116_compact_memory(agent, compaction_budget: Optional[CompactionBudget] = None) -> str:
+    """Récupération overflow F-116 (strip escaladé kilocode payload-recovery).
+
+    Volet LLM opt-in d'abord (ex-F-86 : résumé sémantique gardé par
+    ``CompactionBudget``), repli immédiat sur le reset hiérarchique
+    déterministe (``apply_soft_retry_reset``). Retourne une description courte
+    de ce qui a été fait (observabilité prompt/log). Ne lève jamais.
+    """
+    memory = getattr(agent, "memory", None)
+    if memory is None or not getattr(memory, "steps", None):
+        return "déjà vide"
+    if compaction_budget is not None:
+        ok, _note = llm_compact_history(agent, budget=compaction_budget)
+        if ok:
+            return "résumée par LLM (F-116 opt-in)"
+    marker = apply_soft_retry_reset(
+        memory, transcript_dir=_resolve_transcript_dir(), drop_task_steps=True
+    )
+    return "compactée hiérarchiquement" if marker is not None else "inchangée (vide)"
+
+
 async def run_with_retry(
     agent: ToolCallingAgent,
     prompt: str,
@@ -567,6 +609,25 @@ async def run_with_retry(
     except Exception:
         overflow_guard = OverflowGuard()
 
+    # F-116 volet C : budget du compact LLM opt-in (hermes) — le verdict
+    # d'efficacité est rendu par l'usage provider RÉEL de la requête suivante
+    # (remboursement si prompt_tokens repasse sous le seuil preflight), jamais
+    # par une estimation. None tant que COMPACTION_LLM_ENABLED est off.
+    compaction_budget: Optional[CompactionBudget] = None
+    try:
+        from .config import settings as _settings
+
+        if _settings.compaction_llm_enabled:
+            compaction_budget = CompactionBudget(
+                threshold_tokens=_settings.compaction_preflight_budget_tokens
+            )
+    except Exception:
+        compaction_budget = None
+
+    # F-116 : marque la mémoire déjà compactée CETTE tentative (chemin
+    # overflow) pour ne pas double-compacter au boundary de fin de boucle.
+    memory_reset_done = False
+
     # Réinitialise les erreurs enregistrées pour ce nouveau run du nœud
     _RUN_ERRORS.clear()
 
@@ -575,6 +636,9 @@ async def run_with_retry(
         # complétion) → continuation injectée. Le flag supprime le RAPPEL
         # générique "JSON invalide" qui serait mensonger dans ce cas.
         goal_continued = False
+        # F-116 : le marqueur "mémoire compactée au chemin overflow" ne vaut
+        # que pour la tentative courante.
+        memory_reset_done = False
         # P8 (Orphan Repair) : avant chaque exécution, on répare les appels d'outil
         # orphelins de la mémoire (tool_calls sans observation/erreur). Un historique
         # restauré depuis un checkpoint peut contenir un appel interrompu ; renvoyé
@@ -644,6 +708,13 @@ async def run_with_retry(
 
             # Collecte métriques depuis le RunResult
             last_metrics = _metrics_from_run(agent, run_result)
+            # F-116 volet C : verdict hermes — le run RÉUSSI rapporte l'usage
+            # provider réel ; prompt_tokens sous le seuil preflight → budget
+            # REMBOURSÉ (la compaction a réellement dégagé la fenêtre).
+            if compaction_budget is not None and compaction_budget.awaiting_real_usage:
+                compaction_budget.on_real_usage(
+                    getattr(last_metrics, "input_tokens", None)
+                )
             # F-99 : metering cumulatif (même tentative échouée) pour le
             # plafond de tokens du goal enforcer (meterGoalCall qm : in+out).
             if goal_enforcer is not None:
@@ -860,20 +931,29 @@ async def run_with_retry(
             # propre immédiat, le graphe continue (Judge/itération suivante).
             if is_context_overflow_error(e):
                 if overflow_guard is None or overflow_guard.on_overflow():
+                    # F-116 : strip escaladé kilocode (payload-recovery) — la
+                    # récupération compacte hiérarchiquement (volet LLM opt-in
+                    # d'abord, reset déterministe en repli) au lieu de compter
+                    # sur le wipe total de fin de boucle : la tentative suivante
+                    # repart avec une trace compactée + les culs-de-sac, pas de
+                    # zéro (le rituel visuel n'est plus rejoué intégralement).
+                    compacted_how = _f116_compact_memory(agent, compaction_budget)
+                    memory_reset_done = True
                     print(
-                        "[!] Overflow recovery (F-101) : contexte débordé → mémoire "
-                        "purgée, tentative compactée. Un second overflow interrompra "
-                        "définitivement ce nœud."
+                        f"[!] Overflow recovery (F-101/F-116) : contexte débordé → "
+                        f"mémoire {compacted_how}, tentative compactée. Un second "
+                        f"overflow interrompra définitivement ce nœud."
                     )
                     record_run_error(
                         "Overflow recovery : contexte débordé, récupération unique engagée "
-                        "(purge mémoire + retry compacté)."
+                        f"(mémoire {compacted_how} + retry compacté)."
                     )
                     prompt += (
                         "\n\nATTENTION : ta dernière exécution a fait DÉBORDE la fenêtre "
-                        "de contexte. La mémoire de l'historique a été purgée. Reprends "
-                        "DIRECTEMENT l'action utile suivante, SANS relire ni réexpliquer "
-                        "l'historique."
+                        "de contexte. La mémoire de l'historique a été compactée "
+                        "hiérarchiquement (trace bornée + culs-de-sac listés, archive "
+                        "intégrale lisible via read_file). Reprends DIRECTEMENT "
+                        "l'action utile suivante, SANS relire ni réexpliquer l'historique."
                     )
                 else:
                     print(
@@ -935,12 +1015,37 @@ async def run_with_retry(
                     f"non audité(s) → rappel checklist injecté au retry."
                 )
 
-        # FIX TOKEN EXPLOSION: Si on est arrivé ici (erreur ou JSON invalide),
-        # l'agent a gardé tout son historique d'échec dans sa mémoire interne.
-        # Au prochain tour de la boucle for, si on rappelle agent.run, il va TOUT renvoyer !
-        # On doit purger la mémoire de l'agent avant le prochain essai.
-        if hasattr(agent, "memory") and hasattr(agent.memory, "steps"):
-            agent.memory.steps = []
+        # FIX TOKEN EXPLOSION → F-116 : le boundary de retry compacte
+        # hiérarchiquement (archive perte-zéro + trace bornée + culs-de-sac +
+        # queue conservée) au lieu de purger TOUT — l'historique d'échec garde
+        # sa leçon sans son volume, et le rituel visuel n'est plus rejoué de
+        # zéro à chaque tentative. COMPACTION_RETRY_MODE=hard = comportement
+        # historique exact (purge totale). Si le chemin overflow a déjà
+        # compacté cette tentative, on ne re-compacte pas.
+        if not memory_reset_done and hasattr(agent, "memory") and hasattr(agent.memory, "steps"):
+            _retry_mode = "soft"
+            try:
+                from .config import settings as _settings
+
+                _retry_mode = (_settings.compaction_retry_mode or "soft").strip().lower()
+            except Exception:
+                pass
+            if _retry_mode == "soft":
+                _marker = apply_soft_retry_reset(
+                    agent.memory,
+                    transcript_dir=_resolve_transcript_dir(),
+                    # Le retry ré-appose un TaskStep frais (smolagents
+                    # agents.py:488) : garder l'ancien dupliquerait le prompt
+                    # de tâche complet dans la fenêtre 32k.
+                    drop_task_steps=True,
+                )
+                if _marker:
+                    print(
+                        f"[F-116] Soft retry reset : historique compacté "
+                        f"({len(agent.memory.steps)} steps conservés)."
+                    )
+            else:
+                agent.memory.steps = []
         # P3 : alignement du guard sur la purge — le retry repart d'un historique
         # vierge, donc les comptes de répétition doivent repartir de zéro aussi
         # (sinon un bug d'une tentative précédente fait déclencher la suivante).

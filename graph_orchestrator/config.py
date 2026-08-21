@@ -415,6 +415,30 @@ class Settings:
     # Opt-out COMPACTION_OVERFLOW_GUARD=0.
     compaction_overflow_guard: bool = True
 
+    # --- Compaction v3 résiliente (F-116, kilocode chunks/payload-recovery) ---
+    # Le mur des runs #13/#16 : ~24k tokens/step accumulés (model_output avec
+    # fichiers entiers JAMAIS compactés + rituel visuel rejoué à chaque retry).
+    # Clip du model_output des steps anciens (version intégrale persistée dans
+    # .transcripts/). Opt-out COMPACTION_CLIP_ENABLED=0.
+    compaction_clip_enabled: bool = True
+    # Preflight kilocode needed() : estimation (chars/4 × 1.3 + images) AVANT
+    # l'envoi ; au-dessus du budget → escalade déterministe (reset hiérarchique
+    # serré + éviction images) au lieu de découvrir l'overflow après un
+    # round-trip condamné. Calibré pour n_ctx 32768 − max_tokens 4000 − marge.
+    # Opt-out COMPACTION_PREFLIGHT_ENABLED=0.
+    compaction_preflight_enabled: bool = True
+    compaction_preflight_budget_tokens: int = 26_000
+    # Boundary de retry : "soft" = reset hiérarchique (archive + trace bornée +
+    # culs-de-sac + queue conservée — F-116), "hard" = purge totale historique
+    # (FIX TOKEN EXPLOSION d'origine). Opt-out COMPACTION_RETRY_MODE=hard.
+    compaction_retry_mode: str = "soft"
+    # Volet LLM sémantique opt-in (ex-F-86) : résumé d'historique par LLM dans
+    # le chemin de récupération overflow, gardé par CompactionBudget (hermes :
+    # remboursement sur usage réel, breaker). DÉSACTIVÉ par défaut — la
+    # compaction déterministe 0-LLM reste la défaut (coût nul).
+    compaction_llm_enabled: bool = False
+    compaction_llm_max_tokens: int = 1024
+
     # --- Init MCP non bloquante (Priorité 8 / F-104, crush) ---
     # Timeout de connexion PAR SERVEUR (un serveur npx pendu ne bloque jamais
     # le run) : chrome-devtools / context7 / puppeteer. Timeout → dégradation
@@ -659,6 +683,12 @@ def load_settings() -> Settings:
         llm_retry_jitter=_get_float("LLM_RETRY_JITTER", 0.25),
         compaction_archive_enabled=_get_bool("COMPACTION_ARCHIVE_ENABLED", True),
         compaction_overflow_guard=_get_bool("COMPACTION_OVERFLOW_GUARD", True),
+        compaction_clip_enabled=_get_bool("COMPACTION_CLIP_ENABLED", True),
+        compaction_preflight_enabled=_get_bool("COMPACTION_PREFLIGHT_ENABLED", True),
+        compaction_preflight_budget_tokens=_get_int("COMPACTION_PREFLIGHT_BUDGET_TOKENS", 26_000),
+        compaction_retry_mode=_get_str("COMPACTION_RETRY_MODE", "soft"),
+        compaction_llm_enabled=_get_bool("COMPACTION_LLM_ENABLED", False),
+        compaction_llm_max_tokens=_get_int("COMPACTION_LLM_MAX_TOKENS", 1024),
         chrome_devtools_connect_timeout_s=_get_float("CHROME_DEVTOOLS_CONNECT_TIMEOUT_S", 25.0),
         context7_connect_timeout_s=_get_float("CONTEXT7_CONNECT_TIMEOUT_S", 15.0),
         puppeteer_connect_timeout_s=_get_float("PUPPETEER_CONNECT_TIMEOUT_S", 25.0),
