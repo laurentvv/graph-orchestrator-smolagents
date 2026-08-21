@@ -425,6 +425,19 @@ class GoalEnforcer:
             # « preuves manquantes » sur un historique amputé).
             self._acc_writes += raw.write_calls
             self._acc_verify += raw.verify_calls
+            # Boucle isolation 2026-08-22 : la compaction INTRA-attempt (F-116
+            # chemin overflow) peut amputer la mémoire AVANT ce premier audit —
+            # write_file ×3 exécutés puis « AUCUN changement matériel ». Repli
+            # sur la preuve DURABLE d'écriture (marquée à l'exécution réussie
+            # des outils, même lifecycle que screenshot_was_taken F-126).
+            if self._acc_writes == 0:
+                try:
+                    from .tools import get_write_proof
+
+                    _proof = get_write_proof()
+                    self._acc_writes += int(_proof.get("count") or 0)
+                except Exception:
+                    pass
             missing = _missing_proofs(
                 write_calls=self._acc_writes,
                 verify_calls=self._acc_verify,

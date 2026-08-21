@@ -94,6 +94,33 @@ def reset_screenshot_proof() -> None:
     _SCREENSHOT_PROOF["taken"] = False
 
 
+# Preuve DURABLE d'écriture (boucle isolation 2026-08-22) : même pattern que
+# _SCREENSHOT_PROOF. La compaction intra-attempt (F-116 chemin overflow) peut
+# amputer agent.memory.steps du step qui portait les write_file AVANT l'audit
+# F-99 du final_answer → faux négatif « AUCUN changement matériel » (boucle 8 :
+# write_file ×3 exécutés, rejetés quand même). Les outils d'écriture marquent
+# ce compteur à l'EXÉCUTION RÉUSSIE — il traverse compaction et retries.
+_WRITE_PROOF = {"count": 0, "paths": set()}
+
+
+def mark_write_done(path: str) -> None:
+    """Marque qu'un outil d'écriture a réellement modifié le disque (succès)."""
+    _WRITE_PROOF["count"] += 1
+    if path:
+        _WRITE_PROOF["paths"].add(str(path))
+
+
+def get_write_proof() -> dict:
+    """Snapshot de la preuve d'écriture durable ({"count": int, "paths": set})."""
+    return {"count": _WRITE_PROOF["count"], "paths": set(_WRITE_PROOF["paths"])}
+
+
+def reset_write_proof() -> None:
+    """Réinitialise la preuve d'écriture (une exécution de nœud = un cycle)."""
+    _WRITE_PROOF["count"] = 0
+    _WRITE_PROOF["paths"].clear()
+
+
 @tool
 def visual_check(criterion_number: int, verdict: bool, observation: str) -> str:
     """À appeler pour CHAQUE critère de validation visuelle, APRÈS le screenshot.
@@ -495,6 +522,7 @@ def write_file(path: str, content: str) -> str:
                 )
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
+        mark_write_done(path)
         return f"Successfully wrote to {path} ({len(content)} chars)" + _post_edit_syntax_directive(path)
     except Exception as e:
         return f"Error writing to file {path}: {str(e)}"
@@ -572,6 +600,7 @@ def append_file(path: str, content: str) -> str:
                     # Cas nominal : simple append à la fin.
                     with open(path, 'a', encoding='utf-8') as f:
                         f.write(content)
+                    mark_write_done(path)
 
             # Idempotence des effets de bord (Priorité 8-bis) : au replay de
             # checkpoint, le Coder rejoue ses appends. La garde anti-doublon
@@ -650,9 +679,10 @@ def edit_file(path: str, old_string: str, new_string: str, replace_all: bool = F
             new_content = content.replace(old_string, new_string)
         else:
             new_content = content.replace(old_string, new_string, 1)
-        
+
         with open(path, 'w', encoding='utf-8') as f:
             f.write(new_content)
+        mark_write_done(path)
 
         # F-128 : rappel post-fix si des erreurs console attendent re-vérification.
         # P2 : diagnostics de syntaxe immédiats.
@@ -944,6 +974,7 @@ def search_replace(path: str, old_string: str, new_string: str) -> str:
 
             with open(path, "w", encoding="utf-8") as f:
                 f.write(new_content)
+            mark_write_done(path)
 
         # F-128 : rappel post-fix si des erreurs console attendent re-vérification.
         # P2 : diagnostics de syntaxe injectés immédiatement (kilocode) — le
@@ -1034,6 +1065,7 @@ def multi_replace(path: str, replacements: list) -> str:
                 
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
+            mark_write_done(path)
 
         # F-128 : rappel post-fix si des erreurs console attendent re-vérification.
         msg = f"Successfully applied {success_count}/{len(replacements)} replacements to {path}."

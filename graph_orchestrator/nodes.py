@@ -365,6 +365,12 @@ def _select_coder_spec(task: dict, settings) -> tuple:
     """
     iteration = int(task.get("iteration", 1) or 1)
     no_think_model = str(getattr(getattr(settings, "no_think_spec", None), "model", "") or "")
+    # Philosophie Graph Engineering : la fiabilité vient de la STRUCTURE
+    # (gardes + itérations + feedback aval), pas du modèle. L'Ultra reste un
+    # filet de sécurité borné (itération ≥ 3, une fois par run) — le 4B doit
+    # converger en it. 2 avec les gardes (boucles isolation 2026-08-22 : la
+    # boucle 8 a exécuté le rituel complet ; son seul blocage était un faux
+    # négatif du GoalEnforcer, corrigé par la preuve d'écriture durable).
     ultra_ok = (
         getattr(settings, "coder_ultra_correction", False)
         and bool(no_think_model)
@@ -1011,10 +1017,13 @@ async def run_with_retry(
             _audited = {a.get("criterion_number") for a in get_visual_audit()}
             _missing_vc = sorted(set(range(1, visual_criteria_count + 1)) - _audited)
             if _missing_vc:
-                # Boucles isolation 2026-08-21 (Qwen3.5/3.8) : le rappel narratif
-                # ne suffisait pas — le modèle ré-éditait au lieu d'exécuter le
-                # rituel. Micro-protocole littéral à COPIER : compliance maximale
-                # (le modèle n'a qu'à adapter les observations du screenshot).
+                # Boucles isolation 2026-08-21/22 (Qwen3.5/3.8, 7 boucles) : le
+                # rappel narratif NE SUFFIT PAS et le micro-protocole APPENDU non
+                # plus — en contexte chargé, le modèle re-dérive son plan (read
+                # → edit halluciné) au lieu de copier les blocs prescrits.
+                # Escalade : quand le SEUL manquant est la checklist, le retry
+                # repart sur un prompt RITUEL-SEUL (rien à re-dériver). Le
+                # navigateur MCP survit aux attempts → take_screenshot direct.
                 _m = re.search(r'task_id"?\s*:\s*"([^"]+)"', prompt or "")
                 _task_id = _m.group(1) if _m else "TASK_ID"
                 _vc_lines = "\n".join(
@@ -1022,19 +1031,21 @@ async def run_with_retry(
                     f'observation="ce que tu VOIS sur le screenshot")'
                     for i in _missing_vc
                 )
-                prompt += (
-                    f"\n\n🛑 CHECKLIST VISUELLE INCOMPLÈTE ({visual_criteria_count - len(_missing_vc)}/"
-                    f"{visual_criteria_count} — manquants : {_missing_vc}). NE MODIFIE AUCUN FICHIER. "
-                    f"Exécute EXACTEMENT cette séquence, rien d'autre :\n"
-                    f"STEP SUIVANT — copie ce bloc (seule liberté : tes observations) :\n"
+                prompt = (
+                    "Les fichiers cibles SONT DÉJÀ CORRIGÉS. Il ne manque QUE la "
+                    f"checklist visuelle ({len(_missing_vc)}/{visual_criteria_count} critères : "
+                    f"{_missing_vc}). NE LIS AUCUN FICHIER, NE MODIFIE RIEN.\n"
+                    "Exécute EXACTEMENT cette séquence :\n"
+                    "STEP SUIVANT — copie ce bloc (seule liberté : tes observations) :\n"
                     f"```python\ntake_screenshot()\n{_vc_lines}\n```\n"
-                    f"STEP D'APRÈS — copie ce bloc :\n"
-                    f'```python\nfinal_answer({{"task_id": "{_task_id}", "status": "success" '
-                    f'ou "failure", "details": "...", "linter_ok": true|false, "vision_ok": true|false}})\n```'
+                    "STEP D'APRÈS — copie ce bloc :\n"
+                    '```python\nfinal_answer({"task_id": "' + _task_id + '", '
+                    '"status": "success" ou "failure", "details": "...", '
+                    '"linter_ok": true|false, "vision_ok": true|false})\n```'
                 )
                 print(
                     f"[!] Visual audit : {len(_missing_vc)}/{visual_criteria_count} critère(s) "
-                    f"non audité(s) → micro-protocole rituel injecté au retry."
+                    f"non audité(s) → retry RITUEL-SEUL (prompt remplacé)."
                 )
 
         # FIX TOKEN EXPLOSION → F-116 : le boundary de retry compacte
@@ -1613,6 +1624,12 @@ Code prêt pour la production, respectant les conventions du langage.
         # F-126 : reset de la preuve durable de screenshot (même lifecycle que
         # l'audit visuel — traverse volontairement les retries de run_with_retry).
         reset_screenshot_proof()
+        # Preuve durable d'écriture (boucle isolation 2026-08-22) : même
+        # lifecycle — le GoalEnforcer y replonge quand la compaction intra-
+        # attempt a amputé la mémoire des steps portant les write_file.
+        from .tools import reset_write_proof
+
+        reset_write_proof()
         # F-114 : reset du compteur de screenshots du nudge checklist (même
         # lifecycle que l'audit visuel ; traverse volontairement les retries).
         # F-125 : reset du compteur anti-gel navigateur (même lifecycle).
