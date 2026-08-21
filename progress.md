@@ -1,5 +1,38 @@
 # État d'Avancement du Sprint
 
+## Jalons de l'Itération (cycle F-145 — sondes de preuve de mouvement, post-mortem run #8)
+> Origine : bug ghostY du run #8 (pièce Tetris dessinée à `(ghostY+r)` au lieu de
+> `(currentPiece.y+r)` + `drawGhost()` cassé — AUCUNE animation de chute, invisible
+> sur screenshot) trouvé par debug manuel Chrome DevTools ; la sonde canvas v1
+> (400 ms fixes) était disponible au Tester et ne pouvait pas le voir (une chute à
+> 800ms/row ne change rien sous 800 ms de fenêtre, et le compte de pixels peints
+> ne bouge pas quand une pièce tombe). Décision user : porter la méthode en outils.
+
+- [x] F145-1 : `probe_canvas_activity` **v2** — `window_ms` paramétrable (défaut
+  2400, bornes 800-10000), hash RGB échantillonné (1 pixel/3), liveness `raf_per_s`
+  (1 s dédiée) + `visibility` (anti-faux-positif onglet caché), verdicts
+  ANIMATING/STATIC_PAINTED/INERT_EMPTY/NON_2D + flag `suspect_animation_broken`
+  (boucle active mais rendu figé — la signature exacte du bug ghostY).
+- [x] F145-2 : 4 nouveaux outils (pattern F-72, délèguent à evaluate_script,
+  identifiants JS nus validés côté Python, rejet sans IO) — `expose_game_state`
+  (variables top-level ×2 à 1,5 s → changed_over_1500ms), `instrument_calls`
+  (comptage d'appels réels draw/gameLoop/moveDown), `dump_function_source`
+  (toString() capé 1200 chars — c'est ainsi que le bug a été LU), `force_advance`
+  (N appels d'update + état avant/après + state_changed).
+- [x] F145-3 : Factory 11 helpers (7+4), Coder ET Tester en bénéficient (câblage
+  inchangé). Règle **5-bis** prompt Tester (preuve de mouvement OBLIGATOIRE avant
+  tout PASS jeu/animation ; STATIC_PAINTED + raf>0 = défaut majeur ; diagnostic
+  instrument_calls → dump_function_source) + étape 6 du rituel visuel Coder.
+- [x] F145-4 : Tests — 12 nouveaux + 2 mis à jour → `test_devtools_dom_tools.py`
+  **23/23 PASS** ; suites voisines (prompts, F-127, chrome_devtools, vision_nudge,
+  validation_criteria) **170 passed** ; suite complète **1712 passed / 0 failed /
+  7 skipped** (documentés) ; py_compile 3 fichiers ; gate F-103 : 29 surfaces,
+  0 erreur, 0 warning.
+- [x] F145-5 : État disque (contract C468-C472, feature_list F-145, ce fichier)
+  + DuckDB + commit + PR.
+- [ ] F145-6 : Validation E2E (run ultérieur — idéalement Tetris : la règle 5-bis
+  doit faire FAIL le livrable sans animation de chute).
+
 ## Jalons de l'Itération (cycle F-130/131 — post-mortem run 2026-08-20_1028 Tetris, session « run de 0 »)
 > Objectif utilisateur : run Tetris de 0 → analyser/corriger si problème →
 > relancer → validé si 0 erreur dans les logs. Run 2026-08-20_1028 (~65 min,

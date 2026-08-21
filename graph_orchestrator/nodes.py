@@ -1090,6 +1090,9 @@ Workflow de validation (À FAIRE après avoir créé les fichiers, AVANT final_a
 3. FUZZING UI OBLIGATOIRE : Exécute `fuzz_click_all_buttons()` pour cliquer sur tous les boutons et réveiller les bugs JS cachés (monkey testing en 1 appel, encapsule le snippet JS).
 4. `list_console_messages()` — OBLIGATOIRE EN DERNIER. Vérifie 0 erreur JS (SyntaxError, undefined, Uncaught). Sans l'étape 3, tu rateras 80% des erreurs !
 5. Si erreur : CORRIGE via `search_replace` (jamais de rewrite total), puis recommence le cycle (navigate, screenshot, fuzzing, console).
+6. JEU/CANVAS ANIMÉ : un screenshot ne prouve PAS l'animation — appelle `probe_canvas_activity()`
+   et exige le statut ANIMATING avant final_answer (STATIC_PAINTED = tu dessines probablement
+   avec la mauvaise variable, ex: ghostY au lieu de la position réelle — vérifie ta fonction draw).
 ⚠️ Si `navigate_page` TIMEOUT sur ta page LOCALE : le JS bloque le thread (boucle while/do-while infinie — un fichier local se charge en <1s). Relire le code, corriger la boucle via search_replace, re-naviguer — ne JAMAIS retenter la navigation à l'identique.
 {criteria_note}
 

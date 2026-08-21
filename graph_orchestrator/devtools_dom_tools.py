@@ -115,10 +115,20 @@ class DevToolsFuzzClickTool(Tool):
         return self._eval(function=_FUZZ_CLICK_JS)
 
 
-_PROBE_CANVAS_JS = (
-    "async () => {"
+_PROBE_CANVAS_V2_JS = (
+    "async (window_ms) => {"
+    " const wm = Math.max(800, Math.min(10000, Number(window_ms) || 2400));"
     " const canvases = Array.from(document.querySelectorAll('canvas'));"
     " if (canvases.length === 0) return JSON.stringify({ has_canvas: false, message: 'Aucun canvas dans la page.' });"
+    # liveness rAF : 1 s dédiée (un onglet caché gèle rAF → contexte pour écarter un faux positif)
+    " let raf = 0; let rafStop = false;"
+    " const rafTick = () => { if (rafStop) return; raf++; requestAnimationFrame(rafTick); };"
+    " requestAnimationFrame(rafTick);"
+    " await new Promise(r => setTimeout(r, 1000));"
+    " rafStop = true;"
+    " const raf_per_s = raf;"
+    " const hashRGB = (d) => { let h = 5381; for (let p = 0; p < d.length; p += 12) { h = (((h * 33) ^ d[p]) ^ d[p+1]) ^ d[p+2]; } return h >>> 0; };"
+    " const grab = (ctx, w, h) => { try { return ctx.getImageData(0, 0, Math.min(w, 400), Math.min(h, 400)).data; } catch (e) { return null; } };"
     " const results = [];"
     " for (let i = 0; i < canvases.length; i++) {"
     "   const c = canvases[i];"
@@ -128,40 +138,45 @@ _PROBE_CANVAS_JS = (
     "   let ctx = null;"
     "   try { ctx = c.getContext('2d'); } catch(e){}"
     "   if (!ctx) {"
-    "     results.push({ index: i, width: w, height: h, is_inert: false, note: 'WebGL/non-2D' });"
+    "     results.push({ index: i, width: w, height: h, status: 'NON_2D', note: 'WebGL/non-2D' });"
     "     continue;"
     "   }"
-    "   let img1 = null;"
-    "   try { img1 = ctx.getImageData(0, 0, Math.min(w, 200), Math.min(h, 200)).data; } catch(e){}"
-    "   let painted = 0;"
-    "   if (img1) {"
-    "     for (let p = 3; p < img1.length; p += 4) { if (img1[p] > 0) painted++; }"
-    "   }"
-    "   await new Promise(r => setTimeout(r, 400));"
-    "   let img2 = null;"
-    "   try { img2 = ctx.getImageData(0, 0, Math.min(w, 200), Math.min(h, 200)).data; } catch(e){}"
-    "   let changed = 0;"
-    "   if (img1 && img2) {"
-    "     for (let p = 0; p < Math.min(img1.length, img2.length); p += 4) {"
-    "       if (img1[p] !== img2[p] || img1[p+1] !== img2[p+1] || img1[p+2] !== img2[p+2]) changed++;"
-    "     }"
-    "   }"
-    "   const is_inert = (painted === 0);"
-    "   const is_animating = (changed > 0);"
+    "   const d0 = grab(ctx, w, h);"
+    "   let painted = -1;"
+    "   if (d0) { painted = 0; for (let p = 0; p < d0.length; p += 12) { if (d0[p] || d0[p+1] || d0[p+2]) painted++; } }"
+    # hash RGB (F-145) : une pièce qui tombe garde le MÊME nombre de pixels peints —
+    # seul un hash de position change. 4 échantillons espacés de window/3.
+    "   const hashes = [];"
+    "   if (d0) hashes.push(hashRGB(d0));"
+    "   const nSamples = 3; const step = wm / nSamples;"
+    "   for (let k = 1; k <= nSamples; k++) { await new Promise(r => setTimeout(r, step)); const d = grab(ctx, w, h); if (d) hashes.push(hashRGB(d)); }"
+    "   let changed = false;"
+    "   for (let k = 1; k < hashes.length; k++) { if (hashes[k] !== hashes[k-1]) { changed = true; break; } }"
+    "   let status; let suspect = false;"
+    "   if (painted === 0) status = 'INERT_EMPTY';"
+    "   else if (w < 50 || h < 50) status = 'TOO_SMALL';"
+    "   else if (changed) status = 'ANIMATING';"
+    "   else { status = 'STATIC_PAINTED'; if (raf_per_s > 0) suspect = true; }"
     "   results.push({"
     "     index: i,"
     "     width: w,"
     "     height: h,"
-    "     rect_width: rect.width,"
-    "     rect_height: rect.height,"
-    "     painted_pixels: painted,"
-    "     changed_pixels_400ms: changed,"
-    "     is_inert: is_inert,"
-    "     is_animating: is_animating,"
-    "     status: (is_inert ? 'INERT/EMPTY' : (w < 50 || h < 50 ? 'TOO_SMALL' : 'ACTIVE'))"
+    "     painted_sampled: painted,"
+    "     samples: hashes.length,"
+    "     changed: changed,"
+    "     status: status,"
+    "     suspect_animation_broken: suspect"
     "   });"
     " }"
-    " return JSON.stringify({ has_canvas: true, canvases: results });"
+    " const anySuspect = results.some(r => r.suspect_animation_broken);"
+    " return JSON.stringify({"
+    "   has_canvas: true,"
+    "   visibility: document.visibilityState,"
+    "   raf_per_s: raf_per_s,"
+    "   window_ms: wm,"
+    "   canvases: results,"
+    "   hint: anySuspect ? 'BOUCLE rAF ACTIVE MAIS RENDU FIGÉ — animation probablement cassée (ex: pièce dessinée via la mauvaise variable). Diagnostique avec dump_function_source() sur la fonction draw().' : null"
+    " });"
     "}"
 )
 
@@ -169,20 +184,29 @@ _PROBE_CANVAS_JS = (
 class DevToolsProbeCanvasTool(Tool):
     name = "probe_canvas_activity"
     description = (
-        "Sonde d'activité Canvas (Browser-Use / Stagehand) : analyse les balises <canvas>. "
-        "Vérifie la surface peinte (> 0 pixels non vides) et compare 2 captures à 400ms d'intervalle "
-        "pour prouver que la boucle 60 FPS est active et que la toile n'est pas inerte ou écrasée. "
-        "À appeler SANS ARGUMENT."
+        "Sonde d'activité Canvas (F-145) : hash RGB de chaque <canvas> 2D en 4 échantillons "
+        "sur une fenêtre paramétrable window_ms (défaut 2400, min 800 — une chute de pièce à "
+        "800ms/row est INVISIBLE sous 800ms de fenêtre). Mesure aussi raf_per_s (boucle vivante ?) "
+        "et visibility (onglet caché = rAF gelé, écarter le faux positif). Verdicts : ANIMATING / "
+        "STATIC_PAINTED / INERT_EMPTY / NON_2D + flag suspect_animation_broken quand la boucle "
+        "tourne mais que le rendu ne change JAMAIS (bug du genre pièce dessinée à ghostY au lieu de y). "
+        "À appeler SANS ARGUMENT (fenêtre défaut) ou avec window_ms=4000 pour un jeu lent."
     )
-    inputs = {}
+    inputs = {
+        "window_ms": {
+            "type": "integer",
+            "description": "durée totale d'observation en ms (défaut 2400, bornes 800-10000)",
+            "nullable": True,
+        },
+    }
     output_type = "string"
 
     def __init__(self, evaluate_script_tool: Tool):
         super().__init__()
         self._eval = evaluate_script_tool
 
-    def forward(self) -> str:
-        return self._eval(function=_PROBE_CANVAS_JS)
+    def forward(self, window_ms=None) -> str:
+        return self._eval(function=_PROBE_CANVAS_V2_JS, window_ms=window_ms if window_ms is not None else 2400)
 
 
 _FUZZ_KEYBOARD_JS = (
@@ -346,6 +370,241 @@ class DevToolsHealSelectorTool(Tool):
         return self._eval(function=_HEAL_SELECTOR_JS, args=[tag, text_hint, attr_hint])
 
 
+# --- F-145 : sondes de preuve de mouvement (post-mortem run #8 Tetris) --------
+# La sonde canvas v1 (400 ms fixes) était disponible au Tester du run #8 et n'a
+# pas pu voir le bug ghostY : une chute à 800 ms/row ne change rien sous 800 ms
+# de fenêtre, et un compte de pixels peints ne bouge pas quand une pièce tombe
+# (même nombre de cellules). Ces 4 outils portent la méthode de debug qui a
+# trouvé le bug manuellement : lire l'ÉTAT interne, compter les APPELS réels,
+# lire le SOURCE des fonctions, accélérer l'HORLOGE du jeu.
+
+import re as _re
+
+_IDENT_RE = _re.compile(r"^[A-Za-z_$][A-Za-z0-9_$]*$")
+
+
+def _split_identifiers(names_csv: str, limit: int = 30):
+    """Splitte une liste CSV de noms JS et rejette les non-identifiants.
+
+    Les noms finissent dans un eval() page-side : on n'accepte que des
+    identifiants JS nus (robustesse — evaluate_script reste du JS complet
+    pour l'agent, il n'y a pas d'escalade de privilège ici).
+    """
+    names = [n.strip() for n in (names_csv or "").split(",") if n.strip()]
+    bad = [n for n in names if not _IDENT_RE.match(n)]
+    return names[:limit], bad
+
+
+_EXPOSE_STATE_JS = (
+    "async (names_csv) => {"
+    " const DEFAULT = 'score,lines,level,best,paused,gameOver,isGameOver,running,isPlaying,playing,started,currentPiece,board,grid,lives,time,frame,frameCount,coins';"
+    " const names = (names_csv || DEFAULT).split(',').map(s => s.trim()).filter(Boolean).slice(0, 30);"
+    " const read = (n) => {"
+    "   try {"
+    "     const v = eval(n);"
+    "     if (v === undefined) return { missing: true };"
+    "     if (v === null || typeof v === 'boolean' || typeof v === 'number') return { value: v };"
+    "     if (typeof v === 'string') return { value: v.slice(0, 80) };"
+    "     if (typeof v === 'function') return { kind: 'function' };"
+    "     if (Array.isArray(v)) return { kind: 'array', length: v.length };"
+    "     if (typeof v === 'object') {"
+    "       if (n === 'board' || n === 'grid') { let nz = 0; for (const row of v) { if (Array.isArray(row)) for (const cell of row) { if (cell) nz++; } } return { kind: 'grid', rows: v.length, non_empty_cells: nz }; }"
+    "       try { return { kind: 'object', json: JSON.stringify(v).slice(0, 200) }; } catch (e) { return { kind: 'object' }; }"
+    "     }"
+    "     return { kind: typeof v };"
+    "   } catch (e) { return { missing: true }; }"
+    " };"
+    " const snap = () => { const o = {}; for (const n of names) o[n] = read(n); return o; };"
+    " const t0 = snap();"
+    " await new Promise(r => setTimeout(r, 1500));"
+    " const t1 = snap();"
+    " const changed = [];"
+    " for (const n of names) { if (JSON.stringify(t0[n]) !== JSON.stringify(t1[n])) changed.push(n); }"
+    " return JSON.stringify({ names: names, values: t1, changed_over_1500ms: changed, note: 'changed vide = etat fige (normal sans action ; ANORMAL pour un jeu anime en cours)' });"
+    "}"
+)
+
+
+class DevToolsExposeGameStateTool(Tool):
+    name = "expose_game_state"
+    description = (
+        "Lit l'ÉTAT INTERNE du jeu/page (F-145) : les variables top-level des <script> classiques "
+        "(score, lines, level, paused, gameOver, currentPiece, board...) sont accessibles par "
+        "identifiant nu. Deux snapshots espacés de 1,5 s → changed_over_1500ms prouve si l'état VIT. "
+        "Args : names='score,lines,board' (optionnel, liste par défaut fournie). Un jeu dont l'état "
+        "change mais dont le canvas est figé (voir probe_canvas_activity) = bug de rendu."
+    )
+    inputs = {
+        "names": {
+            "type": "string",
+            "description": "liste CSV d'identifiants JS (défaut: score,lines,level,best,paused,gameOver,currentPiece,board,...)",
+            "nullable": True,
+        },
+    }
+    output_type = "string"
+
+    def __init__(self, evaluate_script_tool: Tool):
+        super().__init__()
+        self._eval = evaluate_script_tool
+
+    def forward(self, names=None) -> str:
+        if names:
+            _, bad = _split_identifiers(names)
+            if bad:
+                return f"ERROR (expose_game_state) : noms invalides {bad} — identifiants JS nuds uniquement, séparés par des virgules."
+        return self._eval(function=_EXPOSE_STATE_JS, names_csv=names)
+
+
+_INSTRUMENT_CALLS_JS = (
+    "async (names_csv, window_s) => {"
+    " const DEFAULT = 'draw,update,gameLoop,loop,tick,render,animate,moveDown,updateHUD,updateScore,spawnPiece';"
+    " const names = (names_csv || DEFAULT).split(',').map(s => s.trim()).filter(Boolean).slice(0, 20);"
+    " const ws = Math.max(1, Math.min(30, Number(window_s) || 3));"
+    " const counts = {}; const wrapped = [];"
+    " for (const n of names) {"
+    "   try {"
+    "     const v = eval(n);"
+    "     if (typeof v !== 'function') { counts[n] = 'not_a_function'; continue; }"
+    "     counts[n] = 0;"
+    "     const w = function (...a) { counts[n]++; return v.apply(this, a); };"
+    "     eval(n + ' = w');"
+    "     wrapped.push(n);"
+    "   } catch (e) { counts[n] = 'error'; }"
+    " }"
+    " await new Promise(r => setTimeout(r, ws * 1000));"
+    " return JSON.stringify({ wrapped: wrapped, window_s: ws, calls: counts, note: '0 appels = fonction morte/jamais appelée ; n>0 = boucle vivante (si le canvas reste figé → bug de rendu)' });"
+    "}"
+)
+
+
+class DevToolsInstrumentCallsTool(Tool):
+    name = "instrument_calls"
+    description = (
+        "Compteur de vie (F-145) : wrappe les fonctions globales du jeu (draw, gameLoop, moveDown...) "
+        "et compte leurs APPELS RÉELS pendant window_s secondes (défaut 3). Prouve que la boucle "
+        "tourne et que la gravité tire — discrimine « moteur mort » vs « moteur vivant mais rendu figé ». "
+        "Args : names='draw,gameLoop' (optionnel), window_s=3 (optionnel)."
+    )
+    inputs = {
+        "names": {"type": "string", "description": "liste CSV de fonctions à wrapper", "nullable": True},
+        "window_s": {"type": "integer", "description": "durée d'observation en secondes (défaut 3)", "nullable": True},
+    }
+    output_type = "string"
+
+    def __init__(self, evaluate_script_tool: Tool):
+        super().__init__()
+        self._eval = evaluate_script_tool
+
+    def forward(self, names=None, window_s=None) -> str:
+        if names:
+            _, bad = _split_identifiers(names, limit=20)
+            if bad:
+                return f"ERROR (instrument_calls) : noms invalides {bad} — identifiants JS nuds uniquement."
+        return self._eval(
+            function=_INSTRUMENT_CALLS_JS, names_csv=names, window_s=window_s if window_s is not None else 3
+        )
+
+
+_DUMP_SOURCE_JS = (
+    "(names_csv) => {"
+    " const DEFAULT = 'draw,update,gameLoop,loop,tick,render,moveDown,spawnPiece,collide,moveLeft,moveRight,rotate,merge,clearLines';"
+    " const names = (names_csv || DEFAULT).split(',').map(s => s.trim()).filter(Boolean).slice(0, 10);"
+    " const out = {};"
+    " for (const n of names) {"
+    "   try {"
+    "     const v = eval(n);"
+    "     out[n] = typeof v === 'function' ? v.toString().slice(0, 1200) : '[' + typeof v + ']';"
+    "   } catch (e) { out[n] = '[absent]'; }"
+    " }"
+    " return JSON.stringify({ sources: out, note: 'Cherche les inversions de variables (ex: dessiner (ghostY+r) au lieu de (currentPiece.y+r)) et les conditions jamais vraies.' });"
+    "}"
+)
+
+
+class DevToolsDumpFunctionSourceTool(Tool):
+    name = "dump_function_source"
+    description = (
+        "Lecture de source in-page (F-145) : renvoie le code source (Function.prototype.toString) "
+        "des fonctions globales du jeu — draw, gameLoop, moveDown... C'est ainsi qu'a été trouvé le "
+        "bug ghostY (pièce dessinée à la mauvaise variable, invisible sur un screenshot). "
+        "Args : names='draw,gameLoop' (optionnel, max 10 fonctions)."
+    )
+    inputs = {
+        "names": {"type": "string", "description": "liste CSV de fonctions à dumper", "nullable": True},
+    }
+    output_type = "string"
+
+    def __init__(self, evaluate_script_tool: Tool):
+        super().__init__()
+        self._eval = evaluate_script_tool
+
+    def forward(self, names=None) -> str:
+        if names:
+            _, bad = _split_identifiers(names, limit=10)
+            if bad:
+                return f"ERROR (dump_function_source) : noms invalides {bad} — identifiants JS nuds uniquement."
+        return self._eval(function=_DUMP_SOURCE_JS, names_csv=names)
+
+
+_FORCE_ADVANCE_JS = (
+    "(fn, times) => {"
+    " const fname = fn || 'moveDown';"
+    " const n = Math.max(1, Math.min(500, Number(times) || 40));"
+    " const readCompact = () => {"
+    "   const names = ['score', 'lines', 'level', 'best', 'paused', 'gameOver', 'currentPiece', 'board'];"
+    "   const o = {};"
+    "   for (const nm of names) {"
+    "     try {"
+    "       const v = eval(nm);"
+    "       if (v === undefined) continue;"
+    "       if (nm === 'board' || nm === 'grid' || Array.isArray(v)) { o[nm] = '[array]'; }"
+    "       else if (v && typeof v === 'object') { o[nm] = { x: v.x, y: v.y, type: v.type }; }"
+    "       else { o[nm] = typeof v === 'string' ? v.slice(0, 40) : v; }"
+    "     } catch (e) {}"
+    "   }"
+    "   return o;"
+    " };"
+    " const before = readCompact();"
+    " let done = 0; let lastError = null;"
+    " try {"
+    "   const f = eval(fname);"
+    "   if (typeof f !== 'function') return JSON.stringify({ error: fname + \" n'est pas une fonction globale accessible\" });"
+    "   for (let i = 0; i < n; i++) { f(); done++; }"
+    " } catch (e) { lastError = String(e).slice(0, 200); }"
+    " const after = readCompact();"
+    " let stateChanged = false;"
+    " try { stateChanged = JSON.stringify(before) !== JSON.stringify(after); } catch (e) {}"
+    " return JSON.stringify({ fn: fname, calls_done: done, last_error: lastError, state_before: before, state_after: after, state_changed: stateChanged });"
+    "}"
+)
+
+
+class DevToolsForceAdvanceTool(Tool):
+    name = "force_advance"
+    description = (
+        "Horloge accélérée (F-145) : appelle N fois (défaut 40) une fonction d'update globale du jeu "
+        "(défaut moveDown) pour tester la logique en 1 seconde au lieu d'attendre l'horloge réelle, et "
+        "renvoie l'état avant/après (state_changed) + la 1re exception rencontrée. Si state_changed=false "
+        "alors que la fonction tourne → la logique est cassée ; si l'état change mais pas le canvas → "
+        "bug de rendu (croise probe_canvas_activity)."
+    )
+    inputs = {
+        "fn": {"type": "string", "description": "nom de la fonction à appeler (défaut: moveDown)", "nullable": True},
+        "times": {"type": "integer", "description": "nombre d'appels (défaut 40, max 500)", "nullable": True},
+    }
+    output_type = "string"
+
+    def __init__(self, evaluate_script_tool: Tool):
+        super().__init__()
+        self._eval = evaluate_script_tool
+
+    def forward(self, fn=None, times=None) -> str:
+        fname = fn or "moveDown"
+        if not _IDENT_RE.match(fname or ""):
+            return "ERROR (force_advance) : nom de fonction invalide — identifiant JS nu uniquement."
+        return self._eval(function=_FORCE_ADVANCE_JS, fn=fname, times=times if times is not None else 40)
+
+
 def build_devtools_helper_tools(cdt_tools: List[Tool]) -> List[Tool]:
     """Factory fail-open : instancie les helpers DevTools si ``evaluate_script`` est dispo.
 
@@ -369,4 +628,9 @@ def build_devtools_helper_tools(cdt_tools: List[Tool]) -> List[Tool]:
         DevToolsProbeCanvasTool(eval_tool),
         DevToolsFuzzKeyboardTool(eval_tool),
         DevToolsHealSelectorTool(eval_tool),
+        # F-145 : sondes de preuve de mouvement
+        DevToolsExposeGameStateTool(eval_tool),
+        DevToolsInstrumentCallsTool(eval_tool),
+        DevToolsDumpFunctionSourceTool(eval_tool),
+        DevToolsForceAdvanceTool(eval_tool),
     ]

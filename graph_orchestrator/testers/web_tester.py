@@ -289,8 +289,12 @@ Pour inspecter la structure sans surcharger ton contexte :
    principale du DOM. Utilise `verbose=True` pour le détail complet.
 2. `evaluate_script(function="async () => document.body.innerHTML.length")` (DevTools) : pour
    des checks ponctuels (nombre d'éléments, valeurs, styles calculés).
-Les outils `clean_dom()`, `add_visual_tags()`, `fuzz_click_all_buttons()`, `probe_canvas_activity()`, `fuzz_keyboard_controls()` instrumentent le navigateur DevTools actif :
-- `probe_canvas_activity()` : vérifie la surface peinte du Canvas (> 0 pixels) et l'animation 60 FPS (détecte les toiles inertes, vides ou coordonnées écrasées à 30px).
+Les outils `clean_dom()`, `add_visual_tags()`, `fuzz_click_all_buttons()`, `probe_canvas_activity()`, `fuzz_keyboard_controls()`, `expose_game_state()`, `instrument_calls()`, `dump_function_source()`, `force_advance()` instrumentent le navigateur DevTools actif :
+- `probe_canvas_activity(window_ms=2400)` : hash RGB du canvas en 4 échantillons sur ~2,4 s + liveness rAF. Verdicts : ANIMATING / STATIC_PAINTED (+`suspect_animation_broken` si la boucle tourne mais que le rendu ne change JAMAIS) / INERT_EMPTY. Fenêtre min 800 ms — une chute à 800ms/row est invisible en dessous.
+- `expose_game_state(names=None)` : lit l'état interne top-level (score, lines, currentPiece, board...) ×2 à 1,5 s d'intervalle → `changed_over_1500ms` prouve que l'état VIT.
+- `instrument_calls(names=None, window_s=3)` : compte les appels RÉELS de draw/gameLoop/moveDown — discrimine moteur mort vs moteur vivant au rendu figé.
+- `dump_function_source(names=None)` : source (toString) des fonctions du jeu — les bugs de rendu s'y lisent (ex réel : pièce peinte à `(ghostY+r)` au lieu de `(currentPiece.y+r)`).
+- `force_advance(fn='moveDown', times=40)` : accélère l'horloge du jeu (N appels d'update en 1 s) → state_changed prouve la logique.
 - `fuzz_keyboard_controls()` : simule les touches clavier de jeu (Flèches, Espace, Z, X) et capture immédiatement toute exception JS non gérée.
 - `clean_dom()` : renvoie le DOM allégé (analyse sans polluer ton contexte).
 - `add_visual_tags()` : ajoute des badges rouges numérotés sur les éléments cliquables avant un screenshot.
@@ -317,6 +321,15 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
    (~400ms), et vérifier que la progression est PARTIELLE (ni 0 ni terminale, si
    l'animation doit durer > 400ms). Une animation qui termine en < 50ms est un BUG
    (instantanée), pas un succès. Voir la recette temporelle dans le skill.
+5-bis. JEU/CANVAS = PREUVE DE MOUVEMENT OBLIGATOIRE (F-145) : avant tout verdict PASS
+   sur un critère de jeu/animation, tu DOIS prouver le MOUVEMENT avec un outil :
+   `probe_canvas_activity()` (statut ANIMATING) OU `expose_game_state()` (changed_over_1500ms
+   non vide) OU `force_advance()` (state_changed=true). Un screenshot statique ne prouve RIEN
+   (ex réel : livrable Tetris au plateau superbe où la pièce n'a JAMAIS été dessinée à sa
+   position réelle — invisible sur screenshot, flaggé par STATIC_PAINTED+suspect). Si
+   STATIC_PAINTED alors que raf_per_s > 0 → défaut MAJEUR ; diagnostique en 2 appels :
+   `instrument_calls()` puis `dump_function_source(names="draw")`, cite la ligne fautive
+   dans ton rapport.
 6. 🛑 BUDGET STEPS — CONVERGE RAPIDEMENT (anti over-exploration) : tu as un budget limité
    de steps. Suite type : 1 `navigate_page` + 1 `list_console_messages` + 1 assertion par
    critère fonctionnel + 1 `final_answer`. Soit ~{settings.tester_max_steps} steps pour TOUT. RÈGLES :

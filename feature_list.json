@@ -1220,6 +1220,15 @@
       "description": "4 correctifs déterministes post-mortem run #7 : (A) print succès Static Tester (détails tronqués 110 chars, workflows.py) ; (B) garde sanité plan Architect (_plan_sanity_violations : dimension > 4000px OU grille > 120 cellules détectées déterministement + UNE re-demande Architect correctrice, px vs cellules distingués) ; (C) budgets Tester TARGETED_MAX_STEPS 16 + TESTER_TIMEOUT_S 1200 ; (D) plafond lectures identiques (3e lecture strictement identique path+offset+limit refusée + directive AGIS, reset par nœud). 8 tests, gate F-103 OK, contract C467. Référencé « F-141 » dans le code/tests/contract/progress d'origine ; renommé F-144 le 2026-08-20 (décision user) car le numéro F-141 était pris par l'entrée références deepseek-harness lors de l'union des PR #98/#99.",
       "status": "completed",
       "dependencies": []
+    },
+    {
+      "id": "F-145",
+      "name": "Sondes de preuve de mouvement (canvas RGB hash + état interne + comptage d'appels + source + horloge accélérée)",
+      "description": "Post-mortem run #8 Tetris : la sonde canvas v1 (400 ms fixes) était disponible au Tester et n'a pas vu le bug ghostY (pièce dessinée à (ghostY+r) au lieu de (currentPiece.y+r) — invisible sur screenshot, trouvé par debug manuel Chrome DevTools). Port de cette méthode en 5 outils déterministes (pattern F-72, 0 LLM) : (1) probe_canvas_activity v2 — fenêtre window_ms paramétrable (défaut 2400), hash RGB échantillonné (pas le compte de pixels peints), liveness raf_per_s + visibility, verdicts ANIMATING/STATIC_PAINTED/INERT_EMPTY + flag suspect_animation_broken (boucle active mais rendu figé) ; (2) expose_game_state — variables top-level ×2 à 1,5 s → changed_over_1500ms ; (3) instrument_calls — comptage d'appels réels de draw/gameLoop/moveDown ; (4) dump_function_source — toString() capé 1200 chars ; (5) force_advance — N appels d'update + état avant/après. Règle 5-bis prompt Tester (preuve de mouvement OBLIGATOIRE avant tout PASS jeu/animation) + étape 6 rituel visuel Coder. 12 nouveaux tests (23/23), gate F-103 29 surfaces 0 erreur, contract C468-C472.",
+      "status": "completed",
+      "dependencies": [
+        "F-72"
+      ]
     }
   ]
 }
