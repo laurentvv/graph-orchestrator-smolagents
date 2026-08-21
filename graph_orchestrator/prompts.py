@@ -317,6 +317,16 @@ décrit le CODE, pas le PÉRIMÈTRE : une sous-fonctionnalité est un ÉCHEC, pa
 concision."""
 
 
+def _ponytail_active() -> bool:
+    """Lit PONYTAIL_ENABLED (fail-open : True si settings indisponible)."""
+    try:
+        from .config import settings
+
+        return bool(settings.ponytail_enabled)
+    except Exception:
+        return True
+
+
 def build_role_header(role: str) -> str:
     """Assemble l'en-tête de prompt pour les nœuds smolagents (Coder, WebTester).
 
@@ -324,23 +334,16 @@ def build_role_header(role: str) -> str:
     complet par f-string et doivent appeler cette fonction en tête pour garantir que les
     invariants sont présents (cohérence avec les nœuds DSPy qui les injectent via __doc__).
 
-    F-116 : les rôles CODER embarquent en plus la doctrine ponytail (réduction
-    à la source — le meilleur code pour le contexte est celui qu'on n'écrit
-    pas ; -54 % LOC / -22 % tokens mesurés par la référence).
+    F-116 : les rôles CODER embarquent la doctrine ponytail (réduction à la
+    source, fiche 48). Opt-out ``PONYTAIL_ENABLED=0`` (A/B post-mortem
+    2026-08-21_1337).
 
     Renvoie une chaîne vide si le rôle est inconnu (robustesse : un nœud qui n'a pas de
     rôle dédié récupère juste les invariants — cf. ``build_invariants_header``).
     """
     block = ROLE_BLOCKS.get(role, "")
-    parts = [
-        p
-        for p in (
-            block,
-            PONYTAIL_LADDER if role in PONYTAIL_ROLES else None,
-            UNIVERSAL_INVARIANTS,
-        )
-        if p
-    ]
+    ponytail = PONYTAIL_LADDER if role in PONYTAIL_ROLES and _ponytail_active() else None
+    parts = [p for p in (block, ponytail, UNIVERSAL_INVARIANTS) if p]
     return "\n\n".join(parts)
 
 

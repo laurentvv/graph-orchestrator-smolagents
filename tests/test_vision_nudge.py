@@ -547,3 +547,120 @@ class TestWindDownNudge:
         """Le message doit ACCEPTER un verdict honnête False (échec prouvé > run brûlé)."""
         step = self._step(criteria=6, step_number=38)
         assert "verdict" in step.observations.lower()
+
+
+# ===========================================================================
+# Goulot run 2026-08-21_1337 : churn d'édition (P2) + budget vision (P3)
+# ===========================================================================
+
+class TestEditChurnNudge:
+    """5 edits chirurgicaux consécutifs sans effet → sortie d'auto-fix honnête."""
+
+    def _nudge(self, code: str, observations: str):
+        from graph_orchestrator.vision_callback import (
+            _build_edit_churn_nudge,
+            reset_edit_churn,
+        )
+
+        reset_edit_churn()
+        step = SimpleNamespace(code_action=code, observations=observations, tool_calls=None)
+        return _build_edit_churn_nudge(step)
+
+    def test_aucun_edit_pas_de_nudge(self):
+        assert self._nudge("read_file('a')", "Out: contenu") is None
+
+    def test_edit_reussit_reset(self):
+        assert (
+            self._nudge(
+                "search_replace(path='a', old_string='x', new_string='y')",
+                "Successfully updated a (1 occurrences replaced).",
+            )
+            is None
+        )
+
+    def test_cinq_edits_rates_declenchent(self):
+        from graph_orchestrator.vision_callback import reset_edit_churn, _EDIT_CHURN_STATE
+
+        reset_edit_churn()
+        step = SimpleNamespace(
+            code_action="search_replace(path='a', old_string='x', new_string='y')",
+            observations="Ancien et nouveau IDENTIQUES : edit refusé.",
+            tool_calls=None,
+        )
+        from graph_orchestrator.vision_callback import _build_edit_churn_nudge
+
+        results = [_build_edit_churn_nudge(step) for _ in range(5)]
+        assert results[:4] == [None, None, None, None]
+        assert results[4] is not None and "CHURN D'ÉDITION" in results[4]
+        assert 'status="failure"' in results[4]
+
+    def test_edit_ambigu_non_compte(self):
+        from graph_orchestrator.vision_callback import reset_edit_churn, _build_edit_churn_nudge
+
+        reset_edit_churn()
+        step = SimpleNamespace(
+            code_action="search_replace(path='a', old_string='x', new_string='y')",
+            observations="Out: quelque chose sans marqueur",
+            tool_calls=None,
+        )
+        assert all(_build_edit_churn_nudge(step) is None for _ in range(10))
+
+    def test_reset_par_noeud(self):
+        from graph_orchestrator.vision_callback import reset_edit_churn, _build_edit_churn_nudge, _EDIT_CHURN_STATE
+
+        reset_edit_churn()
+        step = SimpleNamespace(
+            code_action="multi_replace(path='a', replacements=[])",
+            observations="chaîne introuvable — n'a pas été modifié.",
+            tool_calls=None,
+        )
+        for _ in range(4):
+            _build_edit_churn_nudge(step)
+        reset_edit_churn()
+        assert _build_edit_churn_nudge(step) is None  # repart de zéro
+
+
+class TestVisionBudgetNudge:
+    """8 cycles navigate/screenshot par tentative → conclus sur les preuves."""
+
+    def _nudge(self, code: str):
+        from graph_orchestrator.vision_callback import (
+            _build_vision_budget_nudge,
+            reset_vision_budget,
+        )
+
+        reset_vision_budget()
+        step = SimpleNamespace(code_action=code, observations="img", tool_calls=None)
+        return _build_vision_budget_nudge(step)
+
+    def test_sans_outil_vision_pas_de_comptage(self):
+        assert self._nudge("write_file('a', 'x')") is None
+
+    def test_seuil_huit_declenche(self):
+        from graph_orchestrator.vision_callback import reset_vision_budget, _build_vision_budget_nudge
+
+        reset_vision_budget()
+        step = SimpleNamespace(
+            code_action="navigate_page(url='file://x.html')", observations="", tool_calls=None
+        )
+        results = [_build_vision_budget_nudge(step) for _ in range(13)]
+        assert results[:7] == [None] * 7
+        assert results[7] is not None and "BUDGET VISION ÉPUISÉ" in results[7]
+        # pression graduée : re-fire à 12, pas à chaque step
+        assert results[8:11] == [None] * 3
+        assert results[11] is not None
+
+    def test_tool_calls_comptes_aussi(self):
+        from types import SimpleNamespace as NS
+        from graph_orchestrator.vision_callback import reset_vision_budget, _build_vision_budget_nudge
+
+        reset_vision_budget()
+        step = SimpleNamespace(
+            code_action="",
+            observations="",
+            tool_calls=[NS(name="take_screenshot", arguments={})],
+        )
+        for _ in range(7):
+            _build_vision_budget_nudge(step)
+        nudge = _build_vision_budget_nudge(step)
+        assert nudge is not None and "visual_check" in nudge

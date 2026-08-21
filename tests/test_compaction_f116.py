@@ -626,3 +626,19 @@ class TestPonytail:
         # la clause cruciale pour un 4B : minimal décrit le CODE, pas le périmètre
         assert "sous-fonctionnalité est un ÉCHEC" in h
         assert "checklist est sacrée" in h
+
+    def test_toggle_opt_out(self, monkeypatch):
+        """PONYTAIL_ENABLED=0 → ladder absent, invariants et rôle intacts."""
+        import dataclasses
+
+        from graph_orchestrator import config as config_module
+
+        monkeypatch.setattr(
+            config_module,
+            "settings",
+            dataclasses.replace(config_module.settings, ponytail_enabled=False),
+        )
+        h = build_role_header("coder")
+        assert "DOCTRINE PONYTAIL" not in h
+        assert "AGENT DÉVELOPPEUR" in h  # rôle intact
+        assert "INVARIANTS UNIVERSELS" in h  # invariants intacts

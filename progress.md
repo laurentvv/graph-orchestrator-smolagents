@@ -46,7 +46,16 @@
   0 régression ; flaky minute-boundary PASSÉ cette exécution).
 - [x] F116-8 : État disque (contract C473-C481, feature_list F-116 completed,
   ce fichier, README) + DuckDB + commit + PR.
-- [ ] F116-9 : Validation E2E bubble-sort-multifile-v6 (après merge — étalon
+- [x] F116-9a : Run E2E #1 (2026-08-21_1337) INTERROMPU user ~80 min (97 steps) :
+  F-116 validé côté compaction (0 mur, 24-35k/appel stable, 0 erreur transport,
+  archives mo_step_*) MAIS goulot de convergence global diagnostiqué — 58 % du
+  temps = 21 steps vision (36 navigations), churn 71 sr / 92 reads / 28 writes,
+  livrable cassé (var(--bg) sans :root, suspicion ponytail n=1), CODER_MAX_STEPS
+  48 laissant thrasher. Correctifs P0-P3 appliqués : steps 24, toggle
+  PONYTAIL_ENABLED, nudge churn d'édition (5 échecs consécutifs → failure
+  honnête), nudge budget vision (8 cycles max). Tests 152 ciblés PASS, gate OK.
+- [ ] F116-9 : Validation E2E bubble-sort-multifile-v6 (relance P0-P3, deadline
+  30 min — échec si dépassé ; étalon
   run #11 : ~23 min, 14,3 M tokens ; critères : livrable complet, PAS de
   croissance ~24k tokens/step, zéro exceed_context_size, archives
   .transcripts/ présentes, ponytail visible dans le prompt Coder).

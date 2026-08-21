@@ -306,6 +306,142 @@ def _build_read_stall_nudge(memory_step) -> Optional[str]:
 _WIND_DOWN_REMAINING = 5
 
 
+# ===========================================================================
+# Goulot run 2026-08-21_1337 (post-mortem F-116) : churn d'édition. Le Coder a
+# enchaîné ~71 search_replace + ~92 read_file pour 3 fichiers de 8,5 Ko — la
+# moitié rejetée par les gardes (F-132 no-op/\n littéral, introuvables) puis
+# retentée en variante. Chaque edit raté → relecture → re-vérification visuelle
+# (~1 min/cycle GPU). Le passage de témoin au feedback LLM de l'itération
+# suivante — LE levier prouvé (run #11, correction chirurgicale iter 2) —
+# arrivait trop tard. Miroir exact du plafond lectures identiques F-141-D :
+# N edits CHIRURGICAUX consécutifs sans effet → directive « stoppe l'auto-fix,
+# conclus honnêtement (failure documenté accepté) ». Reset sur un edit qui
+# réussit. Fail-open total.
+# ===========================================================================
+_EDIT_CHURN_TOOLS = ("search_replace", "multi_replace", "edit_file")
+_EDIT_CHURN_THRESHOLD = 5
+_EDIT_CHURN_STATE = {"consecutive_failed": 0}
+_EDIT_CALL_RE = re.compile(
+    r"\b(?:search_replace|multi_replace|edit_file)\s*\("
+)
+_EDIT_SUCCESS_RE = re.compile(r"successfully\s+(?:updated|edited)", re.I)
+_EDIT_FAILURE_RE = re.compile(
+    r"(n'a pas été modifié|pas été modifi[ée]|refus[ée]|introuvable|"
+    r"not found|no match|identiques?\s*:)",
+    re.I,
+)
+
+
+def reset_edit_churn() -> None:
+    """Réinitialise le compteur de churn d'édition (une exécution de nœud = un cycle).
+
+    Comme les autres resets vision : appelé au montage du nœud Coder ; le compteur
+    traverse volontairement les retries (le churn d'une tentative doit déclencher
+    immédiatement à la suivante).
+    """
+    _EDIT_CHURN_STATE["consecutive_failed"] = 0
+
+
+def _step_has_edit_call(memory_step) -> bool:
+    """True si le step contient un appel d'outil d'édition chirurgical."""
+    if _EDIT_CALL_RE.search(str(getattr(memory_step, "code_action", "") or "")):
+        return True
+    for tc in getattr(memory_step, "tool_calls", None) or []:
+        if str(getattr(tc, "name", "") or "") in _EDIT_CHURN_TOOLS:
+            return True
+    return False
+
+
+def _build_edit_churn_nudge(memory_step) -> Optional[str]:
+    """Directive de sortie d'auto-fix si N edits chirurgicaux consécutifs échouent.
+
+    Un edit réussi ré-arme le compteur (le pattern read→edit→check légitime n'est
+    jamais pénalisé). Best-effort total : jamais d'exception.
+    """
+    try:
+        if not _step_has_edit_call(memory_step):
+            return None
+        obs = str(getattr(memory_step, "observations", "") or "")
+        state = _EDIT_CHURN_STATE
+        if _EDIT_SUCCESS_RE.search(obs):
+            state["consecutive_failed"] = 0
+            return None
+        if not _EDIT_FAILURE_RE.search(obs):
+            return None  # ambigu (pas de marqueur clair) → on ne compte pas
+        state["consecutive_failed"] += 1
+        n = state["consecutive_failed"]
+        if n < _EDIT_CHURN_THRESHOLD or n % _EDIT_CHURN_THRESHOLD != 0:
+            return None
+        return (
+            f"[CHURN D'ÉDITION] {n} edits (search_replace/multi_replace) consécutifs "
+            f"SANS effet (rejets, no-op ou introuvables) — ton auto-fix n'avance "
+            f"plus : STOP.\n"
+            f"(1) PLUS AUCUN search_replace sur ce fichier ;\n"
+            f"(2) UNE dernière vérification : navigate_page(reload) + "
+            f"list_console_messages ;\n"
+            f"(3) conclus HONNÊTEMENT : final_answer(status=\"failure\", "
+            f"details=\"<bugs précis + corrections déjà tentées>\") si la page "
+            f"reste cassée, ou status=\"success\" si tout passe.\n"
+            f"Le feedback LLM de l'itération suivante corrige mieux que tes steps "
+            f"restants — un échec documenté vaut mieux qu'un run brûlé."
+        )
+    except Exception as e:  # pragma: no cover - fail-open garanti
+        logger.debug("nudge churn édition échec (%s) — ignoré.", e)
+        return None
+
+
+# ===========================================================================
+# Goulot run 2026-08-21_1337 : budget vision. 36 navigations + 14 screenshots
+# = 21 steps à +60 s (58 % du temps du run) pour un livrable de 3 fichiers —
+# chaque capture ajoute ~5k tokens vision au prefill GPU. On cappe le nombre
+# de cycles navigate/screenshot PAR TENTATIVE : au-delà, directive « conclus
+# sur les preuves déjà collectées ». Fail-open total.
+# ===========================================================================
+_VISION_TOOLS_RE = re.compile(
+    r"\b(?:navigate_page|take_screenshot|puppeteer_screenshot)\s*\("
+)
+_VISION_BUDGET_THRESHOLD = 8
+_VISION_BUDGET_STATE = {"calls": 0}
+
+
+def reset_vision_budget() -> None:
+    """Réinitialise le budget vision (une exécution de nœud = un cycle)."""
+    _VISION_BUDGET_STATE["calls"] = 0
+
+
+def _build_vision_budget_nudge(memory_step) -> Optional[str]:
+    """Directive quand le budget de cycles navigate/screenshot est épuisé."""
+    try:
+        code = str(getattr(memory_step, "code_action", "") or "")
+        calls = len(_VISION_TOOLS_RE.findall(code))
+        for tc in getattr(memory_step, "tool_calls", None) or []:
+            if str(getattr(tc, "name", "") or "") in (
+                "navigate_page",
+                "take_screenshot",
+                "puppeteer_screenshot",
+            ):
+                calls += 1
+        if calls == 0:
+            return None
+        state = _VISION_BUDGET_STATE
+        state["calls"] += calls
+        n = state["calls"]
+        if n < _VISION_BUDGET_THRESHOLD or (n - _VISION_BUDGET_THRESHOLD) % 4 != 0:
+            return None
+        return (
+            f"[BUDGET VISION ÉPUISÉ] {n} navigations/screenshots cette tentative "
+            f"(chacun ~1 min de traitement GPU). PLUS AUCUN navigate_page ni "
+            f"take_screenshot : conclus sur les preuves DÉJÀ collectées — "
+            f"visual_check(criterion_number=i, verdict=True|False, "
+            f"observation=\"ce que tu vois sur la DERNIÈRE capture\") pour chaque "
+            f"critère manquant, puis final_answer honnête. La re-vérification "
+            f"complète viendra au re-test du feedback, pas ici."
+        )
+    except Exception as e:  # pragma: no cover - fail-open garanti
+        logger.debug("nudge budget vision échoué (%s) — ignoré.", e)
+        return None
+
+
 def _build_wind_down_nudge(memory_step, agent, criteria_count: int) -> Optional[str]:
     """Directive de convergence quand le budget de steps est presque épuisé.
 
@@ -910,6 +1046,33 @@ def make_screenshot_callback(capture_holder: List[Any], visual_criteria_count: i
                 )
             except Exception as e:
                 logger.debug("nudge wind-down : append observations échec (%s).", e)
+        # Goulot 2026-08-21 : churn d'édition — N edits chirurgicaux consécutifs
+        # sans effet → sortie d'auto-fix honnête (le feedback d'itération corrige
+        # mieux ; leçon run #11).
+        edit_churn_nudge = _build_edit_churn_nudge(memory_step)
+        if edit_churn_nudge:
+            print("[!] Nudge churn d'édition injecté dans les observations du step.")
+            try:
+                current = getattr(memory_step, "observations", None) or ""
+                memory_step.observations = (
+                    f"{current}\n\n{edit_churn_nudge}" if current else edit_churn_nudge
+                )
+            except Exception as e:
+                logger.debug("nudge churn édition : append observations échec (%s).", e)
+        # Goulot 2026-08-21 : budget vision — trop de cycles navigate/screenshot
+        # par tentative → conclus sur les preuves déjà collectées.
+        vision_budget_nudge = _build_vision_budget_nudge(memory_step)
+        if vision_budget_nudge:
+            print("[!] Nudge budget vision injecté dans les observations du step.")
+            try:
+                current = getattr(memory_step, "observations", None) or ""
+                memory_step.observations = (
+                    f"{current}\n\n{vision_budget_nudge}"
+                    if current
+                    else vision_budget_nudge
+                )
+            except Exception as e:
+                logger.debug("nudge budget vision : append observations échec (%s).", e)
         # P5/F-138 (port deer-flow tool_progress) : résultats d'outils d'ACTION
         # quasi identiques en série (Jaccard ≥0.8) = variantes du même appel
         # sans progrès — le fingerprint F-36 ne voit pas ce cas (args variés).

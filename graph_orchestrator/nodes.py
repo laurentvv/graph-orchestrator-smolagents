@@ -1584,14 +1584,20 @@ Code prêt pour la production, respectant les conventions du langage.
         # F-125 : reset du compteur anti-gel navigateur (même lifecycle).
         from .vision_callback import (
             reset_browser_stall,
+            reset_edit_churn,
             reset_nav_freeze_nudge,
             reset_read_stall,
             reset_screenshot_nudge,
+            reset_vision_budget,
         )
         reset_screenshot_nudge()
         reset_browser_stall()
         reset_nav_freeze_nudge()
         reset_read_stall()
+        # Goulot 2026-08-21 : resets churn d'édition + budget vision (même
+        # lifecycle — traverse volontairement les retries).
+        reset_edit_churn()
+        reset_vision_budget()
         # P5/F-138 : reset du moniteur de résultats en boule (même lifecycle).
         try:
             from .tool_progress import reset_tool_progress
