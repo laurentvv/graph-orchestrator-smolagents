@@ -955,7 +955,7 @@
     {
       "id": "F-116",
       "name": "Compaction résiliente aux payloads + hiérarchique par chunks (kilocode)",
-      "description": "[PÉRIMÈTRE ÉTENDU 2026-08-18 : intègre l'ex-F-86 context-offload sémantique — décision user] Compaction résiliente aux payloads + hiérarchique par chunks (kilocode). LE MUR démontré des runs #13/#16 (thrash 772k-990k tokens/step, ~40 min perdues, échecs propres sans faux succès) : les screenshots du rituel visuel s'accumulent dans l'historique sans purge intra-run (~25k tokens/step). Volet déterministe (chunks, purge images agressive, budget payloads) + volet LLM sémantique opt-in (ex-F-86 : résumé scoré, cognitive tombstones). PRIORITÉ 1 du backlog.",
+      "description": "[PÉRIMÈTRE ÉTENDU 2026-08-18 : intègre l'ex-F-86 context-offload sémantique — décision user] Compaction résiliente aux payloads + hiérarchique par chunks (kilocode). LE MUR démontré des runs #13/#16 (thrash 772k-990k tokens/step, ~40 min perdues, échecs propres sans faux succès) : les screenshots du rituel visuel s'accumulent dans l'historique sans purge intra-run (~25k tokens/step). Volet déterministe (chunks, purge images agressive, budget payloads) + volet LLM sémantique opt-in (ex-F-86 : résumé scoré, cognitive tombstones). PRIORITÉ 1 du backlog. [ARBITRAGE 2026-08-20 user : intégrer la doctrine de concision ponytail (fiche 48-ponytail, plan P0-bis — échelle YAGNI 7 rungs, -54 % LOC / -22 % tokens) comme input du volet réduction à la source, en complément de la compaction aval.]",
       "status": "pending",
       "dependencies": [
         "F-101",
@@ -1196,22 +1196,29 @@
     {
       "id": "F-141",
       "name": "Agent Teams & Protocoles de Runtime (deepseek-harness)",
-      "description": "Architecture expérimentale pour orchestrer des sous-agents en équipe, couplée à un protocole de communication structuré (FD3) et un PTY PowerShell persistant pour maintenir l'état du shell entre les itérations. Source: update_report 2026-08-20 (deepseek-harness).",
-      "status": "pending",
+      "description": "[ANNULÉE 2026-08-20 — arbitrage user, grooming update références : notre graphe est un DAG déterministe mono-GPU à runs séquentiels, aucun besoin démontré d'équipes dynamiques de sous-agents ; idée conservée au journal d'idées plan P17.] Architecture expérimentale pour orchestrer des sous-agents en équipe, couplée à un protocole de communication structuré (FD3) et un PTY PowerShell persistant pour maintenir l'état du shell entre les itérations. Source: update_report 2026-08-20 (deepseek-harness).",
+      "status": "cancelled",
       "dependencies": []
     },
     {
       "id": "F-142",
       "name": "Claude Design Skills & Output Styles (system_prompts_leaks)",
-      "description": "Nouvelle collection de skills dédiées au frontend/design (wireframes, prototypes interactifs) et templates de styles de sortie stricts (concise, explanatory, learning) pour formater les réponses des agents. Source: update_report 2026-08-20 (system_prompts_leaks).",
-      "status": "pending",
+      "description": "[ANNULÉE 2026-08-20 — arbitrage user, grooming update références : skills_loader + frontend-design (F-124) couvrent déjà le périmètre ; l'idée « output styles stricts » reste une piste future pour Judge/Tester, conservée au plan P17.] Nouvelle collection de skills dédiées au frontend/design (wireframes, prototypes interactifs) et templates de styles de sortie stricts (concise, explanatory, learning) pour formater les réponses des agents. Source: update_report 2026-08-20 (system_prompts_leaks).",
+      "status": "cancelled",
       "dependencies": []
     },
     {
       "id": "F-143",
       "name": "Token Budgeting & Uncertainty (code-review-graph)",
-      "description": "Suivi strict du budget de tokens et gestion de l'incertitude du LLM (uncertainty.py) lors des revues de code, permettant de dégrader gracieusement ou d'alerter plutôt que d'halluciner. Source: update_report 2026-08-20 (code-review-graph).",
-      "status": "pending",
+      "description": "[ANNULÉE 2026-08-20 — arbitrage user, grooming update références : le mur de tokens réellement démontré (runs #13/#16) est couvert par F-116 (PRIORITÉ 1) qui intègre la comptabilité de budget ; idée conservée au plan P17.] Suivi strict du budget de tokens et gestion de l'incertitude du LLM (uncertainty.py) lors des revues de code, permettant de dégrader gracieusement ou d'alerter plutôt que d'halluciner. Source: update_report 2026-08-20 (code-review-graph).",
+      "status": "cancelled",
+      "dependencies": []
+    },
+    {
+      "id": "F-144",
+      "name": "Correctifs code pur post-mortem run 2026-08-20_1817 (ex-F-141 hardening)",
+      "description": "4 correctifs déterministes post-mortem run #7 : (A) print succès Static Tester (détails tronqués 110 chars, workflows.py) ; (B) garde sanité plan Architect (_plan_sanity_violations : dimension > 4000px OU grille > 120 cellules détectées déterministement + UNE re-demande Architect correctrice, px vs cellules distingués) ; (C) budgets Tester TARGETED_MAX_STEPS 16 + TESTER_TIMEOUT_S 1200 ; (D) plafond lectures identiques (3e lecture strictement identique path+offset+limit refusée + directive AGIS, reset par nœud). 8 tests, gate F-103 OK, contract C467. Référencé « F-141 » dans le code/tests/contract/progress d'origine ; renommé F-144 le 2026-08-20 (décision user) car le numéro F-141 était pris par l'entrée références deepseek-harness lors de l'union des PR #98/#99.",
+      "status": "completed",
       "dependencies": []
     }
   ]
