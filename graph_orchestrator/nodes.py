@@ -116,9 +116,39 @@ class LoggedOpenAIServerModel(OpenAIServerModel):
     RetryPolicy (délais/jitter/cap observables) soit l'unique autorité.
     """
 
-    def __init__(self, *args, revive=None, **kwargs):
+    def __init__(self, *args, revive=None, prefill_code: bool = False, **kwargs):
         super().__init__(*args, **kwargs)
         self._llm_revive = revive
+        # Prefill ````python (2026-08-22, boucles isolation) : llama-server
+        # CONTINUE le dernier message assistant incomplet (feature native,
+        # cf. tools/server/README.md). Forcer la réponse à DÉMARRER dans un
+        # bloc python tue à la racine : prose préalable, multi-fences (seul le
+        # 1er bloc s'exécute), et le <think> forcé des distills (1-3 min/step
+        # à 7 t/s). Testé empiriquement : continuation correcte, 0 reasoning.
+        self._prefill_code = bool(prefill_code)
+
+    def _maybe_prefill(self, messages, tools_to_call_from):
+        """Append le préfixe assistant '```python' si activé et pertinent.
+
+        Best-effort total : jamais d'exception (au pire, pas de prefill).
+        Pas de prefill si le dernier message EST déjà assistant (le serveur
+        continuerait une fiction) ni en mode tool-calling structuré.
+        """
+        if not self._prefill_code or tools_to_call_from is not None:
+            return messages
+        try:
+            if not messages:
+                return messages
+            last = messages[-1]
+            if getattr(last, "role", None) == "assistant":
+                return messages
+            from smolagents.memory import ChatMessage
+
+            return list(messages) + [
+                ChatMessage(role="assistant", content="```python\n")
+            ]
+        except Exception:
+            return messages
 
     @property
     def api_base(self) -> Optional[str]:
@@ -150,6 +180,19 @@ class LoggedOpenAIServerModel(OpenAIServerModel):
 
     def __call__(self, *args, **kwargs):
         from .config import settings as _settings
+
+        # Prefill code-block : injection AVANT l'appel réseau (le serveur
+        # continue le message assistant incomplet).
+        if args:
+            new_msgs = self._maybe_prefill(args[0], kwargs.get("tools_to_call_from"))
+            if new_msgs is not args[0]:
+                args = (new_msgs,) + args[1:]
+        elif "messages" in kwargs:
+            new_msgs = self._maybe_prefill(
+                kwargs["messages"], kwargs.get("tools_to_call_from")
+            )
+            if new_msgs is not kwargs["messages"]:
+                kwargs["messages"] = new_msgs
 
         if not _settings.llm_retry_enabled:
             res = super().__call__(*args, **kwargs)
@@ -198,6 +241,10 @@ def build_fast_model(settings: Settings) -> OpenAIServerModel:
         api_key=settings.local_api_key,
         max_tokens=settings.fast_max_tokens,
         temperature=settings.coder_temperature,
+        # Prefill ````python : la réponse démarre DANS un bloc code (llama-server
+        # continue le dernier message assistant incomplet). Anti multi-fences /
+        # prose / <think> long. Opt-out CODER_PREFILL_CODE=false.
+        prefill_code=getattr(settings, "coder_prefill_code", False),
         # max_retries=0 : retry SDK openai désactivé, l'autorité = RetryPolicy F-104.
         client_kwargs={"timeout": settings.llm_timeout_s, "max_retries": 0},
     )

@@ -112,6 +112,16 @@ class ModelSpec:
     # top_k 0 / min_p < 0 = ne pas passer le flag.
     top_k: int = 0
     min_p: float = -1.0
+    # --- Sampler DRY (Don't Repeat Yourself, 2026-08-22) ---
+    # Pénalise la répétition de SÉQUENCES (vs repeat_penalty token-level qui
+    # écrase les probas). Cible la panne observée : le modèle re-dérive le
+    # même plan au lieu d'obéir aux gardes. dry_multiplier 0 = désactivé
+    # (défaut serveur). Recos communauté : multiplier 0.8, allowed_length 2,
+    # penalty_last_n >= 256 (contexte de boucle).
+    dry_multiplier: float = 0.0
+    dry_base: float = 0.0
+    dry_allowed_length: int = 0
+    dry_penalty_last_n: int = 0
 
 
 def _model_spec_from_env(prefix: str) -> ModelSpec:
@@ -145,6 +155,10 @@ def _model_spec_from_env(prefix: str) -> ModelSpec:
         cache_reuse=_get_int(f"{prefix}_CACHE_REUSE", 0),
         top_k=_get_int(f"{prefix}_TOP_K", 0),
         min_p=_get_float(f"{prefix}_MIN_P", -1.0),
+        dry_multiplier=_get_float(f"{prefix}_DRY_MULTIPLIER", 0.0),
+        dry_base=_get_float(f"{prefix}_DRY_BASE", 0.0),
+        dry_allowed_length=_get_int(f"{prefix}_DRY_ALLOWED_LENGTH", 0),
+        dry_penalty_last_n=_get_int(f"{prefix}_DRY_PENALTY_LAST_N", 0),
     )
 
 
@@ -255,7 +269,7 @@ class Settings:
     # tiennent plus → boucle de mort max-steps → checklist 0/N → retry. Le golden
     # #11 (018a5b6, cap d'époque 30-40) clôturait au step 29-30. 30 = golden + marge
     # rituel, sans retour au thrash de 48.
-    coder_max_steps: int = 30
+    coder_max_steps: int = 40
     # --- Garde anti-réécriture totale (F-126, post-mortem run 2026-08-19_1552) ---
     # Le 4B « corrigeait » un bug local (1 ligne) en réécrivant TOUT index.html
     # (600+ lignes, 3 fois, ~15 min de prefill chacune) → inondation du contexte
@@ -264,6 +278,12 @@ class Settings:
     # passe par search_replace / multi_replace (chirurgical). La CRÉATION d'un
     # nouveau fichier reste libre (quelque soit sa taille). 0 = désactivé.
     coder_writefile_max_lines: int = 100
+    # Prefill ````python (2026-08-22, boucles isolation) : le wrapper modèle
+    # append un message assistant incomplet '```python\n' que llama-server
+    # CONTINUE (feature native serveur). La réponse démarre physiquement dans
+    # un bloc code — tue multi-fences, prose préalable, et le <think> forcé
+    # des distills (1-3 min/step). Testé empiriquement sur Qwen3.8-Distill.
+    coder_prefill_code: bool = False
     # Circuit-breaker sur tours idle consécutifs (post-mortem idem). _detect_idle_step
     # (F-33) réinjecte un message à chaque tour "sans appel d'outil" mais ne coupe
     # JAMAIS → le Coder peut enchaîner N tours idle jusqu'à épuisement des steps
@@ -668,8 +688,12 @@ def load_settings() -> Settings:
         feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),
         tester_max_steps=_get_int("TESTER_MAX_STEPS", 20),
         tester_inline_skill_resources=_get_bool("TESTER_INLINE_SKILL_RESOURCES", True),
-        coder_max_steps=_get_int("CODER_MAX_STEPS", 30),
+        coder_max_steps=_get_int("CODER_MAX_STEPS", 40),
         coder_writefile_max_lines=_get_int("CODER_WRITEFILE_MAX_LINES", 100),
+        # Prefill ````python (2026-08-22) : llama-server continue le dernier
+        # message assistant incomplet → la réponse démarre DANS un bloc code
+        # (anti multi-fences / prose / <think> interminable).
+        coder_prefill_code=_get_bool("CODER_PREFILL_CODE", False),
         idle_breaker_threshold=_get_int("IDLE_BREAKER_THRESHOLD", 3),
         escalation_enabled=_get_bool("ESCALATION_ENABLED", True),
         auto_install_deps=_get_bool("AUTO_INSTALL_DEPS", True),
