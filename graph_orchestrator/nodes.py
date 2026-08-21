@@ -9,6 +9,7 @@ Chaque nœud :
 import asyncio
 import json
 import os
+import re
 from typing import List, Optional, Tuple
 
 from pydantic import BaseModel
@@ -983,6 +984,14 @@ async def run_with_retry(
                     "appartient au CONTENU, l'appel Python se termine TOUJOURS par `)`. Exemple correct :\n"
                     "    search_replace(path=\"x\", old_string=\"...\", new_string=\"function() { startSort(); }\")\n"
                     "Réessaie en fermant l'appel par `)`."
+                )
+            elif is_code_agent and 'Unknown argument for tool "navigate_page": "reload"' in msg:
+                # Piège MCP récurrent (runs #8/#9 + boucles isolation) : le modèle
+                # émet navigate_page(reload) ; ce serveur attend type="reload".
+                prompt += (
+                    "\n\nATTENTION : `navigate_page(reload)` n'existe pas sur ce serveur. "
+                    'Le rechargement s\'écrit : navigate_page(type="reload") — ou '
+                    "navigate_page(url=\"<l'URL exacte>\"). Réessaie avec la bonne signature."
                 )
             elif is_code_agent and ("Syntax" in msg or "parse" in msg.lower() or "unterminated" in msg.lower()):
                 prompt += (
