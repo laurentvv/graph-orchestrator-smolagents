@@ -1333,6 +1333,18 @@ async def execute_coder_node(
         # Si l'Architect n'a pas sélectionné de skills (vieille sous-tâche, fallback),
         # on utilise la sélection contextuelle (regex sur le contenu) en repli.
         architect_skills = task.get("skills", [])
+        # Goulot 2026-08-21 (runs 1337/1454 vs golden #19) : le mode d'emploi du
+        # rituel visuel (devtools-preview — workflow navigate→console→screenshot
+        # →fix, ~9k chars de guidance) était laissé à la sélection LLM de
+        # l'Architect : présent dans le golden #19 (convergence 21 steps/1 it.),
+        # ABSENT des deux runs ratés (le 9B lui a préféré code-review). Le
+        # rituel est OBLIGATOIRE (section VALIDATION VISUELLE + gate F-109) :
+        # son mode d'emploi ne peut pas être optionnel. Garantie déterministe
+        # sur les tâches web (avant le budget — priorité mode d'emploi) ;
+        # uniquement si l'Architect a sélectionné — le repli regex l'inclut
+        # déjà de façon déterministe.
+        if architect_skills and _is_web_task(task) and "devtools-preview" not in architect_skills:
+            architect_skills = ["devtools-preview"] + list(architect_skills)
         if architect_skills:
             # F-57 v3 : budget de tokens anti-saturation. L'Architect peut sélectionner
             # trop de skills → on rogne pour rester sous skill_budget_tokens (défaut 16000,
