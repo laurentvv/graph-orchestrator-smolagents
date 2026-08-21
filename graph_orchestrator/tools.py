@@ -284,6 +284,13 @@ def _post_edit_syntax_directive(path: str) -> str:
     l'apprendre au Linter 30 min plus tard (post-mortem runs 2026-08-20 :
     erreurs de syntaxe survivant jusqu'au Shift-Left = itérations entières
     perdues). Vide si syntaxe propre ou fichier non-JS. Fail-open total.
+
+    Goulot run 2026-08-21_1531 : les heuristiques (boucle while non bornée)
+    étaient vendues comme « SYNTAXE INVALIDE » — le 4B réécrivait la boucle
+    en boucle (6+ réécritures du même bloc) sur un faux positif. Désormais :
+    erreurs DURES (node --check, syntaxe Python, const) = message urgent ;
+    heuristiques seules = diagnostic TEMPERÉ avec consigne explicite de ne
+    PAS réécrire une boucle correcte.
     """
     try:
         if not str(path).lower().endswith((".html", ".htm", ".js", ".mjs", ".cjs")):
@@ -291,14 +298,26 @@ def _post_edit_syntax_directive(path: str) -> str:
         errs = _collect_js_syntax_errors(str(path))
         if not errs:
             return ""
-        shown = "\n".join(f"  - {e}" for e in errs[:3])
-        extra = f"\n  (+{len(errs) - 3} autre(s))" if len(errs) > 3 else ""
+        heuristics = [e for e in errs if e.startswith("[Boucle infinie JS")]
+        hard = [e for e in errs if not e.startswith("[Boucle infinie JS")]
+        if hard:
+            shown = "\n".join(f"  - {e}" for e in hard[:3])
+            extra = f"\n  (+{len(errs) - 3} autre(s))" if len(errs) > 3 else ""
+            return (
+                f"\n\n[!] SYNTAXE INVALIDE détectée JUSTE APRÈS ton édition :\n{shown}{extra}\n"
+                f"Si c'est un état intermédiaire d'une édition multi-blocs, termine le bloc "
+                f"suivant IMMÉDIATEMENT. Sinon corrige MAINTENANT par search_replace ciblé "
+                f"(la ligne ~ est indiquée) — n'attends pas le Linter, chaque tour d'attente "
+                f"est un step perdu. Console propre uniquement si node --check est satisfait."
+            )
+        shown = "\n".join(f"  - {e}" for e in heuristics[:2])
         return (
-            f"\n\n[!] SYNTAXE INVALIDE détectée JUSTE APRÈS ton édition :\n{shown}{extra}\n"
-            f"Si c'est un état intermédiaire d'une édition multi-blocs, termine le bloc "
-            f"suivant IMMÉDIATEMENT. Sinon corrige MAINTENANT par search_replace ciblé "
-            f"(la ligne ~ est indiquée) — n'attends pas le Linter, chaque tour d'attente "
-            f"est un step perdu. Console propre uniquement si node --check est satisfait."
+            f"\n\n[!] DIAGNOSTIC heuristique (PAS une erreur de syntaxe — node --check est "
+            f"satisfait) :\n{shown}\n"
+            f"Examine cette boucle UNE fois : si sa condition dépend d'une variable que le "
+            f"corps modifie (assignation ou incrément) ou qu'un `break`/`return` peut sortir, "
+            f"elle est CORRECTE — NE LA RÉÉCRIS PAS, passe à la suite. Corrige-la UNE seule "
+            f"fois par search_replace ciblé uniquement si elle est réellement inconditionnelle."
         )
     except Exception:
         return ""

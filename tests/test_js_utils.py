@@ -190,8 +190,16 @@ def test_detect_const_mutation():
 
 
 def test_detect_unbounded_while():
-    """Vérifie la détection des boucles while où la variable incrémentée n'apparaît pas dans la condition."""
-    # 1. Boucle potentiellement infinie : ghostY incrémenté mais non testé dans la condition
+    """Vérifie la détection des boucles while dont la condition ne peut jamais changer.
+
+    Goulot run 2026-08-21_1531 : l'ancienne logique (toute variable incrémentée
+    absente de la condition = flag) produisait un faux positif sur le bubble
+    sort canonique → 6+ réécritures du même bloc par le Coder. Nouvelle logique
+    conservative : flag uniquement si AUCUNE variable de la condition n'est
+    mutée dans le corps (assignation OU incrément), ou condition constante.
+    """
+    # 1. Boucle potentiellement infinie (Tetris) : la condition ne dépend d'aucune
+    # variable mutée dans le corps (ghostY++ est invisible de collide(...))
     js_infinite = """
     function draw() {
         let ghostY = currentPiece.y;
@@ -202,7 +210,6 @@ def test_detect_unbounded_while():
     """
     errs = js_utils.detect_unbounded_while_in_js(js_infinite, start_line=10)
     assert len(errs) == 1
-    assert "ghostY" in errs[0]
     assert "Ligne 13" in errs[0]
     assert "Boucle infinie JS" in errs[0]
 
@@ -216,4 +223,24 @@ def test_detect_unbounded_while():
     }
     """
     assert len(js_utils.detect_unbounded_while_in_js(js_bounded)) == 0
+
+    # 3. Bubble sort canonique (le faux positif du run 2026-08-21_1531) :
+    # `swapped` (assigné =) et `comparisons` (++) conditionnent la sortie.
+    js_bubble = """
+    const maxIterations = 10000;
+    let swapped = true, comparisons = 0, i = 0;
+    while (swapped && comparisons < maxIterations) {
+        swapped = false;
+        for (let j = 0; j < 10 - i; j++) { comparisons++; }
+        i++;
+    }
+    """
+    assert js_utils.detect_unbounded_while_in_js(js_bubble) == []
+
+    # 4. while(true) + incrément : condition constante → flag.
+    assert len(js_utils.detect_unbounded_while_in_js("while (true) { ghostY++; }")) == 1
+
+    # 5. Sortie par assignation simple : PAS de flag.
+    js_assign = "let run = true; while (run) { doWork(); run = false; }"
+    assert js_utils.detect_unbounded_while_in_js(js_assign) == []
 
