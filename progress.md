@@ -73,6 +73,13 @@
   Tester 80 s/step (max 387 s) tué par TESTER_TIMEOUT_S=1200 sans verdict →
   Judge fail-closed → iter inutile. Leviers : tester sur fast 4B, timeout
   1800, investigation du step 387 s.
+- [x] F116-9d : CAUSE RACINE PERFORMANCE (post-run #6) — MTP+ngl99 déborde la
+  VRAM 6 Go (contexte draft) → offload CPU silencieux du 9B → prefill 84 t/s
+  (vs 1300+ sans MTP, golden 550-700) → le Tester à 80 s/step et la régression
+  « trop de features » depuis le golden venaient de LÀ (swap b10472+F-123).
+  Matrice bench 6 combos (CUDA 12.4/13.3, FA, MTP, ngl éliminatoires). Fix :
+  MTP OFF sur les 2 specs 9B (1342 t/s prefill + 41 t/s gen). llama.cpp
+  b10517→b10549 appliqué (validation complète). Doc §2 réécrite. Contract C486.
 - [ ] F116-9 : Validation E2E bubble-sort-multifile-v6 (relance P0-P3, deadline
   30 min — échec si dépassé ; étalon
   run #11 : ~23 min, 14,3 M tokens ; critères : livrable complet, PAS de

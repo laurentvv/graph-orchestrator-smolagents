@@ -28,18 +28,31 @@ Aucun flag n'est écrit en dur dans une commande shell : tout passe par `ModelSp
 <PREFIX>_MIN_P=0                # sampling Qwen officiel (-1 = défaut serveur 0.05)
 ```
 
-## 2. Config actuelle validée (2026-08-17)
+## 2. Config actuelle validée (2026-08-21)
 
 | Rôle | Modèle | Flags actifs | Résultat mesuré |
 |---|---|---|---|
 | FAST (Coder, Router) | Qwen3.5-4B-MTP Q4_K_M | `cache-reuse 256`, **MTP off** | -10% préfill multi-tours ; MTP = **-42%** (acceptance 0,47) → proscrit |
-| REASONING (Architect) | Ornith-1.0-9B-MTP Q4_K_M | `draft-mtp + n-max 2 + KV q8_0`, ngl 99 | **~+50%** tok/s (18,2 → 27,2 @ctx32k), acceptance 0,70 |
+| REASONING (Architect) | Ornith-1.0-9B-MTP Q4_K_M | **MTP off**, KV q8_0, ngl 99 | **1342 t/s prefill + 41 t/s gen** (bench 2026-08-21) |
 | REASONING_NO_THINK (Judge, Security, Tester…) | Ornith-1.0-9B-MTP Q4_K_M | idem | idem |
 
-Build vendé : `vendor/llamacpp-cuda13/` (**b10509, CUDA 13.3** — monté depuis b10472 le
-2026-08-20, validation post-swap : MTP reasoning COMPATIBLE spec-mtp -1 % / spec-kvq8
--8 % vs baseline, 8/8 tests flags ; nouveautés b10472→b10509 surtout mtmd/vision
-robustesse + ggml 0.20.2, aucun impact flags — détail événement DuckDB #1693).
+> ⚠️ **MTP PROSCRIT sur ce matériel (RTX 3060 Laptop 6 Go) — décision 2026-08-21.**
+> Le bench F-123 qui validait MTP (+50 % tok/s) ne mesurait que la GÉNÉRATION courte,
+> jamais le **préfill long** (charge réelle des nœuds 9B : Tester/Judge). Matrice
+> préfill mesurée (4,5k tokens, b10549, cuda-13.3 = cuda-12.4 à ±10 % près) :
+> `ngl99+kvq8` = **1308-1342 t/s** ; `ngl99+kvq8+MTP` = **84 t/s** (×16 plus lent —
+> le contexte draft MTP fait déborder la VRAM 6 Go → offload CPU silencieux, le
+> serveur démarre sans erreur) ; `auto+kvq8+MTP` = 497 t/s mais gen 7-11 t/s.
+> Cause des runs lents 2026-08-21 (tester 80 s/step, run #6 47 min) : MTP+ngl99
+> actif depuis le swap b10472. Symptôme reconnaissable : `common_fit_params:
+> failed to fit params ... n_gpu_layers already set by user` + `12 ms per token`
+> dans `prompt eval time`. → **REASONING_SPEC_MTP=false,
+> REASONING_NO_THINK_SPEC_MTP=false** tant que 6 Go.
+
+Build vendé : `vendor/llamacpp-cuda13/` (**b10549, CUDA 13.3** — monté depuis b10517
+le 2026-08-21, validation post-swap : MTP compatible (+59 % en bench GEN court —
+sans objet, MTP désactivé en prod), 8/8 tests flags ; cuda-12.4 testé identique en
+prefill). Historique : b10509 ← b10472 (2026-08-20), b10517, b10549.
 **Mise à jour** (releases
 llama.cpp quasi-quotidiennes, veille hebdo programmée) :
 `uv run python scripts/update_llamacpp.py` vérifie sans rien toucher (exit 2 si
