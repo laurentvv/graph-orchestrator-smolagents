@@ -54,6 +54,25 @@
   48 laissant thrasher. Correctifs P0-P3 appliqués : steps 24, toggle
   PONYTAIL_ENABLED, nudge churn d'édition (5 échecs consécutifs → failure
   honnête), nudge budget vision (8 cycles max). Tests 152 ciblés PASS, gate OK.
+- [x] F116-9b : Session « trouver le goulot » (runs #1→#6, 2026-08-21) — 6 runs,
+  6 causes racines corrigées sur la branche (PR #102, review Kilo adressée) :
+  (1) CODER_MAX_STEPS 48→24 + P2 nudge churn d'édition + P3 nudge budget vision ;
+  (2) toggle PONYTAIL_ENABLED (off pour validation, bug :root disparu n=2) ;
+  (3) garantie déterministe skill devtools-preview Coder+Tester (décision user —
+  perdu par la sélection LLM Architect : golden #19 l'avait, runs ratés non) ;
+  (4) faux positif detect_unbounded_while_in_js (bubble sort canonique flaggué,
+  logique inversée conservative + wrapper dur/heuristique séparé) ;
+  (5) validate_html_monofile n'exige plus un livrable monofichier (<script src>
+  local légal si cible existe — la golden task EST multifichier) ;
+  (6) FRESH_START purge les réfutations DuckDB (bugs fantômes des runs
+  précédents réinjectés au Coder). Contrat C482-C485, 197 tests ciblés PASS.
+- [x] F116-9c : Run #6 = itinéraire COMPLET pour la 1re fois (Coder convergé
+  11 min → Static OK + HTTP 200 → Tester LLM → Security → Judge) ; livrable
+  3 fichiers VALIDÉ PAR L'USER (visuel + fonctionnel), intact (iter2 morte
+  avant écriture). ÉCHEC au critère 30 min (47 min) : goulot restant = Web
+  Tester 80 s/step (max 387 s) tué par TESTER_TIMEOUT_S=1200 sans verdict →
+  Judge fail-closed → iter inutile. Leviers : tester sur fast 4B, timeout
+  1800, investigation du step 387 s.
 - [ ] F116-9 : Validation E2E bubble-sort-multifile-v6 (relance P0-P3, deadline
   30 min — échec si dépassé ; étalon
   run #11 : ~23 min, 14,3 M tokens ; critères : livrable complet, PAS de
