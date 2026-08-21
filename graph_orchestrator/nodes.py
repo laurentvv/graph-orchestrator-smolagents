@@ -1002,17 +1002,30 @@ async def run_with_retry(
             _audited = {a.get("criterion_number") for a in get_visual_audit()}
             _missing_vc = sorted(set(range(1, visual_criteria_count + 1)) - _audited)
             if _missing_vc:
+                # Boucles isolation 2026-08-21 (Qwen3.5/3.8) : le rappel narratif
+                # ne suffisait pas — le modèle ré-éditait au lieu d'exécuter le
+                # rituel. Micro-protocole littéral à COPIER : compliance maximale
+                # (le modèle n'a qu'à adapter les observations du screenshot).
+                _m = re.search(r'task_id"?\s*:\s*"([^"]+)"', prompt or "")
+                _task_id = _m.group(1) if _m else "TASK_ID"
+                _vc_lines = "\n".join(
+                    f'visual_check(criterion_number={i}, verdict=True|False, '
+                    f'observation="ce que tu VOIS sur le screenshot")'
+                    for i in _missing_vc
+                )
                 prompt += (
-                    f"\n\nCHECKLIST VISUELLE INCOMPLÈTE ({visual_criteria_count - len(_missing_vc)}/"
-                    f"{visual_criteria_count} critères audités — manquants : {_missing_vc}). "
-                    f"Avant final_answer tu DOIS appeler visual_check(criterion_number=i, "
-                    f"verdict=True|False, observation=\"ce que tu vois\") pour CHAQUE critère "
-                    f"manquant, après un take_screenshot frais. final_answer sera REFUSÉ sans "
-                    f"checklist complète."
+                    f"\n\n🛑 CHECKLIST VISUELLE INCOMPLÈTE ({visual_criteria_count - len(_missing_vc)}/"
+                    f"{visual_criteria_count} — manquants : {_missing_vc}). NE MODIFIE AUCUN FICHIER. "
+                    f"Exécute EXACTEMENT cette séquence, rien d'autre :\n"
+                    f"STEP SUIVANT — copie ce bloc (seule liberté : tes observations) :\n"
+                    f"```python\ntake_screenshot()\n{_vc_lines}\n```\n"
+                    f"STEP D'APRÈS — copie ce bloc :\n"
+                    f'```python\nfinal_answer({{"task_id": "{_task_id}", "status": "success" '
+                    f'ou "failure", "details": "...", "linter_ok": true|false, "vision_ok": true|false}})\n```'
                 )
                 print(
                     f"[!] Visual audit : {len(_missing_vc)}/{visual_criteria_count} critère(s) "
-                    f"non audité(s) → rappel checklist injecté au retry."
+                    f"non audité(s) → micro-protocole rituel injecté au retry."
                 )
 
         # FIX TOKEN EXPLOSION → F-116 : le boundary de retry compacte

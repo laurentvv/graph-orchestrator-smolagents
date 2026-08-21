@@ -440,6 +440,69 @@ def _build_vision_budget_nudge(memory_step) -> Optional[str]:
         return None
 
 
+# ===========================================================================
+# Gardes multi-blocs + délimiteurs (boucle isolation Qwen3.8, 2026-08-21) :
+# smolagents n'exécute que le PREMIER bloc ```python d'un message. Les modèles
+# « zélés » (Qwen3.8-Distill) émettent un plan complet en 5-8 fences (fix puis
+# verify puis visual_check puis final_answer) : seuls les fences 2..N sont
+# perdus mais le modèle CROIT qu'ils ont tourné (croyance corrompue → steps
+# fantômes). Corollaire observé : r'''…''' fermé prématurément par les quotes
+# du JS/français → « Code parsing failed: unterminated string literal » →
+# step de 150-205 s généré pour rien. Deux gardes observationnelles, 0 LLM.
+# ===========================================================================
+_PY_FENCE_RE = re.compile(r"```python[ \t]*\r?\n(.*?)```", re.S)
+
+
+def _build_multifence_nudge(memory_step) -> Optional[str]:
+    """Non-exécution des blocs 2..N d'un message multi-fences.
+
+    Best-effort : lit ``model_output_message`` (texte LLM brut), compte les
+    fences ; si ≥2, liste les têtes des blocs NON exécutés pour corriger la
+    croyance du modèle. Un final_answer dans un fence perdu est explicitement
+    signalé non pris en compte.
+    """
+    msg = str(getattr(memory_step, "model_output_message", "") or "")
+    fences = _PY_FENCE_RE.findall(msg)
+    if len(fences) < 2:
+        return None
+    heads = []
+    for fence in fences[1:5]:
+        first = next((ln.strip() for ln in fence.splitlines() if ln.strip()), "")
+        heads.append(first[:70])
+    listing = "\n".join(f"  - `{h}`" for h in heads)
+    return (
+        f"⚠️ SEUL LE PREMIER bloc ```python d'un message est exécuté par step — "
+        f"ton message en contenait {len(fences)}. Les {len(fences) - 1} bloc(s) "
+        f"suivant(s) N'ONT PAS été exécutés :\n{listing}\n"
+        "Réémets-les UN PAR UN (un bloc par message). Si un final_answer était "
+        "dans un bloc perdu : il n'a PAS été pris en compte."
+    )
+
+
+def _build_rstring_parse_nudge(memory_step) -> Optional[str]:
+    """Directive r\"\"\"…\"\"\" quand un r'''…''' casse le parseur Python.
+
+    Signaux : observation « Code parsing failed » + SyntaxError, et ''' dans le
+    code ou le message du step. La cause typique : quotes simples du JS ou
+    apostrophes françaises qui terminent la raw string triple-simple en avance.
+    NB : quand le parse échoue, ``code_action`` peut être vide/partiel — d'où la
+    vérification croisée sur ``model_output_message``.
+    """
+    obs = str(getattr(memory_step, "observations", "") or "")
+    if "Code parsing failed" not in obs or "SyntaxError" not in obs:
+        return None
+    code = str(getattr(memory_step, "code_action", "") or "")
+    msg = str(getattr(memory_step, "model_output_message", "") or "")
+    if "'''" not in code and "'''" not in msg:
+        return None
+    return (
+        "⚠️ Ton bloc a échoué au parse : le délimiteur r'''…''' a été fermé "
+        "prématurément par des apostrophes internes (quotes ' du JS, accents "
+        "français). Réémet le MÊME code avec r\"\"\"…\"\"\" (triples doubles "
+        "quotes) — contenu identique, seul le délimiteur change."
+    )
+
+
 def _build_wind_down_nudge(memory_step, agent, criteria_count: int) -> Optional[str]:
     """Directive de convergence quand le budget de steps est presque épuisé.
 
@@ -1071,6 +1134,31 @@ def make_screenshot_callback(capture_holder: List[Any], visual_criteria_count: i
                 )
             except Exception as e:
                 logger.debug("nudge budget vision : append observations échec (%s).", e)
+        # Boucle isolation 2026-08-21 : blocs 2..N d'un message multi-fences NON
+        # exécutés (croyance corrompue du modèle) → listing + directive.
+        multifence_nudge = _build_multifence_nudge(memory_step)
+        if multifence_nudge:
+            print("[!] Garde multi-blocs : fences 2..N non exécutés signalés.")
+            try:
+                current = getattr(memory_step, "observations", None) or ""
+                memory_step.observations = (
+                    f"{current}\n\n{multifence_nudge}"
+                    if current
+                    else multifence_nudge
+                )
+            except Exception as e:
+                logger.debug("garde multi-blocs : append observations échec (%s).", e)
+        # Boucle isolation 2026-08-21 : r'''…''' cassé au parse → directive r"""…""".
+        rstring_nudge = _build_rstring_parse_nudge(memory_step)
+        if rstring_nudge:
+            print("[!] Garde délimiteurs : r''' cassé → directive r\\\"\\\"\\\".")
+            try:
+                current = getattr(memory_step, "observations", None) or ""
+                memory_step.observations = (
+                    f"{current}\n\n{rstring_nudge}" if current else rstring_nudge
+                )
+            except Exception as e:
+                logger.debug("garde délimiteurs : append observations échec (%s).", e)
         # P5/F-138 (port deer-flow tool_progress) : résultats d'outils d'ACTION
         # quasi identiques en série (Jaccard ≥0.8) = variantes du même appel
         # sans progrès — le fingerprint F-36 ne voit pas ce cas (args variés).

@@ -88,10 +88,23 @@ async def main():
                         help="Chemin vers un draft_*.md à injecter (ou @fichier)")
     parser.add_argument("--out", default=OUT_DIR,
                         help=f"Dossier de sortie (défaut: {OUT_DIR})")
+    parser.add_argument("--seed", default=None,
+                        help="Dossier livrable à copier comme état INITIAL (mode correction : "
+                             "les fichiers existent déjà, le Coder doit read_file + multi_replace)")
+    parser.add_argument("--bug", default=None,
+                        help="Ticket de bug à corriger (texte ou @fichier) — active le mode "
+                             "correction itération 2 (reproduit l'E2E it.2 : MODE CORRECTION)")
     args = parser.parse_args()
 
     out_dir = args.out
     task_desc = _resolve_arg(args.task) if args.task else DEFAULT_TASK
+
+    # Mode correction (--bug) : le ticket est appendé au contenu COMME en E2E
+    # (workflows.py : historique/tickets concaténés au description de la sous-tâche).
+    correction_mode = bool(args.bug)
+    if correction_mode:
+        bug_content = _resolve_arg(args.bug)
+        task_desc = task_desc + "\n\n" + bug_content
 
     # Forcer l'UTF-8 (Windows + accents dans les prompts).
     if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
@@ -103,6 +116,20 @@ async def main():
 
     # 🔒 Isolation stricte : repartir d'un dossier vierge à chaque run.
     _reset_out_dir()
+
+    # Mode correction : pré-seeder les fichiers du livrable à corriger (après le
+    # reset). En E2E, l'itération 2 démarre avec les fichiers de l'itération 1
+    # déjà présents — sans ça, le Coder partirait d'un dossier vide.
+    if args.seed:
+        seeded = []
+        for fname in DEFAULT_TARGET_FILES:
+            src = os.path.join(args.seed, fname)
+            if os.path.isfile(src):
+                shutil.copy2(src, os.path.join(out_dir, fname))
+                seeded.append(fname)
+        if not seeded:
+            print(f"[!] --seed : aucun fichier cible trouvé dans {args.seed}")
+            sys.exit(2)
 
     # Imports paresseux (après load_dotenv).
     from graph_orchestrator.config import settings
@@ -131,6 +158,8 @@ async def main():
     print("[*] Coder isolation — PRODUCTION (execute_coder_node)")
     print(f"    Dossier sortie  : {os.path.abspath(out_dir)} (isolé, nettoyé)")
     print(f"    Fichiers cibles : {DEFAULT_TARGET_FILES}")
+    if correction_mode:
+        print(f"    MODE CORRECTION : itération 2 (seed: {args.seed})")
     print(f"    Draft injecté   : {'OUI (' + draft_filename + ')' if draft_filename else 'NON'}")
     print(f"    Modèle FAST     : {settings.fast_model_id}")
     print(f"    Endpoint        : {settings.local_api_base}")
@@ -159,6 +188,17 @@ async def main():
             "Les barres ont des hauteurs proportionnelles aux valeurs",
         ],
     }
+    if correction_mode:
+        # Reproduit l'it.2 du run #9 : cap F-82 à 5 critères (le 5e = celui en
+        # échec) + iteration>1 → MODE CORRECTION (read_file + multi_replace).
+        task["iteration"] = 2
+        task["visual_success_criteria"] = [
+            "Au chargement de la page, ≥1 barre colorée VISIBLE dans le canvas (un canvas vide au chargement = BUG critique)",
+            "Le compteur de comparaisons affiche '0' au chargement",
+            "Les boutons Start Sort et Reset sont visibles et cliquables",
+            "Le slider vitesse est visible avec une valeur par défaut",
+            "Les barres triées affichent une couleur distincte (ex: vert) des barres en cours de comparaison (ex: orange) et des barres non traitées (ex: bleu)",
+        ]
 
     # 🔒 chdir vers out_dir AVANT execute_coder_node (comme _scoped_chdir en prod,
     # workflows.py). Sans ça, le Coder écrit dans os.getcwd() = racine du projet,
