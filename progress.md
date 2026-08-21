@@ -80,6 +80,15 @@
   Matrice bench 6 combos (CUDA 12.4/13.3, FA, MTP, ngl éliminatoires). Fix :
   MTP OFF sur les 2 specs 9B (1342 t/s prefill + 41 t/s gen). llama.cpp
   b10517→b10549 appliqué (validation complète). Doc §2 réécrite. Contract C486.
+- [x] F116-9e : Run #7 (config saine post-MTP-off, ~96 min, interrompu user) :
+  chaîne amont VALIDÉE (Coder convergent 10 min, vrai bug `speed` détecté par le
+  Static Tester et corrigé it.2 — l'usine fonctionne, plus aucun faux positif ;
+  prefill réparé : steps tester 5-20 s vs 80 s). GOULOT FINAL identifié : le
+  rituel visuel du Web Tester (~20-25 min d'aller-retours DevTools SÉRIELS —
+  step 1 seul = 351 s) dépasse TESTER_TIMEOUT_S=1200 → Judge SKIPPÉ fail-closed
+  → REJET ×3. Mesure : le tester avait son verdict à ~1 525 s →
+  **TESTER_TIMEOUT_S=1800** (une ligne) est le fix suivant ; au-delà, réduire le
+  rituel (7 critères → échantillonnage) pour tenir un budget 30 min.
 - [ ] F116-9 : Validation E2E bubble-sort-multifile-v6 (relance P0-P3, deadline
   30 min — échec si dépassé ; étalon
   run #11 : ~23 min, 14,3 M tokens ; critères : livrable complet, PAS de
