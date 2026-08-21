@@ -410,17 +410,15 @@ def reset_vision_budget() -> None:
 
 
 def _build_vision_budget_nudge(memory_step) -> Optional[str]:
-    """Directive quand le budget de cycles navigate/screenshot est épuisé."""
+    """Directive quand le budget de cycles navigate/screenshot est épuisé.
+
+    Comptage via ``code_action`` uniquement : nos agents sont des CodeAgent
+    (Coder F-29a, Tester F-31) dont les ``tool_calls`` valent toujours
+    ``python_interpreter`` (review Kilo PR #102 — la boucle tool_calls était
+    du code mort en prod).
+    """
     try:
-        code = str(getattr(memory_step, "code_action", "") or "")
-        calls = len(_VISION_TOOLS_RE.findall(code))
-        for tc in getattr(memory_step, "tool_calls", None) or []:
-            if str(getattr(tc, "name", "") or "") in (
-                "navigate_page",
-                "take_screenshot",
-                "puppeteer_screenshot",
-            ):
-                calls += 1
+        calls = len(_VISION_TOOLS_RE.findall(str(getattr(memory_step, "code_action", "") or "")))
         if calls == 0:
             return None
         state = _VISION_BUDGET_STATE

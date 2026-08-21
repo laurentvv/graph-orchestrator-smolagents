@@ -650,17 +650,20 @@ class TestVisionBudgetNudge:
         assert results[8:11] == [None] * 3
         assert results[11] is not None
 
-    def test_tool_calls_comptes_aussi(self):
-        from types import SimpleNamespace as NS
+    def test_comptage_via_code_action_multiple_appels(self):
+        """Plusieurs appels vision dans UN step comptent chacun (via code_action —
+        nos agents sont CodeAgent, tool_calls vaut python_interpreter : review
+        Kilo PR #102)."""
         from graph_orchestrator.vision_callback import reset_vision_budget, _build_vision_budget_nudge
 
         reset_vision_budget()
-        step = SimpleNamespace(
-            code_action="",
-            observations="",
-            tool_calls=[NS(name="take_screenshot", arguments={})],
+        code = (
+            "navigate_page(url='file://x.html')\n"
+            "take_screenshot(format='jpeg')\n"
+            "navigate_page(url='file://x.html')"
         )
-        for _ in range(7):
-            _build_vision_budget_nudge(step)
+        step = SimpleNamespace(code_action=code, observations="", tool_calls=None)
+        # 3 appels/step : cumul 3, 6, 9 (muet), 12 → déclenche (n≥8, (n-8)%4==0)
+        assert all(_build_vision_budget_nudge(step) is None for _ in range(3))
         nudge = _build_vision_budget_nudge(step)
-        assert nudge is not None and "visual_check" in nudge
+        assert nudge is not None and "12 navigations/screenshots" in nudge

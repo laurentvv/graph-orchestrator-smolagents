@@ -151,6 +151,9 @@ class WebTestRunner:
                 # l'Architect (le golden #19 l'avait, les runs ratés l'ont
                 # perdu). Le WebTester pilote les MÊMES outils DevTools MCP —
                 # garantie déterministe, avant le budget (priorité mode d'emploi).
+                # Copie d'abord : task["tester_skills"] est persisté au checkpoint
+                # (review Kilo PR #102 — jamais de mutation du dict de tâche).
+                tester_skills = list(tester_skills)
                 if "devtools-preview" not in tester_skills:
                     tester_skills.insert(0, "devtools-preview")
 
@@ -384,6 +387,20 @@ final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Un r�
                         client_kwargs={"timeout": settings.llm_timeout_s, "max_retries": 0},
                         revive=srv.revive,
                     )
+                    # Goulot 2026-08-21 (review Kilo PR #102) : le Tester utilise
+                    # make_screenshot_callback, qui embarque les nudges churn
+                    # d'édition / budget vision / lectures stériles — sans reset
+                    # ici, il hériterait des compteurs du Coder. Même lifecycle
+                    # que nodes.py : reset à chaque montage du nœud.
+                    from ..vision_callback import (
+                        reset_edit_churn,
+                        reset_read_stall,
+                        reset_vision_budget,
+                    )
+
+                    reset_read_stall()
+                    reset_edit_churn()
+                    reset_vision_budget()
                     local_tester = CompactingCodeAgent(
                         tools=tester_tools,
                         model=dynamic_tester_model,
