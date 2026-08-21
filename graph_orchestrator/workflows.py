@@ -38,6 +38,7 @@ from rich.panel import Panel
 from .config import Settings, settings as default_settings
 from .hitl import hitl_checkpoint, should_trigger_hitl
 from .idempotency import IdempotencyStore, _scoped_idempotency
+from .validation_criteria import MAX_VISUAL_CRITERIA
 from .knowledge_graph import KnowledgeGraph
 from .logging_utils import NodeMetrics, render_observability_table
 from .models import ArchitectOutput, FinalSynthesis, WorkerOutput
@@ -725,6 +726,19 @@ async def run_coding_workflow(
                         # en 6 steps au lieu de 12). Évite le re-test from-scratch coûteux.
                         refutations_raw = refutations
 
+                # F-82 : cap déterministe des critères visuels (voir commentaire dans
+                # sub_dict ci-dessous). Calculé AVANT le dict car littéral d'expression.
+                _vsc = [
+                    c for c in getattr(subtask, "visual_success_criteria", [])
+                    if str(c).strip()
+                ]
+                if len(_vsc) > MAX_VISUAL_CRITERIA:
+                    print(
+                        f"[*] F-82 : {len(_vsc)} critères visuels reçus de l'Architect "
+                        f"→ cap à {MAX_VISUAL_CRITERIA} (budget rituel Coder, golden #11)."
+                    )
+                    _vsc = _vsc[:MAX_VISUAL_CRITERIA]
+
                 sub_dict = {
                     "id": subtask.task_id,
                     "content": subtask.description + historique,
@@ -750,7 +764,11 @@ async def run_coding_workflow(
                     # en route (cas actuel de tester_skills/judge_skills qui sont des champs
                     # morts). Les 3 consommateurs (Coder/Tester/Judge) lisent via task.get().
                     # Vides = repli sur le comportement historique (rétrocompat stricte).
-                    "visual_success_criteria": getattr(subtask, "visual_success_criteria", []),
+                    # Cap _vsc (run #8 2026-08-21) : à 7 critères le rituel visual_check
+                    # du Coder ne tient plus dans CODER_MAX_STEPS → boucle max-steps →
+                    # checklist rejetée → retry. Le golden #11 (018a5b6) en avait 5 ;
+                    # cap déterministe car la variance LLM produit 5-7 sans consigne.
+                    "visual_success_criteria": _vsc,
                     "functional_test_criteria": getattr(subtask, "functional_test_criteria", []),
                     "acceptance_rubric": getattr(subtask, "acceptance_rubric", ""),
                     # Numéro d'itération (1=création initiale, 2+=correction). Le prompt

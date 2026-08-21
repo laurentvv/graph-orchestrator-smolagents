@@ -344,10 +344,14 @@ Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JA
    `instrument_calls()` puis `dump_function_source(names="draw")`, cite la ligne fautive
    dans ton rapport.
 6. 🛑 BUDGET STEPS — CONVERGE RAPIDEMENT (anti over-exploration) : tu as un budget limité
-   de steps. Suite type : 1 `navigate_page` + 1 `list_console_messages` + 1 assertion par
-   critère fonctionnel + 1 `final_answer`. Soit ~{settings.tester_max_steps} steps pour TOUT. RÈGLES :
-   - UNE SEULE assertion par `evaluate_script` (regroupe plusieurs checks dans le même
-     script async plutôt que d'émettre 5 appels séparés sur la même page).
+   de steps. Suite type : 1 `navigate_page` + 1 `list_console_messages` + 1
+   `evaluate_script` PAR ÉTAT DE PAGE + 1 `final_answer`. Soit ~{settings.tester_max_steps} steps pour TOUT. RÈGLES :
+   - REGROUPE les assertions PAR ÉTAT DE PAGE en UN SEUL `evaluate_script` : tous les
+     critères d'un même état de page dans un seul script async qui RETOURNE un dict
+     {{critère: valeur mesurée}} (ex: état « chargement » = barres visibles + compteur=0
+     + boutons présents en 1 appel ; état « après interaction » = compteur>0 + tri
+     partiel en 1 appel). Chaque aller-retour DevTools coûte 20-60 s : 3-4
+     evaluate_script batchés = rituel complet ; 1 appel par critère = timeout garanti.
    - Ne JAMAIS re-vérifier un critère déjà PASS. PASS = acquis, on passe au suivant.
    - Si un critère FAIL après 2 tentatives → note FAIL et passe au suivant (ne boucle pas).
    - `final_answer` OBLIGATOIRE dès que tous les critères ont un verdict (PASS/FAIL/N-A).

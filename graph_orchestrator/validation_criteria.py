@@ -27,6 +27,14 @@ from typing import List
 
 from .feedback_utils import truncate_output
 
+# Budget rituel (2026-08-21, run #8) : nombre max de critères visuels propagés au
+# Coder. Le golden #11 (018a5b6) en avait 5, batchés en 1 step de visual_check ;
+# à 7 le rituel + le build ne tiennent plus dans CODER_MAX_STEPS → boucle de mort
+# (max-steps → final_answer → checklist 0/N → retry). L'Architect n'a AUCUNE
+# consigne de nombre (variance LLM 5-7, prompt inchangé depuis le golden) → cap
+# déterministe à la source (workflows.py sub_dict), pas espoir de prompt.
+MAX_VISUAL_CRITERIA = 5
+
 
 def build_visual_criteria_block(criteria: List[str]) -> str:
     """Construit le bloc de critères visuels injecté au Coder (auto-validation F-45).
@@ -68,7 +76,14 @@ Pour CHAQUE critère ci-dessous, confirme OUI/NON ce que tu vois RÉELLEMENT sur
 
 CHECKLIST OBLIGATOIRE (F-109 — audit matérialisé) : après ta capture, appelle
 `visual_check(criterion_number=i, verdict=True|False, observation="ce que tu vois")`
-pour CHAQUE critère, de 1 à {n}. final_answer sera REFUSÉ si :
+pour CHAQUE critère, de 1 à {n}. Les {n} appels vont dans UN SEUL bloc python
+(un seul step — pas un appel par step), exemple :
+```python
+visual_check(criterion_number=1, verdict=True, observation="...")
+visual_check(criterion_number=2, verdict=True, observation="...")
+# ... jusqu'au critère {n}, puis final_answer au step suivant
+```
+final_answer sera REFUSÉ si :
 - un critère n'a pas été audité (checklist incomplète),
 - un verdict est False (corrige le code via search_replace, re-navigue,
   re-capture, puis ré-audite),

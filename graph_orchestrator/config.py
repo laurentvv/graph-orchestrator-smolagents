@@ -250,7 +250,12 @@ class Settings:
     # brider les cas nominaux ni laisser diverger un modèle qui boucle. Opt-out :
     # CODER_MAX_STEPS plus haut pour une tâche complexe nécessitant plus d'allers-
     # retours outils. Valeur par défaut dans la dataclass (convention tester_max_steps).
-    coder_max_steps: int = 24
+    # 18→24 (F-116 session 2026-08-21, anti-thrash), puis 24→30 (run #8) : à 24 le
+    # build (~20 steps) + le rituel visual_check batché (1 step) + final_answer ne
+    # tiennent plus → boucle de mort max-steps → checklist 0/N → retry. Le golden
+    # #11 (018a5b6, cap d'époque 30-40) clôturait au step 29-30. 30 = golden + marge
+    # rituel, sans retour au thrash de 48.
+    coder_max_steps: int = 30
     # --- Garde anti-réécriture totale (F-126, post-mortem run 2026-08-19_1552) ---
     # Le 4B « corrigeait » un bug local (1 ligne) en réécrivant TOUT index.html
     # (600+ lignes, 3 fois, ~15 min de prefill chacune) → inondation du contexte
@@ -663,7 +668,7 @@ def load_settings() -> Settings:
         feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),
         tester_max_steps=_get_int("TESTER_MAX_STEPS", 20),
         tester_inline_skill_resources=_get_bool("TESTER_INLINE_SKILL_RESOURCES", True),
-        coder_max_steps=_get_int("CODER_MAX_STEPS", 24),
+        coder_max_steps=_get_int("CODER_MAX_STEPS", 30),
         coder_writefile_max_lines=_get_int("CODER_WRITEFILE_MAX_LINES", 100),
         idle_breaker_threshold=_get_int("IDLE_BREAKER_THRESHOLD", 3),
         escalation_enabled=_get_bool("ESCALATION_ENABLED", True),
