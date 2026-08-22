@@ -36,6 +36,13 @@
 > - [x] F156-5 : Tests — 4 nouveaux 0-Chrome (contrat parse, unwrap→[CHARGEMENT],
 >      ancien format préservé, signature source) ; suite 77 passed / 7 skipped
 >      (live), 0 régression. État disque + DuckDB + PR.
+> - [ ] F156-6 : Validation E2E post-merge — le run 2026-08-22_2149 (~1h20,
+>      interrompu user à l'itération 2) a validé F-155 en prod (prefill no-think
+>      538 t/s vs 66 hier ; Tester navigate 51 s vs 281-305 s ; règle reload 5-ter
+>      appliquée ; Tester LLM verdict FAILURE correct sur le board vide — aucune
+>      fausse approbation) et a fourni le cas F-156 (itération 1 : Static valide à
+>      tort, boucle Coder). Relancer un run complet : le Tier 2 réparé doit
+>      rejeter ce livrable dès l'itération 1.
 
 ## Jalons de l'Itération (cycle F-155 — goulot Tester : spill VRAM LLM, sonde tri, isolation sondes)
 > Diagnostic des 4 goulots structurels consignés (focus n°1 demandé user), correctifs
