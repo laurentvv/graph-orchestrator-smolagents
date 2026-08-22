@@ -12,10 +12,20 @@
 
 ---
 
-## Phase 3 — Cœur Coder (P0, directement après merge #106)
+## Phase 3 — Nœuds qui codent : Coder + Web Tester (P0, directement après merge #106)
+
+> **Périmètre = TOUS les nœuds qui codent** : `execute_coder_node` (Coder) ET
+> `execute_tester_node` → `testers/web_tester.py` (Web Tester) — les deux seuls nœuds
+> à boucle agentique smolagents. Hors périmètre (rien à migrer) : Static Tester et
+> Linter (déterministes, zéro LLM), nœuds de raisonnement (DSPy : Router, Refiner,
+> Architect, Drafter, Security, Judge, Escalation), `agent_server` (nettoyage final
+> phase 6). Séquence interne : parité Coder (3.1→3.5) → vision/multimodal, prérequis
+> Tester (3.6) → migration Web Tester (3.7), qui hérite de tout le travail précédent
+> (stack partagé : modèle loggé, callback screenshots, MCP DevTools + Puppeteer).
 
 Objectif : un `execute_coder_node` pydantic **paritaire ou supérieur** au smolagents
-d'aujourd'hui, validé par `debug/run_coder_pydantic.py` A/B puis E2E Bubble Sort.
+d'aujourd'hui, puis un `execute_tester_node` migré sur le même socle, validés par
+`debug/run_coder_pydantic.py` A/B, `debug/run_tester.py` puis E2E Bubble Sort.
 
 ### 3.1 Outils fichiers
 
@@ -71,15 +81,30 @@ d'aujourd'hui, validé par `debug/run_coder_pydantic.py` A/B puis E2E Bubble Sor
 | Context7 | R | `MCP` capability | idem | S |
 | DuckDuckGoSearchTool | R | Capability `WebSearch` (fallback DDG local documenté) | [Web Search](https://pydantic.dev/docs/ai/capabilities/web-search/) | S |
 
----
-
-## Phase 4 — Vision, Web Tester, robustesse (P1)
+### 3.6 Vision & multimodal (prérequis Web Tester)
 
 | Item | Statut | Contenu | Doc | Effort |
 |---|---|---|---|---|
 | Vision Coder (screenshots → contexte) | R | Screenshots MCP DevTools comme retours multimodaux d'outils (prouvé CodeMode « multimodal final expressions » ; à valider sur tools natifs) | [Multimodal Input](https://pydantic.dev/docs/ai/core-concepts/input/) | M |
-| Web Tester (testers/web_tester.py) | R | Même stack Coder + Puppeteer MCP via `MCP` ; prompt compacté F-152 en instructions | [Harness](https://pydantic.dev/docs/ai/harness/) | L |
-| **PlaywrightBrowser** | N | **Alternative in-process à chrome-devtools-mcp** (Chromium stateful, JS, screenshot, `auto_install_chromium`) — A/B à lancer en phase 4 : moins d'IO MCP, un seul process ; DevTools garde la console enrichie | [Playwright](https://pydantic.dev/docs/ai/harness/playwright/) | M |
+| Boucle screenshots (F-50) | R | Strippage `filePath` etc. → transformation per-tool fastmcp ou wrapper toolset (plus de sous-classage `Tool`) | [MCP client](https://pydantic.dev/docs/ai/mcp/client/) | M |
+
+### 3.7 Web Tester (`testers/web_tester.py`)
+
+| Item | Statut | Contenu | Doc | Effort |
+|---|---|---|---|---|
+| Migration du nœud | R | Même socle que le Coder (FileSystem + custom tools + gardes + compaction) + **Puppeteer MCP** via `MCP` capability (en plus de DevTools) ; prompt compacté F-152 en instructions ; `TesterOutput` en `output_type` | [Harness](https://pydantic.dev/docs/ai/harness/) | L |
+| Validation | R | `debug/run_tester.py` en isolation puis E2E Bubble Sort complet (Tester+Security+Judge enchaînés) | §9 analyse | — |
+
+---
+
+## Phase 4 — Robustesse & outillage transverse (P1)
+
+> Items déplacés/ex-migrateurs : tout ce qui n'est pas bloquant pour la parité des
+> deux nœuds qui codent, mais qui fiabilise l'ensemble.
+
+| Item | Statut | Contenu | Doc | Effort |
+|---|---|---|---|---|
+| **PlaywrightBrowser** | N | **Alternative in-process à chrome-devtools-mcp** (Chromium stateful, JS, screenshot, `auto_install_chromium`) — A/B à lancer en phase 4 pour les DEUX nœuds : moins d'IO MCP, un seul process ; DevTools garde la console enrichie | [Playwright](https://pydantic.dev/docs/ai/harness/playwright/) | M |
 | Escalade Ultra (F-111) | A | **FallbackModel** (bascule automatique) ou **Select Model** (hook par requête) — remplace `_select_coder_spec` ad hoc | [Select Model](https://pydantic.dev/docs/ai/capabilities/select-model/) | M |
 | WarnOnCacheBusts | N | Sentinelle d'effondrement du cache prompt (lit `usage.cache_read_tokens` normalisé) — protège l'investissement `--cache-reuse` ; ajuster `cache_ttl_seconds` | [Warn On Cache Busts](https://pydantic.dev/docs/ai/harness/warn-on-cache-busts/) | S |
 | **TestModel/FunctionModel en CI** | N | Tests déterministes du câblage Coder **sans GPU ni LLM** (TestModel génère des données valides par schéma et appelle tous les tools) + `agent.override` + `ALLOW_MODEL_REQUESTS=False` anti-fuite — remplace une partie des ~5 k LOC de mocks smolagents | [Unit testing](https://pydantic.dev/docs/ai/guides/testing/) | M |
@@ -130,6 +155,9 @@ coût fixe — revoir si endpoints distants), native provider compaction (OpenAI
 1. **P3.1-3.2** (parité tools + output_type + skills) → A/B isolation, critères = spike
    round 3 + CoderOutput validé. 2. **P3.3-3.4** (gardes + compaction) → rejouer les
    scénarios de gel F-125/129/131 en isolation. 3. **P3.5** (MCP + helpers) → E2E Bubble
-   Sort complet. 4. Phase 4 (vision + Tester + TestModel CI). 5. Phase 5 au fil de
-   l'eau (une feature = un F-xxx + PR). Chaque étape : branche → isolation → E2E → PR
-   (règle d'or Git + Kilo Review).
+   Sort complet. 4. **P3.6-3.7** (vision + Web Tester) → `debug/run_tester.py` puis E2E.
+   5. Phase 4 (PlaywrightBrowser A/B, FallbackModel, TestModel CI, Media Stores,
+   WarnOnCacheBusts). 6. Phase 5 au fil de l'eau (une feature = un F-xxx + PR).
+   Chaque étape : branche → isolation → E2E → PR (règle d'or Git + Kilo Review).
+   smolagents n'est retiré du `pyproject.toml` qu'une fois Coder **et** Tester migrés
+   (leur stack partagé fait que le second hérite du premier — d'où l'ordre).
