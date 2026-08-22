@@ -1316,6 +1316,17 @@
         "F-150",
         "F-153"
       ]
+    },
+    {
+      "id": "F-155",
+      "name": "Goulot Tester : auto-fit NGL + sonde probe_sort_state + isolation des sondes",
+      "description": "Diagnostic goulot n°1 (run 2026-08-22_1732) : le « hang Chrome/DevTools » était 100% du temps LLM — prefill Ornith-9B à 66-96 t/s (spill VRAM, ngl=99 forcé ne tenant que par chance de fragmentation), Chrome répondant en 0,2 s. Correctifs : (1) REASONING_NO_THINK_NGL=0 auto-fit stable (prefill 576-679 t/s, gen ~7 t/s assumée) ; (2) sonneur probe_sort_state (12e helper DevTools) distinguant tri en cours / tri cassé par attente in-page bornée + mesure de mouvement (validation LIVE : SORTED_AFTER_WAIT à 144 s sur le livrable qui avait produit un faux négatif) ; (3) règle 5-ter prompt Tester : reload (0,2 s) entre sondes indépendantes ; (4) bug PROD découvert : le MCP rejette les kwargs → les 5 helpers F-145 paramétrés étaient cassés en prod → refactor interpolation __TOKEN__ + garde node --check sur les 11 snippets JS.",
+      "status": "completed",
+      "dependencies": [
+        "F-145",
+        "F-127",
+        "F-116"
+      ]
     }
   ]
 }

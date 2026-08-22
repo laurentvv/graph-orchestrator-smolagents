@@ -383,7 +383,7 @@ class TestCoderWebDetection:
         pb, td = _build_devtools_blocks(
             {"target_files": ["landing_page/index.html"]}, ["fake_tool"]
         )
-        assert "VALIDATION VISUELLE" in pb
+        assert "VISUAL VALIDATION" in pb  # F-150 : titre traduit en anglais
         assert "take_screenshot" in pb
         assert "file:///" in pb
         assert "navigate_page" in td
