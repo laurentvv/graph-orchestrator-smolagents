@@ -23,6 +23,27 @@
 > Tester (3.6) → migration Web Tester (3.7), qui hérite de tout le travail précédent
 > (stack partagé : modèle loggé, callback screenshots, MCP DevTools + Puppeteer).
 
+### Principe d'architecture : UN socle commun, DEUX profils de nœud
+
+Les deux nœuds sont liés par tout SAUF quatre axes de différenciation (validation
+utilisateur 2026-08-23) — c'est déjà le cas en smolagents (`web_tester.py` réutilise
+`CompactingCodeAgent`, `run_with_retry`, `LoggedOpenAIServerModel`, le callback
+screenshots) et la migration doit le structurer explicitement :
+
+| Axe | **Socle commun (à construire UNE fois, 3.1→3.6)** | Profil **Coder** | Profil **Web Tester** |
+|---|---|---|---|
+| Boucle & mémoire | Agent pydantic + `agent.iter`, hooks, TieredCompaction + purge images, SystemReminders (nudges), gardes (LoopGuard v2, StallDetector, GoalReanchor), UsageLimits, retries 5 couches + revive llama-server | idem | idem |
+| **Tools** | plomberie toolsets/custom/MCP (transformations per-tool) | FileSystem + customs (`multi_replace`, `search_replace`, `check_js_syntax`, `log_event`, `visual_check`) + 12 helpers DOM + WebSearch/Context7 | DevTools + **Puppeteer MCP** + sondes + `fix_known_error` |
+| **Skills** | capability `Skills` (format SKILL.md commun) | file-creation, coding, frontend-design… | testing/web-testing… |
+| **Prompt** | mécanique `instructions` + ReinjectSystemPrompt + protocole | ROLE_BLOCKS `coder` + `coder_frontend` + invariants + protocole natif | ROLE_BLOCKS `web_tester` + prompt compacté F-152 |
+| **Modèle** | LoggedModel wrapper + profil OpenAI-compat llama-server | fast **Qwen 4B** (+ escalade Ultra F-111 via FallbackModel/SelectModel) | reasoning **Ornith 9B** |
+| **Sortie** | pattern `output_type` Pydantic + retries | `CoderOutput` | `TesterOutput` |
+
+Conséquence d'ingénierie : 3.1→3.6 construisent le socle en profil Coder (le plus
+exigeant côté fichiers) ; 3.7 = assembler le profil Tester par configuration fine
+(tools/skills/prompt/modèle/output), pas une seconde migration. Toute amélioration du
+socle (garde, compaction, reminder) profite automatiquement aux deux nœuds.
+
 Objectif : un `execute_coder_node` pydantic **paritaire ou supérieur** au smolagents
 d'aujourd'hui, puis un `execute_tester_node` migré sur le même socle, validés par
 `debug/run_coder_pydantic.py` A/B, `debug/run_tester.py` puis E2E Bubble Sort.
