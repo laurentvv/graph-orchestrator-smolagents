@@ -932,7 +932,7 @@ def _noop_rejection(old_string: str, new_string: str) -> str | None:
 
 
 @tool
-def search_replace(path: str, old_string: str, new_string: str) -> str:
+def search_replace(path: str, old_string: str, new_string: str, replace_all: bool = False) -> str:
     """Surgically edits a file by replacing the 'old_string' block with the 'new_string' block.
 
     PREFER this tool over write_file when modifying an EXISTING file: you only need to
@@ -941,16 +941,19 @@ def search_replace(path: str, old_string: str, new_string: str) -> str:
 
     The matching is TOLERANT: minor leading-whitespace differences and `...` ellipses
     in the 'old_string' block are accepted. If 'old_string' appears multiple times, the edit
-    fails (provide more surrounding lines to make it unique). If it cannot be found, the tool
-    returns the closest lines found so you can correct your 'old_string' block.
+    fails (provide more surrounding lines to make it unique) unless replace_all=True, which
+    replaces EVERY exact occurrence. If it cannot be found, the tool returns the closest lines
+    found so you can correct your 'old_string' block.
 
     Args:
         path: The file path to edit. Must exist.
         old_string: The exact block of text to find in the file (copy it verbatim from the file,
             including indentation). Use `...` on its own line to elide unchanged code in the
             middle of the block.
-        new_string: The new block of text that replaces 'old_string'. Must be real code, never a
+        new_string: The new block of text that replaces 'old_string'. It must be real code, never a
             placeholder like 'TODO' or '// code here'.
+        replace_all: Set True to replace EVERY occurrence of 'old_string' (exact match) instead of
+            failing on ambiguity. Defaults to False (single, unambiguous edit).
     """
     # F-97 / F-95 : normalisation + cloisonnement IO (fail-open).
     path = normalize_tool_path(path)
@@ -985,6 +988,10 @@ def search_replace(path: str, old_string: str, new_string: str) -> str:
                 if new_content and not new_content.endswith("\n"):
                     new_content += "\n"
                 new_content += new_string
+            elif replace_all and original.count(old_string) > 1:
+                # Remplacement exhaustif des occurrences EXACTES (post-mortem run
+                # 2026-08-22 12:37 : le 4B passe spontanément replace_all=True).
+                new_content = original.replace(old_string, new_string)
             else:
                 new_content = replace_most_similar_chunk(original, old_string, new_string)
 

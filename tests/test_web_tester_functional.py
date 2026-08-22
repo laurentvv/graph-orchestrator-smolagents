@@ -81,13 +81,14 @@ class TestTesterPromptPropagation:
         # Le code doit référencer original_content (avec fallback sur content).
         assert "original_content" in source
         assert "full_requirements" in source
-        # Le bloc CAHIER DES CHARGES doit être injecté dans le prompt.
-        assert "CAHIER DES CHARGES COMPLET" in source
+        # Le bloc spec complète doit être injecté dans le prompt (renommé EN par F-152).
+        assert "COMPREHENSIVE SPECIFICATION" in source
 
     def test_run_mentionne_functional_logic_testing(self):
-        """Le prompt doit rappeler l'étape 4 (Functional Logic Testing) du skill."""
+        """Le prompt doit rappeler les assertions fonctionnelles dynamiques (ex-étape 4
+        'Functional Logic Testing', rewordée EN par F-152)."""
         source = inspect.getsource(WebTestRunner.run)
-        assert "Functional Logic Testing" in source or "assertions fonctionnelles" in source.lower()
+        assert "functional assertions" in source.lower()
 
     def test_run_max_steps_adaptatif(self):
         """Le tester a un max_steps ADAPTATIF (F-47) : 6 en mode ciblé (re-test bugs),
