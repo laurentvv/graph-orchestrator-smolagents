@@ -1327,6 +1327,17 @@
         "F-127",
         "F-116"
       ]
+    },
+    {
+      "id": "F-156",
+      "name": "Static Tester Tier 2 : parsing v2 réparé + signature barres plates atrophiées",
+      "description": "Post-mortem run 2026-08-22_2149 (livrable 50 barres de 4px — hauteur % non résolue — validé à tort puis boucle Coder de 20 steps sur la contradiction capture-vide vs DOM sain) : (1) le garde [CHARGEMENT] du Tier 2 était MORT en prod — _parse_devtools_json enrobe le dict v2 {before,after} en [dict] et _evaluate_visibility le prenait pour l'ancien format liste → before_list=[] ; désenrobage explicite ajouté (replay live : success→failure avec réfutation exacte) ; (2) signature flat élargie : bandes pleine largeur (run #14) OU barres atrophiées maxH ≤ 25% du conteneur (run 2149) ; (3) 4 tests unitaires 0-Chrome avec le raw MCP exact — le test live run15 toujours skippé sous pytest ne protégeait rien.",
+      "status": "completed",
+      "dependencies": [
+        "F-120",
+        "F-82",
+        "F-155"
+      ]
     }
   ]
 }

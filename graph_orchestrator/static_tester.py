@@ -749,8 +749,17 @@ def _evaluate_visibility(
             "      let minH = Infinity, maxH = 0;"
             "      for (const el of els) { const h = el.getBoundingClientRect().height;"
             "        if (h < minH) minH = h; if (h > maxH) maxH = h; }"
-            "      const pw = (first.parentElement || document.body).getBoundingClientRect().width;"
-            "      flat = (maxH - minH) <= Math.max(1, maxH * 0.1) && r.width >= pw * 0.8;"
+            "      const parent = first.parentElement || document.body;"
+            "      const pw = parent.getBoundingClientRect().width;"
+            "      const ph = parent.getBoundingClientRect().height;"
+            # F-156 : deux signatures de géométrie morte. (a) run #14 : bandes
+            # PLEINE LARGEUR (column+flex:1 écrase height). (b) run 2026-08-22_2149 :
+            # hauteur % non résolue (conteneur flex sans height définie) → toutes
+            # les barres atrophiées au min-height (ici 4px, plus haute = 2% du
+            # conteneur). Quasi-égalité des hauteurs + (pleine largeur OU max ≤ 25%
+            # du conteneur) = flat dans les deux cas.
+            "      flat = (maxH - minH) <= Math.max(1, maxH * 0.1) &&"
+            "              (r.width >= pw * 0.8 || maxH <= ph * 0.25);"
             "    }"
             "    out.push({sel, count: els.length, h: r.height, hidden, flat});"
             "  }"
@@ -762,6 +771,18 @@ def _evaluate_visibility(
         # 'Script ran on page and returned:\n```json\n"[...échappé...]"\n```'
         # On extrait le JSON de façon robuste (plusieurs passes de déséchappement).
         result = _parse_devtools_json(raw)
+        # F-156 : _parse_devtools_json enrobe TOUT dict dans [dict] (contrat
+        # homogène pour le Tier 3). Le format v2 {before, after} doit être
+        # désenrobé AVANT la détection de format ci-dessous — sinon la branche
+        # « ancien format liste » vide before_list et le check [CHARGEMENT]
+        # reste mort (run 2026-08-22_2149 : 50 barres à 4px mesurées
+        # visible:0/50 mais JAMAIS rapportées — le livrable a traversé le gate).
+        if (
+            isinstance(result, list) and len(result) == 1
+            and isinstance(result[0], dict)
+            and ("before" in result[0] or "after" in result[0])
+        ):
+            result = result[0]
         # Format v2 (run #15) : {before: [...], after: [...]} ; repli : liste
         # plate = ancien format (robustesse si Chrome tronque le wrapper).
         if isinstance(result, dict):

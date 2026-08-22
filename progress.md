@@ -8,6 +8,34 @@
 - [x] F153 : Sonde déterministe de contrôles interactifs & fuzzing live dans le Static Tester.
 - [x] F154 : Invariants d'initialisation DOM robuste (anti-readyState complete) et complétude :root.
 - [x] F155 : Goulot n°1 « hang Chrome/DevTools du Tester » résolu — c'était le serveur llama (spill VRAM ngl=99), pas Chrome.
+- [x] F156 : Barres invisibles du run 2149 — garde [CHARGEMENT] du Tier 2 réparée (parsing) + signature flat élargie.
+
+## Jalons de l'Itération (cycle F-156 — Tier 2 aveugle : parsing v2 + barres atrophiées)
+> Post-mortem run E2E 2026-08-22_2149 (validation F-155) : livrable 50 barres de
+> 4 px (hauteur % non résolue sur conteneur flex sans height définie) VALIDÉ à tort
+> par le Static Tester, boucle Coder de 20 steps sur la contradiction « capture
+> vide vs DOM sain », leçon injectée à l'itération 2. Diagnostic user-poussé :
+> « comment aider Coder/Tester à trouver cette erreur » (2026-08-22 soir).
+>
+> - [x] F156-1 : CAUSE LIVRABLE — `bar.style.height = (v/max)*100 + '%'` ne
+>      résout pas (#board flex sans height définie) → toutes les barres au
+>      `min-height: 4px` (h_min=h_max=4, plus haute barre = 2% du conteneur,
+>      contraste OK, hit-test OK : VRAIMENT invisible, pas un artefact).
+> - [x] F156-2 : CAUSE GATE — le Tier 2 mesurait JUSTE (probe : count=50,
+>      visible:0) mais `_parse_devtools_json` enrobe le dict v2 {before,after}
+>      en [dict] (contrat Tier 3) → branche « ancien format liste » → before
+>      jeté → garde [CHARGEMENT] morte en prod (test live run15 = toujours
+>      skippé sous pytest). Fix : désenrobage explicite avant détection.
+> - [x] F156-3 : SIGNATURE FLAT ÉLARGIE — l'ancienne exigeait pleine largeur
+>      (bandes run #14) ; nouvelle : hauteurs quasi-égales ET (pleine largeur
+>      OU maxH ≤ 25% hauteur conteneur) → attrape les barres atrophiées.
+> - [x] F156-4 : PREUVE LIVE — replay Static Tester sur le livrable fautif :
+>      `success` avant le fix → `failure [CHARGEMENT] 50 éléments .bar présents
+>      au chargement mais AUCUN visible` après. Le run aurait été rejeté dès
+>      l'itération 1 avec feedback exact (pas de boucle Coder, pas de Tester LLM).
+> - [x] F156-5 : Tests — 4 nouveaux 0-Chrome (contrat parse, unwrap→[CHARGEMENT],
+>      ancien format préservé, signature source) ; suite 77 passed / 7 skipped
+>      (live), 0 régression. État disque + DuckDB + PR.
 
 ## Jalons de l'Itération (cycle F-155 — goulot Tester : spill VRAM LLM, sonde tri, isolation sondes)
 > Diagnostic des 4 goulots structurels consignés (focus n°1 demandé user), correctifs
