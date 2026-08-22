@@ -1,12 +1,47 @@
 # État d'Avancement du Sprint
 
-## Objectif Actuel : Sprint F-149 à F-154 (Élimination des frictions, allégement des rituels, sondes et initialisation robuste)
+## Objectif Actuel : Sprint F-149 à F-155 (Élimination des frictions, allégement des rituels, sondes, initialisation robuste et déblocage du goulot Tester)
 - [x] F149 : Pré-injection directe du Draft dans le prompt Coder (suppression du DraftGate, Step 1 direct écriture).
 - [x] F150 : Épuration des prompts & invariants universels (suppression des micro-règles périmées, traduction intégrale en anglais).
 - [x] F151 : Exemption des outils de validation visuelle du StallDetector.
 - [x] F152 : Compaction du prompt Tester en mode ciblé (passage de ~22k à ~8k tokens).
 - [x] F153 : Sonde déterministe de contrôles interactifs & fuzzing live dans le Static Tester.
 - [x] F154 : Invariants d'initialisation DOM robuste (anti-readyState complete) et complétude :root.
+- [x] F155 : Goulot n°1 « hang Chrome/DevTools du Tester » résolu — c'était le serveur llama (spill VRAM ngl=99), pas Chrome.
+
+## Jalons de l'Itération (cycle F-155 — goulot Tester : spill VRAM LLM, sonde tri, isolation sondes)
+> Diagnostic des 4 goulots structurels consignés (focus n°1 demandé user), correctifs
+> appliqués sur feu vert (2026-08-22, branche fix/tester-vram-autofit-probe-isolation).
+>
+> - [x] F155-1 : DIAGNOSTIC PRÉCIS — le « hang Chrome » du Tester = 100% temps LLM.
+>      Correspondance 1:1 steps ↔ timings llama-server (run 1732 : navigate_page 281,7 s
+>      = 274,2 s prefill 66 t/s ; read_file 86 s = 100% LLM, zéro navigateur). Chrome nu
+>      (MCP production, 0 LLM, `debug/bench_devtools_naked.py`) : navigate 0,68 s /
+>      reload 0,14-0,20 s / evaluate 0,21 s / connexion 2,7 s. AUCUN blocage Chrome.
+> - [x] F155-2 : CAUSE RACINE VÉRIFIÉE par bench A/B (`debug/bench_tester_vram.py`,
+>      spawn production exact) — ngl=99 forcé (F-127) annule l'auto-fit → 9B+mmproj
+>      laissent ~180 MiB VRAM → spill buffers en mémoire partagée → prefill 83-242 t/s
+>      INSTABLE d'un spawn à l'autre (le 1342 t/s du 21/08 = chance de fragmentation ;
+>      Ornith-1.0 tout autant lent aujourd'hui → pas le modèle/mmproj/ctx). Auto-fit :
+>      prefill 576-679 t/s STABLE (gen ~7 t/s, compromis assumé user : stabilité d'abord).
+>      ULTRA (goulot n°4) = même cause (serveur mesuré 74 t/s).
+> - [x] F155-3 : `REASONING_NO_THINK_NGL=0` (.env + .env.example, F-127 inversé) ;
+>      REASONING_NGL=99 conservé + avertissement (Architect gen-heavy, trancher sur bench
+>      dédié si régression). Goulots n°2/#3 : sonde `probe_sort_state` (12e helper
+>      DevTools Coder+Tester) — attente in-page bornée jusqu'au VRAI tri complété +
+>      mesure de mouvement post-timeout → verdicts SORTED / IN_PROGRESS (pas un défaut) /
+>      STATIC_UNSORTED (cassé). Validation LIVE livrable 1732 : SORTED_AFTER_WAIT à
+>      144 s (le run concluant « non trié » à 60 s). Règle 5-ter prompt Tester : reload
+>      (~0,2 s) entre sondes indépendantes + jamais de « non trié » sans verdict sonde.
+> - [x] F155-4 : BUG PROD découvert en validation live — le MCP chrome-devtools REJETTE
+>      les kwargs (« Unknown argument », prouvé dans le log 1732) : les 5 helpers F-145
+>      paramétrés étaient cassés en prod depuis leur création. Refactor : interpolation
+>      __TOKEN__ côté Python (ints clampés, identifiants validés avant interpolation) +
+>      garde node --check sur les 11 snippets JS + test anti-placeholder résiduel.
+> - [x] F155-5 : Validation — 30/30 test_devtools_dom_tools, 228 tests voisins PASS
+>      (prompts, f127, vision_nudge, skill_resolve, chrome_devtools_tool, mcp_connect ;
+>      + fix d'un assert F-150 préexistant cassé sur tree propre), py_compile OK, gate
+>      F-103 : 29 surfaces, 0 erreur, 0 warning. État disque synchronisé + DuckDB + PR.
 
 ## Jalons de l'Itération (cycle E2E du 2026-08-22 soir — boucle run/fix/run, 4 fixes usine)
 > 5 runs E2E bubble-sort-multifile-v6 (12:37 pré-session, 15:24, 15:40, 16:31, 17:32). Aucun verdict Judge :

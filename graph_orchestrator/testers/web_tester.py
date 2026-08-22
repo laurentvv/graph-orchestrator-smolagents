@@ -291,6 +291,7 @@ Puppeteer and DevTools MCP run separate Chrome instances. Always use DevTools to
 2. `evaluate_script(function="async () => ...")`: For executing runtime assertions.
 3. Interactive testing tools:
 - `probe_canvas_activity(window_ms=2400)`: Tests canvas animation liveliness (ANIMATING / STATIC_PAINTED).
+- `probe_sort_state(max_wait_ms=180000)`: Animated-sort verdict — waits IN-PAGE until sorted (SORTED / IN_PROGRESS / STATIC_UNSORTED). NEVER conclude "not sorted" without it.
 - `expose_game_state(names=None)`: Inspects internal runtime game variables across a 1.5s interval.
 - `instrument_calls(names=None, window_s=3)`: Counts actual function calls (e.g. draw/update).
 - `fuzz_keyboard_controls()`: Simulates keyboard inputs (Arrows, Space, Z, X).
@@ -310,6 +311,7 @@ You MUST produce code by executing tools via PYTHON (CodeAgent). NEVER explain w
    ⚠️ If `navigate_page` TIMEOUTS on this local page: the UI is frozen by an infinite JS loop. Return `status="failure"` immediately with details="page frozen on load (infinite loop)".
 5. ANIMATION = TEMPORAL TEST, NOT STATIC STATE: For algorithm visualizers and animations, measure progression over time (verify partial state during execution, not merely checking initial or post-completion state).
 5-bis. GAME/CANVAS = MOTION PROOF REQUIRED: For interactive games, prove motion with `probe_canvas_activity()` (ANIMATING) or `expose_game_state()`.
+5-ter. PROBE ISOLATION & ANIMATED SORTS: successive evaluate_script MUTATE the page (clicks, resets, corrupted state). Before each INDEPENDENT assertion sequence, reset the page with `navigate_page(type="reload")` (~0.2s, cheap). For sorting tasks, NEVER conclude "not sorted" from a snapshot taken before the animation completes: call `probe_sort_state(max_wait_ms=...)` ONCE and trust its verdict — SORTED_AFTER_WAIT = pass, IN_PROGRESS_STILL_MOVING = pass (slow animation, NOT a defect), STATIC_UNSORTED = fail.
 6. STEP BUDGET — CONVERGE RAPIDLY: You have a limited step budget (~{settings.tester_max_steps} steps).
    - Batch assertions per page state into a single `evaluate_script`.
    - Never re-verify already PASS criteria.

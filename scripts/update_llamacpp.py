@@ -1,8 +1,12 @@
 #!/usr/bin/env python
 """Mise à jour du build llama.cpp CUDA vendé (vendor/llamacpp-cuda13) — F-123.
 
-llama.cpp publie des releases quasi-quotidiennes (b####). Ce script automatise la
-veille et la mise à jour du build vendé, SANS jamais appliquer sans demande
+llama.cpp publie des nightlies quasi-quotidiennes (b####) et, depuis le passage
+au versionnage sémantique (v0.2.0, 2026-08-21), des stables vX.Y.Z SANS aucun
+binaire embarqué. On suit le canal NIGHTLY b#### (le seul téléchargeable, et le
+nôtre : releases stables = « downstream/casual users », nightlies = « developers
+and technical users », cf. ggml-org/ggml discussion #1579). Ce script automatise
+la veille et la mise à jour du build vendé, SANS jamais appliquer sans demande
 explicite (philosophie AGENTS.md §8/§11 : validation humaine avant application) :
 
   Vérification seule (défaut, réseau léger, ~1 s) :
@@ -43,7 +47,7 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 VENDOR_DIR = PROJECT_ROOT / "vendor" / "llamacpp-cuda13"
-RELEASES_API = "https://api.github.com/repos/ggml-org/llama.cpp/releases/latest"
+RELEASES_API = "https://api.github.com/repos/ggml-org/llama.cpp/releases"
 # Flags dont l'absence dans un nouveau build casserait la production (F-123).
 CRITICAL_FLAGS = ("--spec-type", "--reasoning-preserve", "--cache-type-k", "--flash-attn", "--parallel")
 
@@ -62,16 +66,32 @@ def current_build() -> int | None:
 
 
 def latest_release(flavor: str) -> tuple[int, list[dict]]:
-    req = urllib.request.Request(RELEASES_API, headers={"User-Agent": "graph-orchestrator-f123"})
+    """Plus récente NIGHTLY b#### dotée d'assets binaires Windows.
+
+    Versionnage sémantique (v0.2.0, 2026-08-21) : les stables vX.Y.Z sont des
+    releases marquées « latest » par GitHub mais n'embarquent AUCUN binaire
+    (seul nightly-tag.txt pointe vers la nightly correspondante) ; les nightlies
+    b#### sont prerelease=true → invisibles de /releases/latest. On itère donc
+    /releases et on prend la 1re b#### (peut-être encore en cours de publication
+    → on exige ses assets win-cuda, sinon on continue dans la liste).
+    """
+    req = urllib.request.Request(
+        RELEASES_API + "?per_page=20", headers={"User-Agent": "graph-orchestrator-f123"}
+    )
     with urllib.request.urlopen(req, timeout=30) as r:
-        data = json.loads(r.read().decode())
-    tag = data.get("tag_name", "")
-    m = re.match(r"b(\d+)", tag)
-    if not m:
-        raise RuntimeError(f"tag de release inattendu : {tag!r}")
-    assets = [a for a in data.get("assets", []) if flavor in a["name"] and a["name"].endswith(".zip")
-              and ("bin-win" in a["name"] or "cudart" in a["name"])]
-    return int(m.group(1)), assets
+        releases = json.loads(r.read().decode())
+    for rel in releases:
+        m = re.match(r"b(\d+)$", rel.get("tag_name", ""))
+        if not m:
+            continue
+        assets = [
+            a for a in rel.get("assets", [])
+            if flavor in a["name"] and a["name"].endswith(".zip")
+            and ("bin-win" in a["name"] or "cudart" in a["name"])
+        ]
+        if assets:
+            return int(m.group(1)), assets
+    raise RuntimeError("aucune release nightly b#### avec assets win-cuda dans les 20 dernières releases")
 
 
 def verify_new_build(new_dir: Path, expected_build: int) -> bool:

@@ -40,19 +40,41 @@ Aucun flag n'est écrit en dur dans une commande shell : tout passe par `ModelSp
 > Le bench F-123 qui validait MTP (+50 % tok/s) ne mesurait que la GÉNÉRATION courte,
 > jamais le **préfill long** (charge réelle des nœuds 9B : Tester/Judge). Matrice
 > préfill mesurée (4,5k tokens, b10549, cuda-13.3 = cuda-12.4 à ±10 % près) :
-> `ngl99+kvq8` = **1308-1342 t/s** ; `ngl99+kvq8+MTP` = **84 t/s** (×16 plus lent —
-> le contexte draft MTP fait déborder la VRAM 6 Go → offload CPU silencieux, le
-> serveur démarre sans erreur) ; `auto+kvq8+MTP` = 497 t/s mais gen 7-11 t/s.
+> `ngl99+kvq8` = **1308-1342 t/s** *(⚠️ F-155 : tenue MARGINALE — remesuré 83-242 t/s
+> le lendemain selon la fragmentation VRAM ; cf. §2-bis)* ; `ngl99+kvq8+MTP` = **84 t/s**
+> (×16 plus lent — le contexte draft MTP fait déborder la VRAM 6 Go → offload CPU
+> silencieux, le serveur démarre sans erreur) ; `auto+kvq8+MTP` = 497 t/s mais gen 7-11 t/s.
 > Cause des runs lents 2026-08-21 (tester 80 s/step, run #6 47 min) : MTP+ngl99
 > actif depuis le swap b10472. Symptôme reconnaissable : `common_fit_params:
 > failed to fit params ... n_gpu_layers already set by user` + `12 ms per token`
 > dans `prompt eval time`. → **REASONING_SPEC_MTP=false,
 > REASONING_NO_THINK_SPEC_MTP=false** tant que 6 Go.
 
-Build vendé : `vendor/llamacpp-cuda13/` (**b10549, CUDA 13.3** — monté depuis b10517
-le 2026-08-21, validation post-swap : MTP compatible (+59 % en bench GEN court —
-sans objet, MTP désactivé en prod), 8/8 tests flags ; cuda-12.4 testé identique en
-prefill). Historique : b10509 ← b10472 (2026-08-20), b10517, b10549.
+Build vendé : `vendor/llamacpp-cuda13/` (**b10586, CUDA 13.3** — monté depuis b10549
+le 2026-08-22 ; validation post-swap : baseline reasoning 27,5 t/s, 8/8 tests flags,
+prefill autofit 616-661 t/s = identique b10549 ; ⚠️ changement de comportement :
+`--spec-type draft-mtp` sur un modèle SANS couches MTP est désormais une ERREUR
+fatale (exit 1) au lieu d'un ignore silencieux — sans objet en prod, SPEC_MTP=false
+depuis F-116-9d). Historique : b10509 ← b10472 (2026-08-20), b10517, b10549 (08-21),
+b10586 (08-22, première nightly post-versionnage sémantique).
+
+**Canal de release (v0.2.0, 2026-08-21)** : llama.cpp est passé au versionnage
+sémantique — `vX.Y.Z` = stables « recommandées downstream » mais SANS AUCUN binaire
+(uniquement `nightly-tag.txt` pointant vers la nightly correspondante) ; `b[NUM]` =
+nightlies quasi-quotidiennes, prerelease=true → INVISIBLES de `/releases/latest`.
+On suit le canal NIGHTLY (le seul téléchargeable, et le nôtre : « developers and
+technical users », cf. ggml-org/ggml discussion #1579) ; `update_llamacpp.py` itère
+donc `/releases` et prend la 1re `b####` dotée d'assets win-cuda (fix 2026-08-22 —
+l'ancien `/releases/latest` remontait v0.2.0 sans assets et plantait le script).
+
+**§2-bis (F-155, 2026-08-22) — ngl>0 sur 6 Go = seuil instable** : 9B Q4 + mmproj ≈
+6,1 GiB ; `ngl=99` ne laisse que ~180 MiB → selon la fragmentation VRAM du moment
+(Chrome, DWM), les buffers débordent en mémoire partagée → prefill 83-242 t/s
+INSTABLE d'un spawn à l'autre (mesuré A/B `debug/bench_tester_vram.py` ; c'était
+la cause du « hang Chrome du Tester » — 100 % temps LLM, Chrome répondant en 0,2 s).
+Fix : `REASONING_NO_THINK_NGL=0` auto-fit → prefill 576-679 t/s STABLE, gen ~7 t/s
+(compromis assumé, steps Tester dominés par le prefill). `REASONING_NGL=99` conservé
+(Architect gen-heavy) mais sous avertissement — re-bencher avant tout changement.
 **Mise à jour** (releases
 llama.cpp quasi-quotidiennes, veille hebdo programmée) :
 `uv run python scripts/update_llamacpp.py` vérifie sans rien toucher (exit 2 si

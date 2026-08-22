@@ -115,9 +115,15 @@ class DevToolsFuzzClickTool(Tool):
         return self._eval(function=_FUZZ_CLICK_JS)
 
 
+# F-155 : les paramètres sont INTERPOLÉS dans le JS (placeholders __TOKEN__),
+# jamais passés en kwargs — le MCP chrome-devtools REJETTE tout argument hors
+# function/args/filePath/dialogAction (« Unknown argument "window_ms" », prouvé
+# run 2026-08-22_1732 : les helpers F-145 paramétrés échouaient en prod depuis
+# leur création, seuls leurs défauts JS fonctionnaient). Le wrapper clampe et
+# valide côté Python AVANT interpolation (ints bornés, identifiants nus).
 _PROBE_CANVAS_V2_JS = (
-    "async (window_ms) => {"
-    " const wm = Math.max(800, Math.min(10000, Number(window_ms) || 2400));"
+    "async () => {"
+    " const wm = Math.max(800, Math.min(10000, Number('__WINDOW_MS__')));"
     " const canvases = Array.from(document.querySelectorAll('canvas'));"
     " if (canvases.length === 0) return JSON.stringify({ has_canvas: false, message: 'Aucun canvas dans la page.' });"
     # liveness rAF : 1 s dédiée (un onglet caché gèle rAF → contexte pour écarter un faux positif)
@@ -206,7 +212,8 @@ class DevToolsProbeCanvasTool(Tool):
         self._eval = evaluate_script_tool
 
     def forward(self, window_ms=None) -> str:
-        return self._eval(function=_PROBE_CANVAS_V2_JS, window_ms=window_ms if window_ms is not None else 2400)
+        wm = 2400 if window_ms is None else max(800, min(10000, int(window_ms)))
+        return self._eval(function=_PROBE_CANVAS_V2_JS.replace("__WINDOW_MS__", str(wm)))
 
 
 _FUZZ_KEYBOARD_JS = (
@@ -395,10 +402,11 @@ def _split_identifiers(names_csv: str, limit: int = 30):
     return names[:limit], bad
 
 
+# F-155 : __NAMES__ interpolé côté Python (voir note _PROBE_CANVAS_V2_JS).
 _EXPOSE_STATE_JS = (
-    "async (names_csv) => {"
+    "async () => {"
     " const DEFAULT = 'score,lines,level,best,paused,gameOver,isGameOver,running,isPlaying,playing,started,currentPiece,board,grid,lives,time,frame,frameCount,coins';"
-    " const names = (names_csv || DEFAULT).split(',').map(s => s.trim()).filter(Boolean).slice(0, 30);"
+    " const names = ('__NAMES__' || DEFAULT).split(',').map(s => s.trim()).filter(Boolean).slice(0, 30);"
     " const read = (n) => {"
     "   try {"
     "     const v = eval(n);"
@@ -452,14 +460,15 @@ class DevToolsExposeGameStateTool(Tool):
             _, bad = _split_identifiers(names)
             if bad:
                 return f"ERROR (expose_game_state) : noms invalides {bad} — identifiants JS nuds uniquement, séparés par des virgules."
-        return self._eval(function=_EXPOSE_STATE_JS, names_csv=names)
+        return self._eval(function=_EXPOSE_STATE_JS.replace("__NAMES__", (names or "").strip()))
 
 
+# F-155 : __NAMES__/__WINDOW_S__ interpolés côté Python (voir note _PROBE_CANVAS_V2_JS).
 _INSTRUMENT_CALLS_JS = (
-    "async (names_csv, window_s) => {"
+    "async () => {"
     " const DEFAULT = 'draw,update,gameLoop,loop,tick,render,animate,moveDown,updateHUD,updateScore,spawnPiece';"
-    " const names = (names_csv || DEFAULT).split(',').map(s => s.trim()).filter(Boolean).slice(0, 20);"
-    " const ws = Math.max(1, Math.min(30, Number(window_s) || 3));"
+    " const names = ('__NAMES__' || DEFAULT).split(',').map(s => s.trim()).filter(Boolean).slice(0, 20);"
+    " const ws = Math.max(1, Math.min(30, Number('__WINDOW_S__')));"
     " const counts = {}; const wrapped = [];"
     " for (const n of names) {"
     "   try {"
@@ -500,15 +509,16 @@ class DevToolsInstrumentCallsTool(Tool):
             _, bad = _split_identifiers(names, limit=20)
             if bad:
                 return f"ERROR (instrument_calls) : noms invalides {bad} — identifiants JS nuds uniquement."
-        return self._eval(
-            function=_INSTRUMENT_CALLS_JS, names_csv=names, window_s=window_s if window_s is not None else 3
-        )
+        ws = 3 if window_s is None else max(1, min(30, int(window_s)))
+        js = _INSTRUMENT_CALLS_JS.replace("__NAMES__", (names or "").strip()).replace("__WINDOW_S__", str(ws))
+        return self._eval(function=js)
 
 
+# F-155 : __NAMES__ interpolé côté Python (voir note _PROBE_CANVAS_V2_JS).
 _DUMP_SOURCE_JS = (
-    "(names_csv) => {"
+    "() => {"
     " const DEFAULT = 'draw,update,gameLoop,loop,tick,render,moveDown,spawnPiece,collide,moveLeft,moveRight,rotate,merge,clearLines';"
-    " const names = (names_csv || DEFAULT).split(',').map(s => s.trim()).filter(Boolean).slice(0, 10);"
+    " const names = ('__NAMES__' || DEFAULT).split(',').map(s => s.trim()).filter(Boolean).slice(0, 10);"
     " const out = {};"
     " for (const n of names) {"
     "   try {"
@@ -543,13 +553,14 @@ class DevToolsDumpFunctionSourceTool(Tool):
             _, bad = _split_identifiers(names, limit=10)
             if bad:
                 return f"ERROR (dump_function_source) : noms invalides {bad} — identifiants JS nuds uniquement."
-        return self._eval(function=_DUMP_SOURCE_JS, names_csv=names)
+        return self._eval(function=_DUMP_SOURCE_JS.replace("__NAMES__", (names or "").strip()))
 
 
+# F-155 : __FN__/__TIMES__ interpolés côté Python (voir note _PROBE_CANVAS_V2_JS).
 _FORCE_ADVANCE_JS = (
-    "(fn, times) => {"
-    " const fname = fn || 'moveDown';"
-    " const n = Math.max(1, Math.min(500, Number(times) || 40));"
+    "() => {"
+    " const fname = '__FN__';"
+    " const n = Math.max(1, Math.min(500, Number('__TIMES__')));"
     " const readCompact = () => {"
     "   const names = ['score', 'lines', 'level', 'best', 'paused', 'gameOver', 'currentPiece', 'board'];"
     "   const o = {};"
@@ -602,7 +613,113 @@ class DevToolsForceAdvanceTool(Tool):
         fname = fn or "moveDown"
         if not _IDENT_RE.match(fname or ""):
             return "ERROR (force_advance) : nom de fonction invalide — identifiant JS nu uniquement."
-        return self._eval(function=_FORCE_ADVANCE_JS, fn=fname, times=times if times is not None else 40)
+        n = 40 if times is None else max(1, min(500, int(times)))
+        js = _FORCE_ADVANCE_JS.replace("__FN__", fname.strip()).replace("__TIMES__", str(n))
+        return self._eval(function=js)
+
+
+# F-155 (goulot n°3, run 2026-08-22_1732) : le Tester a conclu « non trié » en
+# attendant 60 s IN-PAGE un tri animé qui dure ~95 s. La sonde doit attendre
+# le VRAI signal de complétion (ou prouver l'inertie), dans UN SEUL appel —
+# pas de snapshot prématuré, pas d'attente fixe plus courte que l'animation.
+# Verdicts : SORTED_ALREADY / SORTED_AFTER_WAIT / IN_PROGRESS_STILL_MOVING /
+# STATIC_UNSORTED / NO_TARGETS — « tri en cours » est désormais distingué de
+# « tri cassé » par la mesure de mouvement post-timeout.
+# __MAX_WAIT_MS__ interpolé côté Python (voir note _PROBE_CANVAS_V2_JS).
+_PROBE_SORT_STATE_JS = (
+    "async () => {"
+    " const mw = Math.max(1000, Math.min(300000, Number('__MAX_WAIT_MS__')));"
+    " const POLL_MS = 500;"
+    " const cap = (a) => a.slice(0, 400);"
+    " const valueOf = (el) => {"
+    "   const dv = el.getAttribute && el.getAttribute('data-value');"
+    "   if (dv !== null && dv !== '' && !isNaN(Number(dv))) return Number(dv);"
+    "   const h = parseFloat(el.style && el.style.height);"
+    "   if (!isNaN(h) && h > 0) return h;"
+    "   const t = parseFloat((el.textContent || '').trim());"
+    "   if (!isNaN(t)) return t;"
+    "   return null;"
+    " };"
+    " const collect = () => {"
+    "   let els = cap(Array.from(document.querySelectorAll('[class*=\"bar\"],[id*=\"bar\"]')));"
+    "   let withVal = els.filter(e => valueOf(e) !== null);"
+    "   if (withVal.length < 4) {"
+    "     let best = null;"
+    "     for (const c of document.querySelectorAll('div,section,main')) {"
+    "       const kids = c.children ? Array.from(c.children) : [];"
+    "       if (kids.length >= 4 && (!best || kids.length > best.length)) best = kids;"
+    "     }"
+    "     if (best) withVal = cap(best).filter(e => valueOf(e) !== null);"
+    "   }"
+    "   return cap(withVal.map(valueOf));"
+    " };"
+    " const isSorted = (vs) => {"
+    "   if (vs.length < 2) return null;"
+    "   for (let i = 0; i < vs.length - 1; i++) { if (vs[i] > vs[i + 1]) return false; }"
+    "   return true;"
+    " };"
+    " const counter = (() => {"
+    "   const el = document.querySelector('[id*=\"counter\"],[id*=\"comparison\"],[class*=\"counter\"]');"
+    "   return el ? (el.textContent || '').trim().slice(0, 40) : null;"
+    " })();"
+    " const v0 = collect();"
+    " if (v0.length < 4) return JSON.stringify({ verdict: 'NO_TARGETS', n: v0.length,"
+    "   hint: 'Moins de 4 elements a valeur numerique (data-value, height inline, texte)."
+    " Tri sur canvas ? Utilise probe_canvas_activity(). Sinon inspecte avec discover_ui().' });"
+    " const s0 = isSorted(v0);"
+    " if (s0 === true) return JSON.stringify({ verdict: 'SORTED_ALREADY', n: v0.length,"
+    "   values_head: v0.slice(0, 8), counter: counter, waited_ms: 0 });"
+    " const t0 = performance.now();"
+    " let v = v0;"
+    " while (performance.now() - t0 < mw) {"
+    "   await new Promise(r => setTimeout(r, POLL_MS));"
+    "   v = collect();"
+    "   if (isSorted(v) === true) return JSON.stringify({ verdict: 'SORTED_AFTER_WAIT',"
+    "     n: v.length, values_head: v.slice(0, 8), counter: counter,"
+    "     waited_ms: Math.round(performance.now() - t0),"
+    "     note: 'Tri anime complet : ne conclus jamais non-trie avant ce verdict.' });"
+    " }"
+    " const sigA = v.join(',');"
+    " await new Promise(r => setTimeout(r, 800));"
+    " const vEnd = collect();"
+    " const moving = vEnd.join(',') !== sigA;"
+    " return JSON.stringify({"
+    "   verdict: moving ? 'IN_PROGRESS_STILL_MOVING' : 'STATIC_UNSORTED',"
+    "   n: vEnd.length, values_head: vEnd.slice(0, 8), counter: counter,"
+    "   waited_ms: Math.round(performance.now() - t0), moving_after_timeout: moving,"
+    "   hint: moving ? 'Le tri AVANCE encore (animation lente) : rallonge max_wait_ms, PAS un defaut.'"
+    "     : 'Fige ET non trie : tri casse ou avorte. Diagnostique avec instrument_calls() puis dump_function_source().' });"
+    "}"
+)
+
+
+class DevToolsProbeSortStateTool(Tool):
+    name = "probe_sort_state"
+    description = (
+        "Sonde déterministe de tri animé (F-155) : lit les valeurs des barres (data-value, height inline, "
+        "ou texte), et si ce n'est pas trié ATTEND IN-PAGE (poll 500 ms) jusqu'à tri complété ou "
+        "max_wait_ms (défaut 180000, max 300000) — UN SEUL appel, zéro step supplémentaire. Verdicts : "
+        "SORTED_ALREADY / SORTED_AFTER_WAIT (tri animé complet) / IN_PROGRESS_STILL_MOVING (animation "
+        "lente, PAS un défaut — rallonge max_wait_ms) / STATIC_UNSORTED (figé et non trié = tri cassé) / "
+        "NO_TARGETS. Règle : ne JAMAIS conclure « non trié » sur un snapshot pris avant la fin de "
+        "l'animation — attends ce verdict."
+    )
+    inputs = {
+        "max_wait_ms": {
+            "type": "integer",
+            "description": "attente max avant verdict IN_PROGRESS/STATIC (défaut 180000, bornes 1000-300000)",
+            "nullable": True,
+        },
+    }
+    output_type = "string"
+
+    def __init__(self, evaluate_script_tool: Tool):
+        super().__init__()
+        self._eval = evaluate_script_tool
+
+    def forward(self, max_wait_ms=None) -> str:
+        mw = 180000 if max_wait_ms is None else max(1000, min(300000, int(max_wait_ms)))
+        return self._eval(function=_PROBE_SORT_STATE_JS.replace("__MAX_WAIT_MS__", str(mw)))
 
 
 def build_devtools_helper_tools(cdt_tools: List[Tool]) -> List[Tool]:
@@ -633,4 +750,6 @@ def build_devtools_helper_tools(cdt_tools: List[Tool]) -> List[Tool]:
         DevToolsInstrumentCallsTool(eval_tool),
         DevToolsDumpFunctionSourceTool(eval_tool),
         DevToolsForceAdvanceTool(eval_tool),
+        # F-155 : sonde déterministe de tri animé (tri en cours vs tri cassé)
+        DevToolsProbeSortStateTool(eval_tool),
     ]
