@@ -18,7 +18,9 @@ Couverture :
 """
 
 import pytest
+from smolagents import Tool
 
+import graph_orchestrator.static_tester as static_tester
 from graph_orchestrator.static_tester import (
     execute_static_tester_node,
     static_check_html,
@@ -1229,3 +1231,90 @@ class TestTemporalLiveRun8Regression:
         assert not temporal_errors, (
             f"Animation progressive canvas ne doit pas être flagguée: {temporal_errors}"
         )
+
+
+# ==========================================
+# F-156 — Tier 2 parsing v2 + barres atrophiées (post-mortem run 2026-08-22_2149)
+# ==========================================
+class _FakeNavigate(Tool):
+    name = "navigate_page"
+    description = "fake navigate"
+    inputs = {"url": {"type": "string", "description": "url"}}
+    output_type = "string"
+    skip_forward_signature_validation = True
+
+    def forward(self, url=None, **kw):
+        return "ok"
+
+
+class _FakeEvalRaw(Tool):
+    """Fake evaluate_script rejouant le retour EXACT du MCP (doublement échappé,
+    bloc ```json```). Valeur fixée avant l'appel — 0 Chrome requis."""
+
+    name = "evaluate_script"
+    description = "fake eval"
+    inputs = {"function": {"type": "string", "description": "js"}}
+    output_type = "string"
+    skip_forward_signature_validation = True
+
+    def __init__(self, raw):
+        super().__init__()
+        self._raw = raw
+
+    def forward(self, function=None, **kw):
+        return self._raw
+
+
+_RAW_2149 = (
+    'Script ran on page and returned:\n```json\n'
+    '"{\\"before\\":[{\\"sel\\":\\".bar\\",\\"count\\":50,\\"visible\\":0}],'
+    '\\"after\\":[{\\"sel\\":\\".bar\\",\\"count\\":50,\\"h\\":4.24,\\"hidden\\":false,\\"flat\\":false}]}"'
+    '\n```'
+)
+
+
+def test_parse_devtools_json_wraps_single_dict_in_list():
+    """Contrat du helper partagé : un dict unique est enrobé en [dict] (API Tier 3).
+    C'est précisément ce comportement qui piègeait _evaluate_visibility (F-156)."""
+    res = static_tester._parse_devtools_json(_RAW_2149)
+    assert isinstance(res, list) and len(res) == 1 and isinstance(res[0], dict)
+    assert "before" in res[0] and "after" in res[0]
+
+
+def test_visibility_unwraps_v2_and_fires_chargement_guard():
+    """F-156 (run 2026-08-22_2149) : le retour v2 {before, after} enrobé en [dict]
+    par _parse_devtools_json DEVAIT être désenrobé — sinon la branche « ancien
+    format liste » vide before_list et le garde [CHARGEMENT] reste mort alors
+    que la sonde a mesuré visible:0/50. Test 0 Chrome avec le raw exact."""
+    tools = [_FakeNavigate(), _FakeEvalRaw(_RAW_2149)]
+    errs = static_tester._evaluate_visibility(
+        tools, "file:///x/index.html", [".bar"], primary_action_id="start-btn"
+    )
+    assert any("[CHARGEMENT]" in e for e in errs), (
+        f"Le garde [CHARGEMENT] doit tirer sur 50 éléments invisibles : {errs}"
+    )
+
+
+def test_visibility_old_flat_list_format_still_supported():
+    """Régression : l'ANCIEN format (liste plate directe) doit continuer de
+    fonctionner (le désenrobage ne doit concerner que [dict v2])."""
+    raw_old = (
+        'Script ran on page and returned:\n```json\n'
+        '"[{\\"sel\\":\\".bar\\",\\"count\\":12,\\"h\\":0,\\"hidden\\":true,\\"flat\\":false}]"'
+        '\n```'
+    )
+    tools = [_FakeNavigate(), _FakeEvalRaw(raw_old)]
+    errs = static_tester._evaluate_visibility(
+        tools, "file:///x/index.html", [".bar"], primary_action_id=None
+    )
+    assert any("INVISIBLE" in e for e in errs)
+
+
+def test_flat_signature_covers_atrophied_bars():
+    """F-156 : la signature flat doit couvrir les DEUX géométries mortes —
+    bandes pleine largeur (run #14) ET barres atrophiées au min-height
+    (hauteur % non résolue, run 2149 : plus haute barre = 2% du conteneur)."""
+    import inspect
+    src = inspect.getsource(static_tester._evaluate_visibility)
+    assert "maxH <= ph * 0.25" in src, "signature barres atrophiées absente du JS"
+    assert "r.width >= pw * 0.8" in src, "signature bandes pleine largeur (run #14) retirée ?"
