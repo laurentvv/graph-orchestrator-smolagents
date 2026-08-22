@@ -440,6 +440,25 @@ def _check_behavioral_smells(js: str) -> List[str]:
     # n'assigne le textContent qu'une fois AVANT la boucle — le compteur reste
     # visuellement à 0. On exige un rafraîchi d'affichage DANS la boucle,
     # c'est-à-dire après l'incrément.
+    #
+    # F-110-bis (post-mortem run 2026-08-22_1631) : le rafraîchi peut passer
+    # par une FONCTION HELPER (`comparisons++;` puis `updateCounter()` dont
+    # le corps fait `counterEl.textContent = comparisons;`). Sans ça, le code
+    # PROPRE factorisé est rejeté en boucle — faux positif qui a brûlé les
+    # itérations 2 ET 3 du run. On collecte donc les fonctions dont le corps
+    # écrit textContent/innerText/innerHTML : un appel à l'une d'elles dans
+    # la fenêtre après l'incrément compte comme rafraîchi.
+    _display_helper_names: set = set()
+    for hm in re.finditer(
+        r"(?:function\s+(\w+)\s*\([^)]*\)|(?:const|let|var)\s+(\w+)\s*=\s*(?:\([^)]*\)|[\w$]+)\s*=>)\s*\{",
+        js,
+    ):
+        fname = hm.group(1) or hm.group(2)
+        if re.search(
+            r"(?:textContent|innerText|innerHTML)\s*=",
+            js[hm.end(): hm.end() + 500],
+        ):
+            _display_helper_names.add(fname)
     for m in re.finditer(
         r"\b(\w*(?:count|counter|comparisons?|comparaisons?|swaps?|moves?|steps?|iterations?|passes?)\w*)\+\+",
         js,
@@ -459,6 +478,14 @@ def _check_behavioral_smells(js: str) -> List[str]:
         refreshed = re.search(
             r"textContent\s*=|innerText\s*=|innerHTML\s*=", loop_tail
         )
+        if not refreshed and _display_helper_names:
+            # Appel à un helper d'affichage dans la fenêtre post-incrément.
+            refreshed = re.search(
+                r"\b(?:" + "|".join(
+                    re.escape(f) for f in sorted(_display_helper_names)
+                ) + r")\s*\(",
+                loop_tail,
+            )
         if not refreshed:
             errors.append(
                 f"[behavior] Compteur '{name}' incrémenté mais son affichage n'est "

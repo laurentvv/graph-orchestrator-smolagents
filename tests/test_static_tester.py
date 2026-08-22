@@ -908,6 +908,41 @@ def test_behavioral_counter_refreshed_in_loop_clean():
     assert _check_behavioral_smells(js) == []
 
 
+# F-110-bis — rafraîchi via fonction HELPER (post-mortem run 2026-08-22_1631 :
+# `comparisons++` puis `updateComparisonCounter()` — le check (c) historique
+# exigeait une assignation textContent LITTÉRALE → faux positif, itérations
+# 2 ET 3 brûlées sur du code correctement factorisé).
+HELPER_REFRESH_JS = """
+let comparisons = 0;
+function updateComparisonCounter() {
+    document.getElementById("comparison-counter").textContent = comparisons;
+}
+async function bubbleSort() {
+    for (let i = 0; i < n - 1; i++) {
+        if (arr[i] > arr[i + 1]) { comparisons++; }
+        updateComparisonCounter();
+        await sleep(speed);
+    }
+}
+"""
+
+
+def test_behavioral_counter_refresh_via_helper_clean():
+    """Le rafraîchi passe par un helper APPELÉ dans la boucle → PAS un bug."""
+    assert _check_behavioral_smells(HELPER_REFRESH_JS) == []
+
+
+def test_behavioral_counter_helper_never_called_in_loop_flagged():
+    """Le helper existe mais n'est JAMAIS appelé après l'incrément → bug réel
+    (compteur figé) toujours détecté."""
+    js = HELPER_REFRESH_JS.replace(
+        "        updateComparisonCounter();\n        await sleep(speed);",
+        "        await sleep(speed);",
+    )
+    errors = _check_behavioral_smells(js)
+    assert any("JAMAIS rafraîchi" in e for e in errors)
+
+
 def test_canvas_children_anti_pattern():
     """Post-mortem run #6 : appendChild DANS un <canvas> — jamais rendu."""
     from graph_orchestrator.static_tester import _check_canvas_children

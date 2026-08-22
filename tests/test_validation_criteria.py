@@ -163,10 +163,10 @@ class TestCoderDevtoolsInjection:
         pb, _ = _build_devtools_blocks(
             {"target_files": ["index.html"]}, ["fake_tool"]
         )
-        assert "VALIDATION VISUELLE" in pb
+        assert "VISUAL VALIDATION" in pb  # en-tête traduit en anglais (F-150)
         # Pas de checklist F-82 (critères vides).
         assert "CRITÈRES DE VALIDATION VISUELLE" not in pb
-        assert "rendu est conforme" in pb  # wording historique
+        assert "rendering is verified" in pb  # wording F-150 (EN)
 
     def test_avec_critères_checklist_f82_injectee(self):
         from graph_orchestrator.nodes import _build_devtools_blocks
@@ -179,7 +179,7 @@ class TestCoderDevtoolsInjection:
         )
         assert "CRITÈRES DE VALIDATION VISUELLE" in pb
         assert "barres visibles au chargement" in pb
-        assert "VALIDATION CRITÈRES VISUELS" in pb  # étape 5 renommée
+        assert "VISUAL CRITERIA VALIDATION" in pb  # étape 5 renommée (EN, F-150)
 
 
 # ---------------------------------------------------------------------------
