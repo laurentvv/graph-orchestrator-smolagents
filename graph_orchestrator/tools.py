@@ -338,6 +338,78 @@ def _collect_js_syntax_errors(path: str) -> list[str]:
     return all_errors
 
 
+def _css_undefined_vars_directive(path: str) -> str:
+    """Directive déterministe (post-mortem runs 12:37 & 15:40 du 2026-08-22) :
+    après une édition RÉUSSIE d'un fichier CSS, on vérifie que chaque
+    ``var(--x)`` SANS fallback est bien définie quelque part (le CSS lui-même,
+    un bloc ``<style>`` d'un HTML sibling, ou un ``setProperty`` JS sibling).
+    Une variable indéfinie = couleur/taille TRANSPARENTE à l'exécution —
+    exactement le bug « barres invisibles » qui a coûté 2×40 min au Coder 4B
+    (il ne peut PAS le diagnostiquer seul : le fichier est syntaxiquement
+    valide). On injecte donc le diagnostic + le bloc ``:root`` prêt à coller.
+    Fail-open total ; vide si le fichier est propre ou non-CSS.
+    """
+    try:
+        if not str(path).lower().endswith(".css"):
+            return ""
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            css = f.read()
+        if not css.strip():
+            return ""
+        # Usages FATAUX uniquement : var(--x) sans valeur de fallback.
+        used = set(re.findall(r"var\(\s*(--[\w-]+)\s*(?<!,)\)", css))
+        used -= set(re.findall(r"var\(\s*(--[\w-]+)\s*,", css))
+        if not used:
+            return ""
+        # Définitions : toute déclaration `--x:` du fichier CSS compte
+        # (le bloc :root est le cas standard, mais une portée réduite reste
+        # une définition valide — on ne veut AUCUN faux positif).
+        defined = set(re.findall(r"(--[\w-]+)\s*:", css))
+        missing = sorted(v for v in used if v not in defined)
+        if not missing:
+            return ""
+        # Anti-faux-positif cross-fichiers : le HTML sibling peut définir les
+        # vars en inline <style>, le JS sibling via setProperty.
+        try:
+            folder = os.path.dirname(os.path.abspath(path))
+            for sibling in os.listdir(folder):
+                if sibling.endswith((".html", ".js", ".mjs")):
+                    with open(os.path.join(folder, sibling), "r",
+                              encoding="utf-8", errors="replace") as f:
+                        blob = f.read()
+                    missing = [v for v in missing
+                               if not (v + ":" in blob or f"'{v}'" in blob or f'"{v}"' in blob)]
+                    if not missing:
+                        return ""
+        except OSError:
+            pass
+        if not missing:
+            return ""
+        # Palette sombre par défaut (thème demandé dans ~tous les cahiers des
+        # charges web de ce graphe) — le 4B copie-colle, il n'invente pas.
+        _palette = {
+            "--bg": "#0f172a", "--surface": "#1e293b", "--text": "#e2e8f0",
+            "--muted": "#94a3b8", "--default": "#64748b", "--comparing": "#3b82f6",
+            "--sorted": "#22c55e", "--accent": "#f59e0b", "--border": "#334155",
+            "--danger": "#ef4444",
+        }
+        lines = ", ".join(missing)
+        block = ";\n".join(f"    {v}: {_palette.get(v, '#888888')}" for v in missing)
+        return (
+            f"\n\n[!] VARIABLES CSS INDÉFINIES détectées JUSTE APRÈS ton édition :\n"
+            f"  - styles.css utilise {lines} MAIS aucune déclaration ne les définit\n"
+            f"    (ni dans ce fichier, ni dans un <style>/setProperty sibling).\n"
+            f"  → À l'exécution, chaque propriété qui dépend de ces variables est\n"
+            f"    TRANSPARENTE (éléments invisibles sur fond sombre). C'est probablement\n"
+            f"    le bug « rien ne s'affiche » que tu cherches.\n"
+            f"  FIX IMMÉDIAT par search_replace : insère ce bloc AU DÉBUT de {os.path.basename(path)} :\n"
+            f"    :root {{\n{block};\n    }}\n"
+            f"  (adapte les valeurs au thème demandé par le cahier des charges)"
+        )
+    except Exception:
+        return ""
+
+
 def _post_edit_syntax_directive(path: str) -> str:
     """Directive P2 (port kilocode apply_patch.ts:289) : après une édition
     RÉUSSIE d'un fichier JS/HTML, on vérifie immédiatement la syntaxe de façon
@@ -355,6 +427,8 @@ def _post_edit_syntax_directive(path: str) -> str:
     PAS réécrire une boucle correcte.
     """
     try:
+        if str(path).lower().endswith(".css"):
+            return _css_undefined_vars_directive(str(path))
         if not str(path).lower().endswith((".html", ".htm", ".js", ".mjs", ".cjs")):
             return ""
         errs = _collect_js_syntax_errors(str(path))
