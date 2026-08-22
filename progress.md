@@ -43,6 +43,19 @@
 >      + fix d'un assert F-150 préexistant cassé sur tree propre), py_compile OK, gate
 >      F-103 : 29 surfaces, 0 erreur, 0 warning. État disque synchronisé + DuckDB + PR.
 
+## Jalons de l'Itération (cycle E2E du 2026-08-22 soir — boucle run/fix/run, 4 fixes usine)
+> 5 runs E2E bubble-sort-multifile-v6 (12:37 pré-session, 15:24, 15:40, 16:31, 17:32). Aucun verdict Judge :
+> chaque échec a produit un fix mécanique committé (branche `fix/search-replace-replace-all`), validé en
+> production sur le run suivant. Rapports : `analysis_report.md` (run 17:32), `analysis_report_run1540.md`,
+> `analysis_report_run1631.md`.
+>
+> - [x] RUN 12:37 (tué extérieurement) → `search_replace(replace_all=)` (le 4B le passe spontanément) + alignement des 6 tests cassés par F-150/F-152 (commit 7439253 : chaînes traduites non resynchronisées).
+> - [x] RUN 15:24 → doublon `FRESH_START` dans `.env` (la 2e entrée `false` écrasait la 1re) → reprise involontaire du checkpoint 12:37 ; `.env` dédoublonné.
+> - [x] RUN 15:40 → garde déterministe VARIABLES CSS INDÉFINIES post-édition (`tools.py`) : styles.css sans `:root` = barres transparentes = 2×40 min de galère Coder + audit visuel halluciné. Preuve en production au run 17:32 : tirée au Step 2, corrigée au Step 3.
+> - [x] RUN 16:31 → F-110-bis (`static_tester.py`) : le check (c) exigeait `textContent =` littéral après `comparisons++` → faux positif sur rafraîchi via helper (`updateComparisonCounter()`), itérations 2-3 brûlées, escalation 9B prématurée. Runs suivants : Static Tester OK d'emblée (2×).
+> - [x] RUN 17:32 (le plus loin : Coder→Static OK→Tester→Security ; bug réel trouvé it.1 « height=0 », hang Chrome it.2) → tué à 81 min sur itération 3 pendant que le 9B ULTRA (steps 4-7 min) chassait un état de sonde contaminé (`sorted:false` sur livrable correct à la lecture).
+> - [ ] **Goulots structurels identifiés (prochain sprint)** : (1) escalade CODER ULTRA 9B = 60-90 min/itération 3 — à borner (max_steps dédié ou budget temps) ; (2) hang Chrome/DevTools du Tester = 30 min perdues (timeout nœud 1800 s) — à diagnostiquer/réduire ; (3) contamination d'état entre sondes `evaluate_script` successives — le 9B juge un état muté par ses propres tests (isolation par reload ou fresh tab par sonde) ; (4) artefact `sorted:false` : sonde sans attente du tri animé (~95 s) — sonde déterministe attendrie ou tri instantané en mode test.
+
 ## Jalons de l'Itération (cycle F-154 — initialisation DOM robuste & complétude :root)
 > Imposition d'invariants de code stricts pour éliminer les écrans vides au chargement et les styles transparents (2026-08-22).
 >

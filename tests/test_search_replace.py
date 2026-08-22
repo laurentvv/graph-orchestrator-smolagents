@@ -431,3 +431,75 @@ def test_write_file_cassant_declenche_directive(tmp_path):
     res = write_file(path=str(p), content="function broken( {\n")
     assert "Successfully wrote" in res
     assert "SYNTAXE INVALIDE" in res
+
+
+# ==========================================
+# Garde CSS : variables var(--x) indéfinies (post-mortem 2026-08-22)
+# ==========================================
+from graph_orchestrator.tools import _css_undefined_vars_directive
+
+
+def test_css_vars_utilisees_non_definies_declenche_directive(tmp_path):
+    """Reproduit le bug des runs 12:37 & 15:40 : styles.css utilise var(--default)
+    etc. sans AUCUN bloc :root → barres transparentes → 2×40 min de galère Coder."""
+    p = tmp_path / "styles.css"
+    p.write_text(
+        "body { background: var(--bg); color: var(--text); }\n"
+        ".bar { background: var(--default); }\n",
+        encoding="utf-8",
+    )
+    d = _css_undefined_vars_directive(str(p))
+    assert "VARIABLES CSS INDÉFINIES" in d
+    assert "--bg" in d and "--default" in d
+    assert ":root" in d  # bloc prêt à coller fourni
+    assert "--bg: " in d  # avec valeur de palette
+
+
+def test_css_vars_definies_dans_root_aucune_directive(tmp_path):
+    p = tmp_path / "styles.css"
+    p.write_text(
+        ":root { --bg: #111; --text: #eee; --default: #555; }\n"
+        "body { background: var(--bg); color: var(--text); }\n",
+        encoding="utf-8",
+    )
+    assert _css_undefined_vars_directive(str(p)) == ""
+
+
+def test_css_var_avec_fallback_aucune_directive(tmp_path):
+    """var(--x, fallback) ne rend PAS l'élément transparent : pas d'alerte."""
+    p = tmp_path / "styles.css"
+    p.write_text("body { color: var(--missing, #333); }\n", encoding="utf-8")
+    assert _css_undefined_vars_directive(str(p)) == ""
+
+
+def test_css_var_definie_dans_style_sibling_html_aucune_directive(tmp_path):
+    p = tmp_path / "styles.css"
+    p.write_text("body { color: var(--zzz); }\n", encoding="utf-8")
+    (tmp_path / "index.html").write_text(
+        "<style>:root { --zzz: red; }</style>", encoding="utf-8"
+    )
+    assert _css_undefined_vars_directive(str(p)) == ""
+
+
+def test_css_var_definie_par_setproperty_sibling_js_aucune_directive(tmp_path):
+    p = tmp_path / "styles.css"
+    p.write_text("body { color: var(--dyn); }\n", encoding="utf-8")
+    (tmp_path / "script.js").write_text(
+        "document.documentElement.style.setProperty('--dyn', '#0af');",
+        encoding="utf-8",
+    )
+    assert _css_undefined_vars_directive(str(p)) == ""
+
+
+def test_search_replace_css_fautif_recoit_la_directive(tmp_path):
+    """Intégration : l'édition (ou l'écriture) d'un CSS fautif renvoie la
+    directive dans l'output de l'outil — le 4B la voit à la seconde."""
+    p = tmp_path / "styles.css"
+    p.write_text("body { background: var(--bg); }\n", encoding="utf-8")
+    res = search_replace(
+        path=str(p),
+        old_string="var(--bg)",
+        new_string="var(--surface)",
+    )
+    assert "Successfully edited" in res
+    assert "VARIABLES CSS INDÉFINIES" in res

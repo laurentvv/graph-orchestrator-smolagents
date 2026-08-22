@@ -177,4 +177,6 @@ async def test_rappel_checklist_injecte_au_boundary():
         )
 
     printed = " ".join(str(c) for c in mock_print.call_args_list)
-    assert "Visual audit" in printed and "rappel checklist injecté" in printed
+    # Wording F-109-bis actualisé (compaction F-152) : le retry remplace le prompt
+    # par un prompt RITUEL-SEUL résumant la checklist manquante.
+    assert "Visual audit" in printed and "RITUEL-SEUL" in printed
