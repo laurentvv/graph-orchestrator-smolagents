@@ -12,16 +12,24 @@
 
 ---
 
-## Phase 3 — Nœuds qui codent : Coder + Web Tester (P0, directement après merge #106)
+## Phase 3 — Nœuds qui codent : Coder + nœud Tester (runner web) (P0, directement après merge #106)
 
 > **Périmètre = TOUS les nœuds qui codent** : `execute_coder_node` (Coder) ET
-> `execute_tester_node` → `testers/web_tester.py` (Web Tester) — les deux seuls nœuds
-> à boucle agentique smolagents. Hors périmètre (rien à migrer) : Static Tester et
-> Linter (déterministes, zéro LLM), nœuds de raisonnement (DSPy : Router, Refiner,
-> Architect, Drafter, Security, Judge, Escalation), `agent_server` (nettoyage final
-> phase 6). Séquence interne : parité Coder (3.1→3.5) → vision/multimodal, prérequis
-> Tester (3.6) → migration Web Tester (3.7), qui hérite de tout le travail précédent
-> (stack partagé : modèle loggé, callback screenshots, MCP DevTools + Puppeteer).
+> `execute_tester_node` (nœud Tester **polyvalent** : dispatch `detect_tech` →
+> `WebTestRunner` / `PythonTestRunner`, fallback web). Dans ce nœud, **seul le runner
+> web** (`testers/web_tester.py`) tourne sur une boucle agentique smolagents — le
+> runner Python (`testers/python_tester.py`) est **déterministe** (subprocess pytest,
+> zéro LLM, zéro smolagents) : rien à migrer. Hors périmètre pour la même raison :
+> Static Tester et Linter (déterministes), nœuds de raisonnement (DSPy : Router,
+> Refiner, Architect, Drafter, Security, Judge, Escalation), `agent_server`
+> (nettoyage final phase 6). Séquence interne : parité Coder (3.1→3.5) →
+> vision/multimodal, prérequis runner web (3.6) → migration du runner web (3.7),
+> qui hérite de tout le travail précédent (stack partagé : modèle loggé, callback
+> screenshots, MCP DevTools + Puppeteer).
+>
+> Opportunité (phase 5+) : l'architecture socle × profils rend trivial l'ajout d'un
+> futur runner agentique pour une autre techno (ex. Tauri desktop, CLI) — un profil
+> de plus, pas une migration.
 
 ### Principe d'architecture : UN socle commun, DEUX profils de nœud
 
@@ -30,7 +38,7 @@ utilisateur 2026-08-23) — c'est déjà le cas en smolagents (`web_tester.py` r
 `CompactingCodeAgent`, `run_with_retry`, `LoggedOpenAIServerModel`, le callback
 screenshots) et la migration doit le structurer explicitement :
 
-| Axe | **Socle commun (à construire UNE fois, 3.1→3.6)** | Profil **Coder** | Profil **Web Tester** |
+| Axe | **Socle commun (à construire UNE fois, 3.1→3.6)** | Profil **Coder** | Profil **Tester (runner web)** |
 |---|---|---|---|
 | Boucle & mémoire | Agent pydantic + `agent.iter`, hooks, TieredCompaction + purge images, SystemReminders (nudges), gardes (LoopGuard v2, StallDetector, GoalReanchor), UsageLimits, retries 5 couches + revive llama-server | idem | idem |
 | **Tools** | plomberie toolsets/custom/MCP (transformations per-tool) | FileSystem + customs (`multi_replace`, `search_replace`, `check_js_syntax`, `log_event`, `visual_check`) + 12 helpers DOM + WebSearch/Context7 | DevTools + **Puppeteer MCP** + sondes + `fix_known_error` |
@@ -102,14 +110,14 @@ d'aujourd'hui, puis un `execute_tester_node` migré sur le même socle, validés
 | Context7 | R | `MCP` capability | idem | S |
 | DuckDuckGoSearchTool | R | Capability `WebSearch` (fallback DDG local documenté) | [Web Search](https://pydantic.dev/docs/ai/capabilities/web-search/) | S |
 
-### 3.6 Vision & multimodal (prérequis Web Tester)
+### 3.6 Vision & multimodal (prérequis runner web du Tester)
 
 | Item | Statut | Contenu | Doc | Effort |
 |---|---|---|---|---|
 | Vision Coder (screenshots → contexte) | R | Screenshots MCP DevTools comme retours multimodaux d'outils (prouvé CodeMode « multimodal final expressions » ; à valider sur tools natifs) | [Multimodal Input](https://pydantic.dev/docs/ai/core-concepts/input/) | M |
 | Boucle screenshots (F-50) | R | Strippage `filePath` etc. → transformation per-tool fastmcp ou wrapper toolset (plus de sous-classage `Tool`) | [MCP client](https://pydantic.dev/docs/ai/mcp/client/) | M |
 
-### 3.7 Web Tester (`testers/web_tester.py`)
+### 3.7 Nœud Tester — runner web (`testers/web_tester.py`)
 
 | Item | Statut | Contenu | Doc | Effort |
 |---|---|---|---|---|
@@ -162,7 +170,7 @@ d'aujourd'hui, puis un `execute_tester_node` migré sur le même socle, validés
 | Pydantic Graph | Moteur de graphe typé — candidat futur de workflows.py, MAIS l'orchestrateur actuel fonctionne : ne pas migrer | [Graph](https://pydantic.dev/docs/ai/graph/overview/) |
 | Dynamic Workflow | Orchestrateur écrivant un script sandboxé pour coordonner des sous-agents — à réévaluer avec un gros modèle (leçon CodeMode) | [Dynamic Workflow](https://pydantic.dev/docs/ai/harness/dynamic-workflow/) |
 | Runtime Capability Creation | L'agent crée des capabilities mid-run — puissant mais risqué (gated par review) | [Capability Creation](https://pydantic.dev/docs/ai/harness/capability-creation/) |
-| Retrait final de smolagents | Une fois Coder + Web Tester + agent_server migrés : `uv remove smolagents` + purge des ~4 k LOC de glue (annexe A analyse) | analyse §7-S1 ph.4 |
+| Retrait final de smolagents | Une fois Coder + runner web du Tester + agent_server migrés : `uv remove smolagents` + purge des ~4 k LOC de glue (annexe A analyse) | analyse §7-S1 ph.4 |
 
 ## Non-cibles assumées
 
@@ -176,7 +184,7 @@ coût fixe — revoir si endpoints distants), native provider compaction (OpenAI
 1. **P3.1-3.2** (parité tools + output_type + skills) → A/B isolation, critères = spike
    round 3 + CoderOutput validé. 2. **P3.3-3.4** (gardes + compaction) → rejouer les
    scénarios de gel F-125/129/131 en isolation. 3. **P3.5** (MCP + helpers) → E2E Bubble
-   Sort complet. 4. **P3.6-3.7** (vision + Web Tester) → `debug/run_tester.py` puis E2E.
+   Sort complet. 4. **P3.6-3.7** (vision + runner web du Tester) → `debug/run_tester.py` puis E2E.
    5. Phase 4 (PlaywrightBrowser A/B, FallbackModel, TestModel CI, Media Stores,
    WarnOnCacheBusts). 6. Phase 5 au fil de l'eau (une feature = un F-xxx + PR).
    Chaque étape : branche → isolation → E2E → PR (règle d'or Git + Kilo Review).
