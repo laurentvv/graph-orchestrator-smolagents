@@ -156,44 +156,51 @@ class TestReadGateFailOpen:
 
 
 # ==========================================
-# ReadGate — mode Strict (write invalide la mark)
+# ReadGate — persistance de mark après write (CodeAgent séquentiel)
 # ==========================================
-class TestStrictMode:
-    """Mode Strict (fidèle Deer Flow) : un write réussi invalide la mark.
+class TestWriteMarkUpdate:
+    """Un write réussi met à jour la mark avec le hash du nouveau contenu disque.
 
-    La prochaine édition sur le même fichier est BLOQUÉE jusqu'à un nouveau
-    read_file. Corrige le bug « édition à partir d'une représentation mentale
-    stale » (l'auteur doit relire son propre output avant de l'éditer).
+    Permet au CodeAgent d'enchaîner des modifications séquentielles sans re-read
+    intermédiaire tout en bloquant toute écriture sur un fichier non lu ou modifié
+    par un tiers.
     """
 
-    def test_write_invalidates_mark(self, tmp_path: Path):
-        """read → write OK → edit suivant BLOQUÉ (Strict) jusqu'à re-read."""
+    def test_write_updates_mark_allows_sequential_edit(self, tmp_path: Path):
+        """read → write OK → edit suivant AUTORISÉ car mark mise à jour avec nouveau hash."""
         f = tmp_path / "x.txt"
         f.write_text("v1", encoding="utf-8")
         gate = ReadGate()
         gate.record_read(str(f), "v1")
-        # write réussi (le contenu disque ne change pas, mais la mark est invalidée).
+        # write réussi modifie le fichier sur disque
+        f.write_text("v2", encoding="utf-8")
         gate.record_write(str(f))
         allowed, reason = gate.check_write(str(f))
-        assert allowed is False
-        assert "read_file" in reason.lower()
+        assert allowed is True
+        assert reason == ""
 
-    def test_re_read_after_write_allows_edit(self, tmp_path: Path):
-        """Après un write, un nouveau read restaure l'autorisation d'éditer."""
-        f = tmp_path / "x.txt"
-        f.write_text("v1", encoding="utf-8")
+    def test_write_to_new_file_creates_mark(self, tmp_path: Path):
+        """Création d'un nouveau fichier puis record_write permet son édition subséquente."""
+        f = tmp_path / "created.txt"
+        f.write_text("initial", encoding="utf-8")
         gate = ReadGate()
-        gate.record_read(str(f), "v1")
-        gate.record_write(str(f))  # write invalide la mark.
-        gate.record_read(str(f), "v1")  # re-read restaure.
+        gate.record_write(str(f))
         allowed, _ = gate.check_write(str(f))
         assert allowed is True
 
-    def test_write_to_new_file_does_not_create_mark(self, tmp_path: Path):
-        """record_write sur un path sans mark préalable est un no-op idempotent."""
+    def test_external_modification_after_write_blocked(self, tmp_path: Path):
+        """Après un write, si le fichier est modifié de l'extérieur, l'édition est bloquée."""
+        f = tmp_path / "x.txt"
+        f.write_text("v1", encoding="utf-8")
         gate = ReadGate()
-        gate.record_write(str(tmp_path / "never-read.txt"))
-        # Pas de mark à invalider → pas d'erreur, pas d'effet de bord.
+        gate.record_read(str(f), "v1")
+        f.write_text("v2", encoding="utf-8")
+        gate.record_write(str(f))
+        # Modification externe non enregistrée
+        f.write_text("v3-external", encoding="utf-8")
+        allowed, reason = gate.check_write(str(f))
+        assert allowed is False
+        assert "read_file" in reason.lower()
 
 
 # ==========================================
@@ -274,7 +281,7 @@ class TestGatedWriteTool:
         assert f.read_text(encoding="utf-8") == original
 
     def test_allow_delegates_and_records_write(self, tmp_path: Path):
-        """Si ALLOW : délègue à l'outil réel PUIS appelle record_write (Strict)."""
+        """Si ALLOW : délègue à l'outil réel PUIS appelle record_write (CodeAgent séquentiel)."""
         from graph_orchestrator.tools import write_file
 
         f = tmp_path / "x.txt"
@@ -285,9 +292,9 @@ class TestGatedWriteTool:
         result = gated(path=str(f), content="brand new replacement content")
         assert "Successfully wrote" in result  # délégué.
         assert f.read_text(encoding="utf-8") == "brand new replacement content"
-        # Strict : la mark a été invalidée par le write réussi → edit suivant bloqué.
+        # La mark a été mise à jour avec le nouveau hash → edit suivant autorisé.
         allowed, _ = gate.check_write(str(f))
-        assert allowed is False
+        assert allowed is True
 
     def test_copies_metadata(self):
         """Le proxy copie name/description/inputs/output_type de l'outil sous-jacent."""
@@ -467,12 +474,10 @@ class TestEndToEnd:
         assert "Successfully wrote" in result
         assert f.read_text(encoding="utf-8") == "brand new replacement content"
 
-    def test_write_then_edit_without_reread_blocked_strict(self, tmp_path: Path):
-        """Strict : write réussi → edit suivant BLOQUÉ sans re-read (le cas #3857).
+    def test_write_then_sequential_edit_allowed(self, tmp_path: Path):
+        """CodeAgent séquentiel : write réussi → edit suivant AUTORISÉ car le Coder connaît ce qu'il a écrit.
 
-        C'est le scénario anti-corruption central : empêche le Coder d'enchaîner
-        write → edit en s'appuyant sur une représentation mentale stale au lieu
-        du contenu réel du fichier.
+        Permet les passes successives d'édition dans un même step (ex: plusieurs search_replace).
         """
         from graph_orchestrator.tools import edit_file, write_file
 
@@ -485,11 +490,12 @@ class TestEndToEnd:
         gate.record_read(str(f), "old content here")
         gated_write(
             path=str(f), content="v1 brand new content"
-        )  # write OK, mark invalidée (Strict).
-        with pytest.raises(RuntimeError, match="read_file"):
-            gated_edit(
-                path=str(f), old_string="v1", new_string="v2 fixed content"
-            )  # edit bloqué : doit re-read.
+        )  # write OK, mark mise à jour avec v1.
+        result = gated_edit(
+            path=str(f), old_string="v1", new_string="v2 fixed content"
+        )  # edit réussi sans crash !
+        assert "Successfully updated" in result
+        assert f.read_text(encoding="utf-8") == "v2 fixed content brand new content"
 
     def test_message_cites_path_and_read_file(self, tmp_path: Path):
         """Le message pédagogique cite le path ET read_file (vérifiable par substring)."""

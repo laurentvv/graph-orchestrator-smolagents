@@ -127,20 +127,27 @@ class ReadGate:
             return
 
     def record_write(self, path: str) -> None:
-        """Mode Strict (Deer Flow) : un write RÉUSSI invalide la mark.
+        """Met à jour la mark de lecture avec le nouveau hash après un write RÉUSSI.
 
-        La prochaine édition sur ce même fichier sera BLOQUÉE jusqu'à un
-        nouveau read_file. C'est l'invariant read-before-every-edit : l'auteur
-        doit relire son propre output avant de l'éditer (prévient le bug
-        « append/édition à partir d'une représentation mentale stale »).
+        En environnement CodeAgent, un script Python peut enchaîner plusieurs
+        modifications séquentielles sur un même fichier (ex: boucle de search_replace).
+        Mettre à jour la mark avec le hash du nouveau contenu permet ces éditions
+        en chaîne sans crash artificiel, tout en préservant l'invariant strict :
+        un fichier existant non lu au préalable ou modifié par un tiers reste bloqué.
         """
         if not path or not isinstance(path, str):
             return
         try:
             norm = _normalize_path(path)
+            if not os.path.exists(norm):
+                with self._lock:
+                    self._marks.pop(norm, None)
+                return
+            with open(norm, "r", encoding="utf-8") as f:
+                current = f.read()
+            h = compute_content_hash(current)
             with self._lock:
-                # pop avec défaut : idempotent si pas de mark (création).
-                self._marks.pop(norm, None)
+                self._marks[norm] = h
         except Exception:
             return
 
@@ -233,30 +240,37 @@ class _GatedWriteTool(BaseTool):
         # sous-jacent — critique pour ne pas casser le rendu du prompt CodeAgent.
         return getattr(self._wrapped, item)
 
-    def _check_and_record(self, kwargs: dict, result: Any) -> Any:
-        """Hook appelé après un write RÉUSSI pour invalider la mark (Strict)."""
+    def _extract_path(self, args: tuple, kwargs: dict) -> str | None:
         path = kwargs.get("path")
         if path is not None:
-            self._gate.record_write(path)
-        return result
+            return path
+        if args and len(args) > 0 and isinstance(args[0], str):
+            return args[0]
+        return None
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         # Le CodeAgent appelle les outils via __call__ (chemin confirmé dans
         # sanitizer.py docstring). On coerce rien ici (le sanitizer le fait en
         # amont ou en aval selon l'ordre de la chaîne) — on ne fait que gate.
-        allowed, reason = self._gate.check_write(kwargs.get("path"), self.name)
+        path = self._extract_path(args, kwargs)
+        allowed, reason = self._gate.check_write(path, self.name)
         if not allowed:
             raise RuntimeError(reason)
         result = self._wrapped(*args, **kwargs)
-        return self._check_and_record(kwargs, result)
+        if path is not None:
+            self._gate.record_write(path)
+        return result
 
     def forward(self, *args: Any, **kwargs: Any) -> Any:
         # Chemin TCA / fallback. Même logique que __call__.
-        allowed, reason = self._gate.check_write(kwargs.get("path"), self.name)
+        path = self._extract_path(args, kwargs)
+        allowed, reason = self._gate.check_write(path, self.name)
         if not allowed:
             raise RuntimeError(reason)
         result = self._wrapped.forward(*args, **kwargs)
-        return self._check_and_record(kwargs, result)
+        if path is not None:
+            self._gate.record_write(path)
+        return result
 
 
 class _ReadTrackingTool(BaseTool):
@@ -279,9 +293,16 @@ class _ReadTrackingTool(BaseTool):
     def __getattr__(self, item: str) -> Any:
         return getattr(self._wrapped, item)
 
-    def _stamp_after_read(self, kwargs: dict) -> None:
-        """Stamp le hash du contenu COMPLET du fichier (re-lecture disque)."""
+    def _extract_path(self, args: tuple, kwargs: dict) -> str | None:
         path = kwargs.get("path")
+        if path is not None:
+            return path
+        if args and len(args) > 0 and isinstance(args[0], str):
+            return args[0]
+        return None
+
+    def _stamp_after_read(self, path: str | None) -> None:
+        """Stamp le hash du contenu COMPLET du fichier (re-lecture disque)."""
         if not path or not isinstance(path, str):
             return
         try:
@@ -297,12 +318,12 @@ class _ReadTrackingTool(BaseTool):
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         result = self._wrapped(*args, **kwargs)
-        self._stamp_after_read(kwargs)
+        self._stamp_after_read(self._extract_path(args, kwargs))
         return result
 
     def forward(self, *args: Any, **kwargs: Any) -> Any:
         result = self._wrapped.forward(*args, **kwargs)
-        self._stamp_after_read(kwargs)
+        self._stamp_after_read(self._extract_path(args, kwargs))
         return result
 
 

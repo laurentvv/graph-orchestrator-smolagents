@@ -59,13 +59,14 @@ class _MonoFileParser(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.ids: List[str] = []
         self.external_refs: List[str] = []
+        self.local_refs: List[str] = []
         self.inline_scripts: List[str] = []
         self._stack: List[str] = []
         self.unclosed: List[str] = []
         self._in_script = False
         self._script_buf: List[str] = []
 
-    def handle_starttag(self, tag: str, attrs) -> None:
+    def handle_starttag(self, tag, attrs) -> None:
         a = dict(attrs)
         tag_l = tag.lower()
         if tag_l == "script":
@@ -73,7 +74,11 @@ class _MonoFileParser(HTMLParser):
             if src.startswith(("http://", "https://", "//")):
                 self.external_refs.append(f"<script src={src!r}>")
             elif src:
-                self.external_refs.append(f"<script src={src!r}> (fichier externe, livrable monofichier attendu)")
+                # Goulot run 2026-08-21_1614 : un <script src> LOCAL n'est pas
+                # une « ressource externe » — c'est la SPEC des livrables
+                # MULTIFICHIERS (index.html + script.js liés). On vérifie juste
+                # que la cible existe à côté du HTML (cf. validate_html_monofile).
+                self.local_refs.append(src)
             else:
                 self._in_script = True
                 self._script_buf = []
@@ -137,9 +142,22 @@ def validate_html_monofile(path: str, require_canvas_for_game: bool = True) -> H
 
         if parser.external_refs:
             res.errors.extend(
-                f"ressource externe interdite (livrable vanilla monofichier, offline) : {ref}"
+                f"ressource externe interdite (livrable vanilla, offline) : {ref}"
                 for ref in parser.external_refs[:8]
             )
+
+        # Goulot run 2026-08-21_1614 : références LOCALES (<script src="…">
+        # relatif) — légales pour un livrable multifichier (index.html +
+        # script.js liés = la SPEC de la tâche), ERREUR seulement si la cible
+        # n'existe pas à côté du HTML (référence cassée = vrai bug).
+        base_dir = os.path.dirname(os.path.abspath(path))
+        for ref in dict.fromkeys(parser.local_refs[:8]):
+            target = os.path.normpath(os.path.join(base_dir, ref))
+            if not os.path.isfile(target):
+                res.errors.append(
+                    f"référence locale cassée : <script src={ref!r}> pointe un "
+                    f"fichier absent du livrable (typo ? fichier jamais créé ?)"
+                )
 
         seen = set()
         for i in parser.ids:

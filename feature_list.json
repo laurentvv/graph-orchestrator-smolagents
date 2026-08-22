@@ -955,8 +955,8 @@
     {
       "id": "F-116",
       "name": "Compaction résiliente aux payloads + hiérarchique par chunks (kilocode)",
-      "description": "[PÉRIMÈTRE ÉTENDU 2026-08-18 : intègre l'ex-F-86 context-offload sémantique — décision user] Compaction résiliente aux payloads + hiérarchique par chunks (kilocode). LE MUR démontré des runs #13/#16 (thrash 772k-990k tokens/step, ~40 min perdues, échecs propres sans faux succès) : les screenshots du rituel visuel s'accumulent dans l'historique sans purge intra-run (~25k tokens/step). Volet déterministe (chunks, purge images agressive, budget payloads) + volet LLM sémantique opt-in (ex-F-86 : résumé scoré, cognitive tombstones). PRIORITÉ 1 du backlog. [ARBITRAGE 2026-08-20 user : intégrer la doctrine de concision ponytail (fiche 48-ponytail, plan P0-bis — échelle YAGNI 7 rungs, -54 % LOC / -22 % tokens) comme input du volet réduction à la source, en complément de la compaction aval.]",
-      "status": "pending",
+      "description": "[PÉRIMÈTRE ÉTENDU 2026-08-18 : intègre l'ex-F-86 context-offload sémantique — décision user] Compaction résiliente aux payloads + hiérarchique par chunks (kilocode). LE MUR démontré des runs #13/#16 (thrash 772k-990k tokens/step, ~40 min perdues, échecs propres sans faux succès) : les screenshots du rituel visuel s'accumulent dans l'historique sans purge intra-run (~25k tokens/step). Volet déterministe (chunks, purge images agressive, budget payloads) + volet LLM sémantique opt-in (ex-F-86 : résumé scoré, cognitive tombstones). PRIORITÉ 1 du backlog. [ARBITRAGE 2026-08-20 user : intégrer la doctrine de concision ponytail (fiche 48-ponytail, plan P0-bis — échelle YAGNI 7 rungs, -54 % LOC / -22 % tokens) comme input du volet réduction à la source, en complément de la compaction aval.] IMPLÉMENTÉ (2026-08-21) — diagnostic affiné : le trou n°1 n'était PAS les images (apply_image_purge F-101 déjà active) mais le model_output des CodeAgents (pensée + bloc de code complet = fichiers entiers passés à write_file, envoyés à l'API à chaque step, JAMAIS compactés par les 5 couches F-101) + la purge totale steps=[] du boundary de retry qui rejour le rituel visuel à chaque tentative + l'absence de preflight (requête condamnée envoyée quand même). VOLET A (compaction.py v3, 0 LLM, défaut actif) : apply_model_output_clip (steps anciens clippés head 600/tail 250, version intégrale persistée .transcripts/mo_step_*.txt — le correctif du mur), apply_image_purge v2 perte-zéro (archive .transcripts/images/*.png + placeholder '[Screenshot archivé: chemin]' pattern kilocode), render_transcript_block (chunks kilocode déterministes : trace bornée 3000 chars du milieu snippé dans le marqueur), collect_dead_ends (tombstones ex-F-86 sans LLM : 'CULS-DE-SAC ne pas répéter'), apply_soft_retry_reset (reset hiérarchique : archive TOUT l'évincé, step-synthèse, queue 4 conservée clippée, drop_task_steps=True au boundary car smolagents ré-appose un TaskStep frais à chaque run), estimate_history_tokens + preflight kilocode needed() ×1.3 (chars/4 × 1.3 + images × 1600 > COMPACTION_PREFLIGHT_BUDGET_TOKENS 26000 → escalade AVANT l'envoi : reset serré + éviction dernière image). VOLET B (nodes.py) : chemin overflow = _f116_compact_memory (LLM opt-in d'abord, repli soft reset) au lieu du wipe ; boundary de retry COMPACTION_RETRY_MODE=soft (défaut) / hard (historique) ; flag memory_reset_done anti double-compaction ; OverflowGuard failure_drain F-101 inchangé. VOLET C (ex-F-86, opt-in COMPACTION_LLM_ENABLED=false) : llm_compact_history branche les dormants F-101 (build_summary_prompt 5 sections + select_head_recent par entrée entière) via agent.model.generate ; CompactionBudget hermes ENFIN branché (verdict sur usage provider réel via on_real_usage(prompt_tokens) alimenté par les métriques du run réussi, remboursement sous seuil, breaker) ; écarts documentés : pas de Mermaid L2 ni cascade par score ce cycle. VOLET D (ponytail à la source) : PONYTAIL_LADDER (7 rungs + 'l échelle après compréhension' + 'deletion over addition') injecté par build_role_header pour coder/coder_frontend UNIQUEMENT (l'Architect garde son NIVEAU GRAPHIQUE MAXIMAL F-124 — la doctrine réduit le CODE pas les exigences) avec clause anti-sous-livraison cruciale pour un 4B ('INTOUCHABLE : checklist sacrée, robustesse, sécurité — minimal décrit le CODE pas le PÉRIMÈTRE : sous-fonctionnalité = ÉCHEC'). Config : COMPACTION_CLIP_ENABLED / COMPACTION_PREFLIGHT_ENABLED / COMPACTION_PREFLIGHT_BUDGET_TOKENS / COMPACTION_RETRY_MODE / COMPACTION_LLM_ENABLED / COMPACTION_LLM_MAX_TOKENS (.env + .env.example). 45 tests nouveaux (tests/test_compaction_f116.py) ; suite complète 1757 passed / 0 failed / 7 skipped (baseline 1712 + 45, 0 régression) ; gate F-103 : 29 surfaces, 0 erreur, 0 warning (prompts.py ~23.8 Ko < soft 24 Ko). Validation E2E bubble-sort-multifile-v6 (étalon run #11) après merge.",
+      "status": "completed",
       "dependencies": [
         "F-101",
         "F-114"
@@ -1228,6 +1228,93 @@
       "status": "completed",
       "dependencies": [
         "F-72"
+      ]
+    },
+    {
+      "id": "F-146",
+      "name": "Durcissement du Coder en mode correction (pré-injection de contexte + mark tracking séquentiel ReadGate + désactivation péage)",
+      "description": "Post-mortem boucles d'isolation Coder (2026-08-22) : (1) ReadGate séquentiel (record_write met à jour le hash au lieu de pop la mark, permettant les passes successives d'édition sans crash) ; (2) F-141 reset automatique sur modification disque (mark_write_done) ; (3) Pré-injection directe des fichiers cibles existants en itération > 1 (current_files_block, aucun read_file exploratoire nécessaire) ; (4) READ_BEFORE_WRITE_ENABLED=false par défaut ; (5) Harmonisation des prompts (suppression des interdictions contradictoires 'JAMAIS write_file' et 'REFUSÉ sur existant'). 58 tests PASS, 0 régression, guidance gate OK.",
+      "status": "completed",
+      "dependencies": [
+        "F-67",
+        "F-144"
+      ]
+    },
+    {
+      "id": "F-147",
+      "name": "Suppression définitive du Read-Before-Write Gate et simplification du workflow Coder",
+      "description": "Décision de simplification post-validation Coder : le ReadGate (F-67) et l'obligation de relire chaque fichier avant d'écrire ralentissaient l'agent et provoquaient des boucles de procrastination artificielles, alors que le contexte des fichiers existants est déjà pré-injecté dans le prompt. (1) Suppression du middleware ReadGate dans execute_coder_node ; (2) Nettoyage des invariants universels (UNIVERSAL_INVARIANTS) pour privilégier l'édition directe et l'utilisation immédiate du contexte ; (3) Validation complète du Coder en isolation (14 steps, 0 erreur, 5/5 visual checks PASS).",
+      "status": "completed",
+      "dependencies": [
+        "F-146"
+      ]
+    },
+    {
+      "id": "F-148",
+      "name": "Validation de l'injection effective des leçons durables (mémoire cross-run F-68)",
+      "description": "Vérification in-situ lors du run E2E Bubble Sort multi-fichiers : le bloc '### LEÇONS DE RUNS PRÉCÉDENTS (mémoire cross-run)' est correctement rappelé depuis DuckDB (8 leçons actives : synchronisation du compteur DOM, visibilité des barres CSS, réduction de la taille initiale pour éviter les timeouts) et injecté dans le prompt système du Coder. L'agent applique ces leçons dès l'itération 1 (initialisation à 20 barres et synchronisation DOM explicite).",
+      "status": "completed",
+      "dependencies": [
+        "F-68",
+        "F-147"
+      ]
+    },
+    {
+      "id": "F-149",
+      "name": "Pré-injection directe du Draft dans le prompt Coder (suppression du DraftGate)",
+      "description": "Comme pour les fichiers cibles existants (F-146), pré-injecter directement le contenu complet du brouillon Drafter (draft_*.md) dans le prompt système du Coder au lieu d'imposer un step de lecture préalable via DraftGate (F-83). Économise 1 step complet dès l'itération 1.",
+      "status": "completed",
+      "dependencies": [
+        "F-83",
+        "F-147"
+      ]
+    },
+    {
+      "id": "F-150",
+      "name": "Épuration et allégement des invites de nœuds et invariants",
+      "description": "Nettoyage des injonctions et règles contradictoires ou obsolètes dans UNIVERSAL_INVARIANTS et les prompts des nœuds (Coder, Tester) pour éliminer les micro-règles périmées (comme list_directory obligatoire ou interdictions verbeuses de navigation) et maximiser la fluidité de Qwen-4B.",
+      "status": "completed",
+      "dependencies": [
+        "F-147"
+      ]
+    },
+    {
+      "id": "F-151",
+      "name": "Immunité des outils de vérification visuelle dans le StallDetector",
+      "description": "Exempter explicitement les outils de validation et d'assertion visuelle (visual_check, take_screenshot, list_console_messages, probe_canvas_activity) du calcul de stall du StallDetector (F-88) pour éviter les alertes erronées pendant les rituels de fin de tâche normaux.",
+      "status": "completed",
+      "dependencies": [
+        "F-88"
+      ]
+    },
+    {
+      "id": "F-152",
+      "name": "Optimisation et compaction du prompt Tester en mode ciblé",
+      "description": "Élagage des descriptions globales redondantes et allégement du préfill de prompt du Web Tester en mode ciblé (re-test d'erreurs) pour passer de ~22k tokens à ~8k tokens (gain de plus de 2 minutes de préfill sur le 9B par cycle d'audit).",
+      "status": "completed",
+      "dependencies": [
+        "F-116",
+        "F-147"
+      ]
+    },
+    {
+      "id": "F-153",
+      "name": "Sonde déterministe de câblage exhaustif des contrôles interactifs & fuzzing live dans le Static Tester",
+      "description": "Ajout de deux mécanismes de validation déterministes 0 LLM dans static_tester.py : (1) Tier 1b : Détection statique des contrôles orphelins (boutons non branchés comme pauseBtn/resetBtn et sliders sans écouteurs input/change comme sizeRange/speedRange) avec gestion fine de la délégation d'événements ; (2) Tier 4 : Fuzzing exhaustif en headless Chrome simulant les clics sur tous les boutons et le dispatch d'événements input/change sur tous les sliders pour capturer toute exception JS runtime.",
+      "status": "completed",
+      "dependencies": [
+        "F-49",
+        "F-147"
+      ]
+    },
+    {
+      "id": "F-154",
+      "name": "Invariants d'initialisation DOM robuste (anti-readyState complete) et complétude :root",
+      "description": "Imposition d'invariants de code stricts dans les surfaces de guidance (skills/coding/SKILL.md, coder_frontend dans prompts.py, et DrafterSignature dans dspy_nodes.py) : (1) Initialisation DOM robuste avec vérification document.readyState ('loading' vs 'complete') pour empêcher les scripts placés en fin de body de rater le DOMContentLoaded ; (2) Prescription de complétude du bloc CSS :root définissant toutes les variables de thème (--bg, --surface, --text, --default, --sorted, --accent) pour éliminer toute transparence accidentelle des éléments.",
+      "status": "completed",
+      "dependencies": [
+        "F-150",
+        "F-153"
       ]
     }
   ]

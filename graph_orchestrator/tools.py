@@ -94,6 +94,26 @@ def reset_screenshot_proof() -> None:
     _SCREENSHOT_PROOF["taken"] = False
 
 
+# Preuve DURABLE d'écriture (boucle isolation 2026-08-22) : même pattern que
+# _SCREENSHOT_PROOF. La compaction intra-attempt (F-116 chemin overflow) peut
+# amputer agent.memory.steps du step qui portait les write_file AVANT l'audit
+# F-99 du final_answer → faux négatif « AUCUN changement matériel » (boucle 8 :
+# write_file ×3 exécutés, rejetés quand même). Les outils d'écriture marquent
+# ce compteur à l'EXÉCUTION RÉUSSIE — il traverse compaction et retries.
+_WRITE_PROOF = {"count": 0, "paths": set()}
+
+
+def get_write_proof() -> dict:
+    """Snapshot de la preuve d'écriture durable ({"count": int, "paths": set})."""
+    return {"count": _WRITE_PROOF["count"], "paths": set(_WRITE_PROOF["paths"])}
+
+
+def reset_write_proof() -> None:
+    """Réinitialise la preuve d'écriture (une exécution de nœud = un cycle)."""
+    _WRITE_PROOF["count"] = 0
+    _WRITE_PROOF["paths"].clear()
+
+
 @tool
 def visual_check(criterion_number: int, verdict: bool, observation: str) -> str:
     """À appeler pour CHAQUE critère de validation visuelle, APRÈS le screenshot.
@@ -131,23 +151,65 @@ def _file_lock(path: str) -> threading.Lock:
 # mot pour mot, ignorant les 8 nudges F-130 (les nudges n'ont pas de bras armé
 # sur un modèle insensible ; le LoopGuard F-36 exempte read_file). On coupe la
 # SOURCE : à partir de la 3e lecture STRICTEMENT identique (même path+offset+
-# limit) au sein d'une exécution de nœud, le contenu est REFUSÉ et remplacé par
+# limit ET même hash de contenu) au sein d'une exécution de nœud, le contenu est REFUSÉ et remplacé par
 # une directive — le step ne coûte plus NI IO NI croissance de contexte. Les
 # lectures variées (offsets différents) restent libres (couvertes par le nudge
-# F-130, qui convainc le 4B). Lifecycle : reset par nœud (reset_read_supply).
+# F-130, qui convainc le 4B). Lifecycle : reset par nœud (reset_read_supply)
+# ou par écriture réussie sur le fichier (mark_write_done).
 _IDENT_READ_THRESHOLD = 3
-_IDENT_READ_STATE: dict = {}
+_IDENT_READ_STATE: dict[str, int] = {}
+_IDENT_READ_HASHES: dict[str, str] = {}
 
 
-def reset_read_supply() -> None:
-    """Réinitialise le compteur de lectures identiques (une exécution de nœud)."""
-    _IDENT_READ_STATE.clear()
+def reset_read_supply(path: str | None = None) -> None:
+    """Réinitialise le compteur de lectures identiques (une exécution de nœud ou un path)."""
+    if path is None:
+        _IDENT_READ_STATE.clear()
+        _IDENT_READ_HASHES.clear()
+    else:
+        try:
+            norm = os.path.normcase(os.path.abspath(path))
+            prefix = f"{norm}|"
+            to_delete = [k for k in _IDENT_READ_STATE if k == norm or k.startswith(prefix)]
+            for k in to_delete:
+                _IDENT_READ_STATE.pop(k, None)
+                _IDENT_READ_HASHES.pop(k, None)
+        except Exception:
+            _IDENT_READ_STATE.clear()
+            _IDENT_READ_HASHES.clear()
+
+
+def mark_write_done(path: str) -> None:
+    """Marque qu'un outil d'écriture a réellement modifié le disque (succès)."""
+    _WRITE_PROOF["count"] += 1
+    if path:
+        _WRITE_PROOF["paths"].add(str(path))
+        # Après une écriture réussie sur le disque, relire le fichier n'est plus
+        # une lecture identique (le contenu a changé) : reset du supply pour ce path.
+        reset_read_supply(path)
 
 
 def _identical_read_gate(path: str, offset: int, limit: int) -> str | None:
     """Message de refus si c'est la N-ième lecture STRICTEMENT identique, sinon None."""
     try:
-        key = f"{os.path.normcase(os.path.abspath(path))}|{offset}|{limit}"
+        norm = os.path.normcase(os.path.abspath(path))
+        key = f"{norm}|{offset}|{limit}"
+
+        # Détection de changement de contenu : si le fichier a été modifié sur disque
+        # (hash différent de la dernière lecture), ce n'est PAS une lecture identique.
+        current_hash = ""
+        if os.path.exists(norm):
+            try:
+                with open(norm, "r", encoding="utf-8") as f:
+                    current_hash = hashlib.sha256(f.read().encode("utf-8")).hexdigest()
+            except Exception:
+                current_hash = ""
+
+        last_hash = _IDENT_READ_HASHES.get(key)
+        if last_hash is not None and last_hash != current_hash:
+            _IDENT_READ_STATE[key] = 0
+
+        _IDENT_READ_HASHES[key] = current_hash
         n = _IDENT_READ_STATE.get(key, 0) + 1
         _IDENT_READ_STATE[key] = n
         if n < _IDENT_READ_THRESHOLD:
@@ -284,6 +346,13 @@ def _post_edit_syntax_directive(path: str) -> str:
     l'apprendre au Linter 30 min plus tard (post-mortem runs 2026-08-20 :
     erreurs de syntaxe survivant jusqu'au Shift-Left = itérations entières
     perdues). Vide si syntaxe propre ou fichier non-JS. Fail-open total.
+
+    Goulot run 2026-08-21_1531 : les heuristiques (boucle while non bornée)
+    étaient vendues comme « SYNTAXE INVALIDE » — le 4B réécrivait la boucle
+    en boucle (6+ réécritures du même bloc) sur un faux positif. Désormais :
+    erreurs DURES (node --check, syntaxe Python, const) = message urgent ;
+    heuristiques seules = diagnostic TEMPERÉ avec consigne explicite de ne
+    PAS réécrire une boucle correcte.
     """
     try:
         if not str(path).lower().endswith((".html", ".htm", ".js", ".mjs", ".cjs")):
@@ -291,14 +360,26 @@ def _post_edit_syntax_directive(path: str) -> str:
         errs = _collect_js_syntax_errors(str(path))
         if not errs:
             return ""
-        shown = "\n".join(f"  - {e}" for e in errs[:3])
-        extra = f"\n  (+{len(errs) - 3} autre(s))" if len(errs) > 3 else ""
+        heuristics = [e for e in errs if e.startswith("[Boucle infinie JS")]
+        hard = [e for e in errs if not e.startswith("[Boucle infinie JS")]
+        if hard:
+            shown = "\n".join(f"  - {e}" for e in hard[:3])
+            extra = f"\n  (+{len(errs) - 3} autre(s))" if len(errs) > 3 else ""
+            return (
+                f"\n\n[!] SYNTAXE INVALIDE détectée JUSTE APRÈS ton édition :\n{shown}{extra}\n"
+                f"Si c'est un état intermédiaire d'une édition multi-blocs, termine le bloc "
+                f"suivant IMMÉDIATEMENT. Sinon corrige MAINTENANT par search_replace ciblé "
+                f"(la ligne ~ est indiquée) — n'attends pas le Linter, chaque tour d'attente "
+                f"est un step perdu. Console propre uniquement si node --check est satisfait."
+            )
+        shown = "\n".join(f"  - {e}" for e in heuristics[:2])
         return (
-            f"\n\n[!] SYNTAXE INVALIDE détectée JUSTE APRÈS ton édition :\n{shown}{extra}\n"
-            f"Si c'est un état intermédiaire d'une édition multi-blocs, termine le bloc "
-            f"suivant IMMÉDIATEMENT. Sinon corrige MAINTENANT par search_replace ciblé "
-            f"(la ligne ~ est indiquée) — n'attends pas le Linter, chaque tour d'attente "
-            f"est un step perdu. Console propre uniquement si node --check est satisfait."
+            f"\n\n[!] DIAGNOSTIC heuristique (PAS une erreur de syntaxe — node --check est "
+            f"satisfait) :\n{shown}\n"
+            f"Examine cette boucle UNE fois : si sa condition dépend d'une variable que le "
+            f"corps modifie (assignation ou incrément) ou qu'un `break`/`return` peut sortir, "
+            f"elle est CORRECTE — NE LA RÉÉCRIS PAS, passe à la suite. Corrige-la UNE seule "
+            f"fois par search_replace ciblé uniquement si elle est réellement inconditionnelle."
         )
     except Exception:
         return ""
@@ -476,6 +557,7 @@ def write_file(path: str, content: str) -> str:
                 )
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
+        mark_write_done(path)
         return f"Successfully wrote to {path} ({len(content)} chars)" + _post_edit_syntax_directive(path)
     except Exception as e:
         return f"Error writing to file {path}: {str(e)}"
@@ -553,6 +635,7 @@ def append_file(path: str, content: str) -> str:
                     # Cas nominal : simple append à la fin.
                     with open(path, 'a', encoding='utf-8') as f:
                         f.write(content)
+                    mark_write_done(path)
 
             # Idempotence des effets de bord (Priorité 8-bis) : au replay de
             # checkpoint, le Coder rejoue ses appends. La garde anti-doublon
@@ -631,9 +714,10 @@ def edit_file(path: str, old_string: str, new_string: str, replace_all: bool = F
             new_content = content.replace(old_string, new_string)
         else:
             new_content = content.replace(old_string, new_string, 1)
-        
+
         with open(path, 'w', encoding='utf-8') as f:
             f.write(new_content)
+        mark_write_done(path)
 
         # F-128 : rappel post-fix si des erreurs console attendent re-vérification.
         # P2 : diagnostics de syntaxe immédiats.
@@ -925,6 +1009,7 @@ def search_replace(path: str, old_string: str, new_string: str) -> str:
 
             with open(path, "w", encoding="utf-8") as f:
                 f.write(new_content)
+            mark_write_done(path)
 
         # F-128 : rappel post-fix si des erreurs console attendent re-vérification.
         # P2 : diagnostics de syntaxe injectés immédiatement (kilocode) — le
@@ -1015,6 +1100,7 @@ def multi_replace(path: str, replacements: list) -> str:
                 
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
+            mark_write_done(path)
 
         # F-128 : rappel post-fix si des erreurs console attendent re-vérification.
         msg = f"Successfully applied {success_count}/{len(replacements)} replacements to {path}."

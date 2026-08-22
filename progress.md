@@ -1,5 +1,152 @@
 # État d'Avancement du Sprint
 
+## Objectif Actuel : Sprint F-149 à F-154 (Élimination des frictions, allégement des rituels, sondes et initialisation robuste)
+- [x] F149 : Pré-injection directe du Draft dans le prompt Coder (suppression du DraftGate, Step 1 direct écriture).
+- [x] F150 : Épuration des prompts & invariants universels (suppression des micro-règles périmées, traduction intégrale en anglais).
+- [x] F151 : Exemption des outils de validation visuelle du StallDetector.
+- [x] F152 : Compaction du prompt Tester en mode ciblé (passage de ~22k à ~8k tokens).
+- [x] F153 : Sonde déterministe de contrôles interactifs & fuzzing live dans le Static Tester.
+- [x] F154 : Invariants d'initialisation DOM robuste (anti-readyState complete) et complétude :root.
+
+## Jalons de l'Itération (cycle F-154 — initialisation DOM robuste & complétude :root)
+> Imposition d'invariants de code stricts pour éliminer les écrans vides au chargement et les styles transparents (2026-08-22).
+>
+> - [x] F154-1 : Invariant #6 dans `skills/coding/SKILL.md` imposant le pattern d'initialisation vérifiant `document.readyState`.
+> - [x] F154-2 : Ajout de la règle d'initialisation DOM dans `ROLE_BLOCKS["coder_frontend"]` (`prompts.py`).
+> - [x] F154-3 : Mise à jour de `DrafterSignature` (`dspy_nodes.py`) imposant l'initialisation robuste et la complétude du bloc CSS `:root`.
+> - [x] F154-4 : Synchronisation des fichiers de suivi et vérification du budget de guidance (29 surfaces, 0 erreur).
+
+## Jalons de l'Itération (cycle F-149 à F-152 — élimination des frictions & allégement des prompts)
+> Élimination des frictions Coder/Tester, suppression définitive du péage DraftGate et allégement des invites système (2026-08-22).
+>
+> - [x] F149 : Pré-injection directe du contenu complet du draft (`draft_*.md`) dans `draft_instruction`, permettant l'écriture directe au Step 1 sans passer par un appel `read_file`.
+> - [x] F150 : Traduction intégrale en anglais des invariants universels (`UNIVERSAL_INVARIANTS`), des 9 blocs de rôles (`ROLE_BLOCKS`), des prompts Coder et Tester (`nodes.py`, `web_tester.py`), et des skills essentiels (`coding`, `devtools-preview`), avec élimination des micro-règles obsolètes.
+> - [x] F151 : Immunité des outils de vérification visuelle (`visual_check`, `take_screenshot`, `list_console_messages`, `probe_canvas_activity`, etc.) dans `StallDetector` pour éviter les faux positifs en phase de test.
+> - [x] F152 : Compaction du prompt du Web Tester en mode ciblé (omission des spécifications globales redondantes) pour réduire l'empreinte token de ~22k à ~8k tokens.
+> - [x] F149-F152 : Tests unitaires et d'intégration validés à 100%, agent guidance check (29 surfaces, 0 erreur).
+
+## Jalons de l'Itération (cycle F-153 — sonde déterministe de contrôles interactifs & fuzzing live)
+> Validation de la détection déterministe 0 LLM des contrôles interactifs orphelins (2026-08-22).
+>
+> - [x] F153-1 : Tier 1b statique — Détection des contrôles interactifs avec ID orphelins (boutons non branchés sans handler comme `pauseBtn`, `resetBtn` et sliders sans écouteur dynamique `sizeRange`, `speedRange`).
+> - [x] F153-2 : Tier 4 live — Fuzzing exhaustif des clics de tous les boutons et dispatch d'événements `input`/`change` sur tous les sliders en headless Chrome pour capturer les exceptions runtime.
+> - [x] F153-3 : Validation sur le livrable réel (4 anomalies détectées en 1 ms) et suite de tests unitaires (78 passed, 0 régression).
+> - [x] F153-4 : Synchronisation des fichiers de suivi et journalisation DuckDB.
+
+## Jalons de l'Itération (cycle F-148 — vérification effective de la mémoire cross-run)
+> Vérification en conditions réelles lors du run E2E Bubble Sort multi-fichiers :
+>
+> - [x] F148-1 : Extraction déterministe depuis DuckDB (`graph_orchestrator.db`) des 8 leçons durables (`insight` et `escalation`).
+> - [x] F148-2 : Injection effective du bloc `### LEÇONS DE RUNS PRÉCÉDENTS (mémoire cross-run)` dans le prompt système du Coder.
+> - [x] F148-3 : Exploitation immédiate par le Coder (initialisation du tableau à 20 barres pour éviter le timeout, synchronisation explicite des compteurs DOM).
+> - [x] F148-4 : Synchronisation des fichiers de suivi (`feature_list.json`, `contract.md`, `progress.md`) et journalisation DuckDB.
+
+## Jalons de l'Itération (cycle F-147 — suppression définitive du ReadGate et simplification Coder)
+> Validation totale de la simplification Coder post-test isolation (2026-08-22).
+> Le ReadGate (F-67) imposait un péage de lecture préalable (read-before-write) qui
+> bloquait l'agent et provoquait des boucles de procrastination, alors que les fichiers
+> cibles sont déjà pré-injectés dans le prompt en itération > 1 (current_files_block).
+>
+> - [x] F147-1 : Retrait du middleware `ReadGate` dans `nodes.py:execute_coder_node`.
+> - [x] F147-2 : Simplification des `UNIVERSAL_INVARIANTS` dans `prompts.py` (utilisation directe du contexte, édition directe sans péage).
+> - [x] F147-3 : Validation en isolation Coder complète (`debug/run_coder.py`) : 14 steps, 0 erreur de syntaxe, 0 erreur console, 5/5 visual checks PASS, tous livrables conformes.
+> - [x] F147-4 : Synchronisation des fichiers de suivi (`feature_list.json`, `contract.md`, `progress.md`) et DuckDB.
+
+## Jalons de l'Itération (cycle F-116 — compaction résiliente + chunks + ponytail)
+> PRIORITÉ 1 du backlog (gouvernance 2026-08-18). Le mur démontré des runs
+> #13/#16 : thrash 772k-990k tokens/step (~24k/step), ~40 min perdues. Plan
+> approuvé user : 4 volets (A déterministe kilocode, B branchement nodes,
+> C LLM opt-in ex-F-86, D ponytail fiche 48 à la source). Validation E2E
+> prévue sur bubble-sort-multifile-v6 (étalon run #11).
+
+- [x] F116-1 : Diagnostic affiné (vérifié code, pas hypothèse) — le trou n°1
+  n'est PAS les images (apply_image_purge F-101 déjà active pendant #13/#16)
+  mais le **model_output** des CodeAgents : pensée + bloc de code complet
+  (fichiers entiers à write_file) envoyé à l'API à chaque step, JAMAIS compacté
+  par les 5 couches F-101 (qui ne touchent que observations). + purge totale
+  `steps=[]` au boundary de retry (rituel visuel rejoué ×3) + zéro preflight.
+- [x] F116-2 (volet A, compaction.py v3, 0 LLM) : `apply_model_output_clip`
+  (steps anciens > 2000 chars clippés head 600/tail 250, version intégrale
+  persistée `.transcripts/mo_step_*.txt`) ; `apply_image_purge` v2 perte-zéro
+  (archive `.transcripts/images/*.png` + placeholder `[Screenshot archivé: …]`) ;
+  `render_transcript_block` (chunks kilocode : trace bornée 3000 chars dans le
+  marqueur de snip) ; `collect_dead_ends` (tombstones « CULS-DE-SAC » ex-F-86
+  sans LLM) ; `apply_soft_retry_reset` (archive tout l'évincé, step-synthèse,
+  queue 4 conservée clippée ; `drop_task_steps` au boundary car smolagents
+  ré-appose un TaskStep frais à chaque run — agents.py:488) ;
+  `estimate_history_tokens` + preflight kilocode needed() ×1.3 (> 26000 →
+  escalade AVANT l'envoi).
+- [x] F116-3 (volet B, nodes.py) : overflow → `_f116_compact_memory` (LLM
+  opt-in d'abord, repli soft reset) au lieu du wipe ; boundary
+  `COMPACTION_RETRY_MODE=soft` (défaut) / `hard` (historique) ; flag
+  anti double-compaction ; OverflowGuard failure_drain inchangé.
+- [x] F116-4 (volet C, ex-F-86 opt-in désactivé) : `compaction_llm.py` —
+  branche les dormants F-101 (build_summary_prompt + select_head_recent) ;
+  **CompactionBudget hermes enfin branché** (verdict sur usage provider réel,
+  remboursement, breaker). Pas de Mermaid L2 ni cascade par score (documenté).
+- [x] F116-5 (volet D, ponytail) : `PONYTAIL_LADDER` (7 rungs YAGNI) injecté
+  via build_role_header pour coder/coder_frontend SEULEMENT (Architect épargné
+  — il garde son NIVEAU GRAPHIQUE MAXIMAL F-124) + clause anti-sous-livraison
+  (« minimal décrit le CODE pas le PÉRIMÈTRE : sous-fonctionnalité = ÉCHEC »).
+- [x] F116-6 : Config (6 settings COMPACTION_*) + .env + .env.example ; gate
+  F-103 : **29 surfaces, 0 erreur, 0 warning** (prompts.py ~23.8 Ko < soft
+  24 Ko) ; py_compile 4 fichiers.
+- [x] F116-7 : Tests — **45 nouveaux PASS** (`tests/test_compaction_f116.py` :
+  purge v2 ×6, clip ×6, transcript ×4, dead-ends ×4, soft reset ×7, estimate
+  ×2, preflight pipeline ×2, wiring nodes ×3, LLM compact ×7, ponytail ×4) ;
+  suite complète **1757 passed / 0 failed / 7 skipped** (baseline 1712 + 45,
+  0 régression ; flaky minute-boundary PASSÉ cette exécution).
+- [x] F116-8 : État disque (contract C473-C481, feature_list F-116 completed,
+  ce fichier, README) + DuckDB + commit + PR.
+- [x] F116-9a : Run E2E #1 (2026-08-21_1337) INTERROMPU user ~80 min (97 steps) :
+  F-116 validé côté compaction (0 mur, 24-35k/appel stable, 0 erreur transport,
+  archives mo_step_*) MAIS goulot de convergence global diagnostiqué — 58 % du
+  temps = 21 steps vision (36 navigations), churn 71 sr / 92 reads / 28 writes,
+  livrable cassé (var(--bg) sans :root, suspicion ponytail n=1), CODER_MAX_STEPS
+  48 laissant thrasher. Correctifs P0-P3 appliqués : steps 24, toggle
+  PONYTAIL_ENABLED, nudge churn d'édition (5 échecs consécutifs → failure
+  honnête), nudge budget vision (8 cycles max). Tests 152 ciblés PASS, gate OK.
+- [x] F116-9b : Session « trouver le goulot » (runs #1→#6, 2026-08-21) — 6 runs,
+  6 causes racines corrigées sur la branche (PR #102, review Kilo adressée) :
+  (1) CODER_MAX_STEPS 48→24 + P2 nudge churn d'édition + P3 nudge budget vision ;
+  (2) toggle PONYTAIL_ENABLED (off pour validation, bug :root disparu n=2) ;
+  (3) garantie déterministe skill devtools-preview Coder+Tester (décision user —
+  perdu par la sélection LLM Architect : golden #19 l'avait, runs ratés non) ;
+  (4) faux positif detect_unbounded_while_in_js (bubble sort canonique flaggué,
+  logique inversée conservative + wrapper dur/heuristique séparé) ;
+  (5) validate_html_monofile n'exige plus un livrable monofichier (<script src>
+  local légal si cible existe — la golden task EST multifichier) ;
+  (6) FRESH_START purge les réfutations DuckDB (bugs fantômes des runs
+  précédents réinjectés au Coder). Contrat C482-C485, 197 tests ciblés PASS.
+- [x] F116-9c : Run #6 = itinéraire COMPLET pour la 1re fois (Coder convergé
+  11 min → Static OK + HTTP 200 → Tester LLM → Security → Judge) ; livrable
+  3 fichiers VALIDÉ PAR L'USER (visuel + fonctionnel), intact (iter2 morte
+  avant écriture). ÉCHEC au critère 30 min (47 min) : goulot restant = Web
+  Tester 80 s/step (max 387 s) tué par TESTER_TIMEOUT_S=1200 sans verdict →
+  Judge fail-closed → iter inutile. Leviers : tester sur fast 4B, timeout
+  1800, investigation du step 387 s.
+- [x] F116-9d : CAUSE RACINE PERFORMANCE (post-run #6) — MTP+ngl99 déborde la
+  VRAM 6 Go (contexte draft) → offload CPU silencieux du 9B → prefill 84 t/s
+  (vs 1300+ sans MTP, golden 550-700) → le Tester à 80 s/step et la régression
+  « trop de features » depuis le golden venaient de LÀ (swap b10472+F-123).
+  Matrice bench 6 combos (CUDA 12.4/13.3, FA, MTP, ngl éliminatoires). Fix :
+  MTP OFF sur les 2 specs 9B (1342 t/s prefill + 41 t/s gen). llama.cpp
+  b10517→b10549 appliqué (validation complète). Doc §2 réécrite. Contract C486.
+- [x] F116-9e : Run #7 (config saine post-MTP-off, ~96 min, interrompu user) :
+  chaîne amont VALIDÉE (Coder convergent 10 min, vrai bug `speed` détecté par le
+  Static Tester et corrigé it.2 — l'usine fonctionne, plus aucun faux positif ;
+  prefill réparé : steps tester 5-20 s vs 80 s). GOULOT FINAL identifié : le
+  rituel visuel du Web Tester (~20-25 min d'aller-retours DevTools SÉRIELS —
+  step 1 seul = 351 s) dépasse TESTER_TIMEOUT_S=1200 → Judge SKIPPÉ fail-closed
+  → REJET ×3. Mesure : le tester avait son verdict à ~1 525 s →
+  **TESTER_TIMEOUT_S=1800** (une ligne) est le fix suivant ; au-delà, réduire le
+  rituel (7 critères → échantillonnage) pour tenir un budget 30 min.
+- [ ] F116-9 : Validation E2E bubble-sort-multifile-v6 (relance P0-P3, deadline
+  30 min — échec si dépassé ; étalon
+  run #11 : ~23 min, 14,3 M tokens ; critères : livrable complet, PAS de
+  croissance ~24k tokens/step, zéro exceed_context_size, archives
+  .transcripts/ présentes, ponytail visible dans le prompt Coder).
+
 ## Jalons de l'Itération (cycle F-145 — sondes de preuve de mouvement, post-mortem run #8)
 > Origine : bug ghostY du run #8 (pièce Tetris dessinée à `(ghostY+r)` au lieu de
 > `(currentPiece.y+r)` + `drawGhost()` cassé — AUCUNE animation de chute, invisible
@@ -32,6 +179,25 @@
   + DuckDB + commit + PR.
 - [ ] F145-6 : Validation E2E (run ultérieur — idéalement Tetris : la règle 5-bis
   doit faire FAIL le livrable sans animation de chute).
+
+## Jalons de l'Itération (cycle F-146 — durcissement Coder correction & pré-injection)
+> Origine : analyse des boucles de blocage Coder en itération 2 (2026-08-22). Le Coder
+> s'épuisait en appels read_file stériles ou subissait des blocages de péage.
+
+- [x] F146-1 : ReadGate séquentiel (`record_write` met à jour le hash SHA256 du contenu
+  au lieu de supprimer la mark, autorisant des éditions successives sans RuntimeError).
+- [x] F146-2 : Reset déterministe F-141 (`mark_write_done` et `reset_read_supply`
+  réinitialisent le compteur de lectures identiques lors d'une écriture sur disque).
+- [x] F146-3 : Pré-injection automatique du code des fichiers cibles existants en
+  itération > 1 (`current_files_block` dans `nodes.py`), éliminant le besoin de read_file.
+- [x] F146-4 : Désactivation du péage par défaut `READ_BEFORE_WRITE_ENABLED=false` dans
+  `config.py` et `.env`.
+- [x] F146-5 : Harmonisation des règles de prompt (Règle 6 et OUTILS DISPONIBLES
+  déverrouillent l'écriture libre sans interdictions contradictoires ; Invariants 1 & 2
+  assouplis).
+- [x] F146-6 : Tests — `tests/test_coder_hardening.py` + `tests/test_read_gate.py` (58/58 PASS),
+  gate F-103 OK (29 surfaces, 0 erreur).
+- [x] F146-7 : État disque (contract C487, feature_list F-146, ce fichier) + DuckDB.
 
 ## Jalons de l'Itération (cycle F-130/131 — post-mortem run 2026-08-20_1028 Tetris, session « run de 0 »)
 > Objectif utilisateur : run Tetris de 0 → analyser/corriger si problème →

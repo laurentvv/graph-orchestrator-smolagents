@@ -287,6 +287,15 @@ def detect_unbounded_while_in_js(js_source: str, start_line: int = 1) -> list[st
     `while (!collide({ x: 0, y: 1 })) { ghostY++; }`
     où `ghostY` est incrémenté dans le corps de la boucle mais n'apparaît PAS dans la condition du while,
     et la fonction appelée ignore son argument ou ne dépend pas de l'incrément -> boucle infinie bloquante.
+
+    Goulot run 2026-08-21_1531 (review post-mortem) : l'ancienne logique flaggait
+    TOUTE variable incrémentée dans le corps absente de la condition — faux
+    positif sur le bubble sort canonique (`while (swapped && …)` avec `i++` de
+    passe externe) que le Coder a réécrit 6+ fois sans jamais satisfaire le
+    checker (boucle de fix invincible). Logique INVERSÉE, conservative : on
+    flaggue uniquement si AUCUNE variable de la condition n'est mutée dans le
+    corps (assignation `=` OU incrément) — la condition ne peut alors jamais
+    changer ; ou si la condition est constante vraie (`while (true)`, `while (1)`).
     """
     errors: list[str] = []
     if not js_source:
@@ -327,14 +336,42 @@ def detect_unbounded_while_in_js(js_source: str, start_line: int = 1) -> list[st
         body = cleaned[body_start : bpos - 1].strip()
 
         while_line = start_line + cleaned[: m.start()].count("\n")
-        mutated_vars = re.findall(r"\b([a-zA-Z_$][\w$]*)\s*(?:\+\+|--|\+=|-=)", body)
-        for var in mutated_vars:
-            if not re.search(rf"\b{re.escape(var)}\b", cond):
+
+        # Variables LUES dans la condition (identifiants nus, hors littéraux).
+        cond_vars = set(re.findall(r"\b([a-zA-Z_$][\w$]*)\b", cond)) - {
+            "true", "false", "null", "undefined", "length", "not", "&&", "||", "!"
+        }
+        # Constante vraie : aucune variable lue → while(true) & co.
+        if not cond_vars:
+            mutated_in_body = re.findall(
+                r"\b([a-zA-Z_$][\w$]*)\s*(?:\+\+|--|\+=|-=|\*=|/=|=(?!=))", body
+            )
+            if mutated_in_body or cond in ("true", "1"):
                 errors.append(
-                    f"[Boucle infinie JS - Ligne {while_line}] La boucle `while ({cond})` incrémente `{var}` "
-                    f"mais `{var}` n'apparaît pas dans la condition de boucle. "
-                    f"Risque critique de blocage du navigateur. "
-                    f"Assure-toi que la condition teste `{var}` (ex: `while ({var} < ROWS && ...)` ou passe `{var}` à la fonction de collision)."
+                    f"[Boucle infinie JS - Ligne {while_line}] La boucle `while ({cond})` "
+                    f"ne teste AUCUNE variable mutée dans son corps (`while (true)` ou "
+                    f"condition constante) — elle ne peut jamais devenir fausse. "
+                    f"Risque critique de blocage du navigateur. Fais tester une variable "
+                    f"réellement mutée dans le corps (ex: `while (i < ROWS && !done)`)."
                 )
+            continue
+
+        # Variables MUTÉES dans le corps : incrément OU assignation simple
+        # (`swapped = false` fait bien sortir un bubble sort — l'ancienne version
+        # ne comptait que ++/-- et flaggait à tort, run 2026-08-21_1531).
+        mutated = set(
+            re.findall(r"\b([a-zA-Z_$][\w$]*)\s*(?:\+\+|--|\+=|-=|\*=|/=|=(?!=))", body)
+        )
+        # Conservative : au moins UNE variable de condition mutée → pas de flag
+        # (les sorties via fonctions/break restent invisibles, on ne devine pas).
+        if cond_vars & mutated:
+            continue
+        errors.append(
+            f"[Boucle infinie JS - Ligne {while_line}] La condition `while ({cond})` "
+            f"teste {sorted(cond_vars)} mais AUCUNE de ces variables n'est modifiée "
+            f"dans le corps de la boucle — la condition ne peut jamais changer. "
+            f"Risque critique de blocage du navigateur. Assure-toi qu'au moins une "
+            f"variable testée est mutée dans le corps (assignation ou incrément)."
+        )
     return errors
 

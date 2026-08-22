@@ -112,6 +112,16 @@ class ModelSpec:
     # top_k 0 / min_p < 0 = ne pas passer le flag.
     top_k: int = 0
     min_p: float = -1.0
+    # --- Sampler DRY (Don't Repeat Yourself, 2026-08-22) ---
+    # Pénalise la répétition de SÉQUENCES (vs repeat_penalty token-level qui
+    # écrase les probas). Cible la panne observée : le modèle re-dérive le
+    # même plan au lieu d'obéir aux gardes. dry_multiplier 0 = désactivé
+    # (défaut serveur). Recos communauté : multiplier 0.8, allowed_length 2,
+    # penalty_last_n >= 256 (contexte de boucle).
+    dry_multiplier: float = 0.0
+    dry_base: float = 0.0
+    dry_allowed_length: int = 0
+    dry_penalty_last_n: int = 0
 
 
 def _model_spec_from_env(prefix: str) -> ModelSpec:
@@ -145,6 +155,10 @@ def _model_spec_from_env(prefix: str) -> ModelSpec:
         cache_reuse=_get_int(f"{prefix}_CACHE_REUSE", 0),
         top_k=_get_int(f"{prefix}_TOP_K", 0),
         min_p=_get_float(f"{prefix}_MIN_P", -1.0),
+        dry_multiplier=_get_float(f"{prefix}_DRY_MULTIPLIER", 0.0),
+        dry_base=_get_float(f"{prefix}_DRY_BASE", 0.0),
+        dry_allowed_length=_get_int(f"{prefix}_DRY_ALLOWED_LENGTH", 0),
+        dry_penalty_last_n=_get_int(f"{prefix}_DRY_PENALTY_LAST_N", 0),
     )
 
 
@@ -250,7 +264,12 @@ class Settings:
     # brider les cas nominaux ni laisser diverger un modèle qui boucle. Opt-out :
     # CODER_MAX_STEPS plus haut pour une tâche complexe nécessitant plus d'allers-
     # retours outils. Valeur par défaut dans la dataclass (convention tester_max_steps).
-    coder_max_steps: int = 30
+    # 18→24 (F-116 session 2026-08-21, anti-thrash), puis 24→30 (run #8) : à 24 le
+    # build (~20 steps) + le rituel visual_check batché (1 step) + final_answer ne
+    # tiennent plus → boucle de mort max-steps → checklist 0/N → retry. Le golden
+    # #11 (018a5b6, cap d'époque 30-40) clôturait au step 29-30. 30 = golden + marge
+    # rituel, sans retour au thrash de 48.
+    coder_max_steps: int = 40
     # --- Garde anti-réécriture totale (F-126, post-mortem run 2026-08-19_1552) ---
     # Le 4B « corrigeait » un bug local (1 ligne) en réécrivant TOUT index.html
     # (600+ lignes, 3 fois, ~15 min de prefill chacune) → inondation du contexte
@@ -259,6 +278,12 @@ class Settings:
     # passe par search_replace / multi_replace (chirurgical). La CRÉATION d'un
     # nouveau fichier reste libre (quelque soit sa taille). 0 = désactivé.
     coder_writefile_max_lines: int = 100
+    # Prefill ````python (2026-08-22, boucles isolation) : le wrapper modèle
+    # append un message assistant incomplet '```python\n' que llama-server
+    # CONTINUE (feature native serveur). La réponse démarre physiquement dans
+    # un bloc code — tue multi-fences, prose préalable, et le <think> forcé
+    # des distills (1-3 min/step). Testé empiriquement sur Qwen3.8-Distill.
+    coder_prefill_code: bool = False
     # Circuit-breaker sur tours idle consécutifs (post-mortem idem). _detect_idle_step
     # (F-33) réinjecte un message à chaque tour "sans appel d'outil" mais ne coupe
     # JAMAIS → le Coder peut enchaîner N tours idle jusqu'à épuisement des steps
@@ -415,6 +440,30 @@ class Settings:
     # Opt-out COMPACTION_OVERFLOW_GUARD=0.
     compaction_overflow_guard: bool = True
 
+    # --- Compaction v3 résiliente (F-116, kilocode chunks/payload-recovery) ---
+    # Le mur des runs #13/#16 : ~24k tokens/step accumulés (model_output avec
+    # fichiers entiers JAMAIS compactés + rituel visuel rejoué à chaque retry).
+    # Clip du model_output des steps anciens (version intégrale persistée dans
+    # .transcripts/). Opt-out COMPACTION_CLIP_ENABLED=0.
+    compaction_clip_enabled: bool = True
+    # Preflight kilocode needed() : estimation (chars/4 × 1.3 + images) AVANT
+    # l'envoi ; au-dessus du budget → escalade déterministe (reset hiérarchique
+    # serré + éviction images) au lieu de découvrir l'overflow après un
+    # round-trip condamné. Calibré pour n_ctx 32768 − max_tokens 4000 − marge.
+    # Opt-out COMPACTION_PREFLIGHT_ENABLED=0.
+    compaction_preflight_enabled: bool = True
+    compaction_preflight_budget_tokens: int = 26_000
+    # Boundary de retry : "soft" = reset hiérarchique (archive + trace bornée +
+    # culs-de-sac + queue conservée — F-116), "hard" = purge totale historique
+    # (FIX TOKEN EXPLOSION d'origine). Opt-out COMPACTION_RETRY_MODE=hard.
+    compaction_retry_mode: str = "soft"
+    # Volet LLM sémantique opt-in (ex-F-86) : résumé d'historique par LLM dans
+    # le chemin de récupération overflow, gardé par CompactionBudget (hermes :
+    # remboursement sur usage réel, breaker). DÉSACTIVÉ par défaut — la
+    # compaction déterministe 0-LLM reste la défaut (coût nul).
+    compaction_llm_enabled: bool = False
+    compaction_llm_max_tokens: int = 1024
+
     # --- Init MCP non bloquante (Priorité 8 / F-104, crush) ---
     # Timeout de connexion PAR SERVEUR (un serveur npx pendu ne bloque jamais
     # le run) : chrome-devtools / context7 / puppeteer. Timeout → dégradation
@@ -464,7 +513,7 @@ class Settings:
     # mark de lecture → force re-read avant chaque édition (corrige le bug « édition
     # à partir d'une représentation mentale stale »). Fail-open garanti (fichier
     # absent = création OK, read impossible = on laisse passer). Opt-out pour debug.
-    read_before_write_enabled: bool = True
+    read_before_write_enabled: bool = False
 
     # --- Robustesse FS : verrous + transactions + cloisonnement IO (Priorité 8-bis / F-95) ---
     # Port OpenKB (fiche 32). Trois couches complémentaires, chacune opt-out :
@@ -632,8 +681,12 @@ def load_settings() -> Settings:
         feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),
         tester_max_steps=_get_int("TESTER_MAX_STEPS", 20),
         tester_inline_skill_resources=_get_bool("TESTER_INLINE_SKILL_RESOURCES", True),
-        coder_max_steps=_get_int("CODER_MAX_STEPS", 30),
+        coder_max_steps=_get_int("CODER_MAX_STEPS", 40),
         coder_writefile_max_lines=_get_int("CODER_WRITEFILE_MAX_LINES", 100),
+        # Prefill ````python (2026-08-22) : llama-server continue le dernier
+        # message assistant incomplet → la réponse démarre DANS un bloc code
+        # (anti multi-fences / prose / <think> interminable).
+        coder_prefill_code=_get_bool("CODER_PREFILL_CODE", False),
         idle_breaker_threshold=_get_int("IDLE_BREAKER_THRESHOLD", 3),
         escalation_enabled=_get_bool("ESCALATION_ENABLED", True),
         auto_install_deps=_get_bool("AUTO_INSTALL_DEPS", True),
@@ -659,6 +712,12 @@ def load_settings() -> Settings:
         llm_retry_jitter=_get_float("LLM_RETRY_JITTER", 0.25),
         compaction_archive_enabled=_get_bool("COMPACTION_ARCHIVE_ENABLED", True),
         compaction_overflow_guard=_get_bool("COMPACTION_OVERFLOW_GUARD", True),
+        compaction_clip_enabled=_get_bool("COMPACTION_CLIP_ENABLED", True),
+        compaction_preflight_enabled=_get_bool("COMPACTION_PREFLIGHT_ENABLED", True),
+        compaction_preflight_budget_tokens=_get_int("COMPACTION_PREFLIGHT_BUDGET_TOKENS", 26_000),
+        compaction_retry_mode=_get_str("COMPACTION_RETRY_MODE", "soft"),
+        compaction_llm_enabled=_get_bool("COMPACTION_LLM_ENABLED", False),
+        compaction_llm_max_tokens=_get_int("COMPACTION_LLM_MAX_TOKENS", 1024),
         chrome_devtools_connect_timeout_s=_get_float("CHROME_DEVTOOLS_CONNECT_TIMEOUT_S", 25.0),
         context7_connect_timeout_s=_get_float("CONTEXT7_CONNECT_TIMEOUT_S", 15.0),
         puppeteer_connect_timeout_s=_get_float("PUPPETEER_CONNECT_TIMEOUT_S", 25.0),
@@ -669,7 +728,7 @@ def load_settings() -> Settings:
         memory_recall_limit=_get_int("MEMORY_RECALL_LIMIT", 8),
         memory_recall_max_chars=_get_int("MEMORY_RECALL_MAX_CHARS", 1500),
         sanitizer_enabled=_get_bool("SANITIZER_ENABLED", True),
-        read_before_write_enabled=_get_bool("READ_BEFORE_WRITE_ENABLED", True),
+        read_before_write_enabled=_get_bool("READ_BEFORE_WRITE_ENABLED", False),
         run_dir_lock_enabled=_get_bool("RUN_DIR_LOCK_ENABLED", True),
         fs_transactions_enabled=_get_bool("FS_TRANSACTIONS_ENABLED", True),
         io_allowlist_enabled=_get_bool("IO_ALLOWLIST_ENABLED", True),

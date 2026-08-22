@@ -174,6 +174,12 @@ def _enforcer(**kw) -> GoalEnforcer:
         token_cap=0,
     )
     defaults.update(kw)
+    # Preuve durable d'écriture (2026-08-22) : état module-level — sans reset,
+    # les writes d'un test précédent (ex: tests tools) rendent les scénarios
+    # « aucune preuve » faux (CONTINUE attendu, ACCEPT obtenu).
+    from graph_orchestrator.tools import reset_write_proof
+
+    reset_write_proof()
     return GoalEnforcer(**defaults)
 
 

@@ -277,6 +277,16 @@ def _build_cmd(spec: ModelSpec, port: int) -> list[str]:
         cmd += ["--top-k", str(spec.top_k)]
     if getattr(spec, "min_p", -1.0) >= 0:
         cmd += ["--min-p", str(spec.min_p)]
+    # Sampler DRY (2026-08-22) : anti-répétition de SÉQUENCES (le modèle qui
+    # re-dérive le même plan en boucle). 0 = flag non passé (défaut serveur).
+    if getattr(spec, "dry_multiplier", 0.0) > 0:
+        cmd += ["--dry-multiplier", str(spec.dry_multiplier)]
+        if getattr(spec, "dry_base", 0.0) > 0:
+            cmd += ["--dry-base", str(spec.dry_base)]
+        if getattr(spec, "dry_allowed_length", 0) > 0:
+            cmd += ["--dry-allowed-length", str(spec.dry_allowed_length)]
+        if getattr(spec, "dry_penalty_last_n", 0) > 0:
+            cmd += ["--dry-penalty-last-n", str(spec.dry_penalty_last_n)]
     return cmd
 
 

@@ -328,6 +328,28 @@ class KnowledgeGraph:
         self.conn.execute("DELETE FROM checkpoint WHERE run_id = ?", [run_id])
         self.conn.commit()
 
+    def clear_refutations(self, run_id: str) -> None:
+        """Efface les réfutations historiques d'un run (FRESH_START=1).
+
+        Goulot 2026-08-21 (runs 1531→1641) : FRESH_START purge le checkpoint et
+        l'idempotence mais PAS les réfutations — or le run_id (hash du contenu
+        de tâche) est identique à chaque relance de la même tâche : les
+        réfutations des runs précédents étaient réinjectées au Coder dès
+        l'itération 2 (« TICKETS DE BUGS ACTIFS LU DEPUIS DUCKDB ») qui
+        corrigeait des bugs FANTÔMES (faux positifs déjà éliminés du code).
+        Purge précise par run_id via la provenance (les autres tâches/runs ne
+        sont pas touchés ; les leçons cross-run vivent dans un autre mécanisme).
+        """
+        try:
+            self.conn.execute(
+                "DELETE FROM claim WHERE kind = 'refutation' AND id IN "
+                "(SELECT claim_id FROM provenance WHERE run_id = ?)",
+                [run_id],
+            )
+            self.conn.commit()
+        except Exception:
+            pass
+
     # ==========================================
     # Idempotence des effets de bord (Priorité 8-bis)
     # ==========================================

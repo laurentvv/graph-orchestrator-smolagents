@@ -505,3 +505,37 @@ async def test_loop_guard_test_still_passes_with_stall_detector_module_loaded():
 
     printed = " ".join(str(c) for c in mock_print.call_args_list)
     assert "Anti-Loop" in printed  # LoopGuard toujours actif
+
+
+# ==========================================
+# F-151 : Immunité validation visuelle
+# ==========================================
+
+def test_is_verification_turn_detects_visual_tools():
+    """is_verification_turn identifie correctement les outils de test visuel."""
+    from graph_orchestrator.stall_detector import is_verification_turn
+
+    assert is_verification_turn([("take_screenshot", {})]) is True
+    assert is_verification_turn([("navigate_page", {"url": "http://localhost"})]) is True
+    assert is_verification_turn([("list_console_messages", {})]) is True
+    assert is_verification_turn([("visual_check", {"criterion": "ok"})]) is True
+    assert is_verification_turn([("fuzz_click_all_buttons", {})]) is True
+    assert is_verification_turn([("read_file", {"path": "a.txt"})]) is False
+    assert is_verification_turn([]) is False
+
+
+def test_stall_detector_visual_verification_immunity():
+    """Les tours de validation visuelle n'incrémentent pas le stall et resetent le compteur."""
+    sd = StallDetector(threshold=2, enabled=True)
+    # Turn 1 : PROGRESS (non-verif)
+    sd.record(DeliveryOutcome.PROGRESS, "", is_verification=False)
+    assert not sd.is_stalled()
+
+    # Turn 2 : visual verification -> immunité et reset
+    sd.record(DeliveryOutcome.PROGRESS, "", is_verification=True)
+    assert not sd.is_stalled()
+
+    # Turn 3 : PROGRESS (non-verif)
+    sd.record(DeliveryOutcome.PROGRESS, "", is_verification=False)
+    assert not sd.is_stalled()  # compteur à 1 grâce au reset verif
+

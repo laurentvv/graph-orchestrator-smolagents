@@ -9,7 +9,7 @@ We don't waste expensive AI cycles verifying simple typos. Before any file is va
 - **The Static Tester** checks the web mechanics in three tiers: JS syntax (`node --check`), event wiring (are the buttons actually clickable?), DOM visibility (elements rendered, not just created), and **temporal behavior** — it detects "instant animations" where an algorithm (e.g. a sort) runs entirely in one frame instead of animating step-by-step.
 - **The Anti-Loop Circuit Breaker** mathematically detects if the agent makes the exact same mistake 3 times in a row, triggering an Escalation (auto-post-mortem).
 - **The Stall Detector** complements the circuit breaker by hashing the *output content* (what the agent actually wrote), not just the input — it catches the case where the agent rewrites the same file with a cosmetically different call, and detects runs with no new material delivered.
-- **The Read-Before-Write Gate** strictly forbids an agent from editing a file it hasn't read first.
+- **Direct Context Pre-Injection & Safe Edits**: In multi-turn correction, existing code is pre-injected directly into context, removing artificial read barriers and enabling instant, surgical edits.
 - **Context Compaction & Branch Summarization**: Dynamically compresses Python code via AST (Abstract Syntax Trees). If an agent fails 10 times in a row, the engine summarizes the failed branch into a single learning insight. If it reads a file and then modifies it later, the obsolete reads are purged (File-State Compaction). This guarantees the agent never suffers from "Context Overflow".
 
 ## 2. Self-Installing Skills (F-82 — Skill Finder)

@@ -166,7 +166,13 @@ def _check_event_wiring(html: str, js: str) -> List[str]:
     for m in _GETBY_RE.finditer(combined):
         referenced_ids.add(m.group(1) or m.group(2))
         
-    has_any_handler = bool(_ADD_EVENT_RE.search(combined)) or bool(_ONCLICK_RE.search(html))
+    has_delegation = bool(re.search(
+        r"querySelectorAll\s*\(\s*['\"](?:button|\.btn|\.button|\.control)[\w-]*['\"]\)\.forEach|"
+        r"(?:document|window|document\.body)\.addEventListener\s*\(\s*['\"](?:click|input|change)['\"]|"
+        r"\b(?:e|event)\.target\b",
+        js,
+        re.IGNORECASE,
+    ))
 
     for tag, attrs in _INTERACTIVE_RE.findall(html):
         type_m = _TYPE_ATTR_RE.search(attrs)
@@ -182,41 +188,45 @@ def _check_event_wiring(html: str, js: str) -> List[str]:
         if tag.lower() == "button" and el_type == "submit":
             continue  # submit natif dans <form>
 
-        # Attribut onclick/onchange inline → branché (OK).
-        if _ONCLICK_RE.search(attrs):
+        # Attribut onclick/onchange/oninput inline → branché (OK).
+        if _ONCLICK_RE.search(attrs) or re.search(r"\b(?:onchange|oninput)\s*=", attrs, re.IGNORECASE):
             continue
 
         # id de l'élément — si absent, on ne peut pas conclure (le Coder peut
         # le cibler par classe via querySelector). On ne flag que les éléments
-        # AVEC un id clair, non référencés en JS.
+        # AVEC un id clair.
         id_m = _ID_ATTR_RE.search(attrs)
         if not id_m:
-            continue  # pas d'id → pas de conclusion fiable, on laisse le LLM juger
+            continue
         el_id = id_m.group(1)
 
-        # Référencé en JS via getElementById/querySelector('#id') → branché.
-        if el_id in referenced_ids:
+        # 1. Contrôle orphelin : ID absent du code JS et sans délégation
+        is_referenced = (el_id in referenced_ids) or bool(re.search(rf"\b{re.escape(el_id)}\b", js))
+        if not is_referenced:
+            if not has_delegation:
+                line = _line_of(html, f'id="{el_id}"') or _line_of(html, f"id='{el_id}'")
+                errors.append(
+                    f"[wiring] Contrôle interactif orphelin : <{tag} id=\"{el_id}\"> "
+                    f"(ligne ~{line}). Cet identifiant n'apparaît JAMAIS dans le code JavaScript et "
+                    f"ne possède aucun gestionnaire d'événement (onclick, addEventListener). "
+                    f"Le bouton/contrôle est inactif."
+                )
             continue
 
-        # id cité textuellement quelque part dans un addEventListener ?
-        # (pattern : addEventListener('click', () => { ... speedSlider ... }))
-        # Recherche l'occurrence de l'id hors du tag HTML lui-même.
-        # Heuristique simple : l'id apparaît dans le JS extrait.
-        # On refait la recherche sur le HTML complet — suffisant.
-        # (on a déjà vérifié referenced_ids qui couvre les cas typiques)
-        # Si pas d'handler global DU TOUT → c'est sûrement un bug de wiring.
-        if not has_any_handler:
-            line = _line_of(html, f'id="{el_id}"') or _line_of(html, f"id='{el_id}'")
-            errors.append(
-                f"[wiring] Élément interactif sans handler : <{tag} id=\"{el_id}\"> "
-                f"(ligne ~{line}). Aucun addEventListener ni onclick détecté dans "
-                f"la page. Un contrôle visible DOIT être connecté au JS via "
-                f"addEventListener (ex: document.getElementById('{el_id}')"
-                f".addEventListener('click', ...)) sinon il est inactif."
+        # 2. Sliders (<input type="range">) : vérifie la présence d'au moins un écouteur input/change dans le script
+        if tag.lower() == "input" and el_type == "range":
+            has_slider_listener = (
+                bool(re.search(r"addEventListener\s*\(\s*['\"](?:input|change)['\"]|\.oninput\s*=|\.onchange\s*=", js, re.IGNORECASE))
+                or bool(re.search(r"\b(?:oninput|onchange)\s*=", attrs, re.IGNORECASE))
+                or has_delegation
             )
-        # else: il y a des handlers globaux mais l'id n'est pas explicitement
-        # référencé. Risque de FP si branché par classe → on ne flag PAS
-        # (le LLM Tester vérifiera le comportement réel).
+            if not has_slider_listener:
+                line = _line_of(html, f'id="{el_id}"') or _line_of(html, f"id='{el_id}'")
+                errors.append(
+                    f"[wiring] Slider sans écouteur d'événement dynamique : <input type=\"range\" id=\"{el_id}\"> "
+                    f"(ligne ~{line}). Aucun addEventListener('input'|'change') ni attribut oninput/onchange détecté dans le code. "
+                    f"Déplacer le slider n'aura aucun effet dynamique sur l'application."
+                )
 
     return errors
 
@@ -851,12 +861,30 @@ def _check_console_errors(devtools_tools, url, primary_action_id=None):
         if "url" not in (getattr(navigate, "inputs", {}) or {}):
             nav_kwargs = {}
         navigate(**nav_kwargs)
-        # Déclenche l'action primaire (les crashes onClick ne se voient pas au
-        # seul chargement) — best-effort, l'absence de bouton n'est pas un échec.
-        if primary_action_id and evaluate:
+        # Déclenche l'action primaire + fuzzing exhaustif de TOUS les boutons et sliders
+        if evaluate:
             try:
                 inputs = getattr(evaluate, "inputs", {}) or {}
-                kwargs = {"function": f"() => {{ const b = document.getElementById('{primary_action_id}'); if (b) b.click(); return 'clicked'; }}"}
+                fuzz_js = (
+                    "() => {"
+                    f"  const primary = document.getElementById('{primary_action_id or ''}');"
+                    "  if (primary) { try { primary.click(); } catch(e) {} }"
+                    "  document.querySelectorAll('button, input[type=\"button\"]').forEach(b => {"
+                    "    if (b !== primary) { try { b.click(); } catch(e) {} }"
+                    "  });"
+                    "  document.querySelectorAll('input[type=\"range\"]').forEach(s => {"
+                    "    try {"
+                    "      const min = parseFloat(s.min) || 0;"
+                    "      const max = parseFloat(s.max) || 100;"
+                    "      s.value = Math.round((min + max) / 2);"
+                    "      s.dispatchEvent(new Event('input', { bubbles: true }));"
+                    "      s.dispatchEvent(new Event('change', { bubbles: true }));"
+                    "    } catch(e) {}"
+                    "  });"
+                    "  return 'fuzz_complete';"
+                    "}"
+                )
+                kwargs = {"function": fuzz_js}
                 if "function" not in inputs and "script" in inputs:
                     kwargs = {"script": kwargs["function"]}
                 evaluate(**kwargs)

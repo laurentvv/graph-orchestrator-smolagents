@@ -143,11 +143,24 @@ class WebTestRunner:
                 tester_skills = task.get("tester_skills", [])
                 if not tester_skills:
                     tester_skills = ["web-tester"] # Repli statique par défaut
-                
+
+                # Goulot 2026-08-21 (décision user : skill forcé OBLIGATOIRE pour
+                # Coder ET Tester) : le mode d'emploi des outils DevTools
+                # (devtools-preview — navigate→console→screenshot, anti-IIFE,
+                # pièges) ne peut pas dépendre de la sélection LLM de
+                # l'Architect (le golden #19 l'avait, les runs ratés l'ont
+                # perdu). Le WebTester pilote les MÊMES outils DevTools MCP —
+                # garantie déterministe, avant le budget (priorité mode d'emploi).
+                # Copie d'abord : task["tester_skills"] est persisté au checkpoint
+                # (review Kilo PR #102 — jamais de mutation du dict de tâche).
+                tester_skills = list(tester_skills)
+                if "devtools-preview" not in tester_skills:
+                    tester_skills.insert(0, "devtools-preview")
+
                 # Budgétisation pour le Tester (socle "web-tester" toujours conservé)
                 tester_skills = enforce_skill_budget(
-                    tester_skills, 
-                    budget_tokens=settings.skill_budget_tokens, 
+                    tester_skills,
+                    budget_tokens=settings.skill_budget_tokens,
                     always_skills={"web-tester"}
                 )
                 
@@ -248,107 +261,68 @@ class WebTestRunner:
                     # En mode ciblé, la checklist F-46/F-82 est remplacée (sinon on double le
                     # travail : checklist complète + re-test ciblé = trop de steps pour 6).
                     checklist_block = targeted_block
+                    reqs_block = ""
+                else:
+                    reqs_block = f"### COMPREHENSIVE SPECIFICATION (expected behaviors to verify)\n{full_requirements}\n"
 
                 prompt = f"""{build_role_header("web_tester")}
 
-Voici tes instructions obligatoires (Skill) :
+Here are your mandatory skill instructions:
 {skill_content}
 
-### CAHIER DES CHARGES COMPLET (comportements attendus à vérifier)
-{full_requirements}
-{checklist_block}
-### Description de la sous-tâche testée
+{reqs_block}{checklist_block}
+### Description of the subtask under test
 {task['content']}
 
-ATTENTION - Le dossier de travail absolu est : {workspace_url}
+ATTENTION - The absolute working directory is: {workspace_url}
 {target_files_urls}
 
-[FORMAT DES CHEMINS — OUTILS DIFFÉRENTS] Tes outils n'acceptent PAS le même format de chemin :
-- `navigate_page(url=...)` (DevTools) : utilise le format URL `file:///D:/...` (cf. primary_url ci-dessous). C'est le SEUL outil qui attend `file:///`.
-- `read_file(path=...)` / `list_directory(path=...)` : utilise un chemin simple SANS `file:///` — soit relatif (`index.html`, `landing_page/styles.css`) soit absolu `D:/GIT/...`. Passer un `file:///` ici → [Errno 22] ; passer `/d/GIT/` (MSYS) → [WinError 123].
-(Sécurité : read_file/list_directory normalisent automatiquement un `file:///` ou un préfixe MSYS `/d/...` si tu glisses, mais UTILISE LE BON FORMAT pour ne pas gaspiller de steps.) Ne traduis JAMAIS en MSYS `/d/GIT/...`.
+[PATH FORMAT FOR DIFFERENT TOOLS] Your tools expect specific path formats:
+- `navigate_page(url=...)` (DevTools): uses the URL format `file:///D:/...` (see primary_url below). This is the ONLY tool expecting `file:///`.
+- `read_file(path=...)` / `list_directory(path=...)`: uses a relative path (`index.html`, `landing_page/styles.css`) or standard absolute path `D:/GIT/...`. (Do NOT pass MSYS `/d/GIT/...` or `file:///`).
 
-### ⚠️ NAVIGATION OBLIGATOIRE avec DevTools `navigate_page` (PAS puppeteer_navigate)
-[BUG CONNU CRITIQUE] Le serveur `puppeteer_navigate` répond "Navigated to ..." mais ne
-charge PAS réellement le fichier local file:// — la page reste `about:blank` et tous tes
-`puppeteer_evaluate`/`take_snapshot` verront une page VIDE. Tu perdrais alors 16 steps en
-boucle puis le nœud timeout (600s) → FAILURE systématique.
-SOLUTION : utilise UNIQUEMENT `navigate_page(url="{primary_url}")` (outil Chrome DevTools,
-SANS préfixe puppeteer_) pour ouvrir la page. C'est le seul pilote qui charge réellement
-les fichiers file:// dans cet environnement.
-URL EXACTE à passer : {primary_url}
-(N'utilise PAS {workspace_url}/index.html à la racine — le fichier est dans un sous-répertoire.)
-[2 NAVIGATEURS SÉPARÉS] Puppeteer et DevTools MCP pilotent chacun leur propre instance de
-Chrome. Ne mélange JAMAIS : si tu navigues avec `navigate_page` (DevTools), fais TOUT le
-reste (snapshot, console, evaluate, click, screenshot) avec les outils DevTools SANS préfixe
-`puppeteer_`. Les assertions via `puppeteer_evaluate` verraient l'AUTRE navigateur (vide).
+### ⚠️ MANDATORY NAVIGATION via DevTools `navigate_page` (NOT puppeteer_navigate)
+Always use `navigate_page(url="{primary_url}")` to open the application in Chrome.
+EXACT URL to pass: {primary_url}
+Puppeteer and DevTools MCP run separate Chrome instances. Always use DevTools tools (`navigate_page`, `take_snapshot`, `list_console_messages`, `evaluate_script`, `click`, `take_screenshot`).
 
-### 🛠️ INSPECTION DU DOM (préfère DevTools)
-Pour inspecter la structure sans surcharger ton contexte :
-1. `take_snapshot()` (DevTools) : arbre a11y complet — structure, IDs, visibilité. C'est ta vue
-   principale du DOM. Utilise `verbose=True` pour le détail complet.
-2. `evaluate_script(function="async () => document.body.innerHTML.length")` (DevTools) : pour
-   des checks ponctuels (nombre d'éléments, valeurs, styles calculés).
-Les outils `clean_dom()`, `add_visual_tags()`, `fuzz_click_all_buttons()`, `probe_canvas_activity()`, `fuzz_keyboard_controls()`, `expose_game_state()`, `instrument_calls()`, `dump_function_source()`, `force_advance()` instrumentent le navigateur DevTools actif :
-- `probe_canvas_activity(window_ms=2400)` : hash RGB du canvas en 4 échantillons sur ~2,4 s + liveness rAF. Verdicts : ANIMATING / STATIC_PAINTED (+`suspect_animation_broken` si la boucle tourne mais que le rendu ne change JAMAIS) / INERT_EMPTY. Fenêtre min 800 ms — une chute à 800ms/row est invisible en dessous.
-- `expose_game_state(names=None)` : lit l'état interne top-level (score, lines, currentPiece, board...) ×2 à 1,5 s d'intervalle → `changed_over_1500ms` prouve que l'état VIT.
-- `instrument_calls(names=None, window_s=3)` : compte les appels RÉELS de draw/gameLoop/moveDown — discrimine moteur mort vs moteur vivant au rendu figé.
-- `dump_function_source(names=None)` : source (toString) des fonctions du jeu — les bugs de rendu s'y lisent (ex réel : pièce peinte à `(ghostY+r)` au lieu de `(currentPiece.y+r)`).
-- `force_advance(fn='moveDown', times=40)` : accélère l'horloge du jeu (N appels d'update en 1 s) → state_changed prouve la logique.
-- `fuzz_keyboard_controls()` : simule les touches clavier de jeu (Flèches, Espace, Z, X) et capture immédiatement toute exception JS non gérée.
-- `clean_dom()` : renvoie le DOM allégé (analyse sans polluer ton contexte).
-- `add_visual_tags()` : ajoute des badges rouges numérotés sur les éléments cliquables avant un screenshot.
-- `fuzz_click_all_buttons()` : clique tous les `<button>` pour réveiller les bugs JS cachés.
+### 🛠️ DOM INSPECTION (DevTools tools)
+1. `take_snapshot(verbose=True)`: Full accessibility/DOM tree — structure, IDs, visibility.
+2. `evaluate_script(function="async () => ...")`: For executing runtime assertions.
+3. Interactive testing tools:
+- `probe_canvas_activity(window_ms=2400)`: Tests canvas animation liveliness (ANIMATING / STATIC_PAINTED).
+- `expose_game_state(names=None)`: Inspects internal runtime game variables across a 1.5s interval.
+- `instrument_calls(names=None, window_s=3)`: Counts actual function calls (e.g. draw/update).
+- `fuzz_keyboard_controls()`: Simulates keyboard inputs (Arrows, Space, Z, X).
+- `fuzz_click_all_buttons()`: Fuzz-clicks all buttons to uncover hidden JS runtime exceptions.
+- `clean_dom()`: Returns lightweight DOM.
+- `add_visual_tags()`: Adds numbered visual tags for screenshots.
 
-Vérifie l'application web générée. N'oublie PAS l'étape 4 du skill (Functional Logic Testing) :
-identifie les comportements clés du cahier des charges ci-dessus et écris des assertions via
-`evaluate_script` (DevTools) pour vérifier qu'ils fonctionnent — pas seulement que la page ne crash pas.
+Verify the generated web application. Execute functional assertions via `evaluate_script` (DevTools) to prove key behaviors work dynamically.
 {devtools_hint}
-Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JAMAIS expliquer sans agir.
+You MUST produce code by executing tools via PYTHON (CodeAgent). NEVER explain without acting.
 
-### RÈGLES CRITIQUES (numérotées)
-1. AGIS, ne raconte pas : quand tu dis "je vais faire X", tu DOIS faire X dans la foulée.
-2. ARGUMENTS NOMMÉS OBLIGATOIRES : Pour TOUS tes appels d'outils, tu DOIS utiliser des arguments nommés (ex: evaluate_script(function="...")). Les arguments positionnels feront crasher l'exécution.
-3. PYTHON BUILT-INS : Si tu utilises `time.sleep()` ou d'autres modules standards dans ton code Python, n'oublie pas de les importer (ex: `import time` au début du bloc).
-4. NAVIGATION D'ABORD (STEP 1) : Démarre OBLIGATOIREMENT à l'étape 1 par `navigate_page(url="{primary_url}")` pour ouvrir l'application dans le navigateur. Ne perds JAMAIS d'étapes à lire le code source (`read_file`) au début : tu es un testeur E2E dynamique en boîte noire, ton rôle est d'interagir directement avec l'application vivante. Si tu as besoin de lire un fichier ponctuel, utilise l'outil `read_file` (jamais `open()`).
-   ⚠️ Si `navigate_page` TIMEOUT sur cette page locale : l'UI est GELÉE par une boucle JS infinie (fichier local = chargement <1s). C'est un ÉCHEC FONCTIONNEL MAJEUR : conclus immédiatement `status="failure"` avec details="page gelée au chargement (navigation timeout : boucle JS infinie)". Ne brûle PAS tes steps à retenter navigate/screenshot (ils timeouteront aussi, et la console restera vide : un gel est silencieux).
-5. ANIMATION = TEST TEMPOREL, PAS ÉTAT FINAL : pour un visualiseur/animation, NE JAMAIS
-   te contenter d'attendre un délai fixe (ex: `setTimeout(r, 2000)`) puis vérifier l'état
-   final — une animation **instantanée** (exécutée en 1 frame au lieu de progresser) passe
-   ce test alors que c'est un bug grave. Tu DOIS mesurer la progression dans le temps :
-   identifie un signal de progression dans le DOM (compteur, éléments marqués, attribut
-   changeant), snapshot AVANT de déclencher l'action, re-snapshot après un court délai
-   (~400ms), et vérifier que la progression est PARTIELLE (ni 0 ni terminale, si
-   l'animation doit durer > 400ms). Une animation qui termine en < 50ms est un BUG
-   (instantanée), pas un succès. Voir la recette temporelle dans le skill.
-5-bis. JEU/CANVAS = PREUVE DE MOUVEMENT OBLIGATOIRE (F-145) : avant tout verdict PASS
-   sur un critère de jeu/animation, tu DOIS prouver le MOUVEMENT avec un outil :
-   `probe_canvas_activity()` (statut ANIMATING) OU `expose_game_state()` (changed_over_1500ms
-   non vide) OU `force_advance()` (state_changed=true). Un screenshot statique ne prouve RIEN
-   (ex réel : livrable Tetris au plateau superbe où la pièce n'a JAMAIS été dessinée à sa
-   position réelle — invisible sur screenshot, flaggé par STATIC_PAINTED+suspect). Si
-   STATIC_PAINTED alors que raf_per_s > 0 → défaut MAJEUR ; diagnostique en 2 appels :
-   `instrument_calls()` puis `dump_function_source(names="draw")`, cite la ligne fautive
-   dans ton rapport.
-6. 🛑 BUDGET STEPS — CONVERGE RAPIDEMENT (anti over-exploration) : tu as un budget limité
-   de steps. Suite type : 1 `navigate_page` + 1 `list_console_messages` + 1 assertion par
-   critère fonctionnel + 1 `final_answer`. Soit ~{settings.tester_max_steps} steps pour TOUT. RÈGLES :
-   - UNE SEULE assertion par `evaluate_script` (regroupe plusieurs checks dans le même
-     script async plutôt que d'émettre 5 appels séparés sur la même page).
-   - Ne JAMAIS re-vérifier un critère déjà PASS. PASS = acquis, on passe au suivant.
-   - Si un critère FAIL après 2 tentatives → note FAIL et passe au suivant (ne boucle pas).
-   - `final_answer` OBLIGATOIRE dès que tous les critères ont un verdict (PASS/FAIL/N-A).
-   - Atteindre max_steps sans `final_answer` = ÉCHEC automatique du nœud (timeout).
+### CRITICAL RULES (numbered)
+1. ACT, do not just narrate: When you state an intention, execute it immediately in the code block.
+2. MANDATORY NAMED ARGUMENTS: For ALL tool calls, you MUST use named arguments (e.g. `evaluate_script(function="...")`).
+3. PYTHON BUILT-INS: If you use `time.sleep()`, import it (`import time`).
+4. NAVIGATION FIRST (STEP 1): Always begin at Step 1 with `navigate_page(url="{primary_url}")`. Do NOT waste steps reading source files upfront; you are a dynamic black-box tester.
+   ⚠️ If `navigate_page` TIMEOUTS on this local page: the UI is frozen by an infinite JS loop. Return `status="failure"` immediately with details="page frozen on load (infinite loop)".
+5. ANIMATION = TEMPORAL TEST, NOT STATIC STATE: For algorithm visualizers and animations, measure progression over time (verify partial state during execution, not merely checking initial or post-completion state).
+5-bis. GAME/CANVAS = MOTION PROOF REQUIRED: For interactive games, prove motion with `probe_canvas_activity()` (ANIMATING) or `expose_game_state()`.
+6. STEP BUDGET — CONVERGE RAPIDLY: You have a limited step budget (~{settings.tester_max_steps} steps).
+   - Batch assertions per page state into a single `evaluate_script`.
+   - Never re-verify already PASS criteria.
+   - Call `final_answer` immediately once all criteria have verdicts.
 
-### FORMAT DE SORTIE (obligatoire)
-Tu écris du code Python dans un bloc ````python ... ```` qui appelle tes outils.
-Une fois terminé, retourne ton résultat final STRICTEMENT en appelant l'outil `final_answer`.
-Le dictionnaire passé à `final_answer` DOIT absolument respecter ce format exact :
+### OUTPUT FORMAT (mandatory)
+You write Python code inside a ````python ... ```` block that calls your tools.
+When complete, return your final verdict by calling `final_answer`:
 ```python
-# Thought courte (1 phrase) PUIS appel immédiat — pas de longue réflexion
+# Short Thought (1 sentence) THEN immediate execution:
 add_visual_tags()
-# ... autres appels ...
-final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Un résumé détaillé de tes tests visuels, console ET assertions fonctionnelles."}})
+# ... other test calls ...
+final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Detailed summary of console, visual, and functional assertion test results."}})
 ```
 """
                 # Guard anti-loop (fix TIMINGS_ANALYSE) : le Tester peut aussi boucler sur
@@ -374,6 +348,20 @@ final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Un r�
                         client_kwargs={"timeout": settings.llm_timeout_s, "max_retries": 0},
                         revive=srv.revive,
                     )
+                    # Goulot 2026-08-21 (review Kilo PR #102) : le Tester utilise
+                    # make_screenshot_callback, qui embarque les nudges churn
+                    # d'édition / budget vision / lectures stériles — sans reset
+                    # ici, il hériterait des compteurs du Coder. Même lifecycle
+                    # que nodes.py : reset à chaque montage du nœud.
+                    from ..vision_callback import (
+                        reset_edit_churn,
+                        reset_read_stall,
+                        reset_vision_budget,
+                    )
+
+                    reset_read_stall()
+                    reset_edit_churn()
+                    reset_vision_budget()
                     local_tester = CompactingCodeAgent(
                         tools=tester_tools,
                         model=dynamic_tester_model,

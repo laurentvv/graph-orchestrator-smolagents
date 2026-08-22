@@ -49,3 +49,8 @@ mais le contenu reste lisible. Préfère des simples quotes pour les attributs H
 - ❌ `content="TODO: implement"` → placeholder.
 - ❌ Mettre le code dans ton message texte puis dire "j'ai créé le fichier".
 - ❌ Réécrire la même chose plusieurs fois (surcoût inutile).
+- ❌ Plusieurs blocs ```python dans un MÊME message : seul le PREMIER est exécuté,
+  les suivants sont perdus. Un bloc par message.
+- ❌ Délimiteur `r'''…'''` pour `old_string`/`new_string`/`content` : les quotes `'`
+  du code ou les apostrophes françaises le ferment prématurément (SyntaxError).
+  Utilise TOUJOURS `r"""…"""` (triples doubles quotes).
