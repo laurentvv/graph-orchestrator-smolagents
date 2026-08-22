@@ -13,6 +13,7 @@ dependencies = [
     "markdownify>=1.0",
     "mcp>=1.10.1,<2.0.0",
     "pydantic>=2.13.4",
+    "pydantic-ai-harness[code-mode]==0.24.0",
     "python-dotenv>=1.0",
     "rich>=13.0",
     "smolagents[mcp,openai]>=1.26.0",

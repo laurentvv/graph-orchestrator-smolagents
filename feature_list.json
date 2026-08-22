@@ -1338,6 +1338,15 @@
         "F-82",
         "F-155"
       ]
+    },
+    {
+      "id": "F-157",
+      "name": "Migration Coder vers pydantic-ai-harness — spike S1 (smoke provider + A/B + verdict GO/NO-GO)",
+      "description": "Validation du scénario S1 (docs/ANALYSE_MIGRATION_HARNESS_CODAGE.md) : smoke test provider llama-server x pydantic-ai (100% PASS), spike Coder Bubble Sort multi-fichiers. Round 1-2 CodeMode = NO-GO documenté (le Qwen 4B ecrit open() au lieu d'appeler les tools plies dans le sandbox Monty, boucle de regeneration malgre retries). Round 3 tools natifs (FileSystem sans CodeMode) = GO : 8/8 controles livrable, 14 tool calls, 0 retry, ~594 s, 131.6k/7.4k tokens in/out. Scripts : debug/pydantic_smoke_provider.py, debug/run_coder_pydantic.py (--codemode pour reproduire le NO-GO). || A/B final : smolagents 384 322 tokens IN / 15 steps / 533 s / livrable 9,9 Ko VS pydantic 131 589 IN (-66 %) / 11 requêtes / 594 s / livrable 22,8 Ko (8/8 contrôles). Fix accessoire : select_skills NameError (repli skills nodes.py) corrigé. Phase 3 (portage gardes/vision/output_type) débloquée.",
+      "status": "completed",
+      "dependencies": [
+        "F-156"
+      ]
     }
   ]
 }
