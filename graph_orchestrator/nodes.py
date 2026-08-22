@@ -30,6 +30,7 @@ from .models import (
 from .tools import record_run_error, _RUN_ERRORS, reset_visual_audit, get_visual_audit, reset_screenshot_proof, screenshot_was_taken
 from .skills_loader import (
     build_conditional_skills_block,
+    build_skills_block,
     enforce_skill_budget,
     ALWAYS_SKILLS_CODER,
 )
@@ -1381,8 +1382,9 @@ async def execute_coder_node(
             ) if blocks else ""
         else:
             # Repli : sélection contextuelle (regex) si l'Architect n'a rien sélectionné.
-            selected = select_skills(task.get("content", ""))
-            skills_block = build_skills_block(selected)
+            # (build_skills_block fait lui-même select_skills_for_coder en interne —
+            # l'ancien appel select_skills(...) n'existait plus, NameError en isolation.)
+            skills_block = build_skills_block(task.get("content", ""))
 
         # F-59 (Priorité 10-bis) : AGENTS.md local au composant — injecté en
         # complément des skills si présent dans le dossier cible.

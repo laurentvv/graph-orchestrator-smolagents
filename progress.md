@@ -2787,3 +2787,27 @@ Coder est appliquée correctement par Qwen3.5-9B.
 - [x] Analyse de `update_report.md` et extraction des nouveautés majeures (Agent Teams, FD3 Protocol, Claude Design Skills, Token Budget, Gatekeeper Context).
 - [x] Mise à jour de `feature_list.json` avec les nouvelles fonctionnalités (F-141 à F-143).
 - [x] Mise à jour de `plan_usine_logicielle.md` (ajout de la priorité P17 avec les 5 références principales).
+
+## Jalons de l'Itération (cycle F-157 — spike migration Coder pydantic-ai-harness, 2026-08-23)
+
+> Décision user post-analyse (docs/ANALYSE_MIGRATION_HARNESS_CODAGE.md) : « Ok go pour
+> pydantic-ai-harness ». Branched `feat/pydantic-harness-coder-spike`. Doc complète en
+> local + règle de lecture ajoutée à AGENTS.md ; synthèse liens :
+> docs/PYDANTIC_AI_HARNESS_DOC_NOTES.md.
+
+- [x] F157-1 : Phase 1 smoke test provider (debug/pydantic_smoke_provider.py) — 100 %
+      PASS (chat, tool-calling Hermes, output_type Pydantic ; même profil OpenAI défaut).
+- [x] F157-2 : Phase 2 round 1-2 CodeMode — NO-GO documenté : le 4B écrit
+      `with open(...)` au lieu des tools Monty, régénère à l'identique (6 retries,
+      logs/spike_pydantic_round2.log) → variante tools natifs.
+- [x] F157-3 : Phase 2 round 3 tools natifs — VERDICT GO : Bubble Sort 3 fichiers
+      8/8 contrôles, 14 tool calls / 0 retry, 131.6k/7.4k tokens, 593 s
+      (logs/spike_pydantic_round3.log, debug/run_coder_pydantic.py).
+- [x] F157-4 : Bug préexistant main découvert par l'A/B (`select_skills` NameError,
+      nodes.py repli skills — invisible E2E) : corrigé (`build_skills_block` + import).
+- [x] F157-5 : Baseline A/B smolagents (logs/spike_smolagents_baseline2.log) — GO
+      en cours au moment de l'écriture ; reporter les métriques dans
+      ANALYSE_MIGRATION_HARNESS_CODAGE.md §9.3.
+- [ ] F157-6 : PR du spike (scripts + fix + docs + AGENTS.md) → review Kilo.
+- [ ] F157-7 (phase 3, après merge) : portage gardes (hooks/capabilities), MCP
+      vision (PlaywrightBrowser vs DevTools MCP), CoderOutput output_type, Web Tester.
