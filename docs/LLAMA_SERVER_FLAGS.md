@@ -28,13 +28,13 @@ Aucun flag n'est écrit en dur dans une commande shell : tout passe par `ModelSp
 <PREFIX>_MIN_P=0                # sampling Qwen officiel (-1 = défaut serveur 0.05)
 ```
 
-## 2. Config actuelle validée (2026-08-21)
+## 2. Config actuelle validée (2026-08-22)
 
 | Rôle | Modèle | Flags actifs | Résultat mesuré |
 |---|---|---|---|
 | FAST (Coder, Router) | Qwen3.5-4B-MTP Q4_K_M | `cache-reuse 256`, **MTP off** | -10% préfill multi-tours ; MTP = **-42%** (acceptance 0,47) → proscrit |
-| REASONING (Architect) | Ornith-1.0-9B-MTP Q4_K_M | **MTP off**, KV q8_0, ngl 99 | **1342 t/s prefill + 41 t/s gen** (bench 2026-08-21) |
-| REASONING_NO_THINK (Judge, Security, Tester…) | Ornith-1.0-9B-MTP Q4_K_M | idem | idem |
+| REASONING (Architect) | Ornith-1.5-9B Q4_K_M | **MTP off**, KV q8_0, ngl 99 | **1342 t/s prefill + 41 t/s gen** |
+| REASONING_NO_THINK (Judge, Security, Tester…) | Ornith-1.5-9B Q4_K_M | idem | idem |
 
 > ⚠️ **MTP PROSCRIT sur ce matériel (RTX 3060 Laptop 6 Go) — décision 2026-08-21.**
 > Le bench F-123 qui validait MTP (+50 % tok/s) ne mesurait que la GÉNÉRATION courte,

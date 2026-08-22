@@ -36,7 +36,7 @@ from .skills_loader import (
 from .skill_loader_tool import load_skill
 from .skills_loader import load_skill_body
 from .loop_guard import LoopGuard, extract_tool_calls_from_step
-from .stall_detector import StallDetector, classify_turn, dominant_material_hash
+from .stall_detector import StallDetector, classify_turn, dominant_material_hash, is_verification_turn
 from .goal_enforcer import GoalAction, GoalEnforcer
 from .compaction import apply_soft_retry_reset
 from .compaction_guards import CompactionBudget, OverflowGuard, is_context_overflow_error
@@ -805,7 +805,8 @@ async def run_with_retry(
                     step_calls = extract_tool_calls_from_step(step)
                     outcome = classify_turn(step_calls)
                     material_hash = dominant_material_hash(step_calls)
-                    stall_detector.record(outcome, material_hash)
+                    is_verif = is_verification_turn(step_calls)
+                    stall_detector.record(outcome, material_hash, is_verification=is_verif)
                 if stall_detector.is_stalled():
                     stall_msg = stall_detector.signal()
                     if stall_msg:
@@ -1230,60 +1231,45 @@ def _build_devtools_blocks(task: dict, cdt_tools: list) -> tuple[str, str]:
         restent disponibles (au cas où) mais le prompt ne les pousse pas.
       - Si web + outils dispos → preview block (workflow de validation visuelle) +
         doc des outils clés (navigate_page, take_screenshot, list_console_messages).
-
-    F-82 : si l'Architecte a produit des ``visual_success_criteria``, ils sont intégrés
-    au preview_block sous forme de checklist anti-biais (force le Coder à ANALYSER son
-    screenshot au lieu d'excuser un visuel vide — bug canvas 2026-08-08). Rétrocompat :
-    liste vide = workflow DevTools historique (pas de checklist forcée).
-
-    Le screenshot pris est vu par le modèle (gemma-4-E4B est multimodal, validé runtime).
     """
     if not cdt_tools:
         return "", ""
-    # Calcule l'URL file:/// absolue du fichier HTML principal (le Coder s'exécute
-    # dans le dossier du run après _scoped_chdir, donc os.getcwd() = dossier du run).
     target_files = task.get("target_files") or ["index.html"]
     primary_target = target_files[0]
     primary_url = "file:///" + os.path.abspath(primary_target).replace("\\", "/")
 
     if not _is_web_task(task):
-        # Pas web : on liste les outils mais sans workflow de preview poussé.
         return "", _DEVTOOLS_TOOLS_DOC
 
-    # F-82 : critères visuels générés par l'Architecte (anti-biais de confirmation).
     from .validation_criteria import build_visual_criteria_block
     visual_block = build_visual_criteria_block(task.get("visual_success_criteria") or [])
-    # Si critères présents, l'étape 5 du workflow devient une checklist concrète au
-    # lieu du "rendu conforme" flou. Sinon, on garde le workflow historique.
     if visual_block:
         criteria_note = (
-            "\n5. VALIDATION CRITÈRES VISUELS : confirme OUI/NON chaque critère ci-dessous"
-            " sur ta capture. UN seul NON = failure → corrige."
+            "\n5. VISUAL CRITERIA VALIDATION: confirm YES/NO for each criterion below"
+            " on your screenshot. A single NO = failure -> fix."
         )
     else:
-        criteria_note = "\n5. final_answer uniquement quand : 1) le rendu est conforme, 2) 0 erreur console."
+        criteria_note = "\n5. final_answer only when: 1) rendering is verified, 2) 0 console errors."
 
-    preview_block = f"""### 🖥️ VALIDATION VISUELLE (Chrome DevTools — F-45)
-Tu disposes d'un navigateur Chrome pilotable pour VÉRIFIER ta page AVANT final_answer.
+    preview_block = f"""### 🖥️ VISUAL VALIDATION (Chrome DevTools — F-45)
+You have a controllable Chrome browser to VERIFY your page BEFORE final_answer.
 
-⚠️ PIÈGE FRÉQUENT : une page au rendu "joli" (CSS ok) peut avoir TOUT son JS cassé
-silencieusement (boutons morts, éléments non générés). Seule la console le révèle.
+⚠️ CRITICAL TRAP: A page with good-looking CSS may have BROKEN JavaScript
+silently (dead buttons, unhandled events). Only the console and live interactions reveal this.
 
-Workflow de validation (À FAIRE après avoir créé les fichiers, AVANT final_answer) :
-1. `navigate_page(url="{primary_url}")` — ouvre ta page dans Chrome (URL absolue ci-dessous).
-2. `take_screenshot()` — OBLIGATOIRE EN PREMIER pour voir l'état initial.
-3. FUZZING UI OBLIGATOIRE : Exécute `fuzz_click_all_buttons()` pour cliquer sur tous les boutons et réveiller les bugs JS cachés (monkey testing en 1 appel, encapsule le snippet JS).
-4. `list_console_messages()` — OBLIGATOIRE EN DERNIER. Vérifie 0 erreur JS (SyntaxError, undefined, Uncaught). Sans l'étape 3, tu rateras 80% des erreurs !
-5. Si erreur : CORRIGE via `search_replace` (jamais de rewrite total), puis recommence le cycle (navigate, screenshot, fuzzing, console).
-6. JEU/CANVAS ANIMÉ : un screenshot ne prouve PAS l'animation — appelle `probe_canvas_activity()`
-   et exige le statut ANIMATING avant final_answer (STATIC_PAINTED = tu dessines probablement
-   avec la mauvaise variable, ex: ghostY au lieu de la position réelle — vérifie ta fonction draw).
-⚠️ Si `navigate_page` TIMEOUT sur ta page LOCALE : le JS bloque le thread (boucle while/do-while infinie — un fichier local se charge en <1s). Relire le code, corriger la boucle via search_replace, re-naviguer — ne JAMAIS retenter la navigation à l'identique.
+Validation Workflow (perform AFTER creating files, BEFORE final_answer):
+1. `navigate_page(url="{primary_url}")` — opens your page in Chrome (exact absolute URL below).
+2. `take_screenshot()` — MANDATORY FIRST to inspect initial visual state.
+3. UI FUZZING: Run `fuzz_click_all_buttons()` to click all buttons and uncover hidden JS bugs.
+4. `list_console_messages()` — MANDATORY LAST. Check 0 JS errors (SyntaxError, undefined, Uncaught).
+5. If errors occur: FIX via `search_replace` (or `write_file` if needed), then re-test (navigate, screenshot, fuzz, console).
+6. GAME/ANIMATED CANVAS: A static screenshot does NOT prove animation — call `probe_canvas_activity()`
+   and require ANIMATING status before final_answer.
+⚠️ If `navigate_page` TIMEOUTS on your LOCAL page: the JS thread is frozen (infinite loop). Check your while loops.
 {criteria_note}
 
-URL exacte de ta page (primary target) : {primary_url}
-ATTENTION : si ta page n'est pas à la racine du run, navigate_page DOIT pointer sur le
-vrai fichier (ex: landing_page/index.html), pas sur la racine du workspace.{visual_block}"""
+Exact page URL (primary target): {primary_url}
+{visual_block}"""
     return preview_block, _DEVTOOLS_TOOLS_DOC
 
 
@@ -1352,58 +1338,21 @@ async def execute_coder_node(
         screenshot_capture: list = []
         coder_tools = wrap_screenshot_tools(coder_tools, screenshot_capture)
         # F-126 : enrichit list_console_messages avec les stack traces des erreurs
-        # (fichier:ligne → guide le 4B vers le bug LOCAL au lieu de réécrire tout
-        # le fichier — post-mortem run 2026-08-19_1552). Fail-open si l'outil
-        # détail get_console_message est absent.
+        # F-88: Stall Detector — complements LoopGuard to detect (a) identical
+        # output hash on rewrites and (b) a sequence of turns without material
+        # progress. Orthogonal to F-36 (turn-level vs isolated tool call).
+        # Resets between retries (aligned with loop_guard).
         coder_tools = wrap_console_enrichment(coder_tools)
-        # F-66 (Read-Before-Write Gate) : bloque write_file / search_replace / edit_file /
-        # multi_replace / append_file sur un fichier EXISTANT dont le contenu n'a pas été
-        # lu (hash SHA256 du contenu complet). Inspiré de Deer Flow (issue #3857). Mode
-        # Strict : un write réussi invalide la mark → force re-read avant chaque édition.
-        # Fail-open garanti (fichier absent = création OK). Opt-out via settings.
-        # ORDRE : AVANT sanitize_tools — le sanitizer coerce les args (path str), puis
-        # délègue au gate qui check le path. Le gate voit donc des kwargs déjà typés.
-        from .read_gate import ReadGate, wrap_tools_with_read_gate
-        read_gate = ReadGate()
-        coder_tools = wrap_tools_with_read_gate(
-            coder_tools, read_gate, enabled=settings.read_before_write_enabled
-        )
-        # F-42 (Sanitizer) : coerce best-effort les arguments malformés du petit
-        # LLM (ex: offset="1, 80" → 80) avant l'appel d'outil → moins de retries
-        # gaspillées sur les erreurs de validation de type. Opt-out via settings.
-        coder_tools = sanitize_tools(coder_tools, enabled=settings.sanitizer_enabled)
-
-        # P1 : migration ToolCallingAgent → CodeAgent. Les petits modèles locaux (gemma)
-        # ne savent pas émettre de tool_call JSON fiable (tool_calls=None, finish_reason=
-        # 'stop' — le modèle "parle" de l'action au lieu de l'exécuter). CodeAgent génère
-        # du PYTHON qui appelle les outils (write_file(path=..., content=...)) — beaucoup
-        # plus naturel. Preuves empiriques : 3 comparatifs (consignés dans le
-        # journal d'événements DuckDB) — CodeAgent produit
-        # jusqu'à 91× plus de contenu que le TCA sur une même tâche.
-        # final_answer s'appelle maintenant en SYNTAXE PYTHON : final_answer({...}) ou
-        # final_answer("texte"), pas en JSON. extract_and_validate gère les 2 (dict + str).
-        # L'instanciation de local_coder a été déplacée plus bas, à l'intérieur du bloc `with model_lifecycle`.
-
         target_files_instruction = ""
         if "target_files" in task and task["target_files"]:
             files_list = "\n".join([f"- {f}" for f in task["target_files"]])
             target_files_instruction = f"""
-### ⚠️ FICHIERS CIBLES — TU DOIS CRÉER CES FICHIERS (priorité absolue)
+### ⚠️ TARGET FILES — YOU MUST CREATE THESE FILES (highest priority)
 {files_list}
 
-- 📍 TON DOSSIER DE TRAVAIL ACTUEL EST LE DOSSIER DE RUN. Cela signifie que pour
-  créer `index.html`, tu utilises le chemin COURT `index.html` (PAS de préfixe
-  `runs/...` ni de chemin absolu). Le fichier atterrira au bon endroit.
-  → JAMAIS de `write_file(path="runs/2026-..._bubble_sort/index.html", ...)` :
-  cela créerait un sous-dossier imbriqué `runs/.../runs/.../index.html` et la
-  validation visuelle échouerait (ERR_FILE_NOT_FOUND). Utilise `index.html`.
-- 'write_file' crée automatiquement les sous-répertoires manquants NÉCESSAIRES
-  (ex: pour `landing_page/index.html`, le dossier `landing_page/` est créé) — mais
-  ne préfixe JAMAIS par le dossier de run lui-même.
-- ⚠️ AVANT TOUTE CHOSE : Si tu as un BROUILLON DRAFTER (section '### BROUILLON DE L'ALGORITHM DRAFTER' ci-dessous), SAUTE check_run_state et va DIRECTEMENT lire le draft — c'est ton point de départ, pas la peine de vérifier l'état (tu es en iteration 1 propre). Sinon (pas de draft), appelle `check_run_state()` pour vérifier si tu es dans une boucle de redémarrage.
-- ⚠️ AVANT DE CRÉER UN FICHIER : Vérifie TOUJOURS s'il existe déjà en utilisant l'outil `list_directory(path=".")`. S'il est listé et semble complet, NE LE RÉÉCRIS PAS en entier (utilise search_replace/append_file).
-- Sinon, tu DOIS créer le fichier avant de passer au reste.
-- 🚀 AUTO-VALIDATION RAPIDE (JS) : Si tu génères ou modifies du JavaScript, vérifie instantanément sa syntaxe AVANT final_answer en appelant l'outil `check_js_syntax(path="ton_script.js")`. Cela te coûte 1 step et t'évite un rejet du Linter."""
+- 📍 YOUR CURRENT WORKING DIRECTORY IS THE RUN DIRECTORY. To create `index.html`, use the relative path `index.html` (NO `runs/...` prefix, NO absolute path).
+- `write_file` automatically creates parent directories if needed (e.g. `landing_page/index.html`).
+- 🚀 QUICK JS VALIDATION: If you generate or modify JavaScript, verify syntax before final_answer with `check_js_syntax(path="your_script.js")`."""
 
         # Skills ciblés pour cette tâche. F-57 (Priorité 10) : L'ARCHITECT SÉLECTIONNE
         # les skills dans son plan (subtask.skills), et le Coder reçoit leur corps
@@ -1413,22 +1362,9 @@ async def execute_coder_node(
         # Si l'Architect n'a pas sélectionné de skills (vieille sous-tâche, fallback),
         # on utilise la sélection contextuelle (regex sur le contenu) en repli.
         architect_skills = task.get("skills", [])
-        # Goulot 2026-08-21 (runs 1337/1454 vs golden #19) : le mode d'emploi du
-        # rituel visuel (devtools-preview — workflow navigate→console→screenshot
-        # →fix, ~9k chars de guidance) était laissé à la sélection LLM de
-        # l'Architect : présent dans le golden #19 (convergence 21 steps/1 it.),
-        # ABSENT des deux runs ratés (le 9B lui a préféré code-review). Le
-        # rituel est OBLIGATOIRE (section VALIDATION VISUELLE + gate F-109) :
-        # son mode d'emploi ne peut pas être optionnel. Garantie déterministe
-        # sur les tâches web (avant le budget — priorité mode d'emploi) ;
-        # uniquement si l'Architect a sélectionné — le repli regex l'inclut
-        # déjà de façon déterministe.
         if architect_skills and _is_web_task(task) and "devtools-preview" not in architect_skills:
             architect_skills = ["devtools-preview"] + list(architect_skills)
         if architect_skills:
-            # F-57 v3 : budget de tokens anti-saturation. L'Architect peut sélectionner
-            # trop de skills → on rogne pour rester sous skill_budget_tokens (défaut 16000,
-            # Application du budget de tokens pour les skills (F-57)
             architect_skills = enforce_skill_budget(
                 selected_skills=architect_skills,
                 budget_tokens=16000,
@@ -1440,25 +1376,21 @@ async def execute_coder_node(
                 if body:
                     blocks.append(f"### SKILL: {name}\n{body}")
             skills_block = (
-                "Voici tes COMPÉTENCES (skills) — applique leurs consignes directement :\n\n"
+                "Here are your SPECIALIZED SKILLS — follow their directives directly:\n\n"
                 + "\n\n".join(blocks)
             ) if blocks else ""
         else:
             # Repli : sélection contextuelle (regex) si l'Architect n'a rien sélectionné.
-            skills_block = build_conditional_skills_block(task.get("content", ""))
+            selected = select_skills(task.get("content", ""))
+            skills_block = build_skills_block(selected)
 
-        # F-76 : Contextualisation par package (AGENTS.md localisés)
+        # F-59 (Priorité 10-bis) : AGENTS.md local au composant — injecté en
+        # complément des skills si présent dans le dossier cible.
         local_agents_md_block = ""
-        if "target_files" in task and task["target_files"]:
-            import os
+        target_dir = os.path.dirname(task.get("target_files", ["."])[0]) or "."
+        agents_md_path = os.path.join(target_dir, "AGENTS.md")
+        if os.path.exists(agents_md_path):
             try:
-                target_dirs = [os.path.dirname(f) for f in task["target_files"]]
-                common_dir = os.path.commonpath(target_dirs) if target_dirs else ""
-                agents_md_path = os.path.join(common_dir, "AGENTS.md") if common_dir else "AGENTS.md"
-                # Défense path traversal (review Kilo) : target_files vient potentiellement
-                # d'un LLM (Architect). On valide que le chemin résolu reste dans le workspace
-                # (cwd = dossier du run, cf F-40 _scoped_chdir). Un chemin comme
-                # "../../etc/passwd" est rejeté silencieusement (fail-open, pas de crash).
                 workspace_root = os.path.realpath(os.getcwd())
                 resolved = os.path.realpath(agents_md_path)
                 if os.path.exists(resolved) and (
@@ -1466,146 +1398,117 @@ async def execute_coder_node(
                 ):
                     with open(resolved, "r", encoding="utf-8") as f:
                         local_agents_content = f.read()
-                    local_agents_md_block = f"\n### DIRECTIVES SPÉCIFIQUES AU COMPOSANT (AGENTS.md)\n{local_agents_content}\n"
+                    local_agents_md_block = f"\n### COMPONENT-SPECIFIC DIRECTIVES (AGENTS.md)\n{local_agents_content}\n"
             except Exception:
                 pass
 
-        # F-32 : prompt réécrit selon la structure canonique des audits (references aider/
-        # crush/opencode/openfox/deer-flow + web Anthropic/OpenAI/Cline/SWE-agent) :
-        # Rôle → Règles critiques → Format sortie → One-shot → Workflow (adapté stratégie)
-        # → Rappels (double-marquage primacy/recency). Corrige les 2 bugs observés :
-        # (1) "réfléchit sans agir" (reasoning-action dilemma, petits modèles overthinkent),
-        # (2) triple-quote non fermée (limite fenêtre génération).
         strategy = task.get("strategy", "simple")
         sections = task.get("sections", [])
         iteration = task.get("iteration", 1)
 
-        # MODE CORRECTION (itération > 1) : les fichiers cible EXISTENT DÉJÀ (créés à
-        # l'itération 1). Le Coder doit CORRIGER chirurgicalement les bugs signalés dans
-        # ### Contenu de la tâche (tickets [LINTER] / [JUDGE]), PAS réécrire from-scratch.
-        # Sans cette branche, le modèle suit le workflow de création (write_file) → écrase
-        # tout le travail précédent à chaque itération = gaspillage + boucle de frustration.
-        # Correction = read_file (voir l'état actuel) + search_replace (cibler le fragment
-        # fautif). C'est l'invariant n°1 (read-before-write) et n°2 (pas de whole-file rewrite).
+        current_files_block = ""
+        if iteration > 1 and "target_files" in task and task["target_files"]:
+            snippets = []
+            for tf in task["target_files"]:
+                if os.path.isfile(tf):
+                    try:
+                        with open(tf, "r", encoding="utf-8") as f:
+                            c = f.read()
+                        snippets.append(f"--- File `{tf}` ---\n```\n{c}\n```")
+                    except Exception:
+                        pass
+            if snippets:
+                current_files_block = (
+                    "### 📂 CURRENT CODE OF TARGET FILES (ALREADY IN CONTEXT — NO read_file NEEDED)\n"
+                    "The code below is the exact state on disk from the previous iteration. "
+                    "You already have the full code in context; proceed DIRECTLY to modifications without calling read_file:\n\n"
+                    + "\n\n".join(snippets)
+                    + "\n\n"
+                )
+
         if iteration > 1:
-            strategy_block = f"""### WORKFLOW — MODE CORRECTION (itération {iteration}, les fichiers EXISTENT DÉJÀ)
-NE RECOMMENCE PAS DE ZÉRO. Les fichiers cible ont été créés à l'itération précédente et
-contiennent du vrai code. Le bug à corriger est décrit dans ### Contenu de la tâche (tickets
-[LINTER] / [JUDGE]). Procède ainsi :
-1. read_file(path) sur CHAQUE fichier signalé fautif pour voir son état ACTUEL.
-2. Identifie le fragment précis qui cause le bug (ex: balise </html> placée trop tôt,
-   fonction manquante, syntaxe cassée). Les tickets te donnent la ligne et l'aperçu.
-3. Utilise l'outil `multi_replace` pour appliquer une ou plusieurs corrections chirurgicales.
-   Exemple: `multi_replace(path="index.html", replacements=[{{"old_string": "fragment fautif", "new_string": "fragment corrigé"}}])`
-   Donne le fragment EXACT à remplacer (copie de read_file).
-4. Répète pour chaque bug signalé. final_answer quand tous les bugs sont corrigés.
-ATTENTION : NE JAMAIS appeler write_file sur un fichier déjà créé (ça l'écrase et perd
-tout le travail). Uniquement read_file + multi_replace en mode correction."""
+            strategy_block = f"""### WORKFLOW — CORRECTION MODE (Iteration {iteration}, files ALREADY EXIST)
+DO NOT RESTART FROM SCRATCH. Target files already exist from the previous iteration.
+The current code of your files is ALREADY INJECTED in the section '### 📂 CURRENT CODE OF TARGET FILES' below.
+Bugs to fix are described in ### Task Content ([LINTER] / [TESTER] / [JUDGE] tickets).
 
-        # MODE CRÉATION (itération 1) — workflow adapté à la stratégie dictée par l'Architect (F-29).
+Proceed as follows:
+1. Review the current code below and the bug report. You do NOT need to call read_file.
+2. Apply your fixes:
+   - For a short file (< 150 lines) or multi-function modifications: rewrite the complete corrected file in one call `write_file(path="...", content=r\"\"\"...\"\"\")`.
+   - For an isolated single-line change: use `search_replace(path=..., old_string=..., new_string=...)`.
+3. Test in Chrome (navigate_page + list_console_messages + take_screenshot).
+4. Call visual_check for each criterion, then final_answer when console is clean and UI is verified."""
         elif strategy == "incremental":
-            sections_str = ", ".join(sections) if sections else "(sections à définir)"
-            strategy_block = f"""### WORKFLOW (stratégie INCREMENTAL imposée par l'Architect)
-Construis ce gros fichier monolithique EN PLUSIEURS PETITES ÉTAPES. NE TENTE PAS un seul
-write_file massif (ça s'essouffle/tronque). Procède ainsi :
-1. write_file(squelette) UNE SEULE FOIS : la structure HTML de base AVEC des MARQUEURS
-   d'insertion ouverts (ex: <!-- INSERT_CSS -->, <!-- INSERT_JS -->). Le squelette ne doit
-   PAS être fermé par </html> tant que les sections ne sont pas injectées — sinon les
-   appends arrivent après </html> et le navigateur affiche du texte brut.
-2. Pour CHAQUE section ({sections_str}) : append_file(content=section) qui remplace/ajoute
-   le contenu au bon endroit. Chaque appel ≤ 60 lignes, chaque bloc syntaxiquement complet.
-3. Une fois toutes les sections injectées, ferme proprement (</body></html>).
-4. final_answer quand c'est terminé."""
+            sections_str = ", ".join(sections) if sections else "(sections to define)"
+            strategy_block = f"""### WORKFLOW (INCREMENTAL strategy)
+Build this file in modular stages:
+1. write_file(skeleton) ONCE: basic HTML structure with insertion markers (<!-- INSERT_CSS -->, <!-- INSERT_JS -->).
+2. For EACH section ({sections_str}): append_file(content=section) replacing/adding content at the proper spot.
+3. Once all sections are injected, close cleanly (</body></html>).
+4. final_answer when complete."""
         elif strategy == "multifile":
-            strategy_block = """### WORKFLOW (stratégie MULTIFILE imposée par l'Architect)
-Construis chaque fichier cible de façon autonome (1 module logique = 1 fichier).
-⚠️ CRITIQUE ET OBLIGATOIRE : Chaque fichier est écrit UNE SEULE FOIS via write_file avec son contenu COMPLET.
-Si un draft Drafter est fourni, extrais son code via le script du skill `draft-extraction`, puis AMÉLIORE-le.
-1. Étape 1 : Extrait le code du draft (skill draft-extraction) → write_file pour chaque fichier (contenu complet).
-2. Étape 2 : RELIS chaque fichier (read_file) et AMÉLIORE-le en appliquant tes skills (frontend-design pour le
-   design, coding pour les bonnes pratiques). Utilise search_replace/multi_replace pour les améliorations.
-   Points d'amélioration OBLIGATOIRES pour un visualiseur : sync DOM après swap (bar.style.height), init du
-   tableau au chargement (pas de barres vides), animation avec await sleep (pas setTimeout en rafale).
-3. Teste l'interface visuellement (navigate_page + take_screenshot + list_console_messages).
-4. final_answer quand tout marche (0 console error + barres visibles + tri fonctionnel).
-🚫 JAMAIS append_file sur un fichier créé avec write_file → doublerait le contenu."""
-        else:  # simple (défaut, rétro-compat)
-            strategy_block = """### WORKFLOW (stratégie SIMPLE)
-1. `write_file(path=..., content=...)` avec le contenu COMPLET du fichier. Un seul write_file par fichier.
-2. Si un draft Drafter est fourni : extrais son code (skill draft-extraction), puis AMÉLIORE-le avec tes skills
-   (frontend-design, coding) via search_replace/multi_replace. Points clés : sync DOM, init au chargement, animation await.
-3. Teste visuellement (navigate_page + take_screenshot + list_console_messages). final_answer quand tout marche.
-🚫 JAMAIS append_file sur un fichier créé avec write_file."""
+            strategy_block = """### WORKFLOW (MULTIFILE strategy)
+Build each target file modularly (1 logical module = 1 file).
+⚠️ CRITICAL & MANDATORY: Each file is written with its COMPLETE content using write_file.
+If a Drafter draft is provided, use it as your starting foundation and refine it.
+1. Step 1: Write each file (`write_file(path=..., content=...)`) with complete, working code.
+2. Step 2: Ensure all UI components and event listeners are wired (buttons, sliders, stats display, async animation loop).
+3. Test visually (navigate_page + take_screenshot + list_console_messages).
+4. final_answer when everything works (0 console errors, visible rendered elements, working controls).
+🚫 NEVER call append_file on a file created with write_file."""
+        else:
+            strategy_block = """### WORKFLOW (SIMPLE strategy)
+1. `write_file(path=..., content=...)` with the COMPLETE file content.
+2. If a Drafter draft is provided: use its structure and enhance it with complete styles and wired event listeners.
+3. Test visually (navigate_page + take_screenshot + list_console_messages). Call final_answer when verified."""
 
-        # F-45 : section preview visuelle (Chrome DevTools) — ACTIVE uniquement pour
-        # les tâches web (HTML/CSS/JS). Pour les autres technos (Python), les outils
-        # DevTools ne sont pas pertinents (pas de page à ouvrir dans un navigateur).
-        # On détecte le web via router_lang OU extensions des target_files (défense en
-        # profondeur : le routeur peut se tromper, les extensions non).
         devtools_preview_block, devtools_tools_doc = _build_devtools_blocks(task, effective_cdt_tools)
 
         prompt = f"""{build_role_header("coder")}
-Tu DOIS produire du code en appelant tes outils via du PYTHON (CodeAgent). NE JAMAIS expliquer sans agir.
+You MUST produce code by executing tools via PYTHON (CodeAgent). NEVER explain without acting.
 
-### RÈGLES CRITIQUES (numérotées)
-1. AGIS, ne raconte pas : quand tu dis "je vais faire X", tu DOIS faire X dans la foulée.
-   Une réponse sans appel d'outil est considérée comme une TÂCHE TERMINÉE (échec).
-2. INTERDICTION ABSOLUE d'utiliser des backticks (`) dans ta pensée (Thought).
-   Utilise-les UNIQUEMENT pour ouvrir et fermer le bloc de code ```python.
-3. ARGUMENTS NOMMÉS OBLIGATOIRES : Pour TOUS tes appels d'outils, tu DOIS utiliser des arguments nommés (ex: evaluate_script(function="...")). Les arguments positionnels feront crasher l'exécution.
-4. BLOCS COMPLETS : chaque appel write_file/append_file doit contenir un bloc SYNTAXIQUEMENT
-   COMPLET (quotes/braces/parenthèses équilibrées). NE JAMAIS laisser une string/brace
-   ouverte entre 2 appels. Si le contenu dépasse ~60 lignes, DÉCOUPE en plusieurs append_file.
-5. PAS DE PLACEHOLDER : interdiction absolue de "TODO", "...", "Logique ici", fonctions vides
-   ou mocks. Implémentation COMPLÈTE, RÉELLE et FONCTIONNELLE.
-6. ANTI-DOUBLON : Chaque fichier cible ne doit être écrit qu'UNE SEULE FOIS via write_file.
-   Pour MODIFIER un fichier existant → search_replace/multi_replace (JAMAIS write_file ni append_file).
-   append_file UNIQUEMENT pour compléter un fichier incomplet (ex: squelette sans </html>).
-   ❌ FAUX : write_file("index.html") puis append_file("index.html") → 2 pages collées !
-   ✅ JUSTE : write_file("index.html") une fois, puis search_replace pour les modifs.
-7. PYTHON BUILT-INS : Si tu utilises `time.sleep()` ou d'autres modules standards dans ton code Python, n'oublie pas de les importer (ex: `import time` au début du bloc).
-8. FORMATAGE DES STRINGS (TRIPLE QUOTES) : Pour éviter les erreurs de parsing Python liées aux quotes (`'`) et accolades (`{{`) du code source (JS/CSS/HTML), tu DOIS TOUJOURS encadrer tes arguments `content`, `old_string`, et `new_string` par des triples guillemets : `r\"\"\"...\"\"\"` ou `'''...'''`. N'utilise JAMAIS de simples guillemets pour encadrer du code.
-   ❌ FAUX : search_replace(path="x", old_string="function() {{ ... }}")
-   ✅ JUSTE : search_replace(path="x", old_string=r\"\"\"function() {{ ... }}\"\"\", new_string=r\"\"\"function() {{ startSort(); }}\"\"\")
-9. ANIMATION PAS-À-PAS (Visualiseurs/Algos) : Pour les visualisations d'algorithmes (tri, pathfinding, etc.), utilise TOUJOURS `async`/`await` avec une fonction `sleep` (ex: `const sleep = ms => new Promise(r => setTimeout(r, ms));`). N'utilise JAMAIS de boucle `while` ou `for` classique contenant un simple `setTimeout` asynchrone, cela exécute tout instantanément.
-   ❌ FAUX : function sort() {{ while(swapped) {{ setTimeout(() => swap(), delay); }} }}
-   ✅ JUSTE : async function sort() {{ while(swapped) {{ await sleep(delay); swap(); }} }}
-10. VOIS LES RÉSULTATS DE TES OUTILS : une assignation `x = read_file(...)` retourne
-   `None` (tu ne vois PAS le contenu). Pour LIRE un résultat, tu DOIS soit faire
-   `print(read_file(path="..."))` soit appeler l'outil directement comme dernière
-   expression du bloc (`read_file(path="...")` sans assignation). SANS le print,
-   le contenu est INVISIBLE → tu boucleras en croyant que la lecture a échoué.
-   ❌ FAUX : contenu = read_file(path="draft.md")  → Out: None (aveugle)
-   ✅ JUSTE : print(read_file(path="draft.md"))    → Out: <le contenu>
+### CRITICAL RULES (numbered)
+1. ACT, do not just narrate: When you state an intention, execute it immediately in the code block.
+   A turn without any tool call is considered a failed idle turn.
+2. NO backticks (`) in your Thought reasoning. Use them ONLY for opening and closing ```python code blocks.
+3. MANDATORY NAMED ARGUMENTS: For ALL tool calls, you MUST use named arguments (e.g. `write_file(path="...", content="...")`). Positional arguments will crash.
+4. COMPLETE BLOCKS: Each write_file/append_file call must contain a SYNTACTICALLY COMPLETE block (balanced quotes, braces, parentheses). NEVER leave unclosed strings or braces.
+5. NO PLACEHOLDERS: Strictly forbidden to use "TODO", "...", "Logic goes here", empty stubs, or mock placeholders. Provide COMPLETE, REAL, WORKING implementations.
+6. WRITING & EDITING:
+   - To create a file or cleanly rewrite a file: use `write_file(path=..., content=...)`.
+   - To edit targeted fragments: use `search_replace` or `multi_replace`.
+   - `append_file` is ONLY for appending to the end (incremental strategy). Never do write_file followed by append_file.
+7. PYTHON BUILT-INS: If you use `time.sleep()` or standard modules in Python, remember to import them (e.g. `import time`).
+8. STRING FORMATTING (TRIPLE QUOTES): To prevent parsing errors from quotes (`'`) and braces (`{{`) in source code (JS/CSS/HTML), you MUST ALWAYS wrap `content`, `old_string`, and `new_string` arguments with triple quotes: `r\"\"\"...\"\"\"` or `'''...'''`.
+9. STEP-BY-STEP ANIMATION (Visualizers/Algorithms): For algorithm visualizers (sorting, pathfinding, etc.), ALWAYS use `async`/`await` with a `sleep` function (e.g. `const sleep = ms => new Promise(r => setTimeout(r, ms));`). NEVER use a synchronous `while` or `for` loop with un-awaited `setTimeout`.
+10. TOOL OUTPUT VISIBILITY: To see the result of a read operation, use `print(read_file(path="..."))` or call `read_file(...)` as the final expression of the block.
 
-### FORMAT DE SORTIE (obligatoire)
-Tu écris du code Python dans un bloc ````python ... ```` qui appelle tes outils. Exemple one-shot :
+### OUTPUT FORMAT (mandatory)
+You write Python code inside a ````python ... ```` block that calls your tools. One-shot example:
 ```python
-# Thought courte (1 phrase) PUIS appel immédiat — pas de longue réflexion
-resultat = write_file(path="index.html", content=r\"\"\"<!DOCTYPE html>\\n<html>...</html>\"\"\")
-print(resultat)
-# Exemple search_replace avec code JS : utilise toujours des triples guillemets
+# Short Thought (1 sentence) THEN immediate execution:
+result = write_file(path="index.html", content=r\"\"\"<!DOCTYPE html>\\n<html>...</html>\"\"\")
+print(result)
+# search_replace example:
 fix = search_replace(path="index.html", old_string=r\"\"\"function() {{}}\"\"\", new_string=r\"\"\"function() {{ startSort(); }}\"\"\")
 print(fix)
-# ... autres appels ...
-final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Fichiers créés.", "linter_ok": True, "vision_ok": True}})
+final_answer({{"task_id": "{task['id']}", "status": "success", "details": "Files created and verified.", "linter_ok": True, "vision_ok": True}})
 ```
-NOTE CRITIQUE : "linter_ok" doit être True SEULEMENT si tu as vérifié ton code via linter/test.
-"vision_ok" doit être True SEULEMENT pour une UI ET si tu as pris un screenshot via take_screenshot. Sinon False.
-
+CRITICAL NOTE: "linter_ok" MUST be True only after syntax/linter verification. "vision_ok" MUST be True for UI tasks only after taking a screenshot via take_screenshot.
 
         {strategy_block}
         {target_files_instruction}
+        {current_files_block}
         {devtools_preview_block}
 
-### OUTILS DISPONIBLES
-- `write_file(path, content)` : CRÉE un fichier complet (sous-dossiers créés auto). REFUSÉ sur un fichier EXISTANT de plus de ~100 lignes — la correction d'un gros fichier passe par search_replace/multi_replace.
-- `append_file(path, content)` : AJOUTE un bloc à la FIN d'un fichier existant (garde anti-doublon).
-- `multi_replace(path, replacements)` : MODIFIE un ou plusieurs fragments (matching tolérant). À utiliser après read_file.
-- `search_replace(path, old_string, new_string)` : MODIFIE un fragment unique.
-- `read_file(path)` / `list_directory(path)` : lecture/exploration.
-- `context7` (resolve_library_id/query_docs) : UNIQUEMENT pour une lib externe (React, Chart.js...). JAMAIS pour du vanilla.
-- Évite DuckDuckGoSearchTool (lent/imprécis).
+### AVAILABLE TOOLS
+- `write_file(path, content)`: WRITES or rewrites a complete file (parent directories auto-created).
+- `append_file(path, content)`: APPENDS content to the END of an existing file.
+- `multi_replace(path, replacements)`: MODIFIES multiple targeted fragments.
+- `search_replace(path, old_string, new_string)`: MODIFIES a single fragment.
+- `read_file(path)` / `list_directory(path)`: Reads files / lists directory contents.
+- `context7` (resolve_library_id/query_docs): ONLY for external libraries (React, Chart.js...). NEVER for vanilla HTML/JS/CSS.
 {devtools_tools_doc}
 
 ### EXIGENCE DE QUALITÉ

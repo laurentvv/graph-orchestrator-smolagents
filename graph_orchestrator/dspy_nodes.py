@@ -283,6 +283,7 @@ class DrafterSignature(dspy.Signature):
         - Sync DOM : après un swap de valeurs, TOUJOURS mettre à jour l'affichage
           (bar.style.height = newValue) avant de continuer.
         - Init : le tableau doit être généré ET affiché au chargement (pas de barres vides).
+          TOUJOURS prescrire l'initialisation robuste : `if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); } else { init(); }` ou un appel direct `init();` à la racine de script.js.
 
         FORMAT DE SORTIE :
         ## Fichier : index.html
@@ -291,17 +292,18 @@ class DrafterSignature(dspy.Signature):
         - <link> vers styles.css, <script src="script.js">
 
         ## Fichier : styles.css
-        - Thème sombre, layout flex, .bar avec transition height
+        - Thème sombre avec bloc :root définissant toutes les variables (--bg, --surface, --text, --default, --sorted, --accent)
+        - Layout flex, .bar avec transition height et background
         - 3 classes d'état : .comparing, .sorted, .default
 
         ## Fichier : script.js
         - Variables : arr[], isSorting, speed, comparisons
         - generateArray() : crée N valeurs aléatoires, appelle draw()
-        - draw() : pour chaque valeur, crée/met à jour un div.bar avec height proportionnelle
+        - draw() : pour chaque valeur, crée/met à jour un div.bar avec height proportionnelle en px
         - bubbleSort() : async, boucle while(swapped) avec await sleep(speed) à chaque comparaison,
           swap = échange valeurs + MAJ height du DOM (bar.style.height)
         - Event listeners : startBtn → bubbleSort, resetBtn → generateArray, speedRange → speed
-        - Init : generateArray() au chargement (barres visibles immédiatement)
+        - Init : initialisation robuste immédiate (if document.readyState === 'loading' ... else init())
         """,
     )
     subtask_description: str = dspy.InputField(desc="Description de la sous-tâche")

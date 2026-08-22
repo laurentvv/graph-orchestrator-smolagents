@@ -159,17 +159,17 @@ Ces nœuds reçoivent `[]` en skills. Leur "connaissance" vit intégralement dan
 
 | Nœud | Type | Modèle (défaut) | Rôle | Skills injectés | Mode |
 |---|---|---|---|---|---|
-| PromptRefiner | DSPy | Ornith-1.0-9B (reasoning) | `prompt_refiner` | aucun | — |
-| Router | DSPy | Qwen3.5-9B (fast) | `router` | aucun | — |
-| Architect | DSPy | Ornith-1.0-9B (reasoning) | `architect` | aucun (+ brief Context7 si lib externe) | — |
-| **Coder** | smolagents | Qwen3.5-9B (fast) | `coder` | EAGER: file-creation, coding, context7-research ; LAZY: frontend-design, devtools-preview, python-health-audit | **lazy (F-57)** |
+| PromptRefiner | DSPy | Qwen3.5-4B (fast) | `prompt_refiner` | aucun | — |
+| Router | DSPy | Qwen3.5-4B (fast) | `router` | aucun | — |
+| Architect | DSPy | Ornith-1.5-9B (reasoning) | `architect` | aucun (+ brief Context7 si lib externe) | — |
+| **Coder** | smolagents | Qwen3.5-4B (fast) | `coder` | EAGER: file-creation, coding, context7-research ; LAZY: frontend-design, devtools-preview, python-health-audit | **lazy (F-57)** |
 | Linter | déterministe | — | — | aucun | 0 LLM |
 | Static Tester | déterministe | — | — | aucun | 0 LLM |
-| WebTester | smolagents | Ornith-1.0-9B (reasoning) | `web_tester` | web-tester (corps complet) | eager simple |
+| WebTester | smolagents | Ornith-1.5-9B (no-think) | `web_tester` | web-tester (corps complet) | eager simple |
 | PythonTester | subprocess | — | — | aucun | 0 LLM |
-| Security | DSPy | Ornith-1.0-9B (reasoning) | `security` | aucun | — |
-| Judge | DSPy | Ornith-1.0-9B (reasoning) | `judge` | aucun | — |
-| Escalation | DSPy | Ornith-1.0-9B (reasoning) | `escalation` | aucun | — |
+| Security | DSPy | Ornith-1.5-9B (no-think) | `security` | aucun | — |
+| Judge | DSPy | Ornith-1.5-9B (no-think) | `judge` | aucun | — |
+| Escalation | DSPy | Ornith-1.5-9B (reasoning) | `escalation` | aucun | — |
 
 ---
 

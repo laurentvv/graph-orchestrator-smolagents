@@ -602,43 +602,24 @@ class TestLLMCompact:
         assert ok and "rien à résumer" in note
 
 
-# ---------- (D) doctrine ponytail ----------
+# ---------- (D) Rôles & Invariants universels ----------
 
-class TestPonytail:
-    def test_coder_embarque_le_ladder(self):
+class TestRoleHeader:
+    def test_coder_header_invariants(self):
         h = build_role_header("coder")
-        assert "DOCTRINE PONYTAIL" in h
-        assert "INTOUCHABLE" in h
-        assert "INVARIANTS UNIVERSELS" in h  # invariants toujours présents
+        assert "SENIOR SOFTWARE ENGINEER" in h
+        assert "UNIVERSAL INVARIANTS" in h  # invariants always present
+        assert "DOCTRINE PONYTAIL" not in h  # Ponytail decommissioned
 
-    def test_coder_frontend_aussi(self):
-        assert "DOCTRINE PONYTAIL" in build_role_header("coder_frontend")
-
-    def test_architect_et_tester_epargnes(self):
-        # l'Architect garde son NIVEAU GRAPHIQUE MAXIMAL (F-124) : la doctrine
-        # réduit le CODE, pas les exigences.
-        assert "DOCTRINE PONYTAIL" not in build_role_header("architect")
-        assert "DOCTRINE PONYTAIL" not in build_role_header("web_tester")
-        assert "NIVEAU GRAPHIQUE MAXIMAL" in build_role_header("architect")
-
-    def test_garde_anti_sous_livraison_presente(self):
-        h = build_role_header("coder")
-        # la clause cruciale pour un 4B : minimal décrit le CODE, pas le périmètre
-        assert "sous-fonctionnalité est un ÉCHEC" in h
-        assert "checklist est sacrée" in h
-
-    def test_toggle_opt_out(self, monkeypatch):
-        """PONYTAIL_ENABLED=0 → ladder absent, invariants et rôle intacts."""
-        import dataclasses
-
-        from graph_orchestrator import config as config_module
-
-        monkeypatch.setattr(
-            config_module,
-            "settings",
-            dataclasses.replace(config_module.settings, ponytail_enabled=False),
-        )
-        h = build_role_header("coder")
+    def test_coder_frontend_header_invariants(self):
+        h = build_role_header("coder_frontend")
+        assert "FRONTEND" in h or "SOFTWARE ENGINEER" in h
+        assert "UNIVERSAL INVARIANTS" in h
         assert "DOCTRINE PONYTAIL" not in h
-        assert "AGENT DÉVELOPPEUR" in h  # rôle intact
-        assert "INVARIANTS UNIVERSELS" in h  # invariants intacts
+
+    def test_architect_et_tester_roles(self):
+        assert "MAXIMUM GRAPHICAL QUALITY" in build_role_header("architect")
+        assert "UNIVERSAL INVARIANTS" in build_role_header("web_tester")
+        assert "DOCTRINE PONYTAIL" not in build_role_header("architect")
+
+

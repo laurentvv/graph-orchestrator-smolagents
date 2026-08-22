@@ -66,6 +66,40 @@ WRITE_TOOLS = frozenset(
     {"write_file", "append_file", "edit_file", "search_replace", "multi_replace"}
 )
 
+# F-151 : Outils de vérification et de validation visuelle (immunité stall).
+# L'exécution de ces outils constitue une phase active et légitime de test
+# qui ne doit pas déclencher prématurément le circuit-breaker de stall.
+VISUAL_VERIFICATION_TOOLS = frozenset(
+    {
+        "visual_check",
+        "take_screenshot",
+        "navigate_page",
+        "list_console_messages",
+        "get_console_message",
+        "fuzz_click_all_buttons",
+        "probe_canvas_activity",
+        "fuzz_keyboard_controls",
+        "evaluate_script",
+        "check_js_syntax",
+        "clean_dom",
+        "add_visual_tags",
+        "expose_game_state",
+        "instrument_calls",
+        "dump_function_source",
+        "force_advance",
+    }
+)
+
+
+def is_verification_turn(tool_calls: list[tuple[str, Any]] | None) -> bool:
+    """True si au moins un outil d'inspection/validation visuelle est appelé."""
+    if not tool_calls:
+        return False
+    for name, _args in tool_calls:
+        if (name or "").strip() in VISUAL_VERIFICATION_TOOLS:
+            return True
+    return False
+
 
 class DeliveryOutcome(str, Enum):
     """Classification déterministe d'un turn d'agent (loopx `DeliveryOutcome`).
@@ -239,7 +273,7 @@ class StallDetector:
         self._consecutive_no_material = 0
         self._last_material_hash: Optional[str] = None
 
-    def record(self, outcome: DeliveryOutcome, material_hash: str) -> None:
+    def record(self, outcome: DeliveryOutcome, material_hash: str, is_verification: bool = False) -> None:
         """Met à jour le compteur de stall selon l'outcome du turn.
 
         No-op si le détecteur est désactivé. Fail-open : toute exception est
@@ -249,6 +283,11 @@ class StallDetector:
             return
         try:
             with self._lock:
+                if is_verification:
+                    # F-151 : La validation visuelle / inspection active est une progression
+                    # légitime vers final_answer. Elle ne doit pas incrémenter le compteur de stall.
+                    self._consecutive_no_material = 0
+                    return
                 if outcome in ACCOUNTABLE_OUTCOMES and material_hash:
                     if material_hash == self._last_material_hash:
                         # Reproduction : même matériel que le tour précédent = stall.

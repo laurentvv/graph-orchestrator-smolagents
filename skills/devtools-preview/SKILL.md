@@ -1,77 +1,43 @@
 ---
 name: devtools-preview
-description: Auto-validation visuelle via Chrome DevTools MCP — le Coder vérifie sa page (screenshot + console) avant final_answer.
+description: Visual auto-validation via Chrome DevTools MCP — verify rendering and console before final_answer.
 ---
 
-# DevTools Preview Skill (F-45)
+# DevTools Preview Skill
 
-Tu disposes d'un navigateur Chrome pilotable (**Chrome DevTools MCP**) pour vérifier
-visuellement ta page **AVANT** de la déclarer terminée. Le screenshot que tu prends
-**te revient en image** — tu le vois, tu peux juger le rendu.
+You have a controllable Chrome browser (**Chrome DevTools MCP**) to visually and functionally verify your page **BEFORE** calling final_answer. The screenshot you capture is returned in context as an image.
 
-## Pourquoi
-Un fichier HTML syntaxiquement valide peut afficher une page blanche, un layout cassé,
-ou des éléments superposés. Sans preview, tu envoies une page visuellement ratée au
-Tester, qui échouera → cycle de correction long. Le preview court-circuite ça.
+## Why
+Syntactically valid HTML can still render broken layouts, empty containers, or silent JS exceptions. Previewing directly catches visual flaws and runtime errors immediately.
 
-## Workflow (obligatoire pour les tâches web, après write_file)
+## Workflow (Mandatory for web tasks after write_file)
 
-1. **Navigue** : `navigate_page(url="<URL ABSOLUE file:///">...")`
-   - L'URL exacte de ton fichier principal est donnée dans le prompt. Utilise-la telle quelle.
-   - Exemple : `navigate_page(url="file:///D:/.../runs/2024-01-01_1200_slug/landing_page/index.html")`
-2. **Console (OBLIGATOIRE — AVANT le screenshot)** : `list_console_messages()` → erreurs JS ?
-   - ⚠️ **C'EST L'ÉTAPE LA PLUS IMPORTANTE.** Une erreur de syntaxe JS (ex: annotation
-     TypeScript dans `<script>` vanilla) fait échouer TOUT le script silencieusement : la
-     page rend correctement (le CSS marche) mais AUCUNE interaction ne fonctionne (boutons
-     morts, éléments vides, pas de barres générées). Un screenshot seul ne détecte PAS ce
-     bug — seule la console le révèle.
-   - Si tu vois `SyntaxError`, `Unexpected token`, `Uncaught` → c'est un bug CRITIQUE.
-     Corrige-le AVANT de continuer. Ne fais JAMAIS `final_answer` avec une erreur console.
-3. **Capture** : `take_screenshot()` → l'image te revient. **Analyse-la de façon CRITIQUE** :
-   - ⚠️ **JAMAIS de paramètre `filePath`**. Appelle `take_screenshot()` SANS arguments.
-     L'image te revient automatiquement en contexte (tu la vois). Ajouter
-     `filePath="..."` provoque une erreur `Access denied` (workspace root non configuré)
-     → aucun screenshot ne revient → tu boucles sur l'erreur. **Ne passe JAMAIS filePath,
-     format, quality, fullPage ni aucun argument** : juste `take_screenshot()`.
-   - La page est-elle vide/blanche ? → erreur JS (vérifié étape 2 normalement).
-   - Le layout est-il cassé (éléments superposés, débordement, texte coupé) ?
-   - **L'occupation de l'espace est-elle harmonieuse ?** (Traque les énormes zones de vide injustifiées. Si un graphique, un canevas ou une grille n'occupe que la moitié de son conteneur, c'est un BUG visuel à corriger).
-   - Les couleurs/polices correspondent-elles au cahier des charges ?
-4. **Interactions (si la page en a)** : teste un bouton clé via `click(uid=...)` ou
-   `evaluate_script` pour confirmer que le JS fonctionne (ex: cliquer "Démarrer" et vérifier
-   que quelque chose change). Un screenshot "joli" ne prouve pas que le JS marche.
-5. **Corrige** si bug visuel/erreur console/interaction morte : `search_replace` sur le
-   fragment fautif, puis re-`navigate_page` + re-`list_console_messages` + re-`take_screenshot`.
-6. **final_answer** uniquement quand : rendu visuellement correct **ET** 0 erreur console
-   **ET** interactions fonctionnelles vérifiées.
+1. **Navigate**: `navigate_page(url="<ABSOLUTE file:/// URL>")`
+   - The exact primary file URL is provided in the prompt. Use it directly.
+2. **Console Verification**: `list_console_messages()` -> check for JS errors.
+   - ⚠️ **MANDATORY**: If you see `SyntaxError`, `Unexpected token`, or `Uncaught`, fix it immediately via `search_replace` or `write_file`.
+3. **Capture**: `take_screenshot()` -> inspect the rendered image in context.
+   - ⚠️ **NEVER pass `filePath`**. Call `take_screenshot()` without arguments.
+   - Verify layout, colors, font styling, and proper container utilization.
+4. **UI Fuzzing & Interaction**:
+   - Call `fuzz_click_all_buttons()` or `click(uid=...)` to wake up event handlers and catch silent JS exceptions.
+   - For canvas/animations, verify movement with `probe_canvas_activity()`.
+5. **Fix & Re-verify**:
+   - If bugs occur, fix them, then re-navigate, re-check console, and re-capture.
+6. **final_answer**: Call when rendering is verified **AND** 0 console errors **AND** controls are functional.
 
-## Quand NE PAS preview
-- **Tâche non-web** (Python, data, CLI) : pas de navigateur pertinent, saute cette section.
-- **Mode correction** (itération > 1) : preview pour **confirmer** que ton fix a marché,
-  pas pour tout re-vérifier from scratch.
+## Pitfalls to Avoid
+- **HTML ONLY**: NEVER pass `.css` or `.js` files to `navigate_page()`. Always navigate to the parent HTML file (e.g. `index.html`).
+- **Stop Condition**: Once files are written and verified with clean console and good rendering, immediately call `final_answer`.
+- **Absolute URLs**: `navigate_page(url="index.html")` will not work. Always use the provided absolute `file:///...` URL.
 
-## Pièges à éviter
-- **Navigation HTML ONLY (RÈGLE ABSOLUE)** : Ne passe **JAMAIS** une URL se terminant par `.css` ou `.js` à `navigate_page()` ! Chrome affiche ces fichiers en texte brut sans DOM ni rendu CSS, ce qui fait échouer `evaluate_script` et provoque des boucles infinies. Pour vérifier `styles.css` ou `script.js`, navigue **TOUJOURS** vers la page HTML parente (ex: `index.html`).
-- **Condition d'arrêt (Stop Condition)** : Dès que tes fichiers cibles sont écrits et qu'un seul screenshot confirme que l'affichage est bon et sans erreur console, appelle **IMMÉDIATEMENT** `final_answer`. Il est STRICTEMENT INTERDIT d'enchaîner des screenshots ou navigations si aucun fichier n'a été modifié entre-temps.
-- **URL relative** : `navigate_page(url="index.html")` ne marche pas. Toujours `file:///` absolu.
-- **Page dans un sous-dossier** : si ta page est `landing_page/index.html`, l'URL est
-  `file:///.../landing_page/index.html`, PAS `file:///.../index.html` (sinon 404 / page racine).
-- **Boucle de screenshots** : max 1 screenshot par étape de correction. Si tu ne vois pas
-  le bug après 2 screenshots, lis le DOM via `evaluate_script` au lieu de re-capturer.
-- **`filePath` INTERDIT** (cause n°1 de boucle de screenshots) : `take_screenshot` s'appelle
-  SANS arguments. Ne passe **JAMAIS** `filePath`, `format`, `quality`, `fullPage` ni
-  aucun kwarg — l'image revient automatiquement. Si tu vois `Access denied: path ... is not
-  within configured workspace roots`, c'est que tu as passé `filePath` : recommence sans.
-- **Interactions** : pour tester un bouton (ex: "Démarrer le tri"), `click(uid=...)` après
-  avoir identifié l'élément via `take_snapshot()`. Mais pour un simple check visuel,
-  screenshot + console suffisent dans 90% des cas.
-
-## Outils clés (rappel compact)
-| Outil | Rôle |
-|-------|------|
-| `navigate_page(url)` | Ouvre l'URL (file:/// absolu) dans Chrome. |
-| `take_screenshot()` | Capture → image TE REVIENT (tu la vois). |
-| `list_console_messages()` | Erreurs/warnings JS (avec source maps). |
-| `evaluate_script(function)` | JS dans la page (lire une valeur DOM). |
-| `take_snapshot()` | Arbre a11y (IDs/textes, pour cibler un click). |
-| `click(uid)` / `fill(uid, value)` | Interactions (optionnel). |
+## Key Tools
+| Tool | Purpose |
+|---|---|
+| `navigate_page(url)` | Opens absolute `file:///...` URL in Chrome |
+| `take_screenshot()` | Captures page and returns screenshot |
+| `list_console_messages()` | Lists runtime JS errors and console logs |
+| `evaluate_script(function)` | Executes custom JS inside the page |
+| `take_snapshot()` | Returns accessibility/DOM tree |
+| `fuzz_click_all_buttons()` | Fuzz-clicks all buttons to trigger handlers |
+| `probe_canvas_activity()` | Probes canvas animation liveliness |

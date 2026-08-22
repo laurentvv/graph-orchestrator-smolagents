@@ -852,14 +852,11 @@ async def run_coding_workflow(
                             with open(draft_path, "w", encoding="utf-8") as f:
                                 f.write(gate.corrected_markdown)
                             sub_dict["draft_instruction"] = (
-                                f"\n\n### PLAN D'IMPLÉMENTATION DE L'ARCHITECTE LOGICIEL\n"
-                                f"L'Architecte Logiciel a conçu un plan d'implémentation détaillé dans `{draft_filename}`.\n"
-                                f"⚠️ CE N'EST PAS DU CODE À RECOPIER — c'est un plan d'intention (structure, logique, edge cases).\n\n"
-                                f"INSTRUCTION : Lis ce plan avec `read_file(path=\"{draft_filename}\")`, puis IMPLÉMENTE-LE en codant "
-                                f"from-scratch avec tes outils (write_file pour chaque fichier, contenu COMPLET).\n"
-                                f"Applique tes SKILLS (frontend-design, coding) pendant l'implémentation pour enrichir le code.\n"
-                                f"Respecte scrupuleusement la logique décrite dans le plan (algorithmes, sync DOM, init).\n\n"
-                                f"🚫 NE recopie PAS le plan — IMPLÉMENTE-LE. Chaque fichier écrit UNE SEULE FOIS via write_file."
+                                f"\n\n### 📐 ARCHITECTURE & IMPLEMENTATION PLAN (ALREADY IN CONTEXT — NO read_file NEEDED)\n"
+                                f"The Software Architect prepared this implementation plan in `{draft_filename}`:\n\n"
+                                f"```markdown\n{gate.corrected_markdown}\n```\n\n"
+                                f"INSTRUCTION: Implement this plan directly using your tools (write_file for each target file with COMPLETE content).\n"
+                                f"Apply your skills (frontend-design, coding) during implementation. Ensure all UI elements and interactive events are wired.\n"
                                 + gate.warnings_block
                             )
 

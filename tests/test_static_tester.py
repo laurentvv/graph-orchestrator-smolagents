@@ -206,6 +206,23 @@ s.addEventListener("input", () => {});
     assert _check_event_wiring(html, js) == []
 
 
+def test_multiple_buttons_partial_wiring_flagged():
+    """Quand un bouton est branché (startBtn) mais d'autres ont un ID sans aucun handler (pauseBtn, resetBtn),
+    ils doivent TOUS être signalés comme orphelins (bug Bubble Sort multi-fichiers F-153)."""
+    html = """<html><body>
+    <button id="startBtn">Démarrer</button>
+    <button id="pauseBtn">Pause</button>
+    <button id="resetBtn">Réinitialiser</button>
+    <script>
+    document.getElementById("startBtn").addEventListener("click", () => { console.log("start"); });
+    </script></body></html>"""
+    js = extract_all_js(html)
+    errs = _check_event_wiring(html, js)
+    assert len(errs) == 2
+    assert any("pauseBtn" in e for e in errs)
+    assert any("resetBtn" in e for e in errs)
+
+
 def test_button_wired_inline_onclick():
     """onclick inline = branchement légitime → toléré."""
     html = '<html><body><button id="b" onclick="doThing()">Go</button></body></html>'

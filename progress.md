@@ -1,5 +1,57 @@
 # État d'Avancement du Sprint
 
+## Objectif Actuel : Sprint F-149 à F-154 (Élimination des frictions, allégement des rituels, sondes et initialisation robuste)
+- [x] F149 : Pré-injection directe du Draft dans le prompt Coder (suppression du DraftGate, Step 1 direct écriture).
+- [x] F150 : Épuration des prompts & invariants universels (suppression des micro-règles périmées, traduction intégrale en anglais).
+- [x] F151 : Exemption des outils de validation visuelle du StallDetector.
+- [x] F152 : Compaction du prompt Tester en mode ciblé (passage de ~22k à ~8k tokens).
+- [x] F153 : Sonde déterministe de contrôles interactifs & fuzzing live dans le Static Tester.
+- [x] F154 : Invariants d'initialisation DOM robuste (anti-readyState complete) et complétude :root.
+
+## Jalons de l'Itération (cycle F-154 — initialisation DOM robuste & complétude :root)
+> Imposition d'invariants de code stricts pour éliminer les écrans vides au chargement et les styles transparents (2026-08-22).
+>
+> - [x] F154-1 : Invariant #6 dans `skills/coding/SKILL.md` imposant le pattern d'initialisation vérifiant `document.readyState`.
+> - [x] F154-2 : Ajout de la règle d'initialisation DOM dans `ROLE_BLOCKS["coder_frontend"]` (`prompts.py`).
+> - [x] F154-3 : Mise à jour de `DrafterSignature` (`dspy_nodes.py`) imposant l'initialisation robuste et la complétude du bloc CSS `:root`.
+> - [x] F154-4 : Synchronisation des fichiers de suivi et vérification du budget de guidance (29 surfaces, 0 erreur).
+
+## Jalons de l'Itération (cycle F-149 à F-152 — élimination des frictions & allégement des prompts)
+> Élimination des frictions Coder/Tester, suppression définitive du péage DraftGate et allégement des invites système (2026-08-22).
+>
+> - [x] F149 : Pré-injection directe du contenu complet du draft (`draft_*.md`) dans `draft_instruction`, permettant l'écriture directe au Step 1 sans passer par un appel `read_file`.
+> - [x] F150 : Traduction intégrale en anglais des invariants universels (`UNIVERSAL_INVARIANTS`), des 9 blocs de rôles (`ROLE_BLOCKS`), des prompts Coder et Tester (`nodes.py`, `web_tester.py`), et des skills essentiels (`coding`, `devtools-preview`), avec élimination des micro-règles obsolètes.
+> - [x] F151 : Immunité des outils de vérification visuelle (`visual_check`, `take_screenshot`, `list_console_messages`, `probe_canvas_activity`, etc.) dans `StallDetector` pour éviter les faux positifs en phase de test.
+> - [x] F152 : Compaction du prompt du Web Tester en mode ciblé (omission des spécifications globales redondantes) pour réduire l'empreinte token de ~22k à ~8k tokens.
+> - [x] F149-F152 : Tests unitaires et d'intégration validés à 100%, agent guidance check (29 surfaces, 0 erreur).
+
+## Jalons de l'Itération (cycle F-153 — sonde déterministe de contrôles interactifs & fuzzing live)
+> Validation de la détection déterministe 0 LLM des contrôles interactifs orphelins (2026-08-22).
+>
+> - [x] F153-1 : Tier 1b statique — Détection des contrôles interactifs avec ID orphelins (boutons non branchés sans handler comme `pauseBtn`, `resetBtn` et sliders sans écouteur dynamique `sizeRange`, `speedRange`).
+> - [x] F153-2 : Tier 4 live — Fuzzing exhaustif des clics de tous les boutons et dispatch d'événements `input`/`change` sur tous les sliders en headless Chrome pour capturer les exceptions runtime.
+> - [x] F153-3 : Validation sur le livrable réel (4 anomalies détectées en 1 ms) et suite de tests unitaires (78 passed, 0 régression).
+> - [x] F153-4 : Synchronisation des fichiers de suivi et journalisation DuckDB.
+
+## Jalons de l'Itération (cycle F-148 — vérification effective de la mémoire cross-run)
+> Vérification en conditions réelles lors du run E2E Bubble Sort multi-fichiers :
+>
+> - [x] F148-1 : Extraction déterministe depuis DuckDB (`graph_orchestrator.db`) des 8 leçons durables (`insight` et `escalation`).
+> - [x] F148-2 : Injection effective du bloc `### LEÇONS DE RUNS PRÉCÉDENTS (mémoire cross-run)` dans le prompt système du Coder.
+> - [x] F148-3 : Exploitation immédiate par le Coder (initialisation du tableau à 20 barres pour éviter le timeout, synchronisation explicite des compteurs DOM).
+> - [x] F148-4 : Synchronisation des fichiers de suivi (`feature_list.json`, `contract.md`, `progress.md`) et journalisation DuckDB.
+
+## Jalons de l'Itération (cycle F-147 — suppression définitive du ReadGate et simplification Coder)
+> Validation totale de la simplification Coder post-test isolation (2026-08-22).
+> Le ReadGate (F-67) imposait un péage de lecture préalable (read-before-write) qui
+> bloquait l'agent et provoquait des boucles de procrastination, alors que les fichiers
+> cibles sont déjà pré-injectés dans le prompt en itération > 1 (current_files_block).
+>
+> - [x] F147-1 : Retrait du middleware `ReadGate` dans `nodes.py:execute_coder_node`.
+> - [x] F147-2 : Simplification des `UNIVERSAL_INVARIANTS` dans `prompts.py` (utilisation directe du contexte, édition directe sans péage).
+> - [x] F147-3 : Validation en isolation Coder complète (`debug/run_coder.py`) : 14 steps, 0 erreur de syntaxe, 0 erreur console, 5/5 visual checks PASS, tous livrables conformes.
+> - [x] F147-4 : Synchronisation des fichiers de suivi (`feature_list.json`, `contract.md`, `progress.md`) et DuckDB.
+
 ## Jalons de l'Itération (cycle F-116 — compaction résiliente + chunks + ponytail)
 > PRIORITÉ 1 du backlog (gouvernance 2026-08-18). Le mur démontré des runs
 > #13/#16 : thrash 772k-990k tokens/step (~24k/step), ~40 min perdues. Plan
@@ -127,6 +179,25 @@
   + DuckDB + commit + PR.
 - [ ] F145-6 : Validation E2E (run ultérieur — idéalement Tetris : la règle 5-bis
   doit faire FAIL le livrable sans animation de chute).
+
+## Jalons de l'Itération (cycle F-146 — durcissement Coder correction & pré-injection)
+> Origine : analyse des boucles de blocage Coder en itération 2 (2026-08-22). Le Coder
+> s'épuisait en appels read_file stériles ou subissait des blocages de péage.
+
+- [x] F146-1 : ReadGate séquentiel (`record_write` met à jour le hash SHA256 du contenu
+  au lieu de supprimer la mark, autorisant des éditions successives sans RuntimeError).
+- [x] F146-2 : Reset déterministe F-141 (`mark_write_done` et `reset_read_supply`
+  réinitialisent le compteur de lectures identiques lors d'une écriture sur disque).
+- [x] F146-3 : Pré-injection automatique du code des fichiers cibles existants en
+  itération > 1 (`current_files_block` dans `nodes.py`), éliminant le besoin de read_file.
+- [x] F146-4 : Désactivation du péage par défaut `READ_BEFORE_WRITE_ENABLED=false` dans
+  `config.py` et `.env`.
+- [x] F146-5 : Harmonisation des règles de prompt (Règle 6 et OUTILS DISPONIBLES
+  déverrouillent l'écriture libre sans interdictions contradictoires ; Invariants 1 & 2
+  assouplis).
+- [x] F146-6 : Tests — `tests/test_coder_hardening.py` + `tests/test_read_gate.py` (58/58 PASS),
+  gate F-103 OK (29 surfaces, 0 erreur).
+- [x] F146-7 : État disque (contract C487, feature_list F-146, ce fichier) + DuckDB.
 
 ## Jalons de l'Itération (cycle F-130/131 — post-mortem run 2026-08-20_1028 Tetris, session « run de 0 »)
 > Objectif utilisateur : run Tetris de 0 → analyser/corriger si problème →

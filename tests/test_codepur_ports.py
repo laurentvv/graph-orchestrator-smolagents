@@ -324,6 +324,27 @@ class TestIdenticalReadGate:
         r = read_file(path=str(p), offset=5, limit=5)
         assert "garde lectures identiques" not in r
 
+    def test_write_resets_identical_read_gate_for_file(self, tmp_path):
+        """Après une écriture réussie (mark_write_done), relire le fichier est autorisé."""
+        from graph_orchestrator.tools import mark_write_done, read_file, reset_read_supply
+
+        reset_read_supply()
+        p = tmp_path / "modified.js"
+        p.write_text("v1\n" * 30, encoding="utf-8")
+        read_file(path=str(p), offset=0, limit=10)
+        read_file(path=str(p), offset=0, limit=10)
+        r3 = read_file(path=str(p), offset=0, limit=10)
+        assert "garde lectures identiques" in r3
+
+        # Le fichier est modifié et marqué via mark_write_done
+        p.write_text("v2-updated\n" * 30, encoding="utf-8")
+        mark_write_done(str(p))
+
+        # Relire le fichier modifié n'est plus bloqué
+        r_after = read_file(path=str(p), offset=0, limit=10)
+        assert "garde lectures identiques" not in r_after
+        assert "v2-updated" in r_after
+
 
 class TestTargetedBudget:
     def test_targeted_max_steps_releve(self):

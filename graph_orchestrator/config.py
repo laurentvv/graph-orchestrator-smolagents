@@ -464,13 +464,6 @@ class Settings:
     compaction_llm_enabled: bool = False
     compaction_llm_max_tokens: int = 1024
 
-    # --- Doctrine ponytail (F-116 volet D, fiche 48) ---
-    # Injectée dans le header Coder par build_role_header. Run 2026-08-21_1337 :
-    # suspicion (n=1) d'un bug de concision (var(--bg) sans :root → fond blanc,
-    # là où le golden #11 utilisait des littéraux) — le toggle permet l'A/B sur
-    # la golden task. Opt-out PONYTAIL_ENABLED=0.
-    ponytail_enabled: bool = True
-
     # --- Init MCP non bloquante (Priorité 8 / F-104, crush) ---
     # Timeout de connexion PAR SERVEUR (un serveur npx pendu ne bloque jamais
     # le run) : chrome-devtools / context7 / puppeteer. Timeout → dégradation
@@ -520,7 +513,7 @@ class Settings:
     # mark de lecture → force re-read avant chaque édition (corrige le bug « édition
     # à partir d'une représentation mentale stale »). Fail-open garanti (fichier
     # absent = création OK, read impossible = on laisse passer). Opt-out pour debug.
-    read_before_write_enabled: bool = True
+    read_before_write_enabled: bool = False
 
     # --- Robustesse FS : verrous + transactions + cloisonnement IO (Priorité 8-bis / F-95) ---
     # Port OpenKB (fiche 32). Trois couches complémentaires, chacune opt-out :
@@ -725,7 +718,6 @@ def load_settings() -> Settings:
         compaction_retry_mode=_get_str("COMPACTION_RETRY_MODE", "soft"),
         compaction_llm_enabled=_get_bool("COMPACTION_LLM_ENABLED", False),
         compaction_llm_max_tokens=_get_int("COMPACTION_LLM_MAX_TOKENS", 1024),
-        ponytail_enabled=_get_bool("PONYTAIL_ENABLED", True),
         chrome_devtools_connect_timeout_s=_get_float("CHROME_DEVTOOLS_CONNECT_TIMEOUT_S", 25.0),
         context7_connect_timeout_s=_get_float("CONTEXT7_CONNECT_TIMEOUT_S", 15.0),
         puppeteer_connect_timeout_s=_get_float("PUPPETEER_CONNECT_TIMEOUT_S", 25.0),
@@ -736,7 +728,7 @@ def load_settings() -> Settings:
         memory_recall_limit=_get_int("MEMORY_RECALL_LIMIT", 8),
         memory_recall_max_chars=_get_int("MEMORY_RECALL_MAX_CHARS", 1500),
         sanitizer_enabled=_get_bool("SANITIZER_ENABLED", True),
-        read_before_write_enabled=_get_bool("READ_BEFORE_WRITE_ENABLED", True),
+        read_before_write_enabled=_get_bool("READ_BEFORE_WRITE_ENABLED", False),
         run_dir_lock_enabled=_get_bool("RUN_DIR_LOCK_ENABLED", True),
         fs_transactions_enabled=_get_bool("FS_TRANSACTIONS_ENABLED", True),
         io_allowlist_enabled=_get_bool("IO_ALLOWLIST_ENABLED", True),

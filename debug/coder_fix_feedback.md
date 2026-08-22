@@ -27,7 +27,3 @@ script.js (fusion Static Tester + lecture du code) :
 Contrat visuel attendu (styles.css doit définir 3 couleurs distinctes, ex: défaut bleu,
 comparing orange, sorted vert) : pendant le tri on doit VOIR simultanément les 3 états ;
 le fond reste sombre.
-
-MÉTHODE (mode correction) : read_file des fichiers fautifs → multi_replace chirurgical sur
-les fragments exacts → re-naviguer → take_screenshot → visual_check (les 5, batchés en un
-seul bloc python) → final_answer. NE JAMAIS write_file sur un fichier existant.
