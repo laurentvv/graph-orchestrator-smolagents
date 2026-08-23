@@ -552,7 +552,10 @@ class TestCapabilitiesAssembly:
             {"id": "s", "content": "x", "iteration": 1}, settings, guards=False
         )
         names = [type(c).__name__ for c in caps]
-        assert names == ["FileSystem", "ToolOutputLimits", "ClearToolResults"]
+        # F-161 : la ProcessHistory de purge images est INCONDITIONNELLE (elle
+        # protège le contexte du nouveau flux image, A/B porté par
+        # CODER_PYDANTIC_VISION, plus par guards). Le reste est F-158 exact.
+        assert names == ["FileSystem", "ToolOutputLimits", "ProcessHistory", "ClearToolResults"]
 
     def test_config_flag_default_and_env(self, monkeypatch):
         monkeypatch.delenv("CODER_PYDANTIC_GUARDS", raising=False)

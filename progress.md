@@ -90,6 +90,69 @@
 - [x] F159-7 : État disque final (contract C505-C508, feature_list F-159
       completed, README §Hands, ce fichier) + DuckDB + commit + PR.
 
+## Jalons de l'Itération (cycle F-161 — phase 3.6 : vision multimodale des screenshots)
+> Quatrième incrément PRODUCTION du plan de migration : take_screenshot retourne
+> l'image DANS le contexte du Coder pydantic (le modèle VOIT ses livrables,
+> parité F-50 smolagents) et la purge perte-zéro F-101/F-116 migre sur le seam
+> officiel ProcessHistory. Découverte en route : le render texte F-160 produisait
+> str(bytes) (bruit hexadécimal) sur un retour image — l'image était non
+> seulement invisible mais polluante.
+
+- [x] F161-1 : Module `graph_orchestrator/coder_pydantic_vision.py` —
+      `split_tool_result` (texte/images séparés, JAMAIS str(bytes)),
+      `make_image_tool_return` ([note_texte, BinaryImage] = ToolResult
+      multimodal valide), `purge_history_images` (keep=N dernières images
+      vivantes, archives .transcripts/images/ + placeholder « [Screenshot
+      archivé: …] », parts reconstruites NEUVES via dataclasses.replace —
+      dataclasses pydantic-ai, PAS des BaseModel), `build_vision_capabilities`
+      (ProcessHistory officiel, avant CHAQUE requête modèle).
+- [x] F161-2 : Câblage MCP — `process_tool_call` retourne la liste mixte pour
+      tout résultat contenant des images (générique, pas seulement
+      take_screenshot) ; strippage filePath F-50/F-90 inchangé et PROUVÉ sur le
+      même chemin vision ; `render_mcp_result` délègue à split_tool_result
+      (fix garbage hexa) ; OpenAIChatModel sérialise nativement en message tool
+      (texte + « See file <id>. ») + message user (« This is file <id>: » +
+      data-URI base64) — décodé par le mmproj llama-server, même format que
+      le chemin smolagents F-50.
+- [x] F161-3 : Instructions — étape VISUAL CHECK (« the screenshot is attached
+      to your context AS AN IMAGE: LOOK at it ») insérée au workflow (fix
+      d'erreurs conservé, numérotation automatique cohérente des deux modes),
+      critères visuels jugés « by LOOKING at your latest screenshot » ;
+      caveat « text confirmation only » retiré en nominal, conservé si
+      CODER_PYDANTIC_VISION=false. Config CODER_PYDANTIC_VISION (défaut true)
+      + CODER_PYDANTIC_VISION_KEEP (défaut 1 ≡ F-101 « very last step's
+      image ») + .env/.env.example.
+- [x] F161-4 : Purge INCONDITIONNELLE (guards on ET off — elle protège le
+      contexte du NOUVEAU flux image ; l'A/B passe par CODER_PYDANTIC_VISION,
+      pas par les gardes ; contrat test F-159 mis à jour en conséquence).
+- [x] F161-5 : Tests — **31 nouveaux 0-LLM/0-réseau PASS** (split ×6 dont
+      régression anti-garbage, retour image ×3, process_tool_call vision ×4
+      dont filePath strippé sur chemin image, purge ×7 dont multi-images par
+      part (l'image gardée survit à la reconstruction) + non-mutation +
+      idempotence, capabilities ×5, instructions ×4, intégration in-process ×2 :
+      FastMCP ImageContent → VRAI MCPToolset → ToolReturnPart multimodal dans
+      l'historique de l'agent + sérialisation OpenAIChatModel data-URI prouvée
+      sur le profil llama-server exact) ; suites voisines 155 passed ; **suite
+      complète 1933 passed / 0 failed / 7 skipped** (baseline 1902, 0
+      régression) ; gate F-103 29 surfaces 0 erreur ; py_compile OK.
+- [x] F161-6 : Validation GPU isolation ×2 (2026-08-23) — **GO vision** :
+      run 1 Bubble Sort (banner vision F-161) : CoderOutput **success natif,
+      vision_ok=True**, 254 537 in / 5 521 out / 613,5 s, 7/8 contrôles (échec
+      unique « JS strict mode » = variance 4B documentée) ; run 2 MINI-TÂCHE
+      INSTRUMENTÉE (`debug/trace_vision_f161.py`, miroir F-160 run3) : le 4B
+      exécute navigate → console → take_screenshot à travers le toolset,
+      **l'image jpeg 11 941 octets est extraite et injectée dans le contexte,
+      et le modèle DÉCRIT le visuel avec précision perceptive** (« dark theme,
+      purple #6c8cff accent, centered card, counter showing "0", rounded blue
+      button "+1" » — couleur hex + état RUNTIME du DOM : impossible sans
+      vision réelle), success 155 s / 115 360 in ; confirmation croisée
+      llama-server : requête post-screenshot 986 tokens (vs 554-640 tours
+      texte) ≈ ~900 tokens vision mmproj ; purge non déclenchée ce run
+      (1 screenshot ≤ keep=1, comportement correct — purge prouvée tests ×7).
+- [x] F161-7 : État disque final (contract C513-C516, feature_list F-161,
+      README §Hands, doc notes §3 leçon F-161, ce fichier) + DuckDB + commit
+      + PR.
+
 ## Jalons de l'Itération (cycle F-160 — phase 3.5 : MCP navigateur & doc)
 > Troisième incrément PRODUCTION du plan de migration : les serveurs MCP du
 > Coder (chrome-devtools + Context7) passent sur les seams officiels du

@@ -295,6 +295,16 @@ class Settings:
     # ReviveRetry + SystemReminders + TieredCompaction/DeduplicateFileReads/
     # WarnNearLimits. false = comportement exact F-158 (A/B 3.1-3.2).
     coder_pydantic_guards: bool = True
+    # Vision multimodale du Coder pydantic (F-161, phase 3.6 du plan) :
+    # take_screenshot retourne l'image DANS le contexte (ToolReturnPart mixte
+    # → message user data-URI → mmproj llama-server) + purge perte-zéro des
+    # anciennes images (ProcessHistory, parité F-101/F-116). false = monde
+    # sans vision (screenshot → texte seul, verdicts sur sondes DOM).
+    coder_pydantic_vision: bool = True
+    # Nombre d'images gardées vivantes dans le contexte (F-161) : 1 = parité
+    # exacte F-101/F-116 (« purge all visual memory except the very last
+    # step's image »). 0 = purge totale (aucune image renvoyée au modèle).
+    coder_pydantic_vision_keep: int = 1
     # Circuit-breaker sur tours idle consécutifs (post-mortem idem). _detect_idle_step
     # (F-33) réinjecte un message à chaque tour "sans appel d'outil" mais ne coupe
     # JAMAIS → le Coder peut enchaîner N tours idle jusqu'à épuisement des steps
@@ -700,6 +710,8 @@ def load_settings() -> Settings:
         # (anti multi-fences / prose / <think> interminable).
         coder_prefill_code=_get_bool("CODER_PREFILL_CODE", False),
         coder_pydantic_guards=_get_bool("CODER_PYDANTIC_GUARDS", True),
+        coder_pydantic_vision=_get_bool("CODER_PYDANTIC_VISION", True),
+        coder_pydantic_vision_keep=_get_int("CODER_PYDANTIC_VISION_KEEP", 1),
         idle_breaker_threshold=_get_int("IDLE_BREAKER_THRESHOLD", 3),
         escalation_enabled=_get_bool("ESCALATION_ENABLED", True),
         auto_install_deps=_get_bool("AUTO_INSTALL_DEPS", True),

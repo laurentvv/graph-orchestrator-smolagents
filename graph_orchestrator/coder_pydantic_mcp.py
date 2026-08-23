@@ -32,8 +32,12 @@ toolset None ; échec/timeout d'init (``init_timeout`` = réglages
 ``*_connect_timeout_s``) → warning + skip, le nœud tourne sans cet apport —
 aucun nœud ne dépend d'un MCP pour fonctionner.
 
-Vision multimodale (screenshots → contexte) = phase 3.6 : take_screenshot
-retourne ici une confirmation texte, pas une image.
+Vision multimodale (screenshots → contexte image) = phase 3.6 (F-161) :
+``take_screenshot`` retourne désormais une liste mixte ``[note_texte,
+BinaryImage]`` — le framework l'éclate en message tool texte + message user
+image (data-URI décodée par le mmproj llama-server). Le strippage filePath
+(F-50/F-90) est inchangé ; la purge des anciennes images vit dans
+``coder_pydantic_vision`` (ProcessHistory, parité F-101/F-116).
 
 Activation : ``CODER_ENGINE=pydantic`` (l'aiguillage F-158) ; rien de nouveau
 à configurer — CHROME_DEVTOOLS_ENABLED / CONTEXT7_API_KEY / CHROME_PATH /
@@ -146,20 +150,28 @@ def _enrich_console(text: str, details: list) -> str:
     )
 
 
-def make_process_tool_call():
+def make_process_tool_call(vision: bool = True):
     """Construit le callback ``process_tool_call`` du toolset DevTools.
 
     Signature officielle (doc mcp/client « Tool call customization ») :
-    ``async (ctx, call_tool, name, tool_args) -> ToolResult``. Retourne un str
-    (partie texte du résultat MCP). Le détail console (get_console_message) est
-    récupéré par le MÊME canal (call_tool) — équivalent du wrapper
-    _ConsoleEnrichingTool smolagents, sans sous-classage.
+    ``async (ctx, call_tool, name, tool_args) -> ToolResult``. Pour les outils
+    texte, retourne un str (partie texte du résultat MCP) ; le détail console
+    (get_console_message) est récupéré par le MÊME canal (call_tool) —
+    équivalent du wrapper _ConsoleEnrichingTool smolagents, sans sous-classage.
+
+    Phase 3.6 (F-161) — ``vision=True`` (défaut) : un résultat contenant des
+    images (``take_screenshot`` → ``BinaryImage`` mappé par le toolset)
+    retourne ``[note_texte, *images]`` (ToolResult multimodal valide — le
+    modèle VOIT l'image). ``vision=False`` reproduit un monde sans vision.
     """
+    from .coder_pydantic_vision import make_image_tool_return, split_tool_result
 
     async def process_tool_call(ctx, call_tool, name: str, tool_args: dict) -> Any:  # noqa: ANN001
         args = _prepare_tool_args(name, tool_args)
         result = await call_tool(name, args)
-        text = render_mcp_result(result)
+        text, images = split_tool_result(result)
+        if images:
+            return make_image_tool_return(text, images, vision=vision)
         if name != "list_console_messages":
             return text
         # F-126 : va chercher les stacks des erreurs (borné : max 4).
@@ -187,35 +199,14 @@ def render_mcp_result(result: Any) -> str:
     """Aplatit un résultat d'appel MCP en texte modèle-friendly. Défensif.
 
     fastmcp retourne un ``CallToolResult`` (.content liste de blocs, .data
-    structuré) ; le chemin str des tests fournit du texte brut.
+    structuré) ; le chemin str des tests fournit du texte brut. F-161 : les
+    items binaires (``BinaryImage`` des screenshots) sont IGNORÉS proprement
+    (l'ancien fallback produisait ``str(bytes)`` — du bruit hexadécimal dans
+    le contexte) ; le parcours image complet vit dans ``process_tool_call``.
     """
-    if result is None:
-        return ""
-    if isinstance(result, str):
-        return result
-    parts: list = []
-    content = getattr(result, "content", None)
-    if content:
-        for block in content:
-            if isinstance(block, str):
-                parts.append(block)
-            else:
-                text = getattr(block, "text", None)
-                if text:
-                    parts.append(str(text))
-    if not parts:
-        data = getattr(result, "data", None)
-        if data is not None:
-            if isinstance(data, str):
-                parts.append(data)
-            else:
-                import json
+    from .coder_pydantic_vision import split_tool_result
 
-                try:
-                    parts.append(json.dumps(data, ensure_ascii=False))
-                except Exception:  # noqa: BLE001 — dernier repli
-                    parts.append(str(data))
-    return "\n".join(p for p in parts if p) if parts else str(result)
+    return split_tool_result(result)[0]
 
 
 # ============================================================
@@ -245,7 +236,11 @@ def build_devtools_mcp_toolset(settings) -> Optional[Any]:
         transport,
         id="chrome-devtools",
         init_timeout=settings.chrome_devtools_connect_timeout_s,
-        process_tool_call=make_process_tool_call(),
+        # F-161 : vision multimodale (screenshots → contexte image) quand
+        # CODER_PYDANTIC_VISION=true (défaut).
+        process_tool_call=make_process_tool_call(
+            vision=getattr(settings, "coder_pydantic_vision", True)
+        ),
         # 'retry' (défaut) : une erreur serveur devient ModelRetry → le modèle
         # corrige son appel (sémantique du tool-retry maison smolagents).
         tool_error_behavior="retry",
