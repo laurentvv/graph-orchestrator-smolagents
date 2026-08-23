@@ -457,8 +457,10 @@ class TestInstructionsBrowser:
         assert "LIVE VERIFICATION (Chrome DevTools" in instructions
         assert "list_console_messages()" in instructions
         assert "probe_sort_state()" in instructions
-        # Caveat vision 3.6 : screenshot = confirmation texte seulement
-        assert "text confirmation only" in instructions
+        # F-161 : vision livrée — screenshot = image dans le contexte (VISUAL
+        # CHECK) ; le caveat « text confirmation only » n'existe plus en nominal.
+        assert "VISUAL CHECK" in instructions
+        assert "text confirmation only" not in instructions
         # URL file:/// absolue du 1er target
         assert "file:///" in instructions
 

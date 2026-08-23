@@ -31,9 +31,13 @@ chrome-devtools (navigate/console/evaluate + 12 helpers DOM + enrichissement
 console F-126 via process_tool_call) et Context7, ouverts par open_coder_mcp
 (dégradation gracieuse par serveur). ``browser_tools_available`` devient
 dynamique : le skill devtools-preview est re-pré-collé sur tâche web et le
-bloc VISUAL VALIDATION (console-centrique) revient. Écart restant : la vision
-multimodale (screenshots → contexte image) est la phase 3.6 — take_screenshot
-ne retourne ici qu'une confirmation texte.
+bloc VISUAL VALIDATION revient.
+
+Phase 3.6 (F-161, coder_pydantic_vision.py) : vision multimodale —
+``take_screenshot`` retourne l'image dans le contexte (ToolReturnPart mixte →
+message user data-URI décodé par le mmproj llama-server), purge perte-zéro
+des images anciennes via ProcessHistory (parité F-101/F-116), instructions
+VISUAL CHECK conditionnées par ``CODER_PYDANTIC_VISION``.
 
 Activation : ``CODER_ENGINE=pydantic`` (défaut ``smolagents`` — zéro changement
 de comportement tant que le flag n'est pas posé).
@@ -331,13 +335,14 @@ def _is_web_task(task: dict) -> bool:
     )
 
 
-def _build_devtools_block(task: dict) -> str:
-    """Bloc VISUAL VALIDATION du profil Coder pydantic (phase 3.5, F-160).
+def _build_devtools_block(task: dict, vision_available: bool = True) -> str:
+    """Bloc VISUAL VALIDATION du profil Coder pydantic (F-160, vision F-161).
 
-    Miroir de nodes.py._build_devtools_blocks, ADAPTÉ à la phase 3.5 : tant que
-    la vision multimodale n'est pas migrée (3.6), take_screenshot ne retourne
-    qu'une confirmation TEXTE — la vérification s'appuie donc sur la CONSOLE et
-    les sondes DOM (discover_ui/fuzz/probe_*), pas sur l'inspection visuelle.
+    Miroir de nodes.py._build_devtools_blocks. Phase 3.6 : ``take_screenshot``
+    retourne l'image DANS le contexte (retour multimodal) — le modèle l'inspecte
+    visuellement, comme le chemin smolagents F-50. ``vision_available=False``
+    (CODER_PYDANTIC_VISION=false) retrouve le mode console-centrique 3.5 :
+    verdicts sur sondes DOM, pas sur l'inspection visuelle.
     Appelé uniquement quand les outils navigateur sont connectés
     (open_coder_mcp → browser_tools_available).
     """
@@ -353,16 +358,59 @@ def _build_devtools_block(task: dict) -> str:
     from .validation_criteria import build_visual_criteria_block
 
     visual_block = build_visual_criteria_block(task.get("visual_success_criteria") or [])
+
+    if vision_available:
+        vision_note = (
+            "👁 VISUAL INSPECTION (your EYES): `take_screenshot()` returns the screenshot "
+            "AS AN IMAGE attached to your context — LOOK at it and judge the rendered UI "
+            "(layout, colors, sizes, visible text). NEVER pass filePath."
+        )
+        visual_step = (
+            "VISUAL CHECK: `take_screenshot()` — inspect the attached image against the "
+            "expected look; a broken layout, empty board or invisible bars is a FAILURE even "
+            "with 0 console errors."
+        )
+    else:
+        vision_note = (
+            "NOTE: take_screenshot returns a text confirmation only (vision disabled) — "
+            "base your verdicts on console + DOM probes, not on visual inspection."
+        )
+        visual_step = ""
+
+    steps = [
+        f'`navigate_page(url="{primary_url}")` — opens your page in Chrome (exact URL below).',
+        "`list_console_messages()` — MANDATORY: 0 JS errors required (SyntaxError, undefined, Uncaught).",
+        "`discover_ui()` — learn the REAL DOM ids/dimensions; never guess a selector.",
+        "UI FUZZING: `fuzz_click_all_buttons()` then `fuzz_keyboard_controls()`, then re-check `list_console_messages()`.",
+        "If errors occur: FIX via `search_replace` (never rewrite the whole file), then re-test (navigate, console, fuzz).",
+    ]
+    if visual_step:
+        steps.append(visual_step)
+    steps.append(
+        "ANIMATED/ALGORITHM PAGE: a static snapshot proves nothing — for sorting bars call "
+        "`probe_sort_state()` (waits for the REAL completed-sort verdict); for canvas games call "
+        "`probe_canvas_activity()` and require ANIMATING status; `instrument_calls()` / `dump_function_source()` "
+        "diagnose a live-but-frozen engine."
+    )
+    workflow = "\n".join(f"{i}. {s}" for i, s in enumerate(steps, 1))
+
     if visual_block:
+        how = (
+            "by LOOKING at your latest screenshot (attached as an image), completed by DOM "
+            "probes (discover_ui / evaluate_script / probe_*) for invisible properties"
+            if vision_available
+            else "through DOM probes (discover_ui / evaluate_script / probe_*)"
+        )
         criteria_note = (
-            "\n7. VISUAL CRITERIA VALIDATION: confirm each criterion below through DOM probes "
-            "(discover_ui / evaluate_script / probe_*), and record honest verdicts with "
-            "visual_check(criterion_number=..., verdict=..., observation=...). A single NO = failure -> fix."
+            f"\nFINAL GATE — VISUAL CRITERIA VALIDATION: confirm each criterion below {how}, "
+            "and record honest verdicts with visual_check(criterion_number=..., verdict=..., "
+            "observation=...). A single NO = failure -> fix."
         )
     else:
         criteria_note = (
-            "\n7. final_result only when: 1) the page loads with 0 console errors, "
-            "2) interactive controls are wired (fuzz proves it)."
+            "\nFINAL GATE: call final_result only when: 1) the page loads with 0 console errors, "
+            "2) interactive controls are wired (fuzz proves it)"
+            + (", 3) the screenshot matches the expected look." if vision_available else ".")
         )
 
     return f"""### 🖥️ LIVE VERIFICATION (Chrome DevTools — verify BEFORE final_result)
@@ -370,19 +418,10 @@ You have a controllable Chrome browser to VERIFY your page through REAL executio
 
 ⚠️ CRITICAL TRAP: a page with good-looking CSS may have BROKEN JavaScript silently
 (dead buttons, unhandled events). Only the console and live interactions reveal this.
-NOTE: take_screenshot returns a text confirmation only (image input arrives phase 3.6) —
-base your verdicts on console + DOM probes, not on visual inspection.
+{vision_note}
 
 Verification Workflow (perform AFTER creating files, BEFORE final_result):
-1. `navigate_page(url="{primary_url}")` — opens your page in Chrome (exact URL below).
-2. `list_console_messages()` — MANDATORY: 0 JS errors required (SyntaxError, undefined, Uncaught).
-3. `discover_ui()` — learn the REAL DOM ids/dimensions; never guess a selector.
-4. UI FUZZING: `fuzz_click_all_buttons()` then `fuzz_keyboard_controls()`, then re-check `list_console_messages()`.
-5. If errors occur: FIX via `search_replace` (never rewrite the whole file), then re-test (navigate, console, fuzz).
-6. ANIMATED/ALGORITHM PAGE: a static snapshot proves nothing — for sorting bars call
-   `probe_sort_state()` (waits for the REAL completed-sort verdict); for canvas games call
-   `probe_canvas_activity()` and require ANIMATING status; `instrument_calls()` / `dump_function_source()`
-   diagnose a live-but-frozen engine.
+{workflow}
 ⚠️ If `navigate_page` TIMEOUTS on your LOCAL page: the JS thread is frozen (infinite loop). Check your while loops.
 {criteria_note}
 
@@ -391,7 +430,8 @@ Exact page URL (primary target): {primary_url}
 
 
 def build_coder_instructions(task: dict, browser_tools_available: bool = True,
-                             context7_available: bool = False) -> str:
+                             context7_available: bool = False,
+                             vision_available: bool = True) -> str:
     """Instructions système du profil Coder (partie STABLE du prompt).
 
     Rôle + invariants + protocole + stratégie + fichiers cibles + skills +
@@ -403,6 +443,9 @@ def build_coder_instructions(task: dict, browser_tools_available: bool = True,
     connecté (open_coder_mcp) → bloc LIVE VERIFICATION + skill devtools-preview
     pré-collé sur tâche web. ``context7_available`` : True quand le MCP Context7
     est connecté → ligne d'orientation anti-hallucination d'API.
+    ``vision_available`` (F-161) : True quand les screenshots arrivent comme
+    images dans le contexte (CODER_PYDANTIC_VISION) → étape VISUAL CHECK +
+    critères visuels jugés sur l'image.
     """
     from .prompts import ROLE_BLOCKS, build_role_header
 
@@ -426,7 +469,7 @@ def build_coder_instructions(task: dict, browser_tools_available: bool = True,
         )
 
     if browser_tools_available:
-        devtools_block = _build_devtools_block(task)
+        devtools_block = _build_devtools_block(task, vision_available=vision_available)
         if devtools_block:
             parts.append(devtools_block)
 
@@ -556,9 +599,14 @@ def build_coder_capabilities(task: dict, settings, guards: bool = True,
     """
     from pydantic_ai_harness import ClearToolResults, FileSystem, ToolOutputLimits
 
+    from .coder_pydantic_vision import build_vision_capabilities
+
     capabilities: list = list(extra_capabilities or [])
     capabilities.append(FileSystem(root_dir="."))
     capabilities.append(ToolOutputLimits())
+    # F-161 : purge perte-zéro des images d'historique — INCONDITIONNELLE (elle
+    # protège le contexte du nouveau flux image), y compris guards=False (A/B).
+    capabilities.extend(build_vision_capabilities(settings))
     if guards:
         from .coder_pydantic_guards import (
             CoderGuardState,
@@ -582,7 +630,7 @@ def build_coder_agent(model, task: dict, settings, coder_max_tokens: int,
                       browser_tools_available: bool = True, guards: bool = True,
                       extra_capabilities: Optional[list] = None,
                       on_reminder_fired=None, toolsets: Optional[list] = None,
-                      context7_available: bool = False):
+                      context7_available: bool = False, vision_available: bool = True):
     """Assemble l'Agent pydantic du profil Coder autour du modèle fourni.
 
     Séparé de run_coder_pydantic pour être testable sans GPU (construction
@@ -592,6 +640,8 @@ def build_coder_agent(model, task: dict, settings, coder_max_tokens: int,
     pour la sémantique de ``guards`` / ``extra_capabilities``. ``toolsets``
     (F-160) : toolsets MCP ouverts (chrome-devtools + helpers + context7) —
     leur lifecycle est porté par l'appelant (open_coder_mcp).
+    ``vision_available`` (F-161) : screenshots comme images dans le contexte
+    (instructions VISUAL CHECK + purge ProcessHistory via capabilities).
     """
     from pydantic_ai import Agent, ModelSettings
 
@@ -621,7 +671,8 @@ def build_coder_agent(model, task: dict, settings, coder_max_tokens: int,
     return Agent(
         model,
         instructions=build_coder_instructions(
-            task, browser_tools_available, context7_available=context7_available
+            task, browser_tools_available, context7_available=context7_available,
+            vision_available=vision_available,
         ),
         capabilities=capabilities,
         tools=build_coder_custom_tools(),
@@ -740,6 +791,7 @@ async def run_coder_pydantic(
                 extra_capabilities=[revive_cap] if revive_cap is not None else None,
                 toolsets=mcp.toolsets,
                 context7_available=mcp.context7_available,
+                vision_available=settings.coder_pydantic_vision,
             )
             print(f"[*] Coder (pydantic) — llama-server prêt : {srv.api_base}")
             try:

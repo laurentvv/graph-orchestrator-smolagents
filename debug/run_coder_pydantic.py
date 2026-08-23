@@ -118,9 +118,10 @@ def main() -> int:
 
     from graph_orchestrator.config import settings
 
-    print("[*] Isolation Coder pydantic-ai-harness — F-158 3.1-3.2 + F-159 3.3-3.4 (PRODUCTION)")
+    print("[*] Isolation Coder pydantic-ai-harness — F-158 3.1-3.2 + F-159 3.3-3.4 + F-161 3.6 vision (PRODUCTION)")
     print(f"    Sortie isolée  : {os.path.abspath(OUT_DIR)}")
     print(f"    gardes F-159   : {settings.coder_pydantic_guards}")
+    print(f"    vision F-161   : {settings.coder_pydantic_vision} (keep={settings.coder_pydantic_vision_keep})")
     print(f"    Modèle FAST    : {settings.fast_spec.model}")
     print(f"    tempér.        : {settings.coder_temperature} | retries sortie : {settings.worker_max_retries}")
     print(f"    max requests   : {settings.coder_max_steps}")

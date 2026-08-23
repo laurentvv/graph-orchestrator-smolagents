@@ -74,6 +74,19 @@ ou `{'tools': 3, 'output': 1}` ; par run : `agent.run(retries=…)`.
   IdleBreaker. Les noms d'outils MCP arrivent avec leurs TIRETS d'origine
   (ex `resolve-library-id`) — mcpadapt les convertissait en underscores :
   utiliser `RenamedToolset` pour préserver les noms cités par les prompts/skills.
+  ✅ **Leçon F-161 (prouvée in-process, 2026-08-23 — vision multimodale)** : les
+  retours d'outils MCP `ImageContent` sont mappés NATIVEMENT en `BinaryImage`
+  (`_map_mcp_tool_result`, pydantic_ai/mcp.py) — mais un `process_tool_call`
+  custom qui réduit le résultat en texte écrase l'image (et un fallback naïf
+  produit `str(bytes)` = bruit hexadécimal). Le retour d'un processor peut être
+  la liste mixte `[str, BinaryImage]` (ToolResult valide) : le framework la
+  stocke comme `ToolReturnPart` multimodal et `OpenAIChatModel` la sérialise en
+  message `role=tool` (texte + « See file <id>. ») PUIS message `user` séparé
+  (« This is file <id>: » + data-URI base64) — exactement le format que
+  llama-server+mmproj décode. Purge des anciennes images : seam officiel
+  `ProcessHistory` (reconstruire les parts en objets NEUFS — ce sont des
+  dataclasses, `dataclasses.replace`, jamais de mutation in-place), cf.
+  coder_pydantic_vision.py.
 - **Common/Native tools** : [common-tools](https://pydantic.dev/docs/ai/tools-toolsets/common-tools/),
   [native-tools](https://pydantic.dev/docs/ai/tools-toolsets/native-tools/) (exécutés côté
   provider — inutiles en local llama.cpp).
