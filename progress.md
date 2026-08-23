@@ -1,5 +1,43 @@
 # État d'Avancement du Sprint
 
+## Objectif Actuel : Migration pydantic-ai-harness — phase 3 par étapes (F-158+, plan docs/PLAN_MIGRATION_PYDANTIC_HARNESS.md)
+> Exécution de la séquence recommandée du plan approuvé (PR #107) : 3.1-3.2 (parité
+> Coder) → 3.3-3.4 (gardes + compaction) → 3.5 (MCP) → 3.6-3.7 (vision + runner web
+> Tester) → E2E. Prérequis remplis : spike GO F-157 (PR #106), dépendances pinées
+> (pydantic-ai-harness==0.24.0), doc lue (F-157, règle §5 AGENTS.md).
+
+## Jalons de l'Itération (cycle F-158 — phase 3.1-3.2 : Coder pydantic en production)
+> Premier incrément PRODUCTION du plan : le socle commun × profil Coder derrière un
+> flag réversible (CODER_ENGINE), le moteur smolagents reste le défaut inchangé.
+
+- [x] F158-1 : Module `graph_orchestrator/coder_pydantic.py` — FileSystem 8 tools
+      (expected_hash ≡ ReadGate structurel, protected patterns ≡ io_guard) + 9 custom
+      tools déléguant aux canoniques tools.py (gardes F-132/F-95/P2 conservées) +
+      `output_type=CoderOutput` (fini extract_and_validate + sauvetage DSPy) +
+      UsageLimits ≡ coder_max_steps + escalade Ultra F-111 conservée +
+      ClearToolResults/ToolOutputLimits du spike.
+- [x] F158-2 : Instructions système/user séparées (cache-friendly) — rôle + invariants
+      + protocole tool-calls natifs + stratégies + mode correction + skills eager
+      (budget F-103). Écart documenté : devtools-preview SUSPENDU sans outils
+      navigateur (un skill qui documente des outils absents induit le modèle en
+      erreur) — flip prévu phase 3.5/3.6.
+- [x] F158-3 : Aiguillage `CODER_ENGINE=pydantic|smolagents` dans execute_coder_node
+      (config + .env.example + .env ; valeur inconnue → warning + repli smolagents).
+- [x] F158-4 : `debug/run_coder_pydantic.py` → appelle la VRAIE fonction production
+      (convention F-89, 0 mock) — contrôles livrable 8/8 + CoderOutput natif.
+- [x] F158-5 : Tests — 31 nouveaux 0-LLM/0-réseau PASS (instructions ×13, user
+      prompt ×4, délégation tools ×6, assemblage Agent ×3, aiguillage ×4) ;
+      suites voisines 85 passed ; py_compile OK ; gate F-103 29 surfaces 0 erreur
+      (AGENTS.md préexistant > hard limit : condensé §4, warning soft uniquement).
+- [x] F158-6 : Validation A/B isolation GPU (2026-08-23, run1) — **GO 8/8** :
+      CoderOutput validé nativement (status=success, task_id exact, linter_ok=True),
+      3 fichiers 22,4 Ko (strict mode + init robuste + câblage OK), **68,2k in /
+      7,1k out / 583 s** — mieux que le spike (131,6k in) et -82 % vs baseline
+      smolagents (384k in / 533 s). Caveat documenté : vision_ok=True non audité
+      (gate vision = phase 3.3/3.6).
+- [x] F158-7 : État disque final (contract C501-C504 cochés, feature_list F-158
+      completed, README §Hands, ce fichier) + DuckDB + commit + PR.
+
 ## Objectif Actuel : Sprint F-149 à F-155 (Élimination des frictions, allégement des rituels, sondes, initialisation robuste et déblocage du goulot Tester)
 - [x] F149 : Pré-injection directe du Draft dans le prompt Coder (suppression du DraftGate, Step 1 direct écriture).
 - [x] F150 : Épuration des prompts & invariants universels (suppression des micro-règles périmées, traduction intégrale en anglais).
