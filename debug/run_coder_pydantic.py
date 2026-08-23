@@ -27,6 +27,7 @@ Usage :
 import argparse
 import asyncio
 import os
+import re
 import shutil
 import sys
 import time
@@ -79,7 +80,9 @@ def _reset_out_dir() -> None:
 
 
 def _check_deliverable(out_dir: str) -> list[tuple[str, bool, str]]:
-    """Contrôles livrable : existence, taille, câblage index.html, invariants JS clés."""
+    """Contrôles livrable : existence, taille, câblage, invariants JS + design (F-164)."""
+    from graph_orchestrator.tools import find_undefined_css_vars
+
     checks: list[tuple[str, bool, str]] = []
     contents: dict[str, str] = {}
     for fname in DEFAULT_TARGET_FILES:
@@ -98,6 +101,18 @@ def _check_deliverable(out_dir: str) -> list[tuple[str, bool, str]]:
     checks.append(("JS strict mode", "'use strict'" in js or '"use strict"' in js, ""))
     checks.append(("aucun placeholder TODO/…", not any(
         m in c for c in contents.values() for m in ("TODO", "...:</", "PLACEHOLDER")), ""))
+    # F-164 : contrôles DESIGN (bugs E2E F-162 — Times New Roman + board 48 %).
+    css = contents.get("styles.css", "")
+    missing_vars = find_undefined_css_vars(os.path.join(out_dir, "styles.css"))
+    checks.append(("variables CSS complètes (var() définies)", not missing_vars,
+                   ", ".join(missing_vars) if missing_vars else ""))
+    # F-164 : même source de vérité que la garde (DRY — la regex séparée du
+    # run 5 matchait min-width comme width).
+    from graph_orchestrator.tools import _find_narrow_fixed_widths
+    suspects = _find_narrow_fixed_widths(css)
+    checks.append(("barres remplissent le board (flex:1 sans cap étroit)",
+                   not suspects,
+                   "propres ✓" if not suspects else f"suspects : {suspects[:3]} ✗"))
     return checks
 
 
@@ -170,7 +185,7 @@ def main() -> int:
     for name, ok, detail in _check_deliverable(OUT_DIR):
         print(f"  [{'✓' if ok else '✗'}] {name} {detail}")
         ok_count += ok
-    total = len(DEFAULT_TARGET_FILES) + 5
+    total = len(DEFAULT_TARGET_FILES) + 7
     print("-" * 60)
     verdict = (
         "GO"

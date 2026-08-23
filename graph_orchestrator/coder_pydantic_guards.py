@@ -74,6 +74,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import re
 from collections import deque
 from dataclasses import dataclass, field
@@ -578,6 +579,129 @@ class ReviveRetryCapability(AbstractCapability):
                     f"({type(exc).__name__}) — retry dans {delay:.1f}s"
                 )
                 await asyncio.sleep(delay)
+
+
+# ============================================================
+# ToolGuardrail d'écriture (F-164 — gardes tools.py sur le FileSystem)
+# ============================================================
+
+
+def build_write_guardrail(settings) -> Any:
+    """Porte les gardes d'écriture canoniques de ``tools.py`` sur le
+    ``write_file``/``edit_file`` du FileSystem harness (F-164).
+
+    Constat E2E F-162 : le Coder pydantic écrit via le ``write_file`` du
+    FileSystem, qui ne porte NI les gardes tools.py ni leurs directives —
+    3 contournements observés (writefile_max_lines F-126 : script.js 128
+    lignes réécrit 2× en 28 min ; directive variables CSS : livrable rendu en
+    Times New Roman ; write_proof F-159 déjà documenté). Le seam officiel est
+    ``ToolGuardrail`` (doc harness/guardrails « Tool calls ») :
+
+    - ``guard`` (AVANT exécution) → ``block()`` : le message de refus DEVIENT
+      le résultat outil (SkipToolExecution), le modèle ajuste — sémantique
+      exacte des retours d'erreur de tools.py. Porte F-10 (contenu
+      vide/placeholder) et F-126 (écraser un existant > N lignes interdit →
+      orientation chirurgicale search_replace), messages canoniques repris.
+    - ``result_guard`` (APRÈS exécution) → ``replace()`` : la directive
+      ``_css_undefined_vars_directive`` (post-mortem runs 12:37/15:40) est
+      appendée au résultat des écritures ``.css`` — mêmes regex/anti-faux-
+      positif cross-fichiers que tools.py, zéro duplication.
+
+    Fail-open total (une garde ne doit jamais bloquer une écriture légitime
+    par exception). Câblée INCONDITIONNELLEMENT (garde de sécurité ≡ io_guard,
+    pas une garde comportementale A/B du toggle CODER_PYDANTIC_GUARDS).
+    """
+    from pydantic_ai_harness import GuardrailResult, ToolGuardrail
+
+    max_lines = int(getattr(settings, "coder_writefile_max_lines", 100) or 0)
+
+    def _guard(call) -> Any:  # noqa: ANN001 — ToolCallInfo
+        try:
+            if call.name != "write_file":
+                return GuardrailResult.allow()
+            args = dict(call.args or {})
+            content = str(args.get("content") or "")
+
+            # F-10 : contenu vide (le vrai contenu est parti dans le raisonnement).
+            if not content.strip():
+                return GuardrailResult.block(
+                    "ERROR: write_file was called with an EMPTY 'content' argument. "
+                    "You put the file content in your reasoning/prose instead of in the "
+                    "'content' argument. Re-call write_file with the COMPLETE, real file "
+                    "content in the 'content' argument. The file was NOT created."
+                )
+            stripped = content.strip()
+            if len(stripped) < 5 or stripped.lower() in {"...", "todo", "placeholder", "// code here"}:
+                return GuardrailResult.block(
+                    "ERROR: write_file 'content' looks like a placeholder, not real code. "
+                    "Provide the COMPLETE implementation. The file was NOT created."
+                )
+
+            # F-126 : anti-réécriture totale d'un gros fichier existant.
+            path = str(args.get("path") or "")
+            if max_lines > 0 and path and os.path.exists(path):
+                try:
+                    with open(path, "r", encoding="utf-8", errors="replace") as f:
+                        existing = sum(1 for _ in f)
+                except OSError:
+                    existing = 0
+                if existing > max_lines:
+                    return GuardrailResult.block(
+                        f"REFUS : '{path}' existe déjà ({existing} lignes > "
+                        f"{max_lines}). Écraser un gros fichier existant est INTERDIT : "
+                        "une réécriture complète noie le contexte et corrige rarement la "
+                        "cause racine. Procédure de correction d'un bug LOCAL : "
+                        "1) read_file(path, offset=..., limit=...) pour voir la zone fautive "
+                        "(la stack trace des erreurs console donne fichier:ligne) ; "
+                        "2) search_replace(path, old_string=..., new_string=...) pour le fix, "
+                        "ou multi_replace pour plusieurs retouches. "
+                        "Le fichier N'A PAS été modifié."
+                    )
+
+            # F-164 (boucle runs 2-4 : `.bar { width: 30px }` récidive 3/4
+            # malgré la skill ET la directive soft post-écriture — preuve
+            # in-process que le result_guard traverse bien le FileSystem,
+            # c'est le modèle qui ignore). Blocage PRÉ-exécution sur le
+            # contenu PROPOSÉ : data-viz à largeur fixe étroite = refus +
+            # fix flex:1, le fichier n'est pas écrit (doctrine F-33 : un
+            # prompt seul ne suffit jamais).
+            if path.lower().endswith(".css"):
+                from .tools import _find_narrow_fixed_widths
+
+                suspects = _find_narrow_fixed_widths(content)
+                if suspects:
+                    lines = "; ".join(f"{sel} (width: {w}px)" for sel, w in suspects[:5])
+                    return GuardrailResult.block(
+                        f"REFUS : remplissage défaillant sur des éléments de données ({lines}). "
+                        "Une largeur/cap fixe étroit laisse le conteneur à moitié VIDE (~49 % "
+                        "mesuré) — bug visuel même sans erreur console. ATTENTION : un "
+                        "`max-width: Npx` étroit défait `flex: 1` (les barres plaque au cap). "
+                        "Réécris : `flex: 1;` SANS max-width étroit (un `min-width` est OK), "
+                        "ou `width: calc(100% / N);`. Le fichier N'A PAS été écrit."
+                    )
+            return GuardrailResult.allow()
+        except Exception:  # noqa: BLE001 — fail-open : jamais bloquer par exception
+            return GuardrailResult.allow()
+
+    def _result_guard(info) -> Any:  # noqa: ANN001 — ToolResultInfo
+        try:
+            if info.name not in ("write_file", "edit_file"):
+                return GuardrailResult.allow()
+            path = str((info.args or {}).get("path") or "")
+            if not path.lower().endswith(".css"):
+                return GuardrailResult.allow()
+            if not isinstance(info.result, str):
+                return GuardrailResult.allow()
+            from .tools import _css_undefined_vars_directive, narrow_fixed_width_directive
+
+            directive = _css_undefined_vars_directive(path) + narrow_fixed_width_directive(path)
+            if directive:
+                return GuardrailResult.replace(info.result + directive)
+            return GuardrailResult.allow()
+        except Exception:  # noqa: BLE001 — fail-open
+            return GuardrailResult.allow()
+
+    return ToolGuardrail(guard=_guard, result_guard=_result_guard)
 
 
 # ============================================================

@@ -93,6 +93,48 @@
 - [x] F159-7 : État disque final (contract C505-C508, feature_list F-159
       completed, README §Hands, ce fichier) + DuckDB + commit + PR.
 
+## Jalons de l'Itération (cycle F-164 — gardes d'écriture pydantic + design déterministe)
+> Sixième incrément PRODUCTION, né du post-mortem E2E F-162 (3 gardes tools.py
+> contournées par le write_file du FileSystem harness + livrable design
+> défaillant) et de la demande user « boucle d'itération Coder jusqu'à ce que
+> ça soit le mieux ». Doc consultée AVANT (règle §5) : le seam officiel est
+> ToolGuardrail (harness/guardrails « Tool calls »).
+
+- [x] F164-1 : `build_write_guardrail` (coder_pydantic_guards) câblé
+      INCONDITIONNELLEMENT dans build_coder_capabilities — `guard` PRÉ-exécution
+      (block : F-10 vide/placeholder, F-126 anti-réécriture >100 lignes avec
+      orientation search_replace, F-164 remplissage data-viz : width fixe <40px
+      sans flex/calc OU cap max-width <60px défaisant flex:1 ; min-width bénin) +
+      `result_guard` POST-exécution (replace : directives var() CSS + remplissage
+      apposées aux résultats d'écriture .css, logique canonique tools.py,
+      find_undefined_css_vars/_find_narrow_fixed_widths extraites en pures).
+- [x] F164-2 : Static Tester Tier 1 « [CSS VARS] » (agnostique moteur — le bug
+      Times New Roman de l'E2E, var(--font-*) indéfinies, attrapé pour les DEUX
+      moteurs ; anti-FP cross-fichiers <style>/setProperty) + skill
+      frontend-design : règles COMPLÉTUDE var() (fallback DANS les parenthèses)
+      et REMPLISSAGE (flex:1/calc, largeurs fixes étroites interdites).
+- [x] F164-3 : Tests — **23 nouveaux 0-LLM PASS** (guard ×10 dont F-126/F-10/
+      cap/fail-open, result_guard ×4 dont preuve transport directive, [CSS
+      VARS] ×3 sans FP, câblage inconditionnel ×1, directive pure ×3, skill ×1,
+      intégration in-process FunctionModel + VRAI FileSystem ×1) ; suite
+      complète re-vérifiée post-changements ; gate F-103 29 surfaces 0 erreur ;
+      contrat F-159 test_guards_off_exact_f158 mis à jour (précédent F-161).
+- [x] F164-4 : **Boucle validation Coder ×6 runs GPU — CONVERGENCE prouvée** :
+      run1 GO 10/10 → runs 2-4 `width:30px` récidive (42 % remplissage DOM) →
+      garde largeur fixe → run5 loophole `flex:1+max-width:40px` (49 % mesuré,
+      le modèle obéit à la lettre en gardant le cap) → garde anti-cap →
+      **run6 : remplissage ✓ var() ✓ — 97 % de remplissage + Segoe UI MESURÉS
+      DOM LIVE** (vs 42-49 % + Times New Roman avant gardes), success natif
+      766 s / 226 k in ; restent strict mode + init robuste = variance 4B
+      documentée F-159→F-161 (hors périmètre). Hiérarchie des leviers mesurée :
+      skill 1/4 < directive soft 0/1 (ignorée alors que le canal est PROUVÉ
+      in-process) < blocage pré-exécution 2/2. Contrôle design du script
+      d'isolation unifié sur _find_narrow_fixed_widths (DRY).
+- [x] F164-5 : État disque (contract C521-C523, feature_list F-164 completed,
+      ce fichier) + DuckDB + commit + PR.
+- [ ] F164-6 : Validation E2E post-merge (avec F-163 pool navigateur en amont
+      de préférence — les fuites MCP entacheraient la mesure).
+
 ## Jalons de l'Itération (cycle F-162 — phase 3.7 : runner web du Tester sur le socle pydantic)
 > Cinquième incrément PRODUCTION du plan de migration : le runner web du Tester
 > passe sur le MÊME socle que le Coder (F-158→F-161) par configuration fine —

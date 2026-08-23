@@ -36,6 +36,11 @@ visualiseur est une **APP** : titre ~1.75rem, tout empilé verticalement dans un
 --font-display:"Segoe UI",system-ui,sans-serif; /* titres 700/800 */
 --font-body:system-ui,-apple-system,sans-serif;  /* corps 400/500 */
 ```
+**Règle de COMPLÉTUDE (non négociable) :** chaque `var(--x)` que tu ÉCRIS doit être
+DÉCLARÉE dans le `:root` ci-dessus — une var référencée mais jamais définie rend la
+propriété INVALIDE à l'exécution (police serif par défaut, couleurs transparentes).
+Un fallback se met DANS les parenthèses : `var(--font-body, system-ui)` — jamais
+`var(--font-body), system-ui` (ça ne protège de rien).
 
 ## Typographie — fourchettes (NE JAMAIS dépasser le max)
 **APP/TOOL (défaut) :** `h1` 1.5–2rem · `h2` 1.25–1.5rem · corps 1rem · lead 1.1rem ·
@@ -63,6 +68,12 @@ l'écran au point d'écraser le contenu fonctionnel.
 ## Visualiseurs d'algorithmes — plancher d'effets (F-124, non négociable)
 La sobriété vaut pour le CHROME (card, titres, contrôles). Dans un visualiseur, les éléments
 animés SONT le produit : le spec de l'Architecte est un PLANCHER — complète-le, jamais aplats.
+- **Règle de REMPLISSAGE (F-164, quantitative)** : les éléments de données (barres,
+  colonnes, points) doivent REMPLIR la largeur de leur conteneur — `flex: 1` par
+  élément dans un conteneur flex (ou largeur calculée `calc()`). INTERDIT : un
+  `width: Npx` ou `max-width: Npx` FIXE sur ces éléments (barres de 10-30 px dans
+  un board de 800 px = la moitié de l'écran vide). Un board à moitié vide est un
+  BUG visuel, même avec 0 erreur console.
 - `comparing` : accent dédié + glow (`box-shadow: 0 0 12px var(--accent)`) + `scaleY(1.06)`.
 - `sorted` : dégradé distinct (ex. `linear-gradient(180deg,var(--accent-2),var(--accent))`),
   appliqué PROGRESSIVEMENT (position par position), pas toutes les barres d'un coup.
