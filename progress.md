@@ -38,6 +38,56 @@
 - [x] F158-7 : État disque final (contract C501-C504 cochés, feature_list F-158
       completed, README §Hands, ce fichier) + DuckDB + commit + PR.
 
+## Jalons de l'Itération (cycle F-159 — phases 3.3-3.4 : gardes & contrôle + contexte/mémoire)
+> Deuxième incrément PRODUCTION du plan de migration : le socle commun × profil
+> Coder reçoit les gardes comportementales (boucles, stall, idle, preuves, retries)
+> et la compaction contextuelle — sur les seams officiels du harness (hooks,
+> SystemReminders, TieredCompaction), pas des répliques maison.
+
+- [x] F159-1 : Module `graph_orchestrator/coder_pydantic_guards.py` —
+      `ToolGuardsCapability` (LoopGuard v2 : fingerprint tool+args+RÉSULTAT vol
+      crush, fenêtre 10, nudges 3/5, GuardAbort propre à 8 ; StallDetector F-88
+      par réutilisation de compute_material_fingerprint + exemptions F-151 ;
+      churn d'édition ; gels navigateur F-125/129 en détection générique),
+      `IdleBreakerCapability` (F-61), `GoalGateCapability` (preuves autoritaires
+      F-99, continuation ModelRetry native 1× puis waive), `ReviveRetryCapability`
+      (F-104 : classify_llm_error maison + revive llama-server + échange
+      request_context.model au changement de port).
+- [x] F159-2 : Nudges → SystemReminders DYNAMIQUES (build_guard_reminders) :
+      injection en queue derrière CachePoint, pop-once, JAMAIS dans
+      message_history (finit la pollution memory_step.observations) ; GoalReanchor
+      natif ; wind-down F-131 + checklist F-114 dérivés de run_step × audit
+      visuel. F-130 remplacé par DeduplicateFileReads (plan §3.4) ; multifences/
+      r-string F-150 obsolètes (tool-calls natifs).
+- [x] F159-3 : Compaction (build_compaction_capabilities) : TieredCompaction
+      ciblé 26k (parité preflight F-116) — Clamp 30k chars → ClearToolResults
+      keep_pairs=3 → Summarizing (si COMPACTION_LLM_ENABLED) sinon SlidingWindow ;
+      DeduplicateFileReads standalone chaque requête ; WarnNearLimits.
+- [x] F159-4 : Câblage — `CODER_PYDANTIC_GUARDS` (défaut true ; false =
+      comportement F-158 exact, ClearToolResults standalone) ; build_coder_
+      capabilities ordonnée (ReviveRetry EN TÊTE = wrap externe) ; run_coder_
+      pydantic capture GuardAbort → échec propre distinct d'un crash.
+- [x] F159-5 : Tests — **39 nouveaux 0-LLM/0-réseau PASS** (loop ×6, stall ×3,
+      churn/gels ×5, idle ×2, goal gate ×3 avec continuation ModelRetry PROUVÉE,
+      revive ×5, reminders ×4, compaction ×3, assemblage ×3, intégration ×2 dont
+      rejeu du scénario de gel : boucle d'édition stérile → nudges 3/5 injectés
+      AVANT GuardAbort à 8 à travers le VRAI build_coder_agent) ; suites voisines
+      139 passed ; **suite complète 1858 passed / 0 failed / 7 skipped** ; gate
+      F-103 29 surfaces 0 erreur ; py_compile OK.
+- [x] F159-6 : Validation GPU isolation ×3 runs (2026-08-23) — **non-régression
+      PROUVÉE par A/B ON/OFF** : gardes ON run1 6/8 (52,2k in / 5,6k out /
+      528 s) + run2 7/8 (50,1k / 4,7k / 441 s) vs gardes OFF run3 7/8 (50,3k /
+      5,6k / 513 s) — CoderOutput success NATIF ×3, zéro GuardAbort parasite,
+      zéro fausse continuation GoalGate, tokens/durées identiques. Les contrôles
+      livrable échoués (JS strict mode 3/3, init robuste 1/3) échouent AUSSI
+      sans gardes → variance du 4B (l'invariant est bien dans
+      UNIVERSAL_INVARIANTS des deux moteurs ; F-158 run1 8/8 = tirage chanceux) ;
+      livrables fonctionnellement valides (node --check OK, listeners câblés).
+      Le barème 8/8 du script d'isolation mesure la qualité livrable du modèle,
+      pas la non-régression des gardes — arbitrage réel = Static Tester/Judge.
+- [x] F159-7 : État disque final (contract C505-C508, feature_list F-159
+      completed, README §Hands, ce fichier) + DuckDB + commit + PR.
+
 ## Objectif Actuel : Sprint F-149 à F-155 (Élimination des frictions, allégement des rituels, sondes, initialisation robuste et déblocage du goulot Tester)
 - [x] F149 : Pré-injection directe du Draft dans le prompt Coder (suppression du DraftGate, Step 1 direct écriture).
 - [x] F150 : Épuration des prompts & invariants universels (suppression des micro-règles périmées, traduction intégrale en anglais).

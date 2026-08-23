@@ -290,6 +290,11 @@ class Settings:
     # un bloc code — tue multi-fences, prose préalable, et le <think> forcé
     # des distills (1-3 min/step). Testé empiriquement sur Qwen3.8-Distill.
     coder_prefill_code: bool = False
+    # Gardes + compaction du Coder pydantic (F-159, phases 3.3-3.4 du plan de
+    # migration) : LoopGuard v2 / StallDetector / IdleBreaker / GoalGate /
+    # ReviveRetry + SystemReminders + TieredCompaction/DeduplicateFileReads/
+    # WarnNearLimits. false = comportement exact F-158 (A/B 3.1-3.2).
+    coder_pydantic_guards: bool = True
     # Circuit-breaker sur tours idle consécutifs (post-mortem idem). _detect_idle_step
     # (F-33) réinjecte un message à chaque tour "sans appel d'outil" mais ne coupe
     # JAMAIS → le Coder peut enchaîner N tours idle jusqu'à épuisement des steps
@@ -694,6 +699,7 @@ def load_settings() -> Settings:
         # message assistant incomplet → la réponse démarre DANS un bloc code
         # (anti multi-fences / prose / <think> interminable).
         coder_prefill_code=_get_bool("CODER_PREFILL_CODE", False),
+        coder_pydantic_guards=_get_bool("CODER_PYDANTIC_GUARDS", True),
         idle_breaker_threshold=_get_int("IDLE_BREAKER_THRESHOLD", 3),
         escalation_enabled=_get_bool("ESCALATION_ENABLED", True),
         auto_install_deps=_get_bool("AUTO_INSTALL_DEPS", True),
