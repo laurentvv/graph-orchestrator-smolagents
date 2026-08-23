@@ -64,12 +64,24 @@ Tester, agnostique moteur).
 ## 4. Les deux goulots de performance
 
 **Goulot 1 — Coder it.2 : 28 min / 1,13 M tokens in pour UNE ligne corrigée.**
-40/40 requêtes consommées (budget UsageLimits = coder_max_steps). Rituel de
-correction : lecture du contexte pré-injecté → navigation → console → probes →
-search_replace → re-vérification complète (5 critères visuels). Le Chrome du
-Coder n'est spawné qu'à la 21ᵉ minute : ~20 min de préparation/édition avant
-la première vérification live. C'est le pattern de thrash de correction 4B
-connu (F-116) — amplifié par le format 1-requête-1-tool-call.
+Timeline reconstituée (llama-server req par req + timestamps fichiers) :
+min 0-1 contexte 26k → compaction immédiate, plateau ~11k (TieredCompaction a
+tenu) ; min 2-6 investigation (read_file + search_replace) ; **min 7 :
+RÉÉCRITURE COMPLÈTE de script.js (1 007 tokens générés)** ; min 9-13
+re-lectures ; **min 14 : DEUXIÈME réécriture complète (979 générés)** ; min 16-20
+diagnostics ; **min 21:26 : premier appel navigateur (Chrome spawné ici — 21 min
+après le début du nœud)** ; min 21-26 rituel live (probes répétitifs 44-48
+s/req) ; **min 25 : LE fix chirurgical réel (search_replace 1 ligne)** ; min 27:39
+final_result. 457 750 tokens de prompt cumulés, 5 requêtes à génération nulle
+(réponses vides/retries).
+
+**Trou de garde associé (découvert à l'analyse)** : la garde F-126
+`coder_writefile_max_lines=100` (write_file refuse d'écraser un existant
+>100 lignes, précisément anti double-réécriture) vit dans tools.py — le Coder
+pydantic écrit via le write_file du FileSystem harness qui ne la porte pas :
+script.js (128 lignes) a été réécrit 2× là où smolagents aurait REFUSÉ.
+Troisième garde tools.py contournée par le FileSystem (après write_proof F-159
+et la directive var() CSS) → à porter (F-164 élargi).
 
 **Goulot 2 — Tester : 1 requête = 1 tool-call vs 1 step CodeAgent = N calls.**
 Golden : 10 requêtes pour tout le rituel (le bloc Python chainait les appels).
