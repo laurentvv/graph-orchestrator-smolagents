@@ -1365,6 +1365,15 @@
       "dependencies": [
         "F-158"
       ]
+    },
+    {
+      "id": "F-160",
+      "name": "Coder pydantic — MCP navigateur & doc (phase 3.5)",
+      "description": "Migration des serveurs MCP du Coder sur les seams officiels pydantic-ai (plan §3.5). Module coder_pydantic_mcp.py : chrome-devtools-mcp via MCPToolset/fastmcp StdioTransport (commande npx déléguée à agent_server.mcp, init_timeout ≡ *_connect_timeout_s F-104, tool_error_behavior=retry) remplaçant ToolCollection.from_mcp + patch mcpadapt ; transformations per-tool via process_tool_call (strip filePath F-50/F-90, sanitisation enum types F-127, enrichissement console F-126 : stacks get_console_message + directive read_file ciblée) ; 12 helpers DOM F-72/F-145/F-155 en FunctionToolset (corps JS importés à l'identique de devtools_dom_tools) ; Context7 HTTP via MCPToolset + RenamedToolset (tirets serveur → underscores des prompts). open_coder_mcp groupe les lifecycles avec dégradation individuelle par serveur ; browser_tools_available devient dynamique (skill devtools-preview re-précollé, bloc LIVE VERIFICATION console-centrique, caveat vision = phase 3.6). DÉCOUVERTE PROD : pydantic-ai force tool_choice='required' que llama-server encode en grammaire GBNF d'union — casse au-delà de ~45-60 outils (mesuré 45 OK / 62 KO → 400 failed to parse grammar) ; fix tool_choice='auto' quand des toolsets sont attachés (forçage comportemental porté par PROTOCOL + IdleBreaker). Dépendance fastmcp-slim[client] ajoutée. 44 tests 0-LLM (dont 2 fermetures review Kilo #111), suite complète 1902 passed / 0 failed / 7 skipped ; validation GPU isolation ×3 (run2 CoderOutput success 97,4k in / 670 s ; run3 instrumenté : navigate_page/take_snapshot/click/list_console_messages exercés via le toolset).",
+      "status": "completed",
+      "dependencies": [
+        "F-159"
+      ]
     }
   ]
 }

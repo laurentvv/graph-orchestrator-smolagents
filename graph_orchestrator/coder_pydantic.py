@@ -26,10 +26,14 @@ Phases 3.3-3.4 (F-159, coder_pydantic_guards.py) : gardes comportementales
 SystemReminders dynamiques + compaction TieredCompaction — assemblées par
 ``guards=True`` dans build_coder_agent (bascule ``CODER_PYDANTIC_GUARDS``).
 
-Hors périmètre (phases suivantes du plan) : MCP DevTools/Context7 + vision
-multimodale (3.5/3.6 → le protocole n'annonce PAS navigate_page/screenshot).
-Le graphe continue de fonctionner : la validation aval (Static Tester → Tester
-LLM → Judge) reste l'arbitre de la qualité du livrable.
+Phase 3.5 (F-160, coder_pydantic_mcp.py) : MCP navigateur & doc —
+chrome-devtools (navigate/console/evaluate + 12 helpers DOM + enrichissement
+console F-126 via process_tool_call) et Context7, ouverts par open_coder_mcp
+(dégradation gracieuse par serveur). ``browser_tools_available`` devient
+dynamique : le skill devtools-preview est re-pré-collé sur tâche web et le
+bloc VISUAL VALIDATION (console-centrique) revient. Écart restant : la vision
+multimodale (screenshots → contexte image) est la phase 3.6 — take_screenshot
+ne retourne ici qu'une confirmation texte.
 
 Activation : ``CODER_ENGINE=pydantic`` (défaut ``smolagents`` — zéro changement
 de comportement tant que le flag n'est pas posé).
@@ -228,9 +232,9 @@ When done, call the `final_result` tool with ALL fields:
 def _strategy_block(strategy: str, sections: list, iteration: int) -> str:
     """Bloc workflow par stratégie — parité nodes.py, adapté au moteur pydantic.
 
-    Différence assumée vs smolagents : pas encore d'outils navigateur (phase
-    3.5/3.6) → l'étape de vérification s'appuie sur check_js_syntax au lieu
-    de navigate_page + list_console_messages.
+    La vérification navigateur (navigate/console) vit dans le bloc LIVE
+    VERIFICATION (F-160, injecté quand DevTools est connecté) ; ce bloc porte
+    la vérification statique check_js_syntax commune aux deux moteurs.
     """
     if iteration > 1:
         return f"""### WORKFLOW — CORRECTION MODE (Iteration {iteration}, files ALREADY EXIST)
@@ -274,12 +278,10 @@ def _skills_block_for(task: dict, browser_tools_available: bool) -> str:
     """Sélection des skills — miroir de nodes.py (F-57 : l'Architect décide,
     budget F-103, repli contextuel si rien de sélectionné).
 
-    Écart moteur pydantic 3.1-3.2 : ``devtools-preview`` (rituel visuel
-    navigate_page/screenshot) n'est PAS garanti sur tâche web tant que le MCP
-    DevTools n'est pas migré (phase 3.5/3.6) — un skill qui documente des
-    outils absents induit le modèle en erreur. Le skill reste honoré s'il a
-    été EXPLICITEMENT sélectionné par l'Architect (contenu utile pour la
-    phase d'après), seul le pré-scotchage automatique est suspendu.
+    ``browser_tools_available`` (F-160) : le skill ``devtools-preview`` est
+    pré-collé sur tâche web quand le MCP DevTools est connecté — parité
+    smolagents exacte (le rituel navigate/console est alors réellement
+    exécutable).
     """
     from .skills_loader import (
         ALWAYS_SKILLS_CODER,
@@ -329,7 +331,67 @@ def _is_web_task(task: dict) -> bool:
     )
 
 
-def build_coder_instructions(task: dict, browser_tools_available: bool = True) -> str:
+def _build_devtools_block(task: dict) -> str:
+    """Bloc VISUAL VALIDATION du profil Coder pydantic (phase 3.5, F-160).
+
+    Miroir de nodes.py._build_devtools_blocks, ADAPTÉ à la phase 3.5 : tant que
+    la vision multimodale n'est pas migrée (3.6), take_screenshot ne retourne
+    qu'une confirmation TEXTE — la vérification s'appuie donc sur la CONSOLE et
+    les sondes DOM (discover_ui/fuzz/probe_*), pas sur l'inspection visuelle.
+    Appelé uniquement quand les outils navigateur sont connectés
+    (open_coder_mcp → browser_tools_available).
+    """
+    import os
+
+    target_files = task.get("target_files") or ["index.html"]
+    primary_target = target_files[0]
+    primary_url = "file:///" + os.path.abspath(primary_target).replace("\\", "/")
+
+    if not _is_web_task(task):
+        return ""
+
+    from .validation_criteria import build_visual_criteria_block
+
+    visual_block = build_visual_criteria_block(task.get("visual_success_criteria") or [])
+    if visual_block:
+        criteria_note = (
+            "\n7. VISUAL CRITERIA VALIDATION: confirm each criterion below through DOM probes "
+            "(discover_ui / evaluate_script / probe_*), and record honest verdicts with "
+            "visual_check(criterion_number=..., verdict=..., observation=...). A single NO = failure -> fix."
+        )
+    else:
+        criteria_note = (
+            "\n7. final_result only when: 1) the page loads with 0 console errors, "
+            "2) interactive controls are wired (fuzz proves it)."
+        )
+
+    return f"""### 🖥️ LIVE VERIFICATION (Chrome DevTools — verify BEFORE final_result)
+You have a controllable Chrome browser to VERIFY your page through REAL execution.
+
+⚠️ CRITICAL TRAP: a page with good-looking CSS may have BROKEN JavaScript silently
+(dead buttons, unhandled events). Only the console and live interactions reveal this.
+NOTE: take_screenshot returns a text confirmation only (image input arrives phase 3.6) —
+base your verdicts on console + DOM probes, not on visual inspection.
+
+Verification Workflow (perform AFTER creating files, BEFORE final_result):
+1. `navigate_page(url="{primary_url}")` — opens your page in Chrome (exact URL below).
+2. `list_console_messages()` — MANDATORY: 0 JS errors required (SyntaxError, undefined, Uncaught).
+3. `discover_ui()` — learn the REAL DOM ids/dimensions; never guess a selector.
+4. UI FUZZING: `fuzz_click_all_buttons()` then `fuzz_keyboard_controls()`, then re-check `list_console_messages()`.
+5. If errors occur: FIX via `search_replace` (never rewrite the whole file), then re-test (navigate, console, fuzz).
+6. ANIMATED/ALGORITHM PAGE: a static snapshot proves nothing — for sorting bars call
+   `probe_sort_state()` (waits for the REAL completed-sort verdict); for canvas games call
+   `probe_canvas_activity()` and require ANIMATING status; `instrument_calls()` / `dump_function_source()`
+   diagnose a live-but-frozen engine.
+⚠️ If `navigate_page` TIMEOUTS on your LOCAL page: the JS thread is frozen (infinite loop). Check your while loops.
+{criteria_note}
+
+Exact page URL (primary target): {primary_url}
+{visual_block}"""
+
+
+def build_coder_instructions(task: dict, browser_tools_available: bool = True,
+                             context7_available: bool = False) -> str:
     """Instructions système du profil Coder (partie STABLE du prompt).
 
     Rôle + invariants + protocole + stratégie + fichiers cibles + skills +
@@ -337,10 +399,10 @@ def build_coder_instructions(task: dict, browser_tools_available: bool = True) -
     le user prompt (build_coder_user_prompt) — découpage system/user
     cache-friendly pour --cache-reuse llama-server.
 
-    ``browser_tools_available`` : False tant que le MCP DevTools n'est pas
-    migré (phase 3.5/3.6) — suspend le pré-scotchage du skill devtools-preview
-    et adapte les étapes de vérification (check_js_syntax au lieu de la
-    console navigateur).
+    ``browser_tools_available`` (F-160) : True quand le MCP DevTools est
+    connecté (open_coder_mcp) → bloc LIVE VERIFICATION + skill devtools-preview
+    pré-collé sur tâche web. ``context7_available`` : True quand le MCP Context7
+    est connecté → ligne d'orientation anti-hallucination d'API.
     """
     from .prompts import ROLE_BLOCKS, build_role_header
 
@@ -363,9 +425,14 @@ def build_coder_instructions(task: dict, browser_tools_available: bool = True) -
             "`check_js_syntax(path=...)` before final_result."
         )
 
+    if browser_tools_available:
+        devtools_block = _build_devtools_block(task)
+        if devtools_block:
+            parts.append(devtools_block)
+
     parts.append(_FINAL_RESULT_BLOCK.format(task_id=task.get("id", "")))
 
-    parts.append(
+    tools_lines = [
         "### AVAILABLE TOOLS\n"
         "- File tools: `read_file` (line numbers + hash), `write_file` (complete file, "
         "expected_hash), `edit_file` (exact unique replacement), `append_file` (end of file), "
@@ -375,7 +442,22 @@ def build_coder_instructions(task: dict, browser_tools_available: bool = True) -
         "- Verification: `check_js_syntax` (node --check + CSS vars), `read_python_skeleton`.\n"
         "- Trace: `log_event` (DuckDB), `check_run_state`.\n"
         "- Task-specific: `visual_check` (per visual criterion), `load_skill` (lazy skills)."
-    )
+    ]
+    if browser_tools_available:
+        tools_lines.append(
+            "- Browser (Chrome DevTools MCP): `navigate_page`, `list_console_messages`, "
+            "`evaluate_script`, `take_screenshot`, `click`, `fill`, plus DOM probes "
+            "(`discover_ui`, `fuzz_click_all_buttons`, `fuzz_keyboard_controls`, "
+            "`probe_canvas_activity`, `probe_sort_state`, `expose_game_state`, "
+            "`instrument_calls`, `dump_function_source`, `force_advance`, `heal_selector`, "
+            "`clean_dom`)."
+        )
+    if context7_available:
+        tools_lines.append(
+            "- Library docs (Context7 MCP): `resolve_library_id` / `query_docs` — ONLY for "
+            "external libraries (React, Chart.js...). NEVER for vanilla HTML/JS/CSS."
+        )
+    parts.append("\n".join(tools_lines))
 
     skills = _skills_block_for(task, browser_tools_available)
     if skills:
@@ -499,14 +581,17 @@ def build_coder_capabilities(task: dict, settings, guards: bool = True,
 def build_coder_agent(model, task: dict, settings, coder_max_tokens: int,
                       browser_tools_available: bool = True, guards: bool = True,
                       extra_capabilities: Optional[list] = None,
-                      on_reminder_fired=None):
+                      on_reminder_fired=None, toolsets: Optional[list] = None,
+                      context7_available: bool = False):
     """Assemble l'Agent pydantic du profil Coder autour du modèle fourni.
 
     Séparé de run_coder_pydantic pour être testable sans GPU (construction
     seule, aucun appel réseau) et réutilisable par le profil Tester (3.7) —
     c'est le « socle commun » du plan : seule la liste tools/instructions/
     output_type change d'un profil à l'autre. Voir build_coder_capabilities
-    pour la sémantique de ``guards`` / ``extra_capabilities``.
+    pour la sémantique de ``guards`` / ``extra_capabilities``. ``toolsets``
+    (F-160) : toolsets MCP ouverts (chrome-devtools + helpers + context7) —
+    leur lifecycle est porté par l'appelant (open_coder_mcp).
     """
     from pydantic_ai import Agent, ModelSettings
 
@@ -518,20 +603,34 @@ def build_coder_agent(model, task: dict, settings, coder_max_tokens: int,
         on_reminder_fired=on_reminder_fired,
     )
 
+    model_settings = ModelSettings(
+        temperature=settings.coder_temperature,
+        max_tokens=coder_max_tokens,
+        timeout=settings.llm_timeout_s,
+    )
+    if toolsets:
+        # F-160 : pydantic-ai force tool_choice='required' par défaut sur les
+        # runs à output outil — llama-server encode ce forçage en GRAMMAIRE
+        # GBNF d'union des tools, qui casse au-delà de ~45-60 outils (mesuré :
+        # 45 outils OK, 62 → 400 « failed to parse grammar » ; les MCP portent
+        # le Coder à 62). 'auto' supprime la grammaire contrainte sans changer
+        # le protocole tool-calls ; le forçage comportemental reste porté par
+        # le PROTOCOL block + IdleBreaker (F-159).
+        model_settings["tool_choice"] = "auto"
+
     return Agent(
         model,
-        instructions=build_coder_instructions(task, browser_tools_available),
+        instructions=build_coder_instructions(
+            task, browser_tools_available, context7_available=context7_available
+        ),
         capabilities=capabilities,
         tools=build_coder_custom_tools(),
+        toolsets=list(toolsets) if toolsets else [],
         output_type=CoderOutput,
         # Retries niveau output-validation (pydantic-ai couche 4) ≡
         # worker_max_retries du chemin smolagents.
         retries=settings.worker_max_retries,
-        model_settings=ModelSettings(
-            temperature=settings.coder_temperature,
-            max_tokens=coder_max_tokens,
-            timeout=settings.llm_timeout_s,
-        ),
+        model_settings=model_settings,
     )
 
 
@@ -624,46 +723,53 @@ async def run_coder_pydantic(
                 current_base=srv.api_base,
             )
 
-        # Phase 3.5/3.6 à venir : pas de MCP navigateur → devtools-preview non
-        # collé, vérification par check_js_syntax.
-        agent = build_coder_agent(
-            model,
-            task,
-            settings,
-            coder_max_tokens,
-            browser_tools_available=False,
-            guards=settings.coder_pydantic_guards,
-            extra_capabilities=[revive_cap] if revive_cap is not None else None,
-        )
-        print(f"[*] Coder (pydantic) — llama-server prêt : {srv.api_base}")
-        try:
-            result = await agent.run(
-                user_prompt,
-                usage_limits=UsageLimits(
-                    request_limit=settings.coder_max_steps,
-                    tool_calls_limit=settings.coder_max_steps * 3,
-                ),
+        # F-160 (phase 3.5) : MCP navigateur (chrome-devtools + helpers DOM) et
+        # doc (Context7) — dégradation gracieuse par serveur ; les toolsets
+        # restent ouverts pendant TOUT le run (open_coder_mcp = miroir des
+        # context managers smolagents F-45/F-17).
+        from .coder_pydantic_mcp import open_coder_mcp
+
+        async with open_coder_mcp(settings) as mcp:
+            agent = build_coder_agent(
+                model,
+                task,
+                settings,
+                coder_max_tokens,
+                browser_tools_available=mcp.browser_tools_available,
+                guards=settings.coder_pydantic_guards,
+                extra_capabilities=[revive_cap] if revive_cap is not None else None,
+                toolsets=mcp.toolsets,
+                context7_available=mcp.context7_available,
             )
-        except GuardAbort as exc:
-            duration = time.time() - t0
-            print(f"[-] Coder (pydantic) GARDÉ-ABORT propre ({exc})")
-            return None, NodeMetrics(
-                node=node_label,
-                model=str(coder_spec.model or ""),
-                duration_s=duration,
-                input_tokens=None,
-                output_tokens=None,
-            )
-        except Exception as exc:  # noqa: BLE001 — échec propre, le graphe continue
-            duration = time.time() - t0
-            print(f"[-] Coder (pydantic) ÉCHEC ({type(exc).__name__}: {exc})")
-            return None, NodeMetrics(
-                node=node_label,
-                model=str(coder_spec.model or ""),
-                duration_s=duration,
-                input_tokens=None,
-                output_tokens=None,
-            )
+            print(f"[*] Coder (pydantic) — llama-server prêt : {srv.api_base}")
+            try:
+                result = await agent.run(
+                    user_prompt,
+                    usage_limits=UsageLimits(
+                        request_limit=settings.coder_max_steps,
+                        tool_calls_limit=settings.coder_max_steps * 3,
+                    ),
+                )
+            except GuardAbort as exc:
+                duration = time.time() - t0
+                print(f"[-] Coder (pydantic) GARDÉ-ABORT propre ({exc})")
+                return None, NodeMetrics(
+                    node=node_label,
+                    model=str(coder_spec.model or ""),
+                    duration_s=duration,
+                    input_tokens=None,
+                    output_tokens=None,
+                )
+            except Exception as exc:  # noqa: BLE001 — échec propre, le graphe continue
+                duration = time.time() - t0
+                print(f"[-] Coder (pydantic) ÉCHEC ({type(exc).__name__}: {exc})")
+                return None, NodeMetrics(
+                    node=node_label,
+                    model=str(coder_spec.model or ""),
+                    duration_s=duration,
+                    input_tokens=None,
+                    output_tokens=None,
+                )
 
         usage = result.usage  # propriété (piège v2.33 : pas une méthode)
         duration = time.time() - t0

@@ -64,6 +64,16 @@ ou `{'tools': 3, 'output': 1}` ; par run : `agent.run(retries=…)`.
   chrome-devtools-mcp se branche directement (fini `ToolCollection.from_mcp` + le patch
   mcpadapt des images). Lifecycle par `async with agent` / `async with toolset`.
   Transformation per-tool via client fastmcp (équivalent de nos wrappers vision).
+  ⚠️ **Leçon F-160 (mesurée, 2026-08-23)** : sur les runs à output outil,
+  pydantic-ai envoie `tool_choice='required'` par défaut — llama-server encode
+  ce forçage en GRAMMAIRE GBNF d'union des tools, qui **casse au-delà de
+  ~45-60 outils** (45 OK / 62 → 400 « failed to parse grammar », body capturé
+  puis rejoué). Fix : `ModelSettings(tool_choice='auto')` dès que des toolsets
+  MCP sont attachés (coder_pydantic.build_coder_agent) — plus de grammaire
+  contrainte, le forçage comportemental reste porté par le protocole prompt +
+  IdleBreaker. Les noms d'outils MCP arrivent avec leurs TIRETS d'origine
+  (ex `resolve-library-id`) — mcpadapt les convertissait en underscores :
+  utiliser `RenamedToolset` pour préserver les noms cités par les prompts/skills.
 - **Common/Native tools** : [common-tools](https://pydantic.dev/docs/ai/tools-toolsets/common-tools/),
   [native-tools](https://pydantic.dev/docs/ai/tools-toolsets/native-tools/) (exécutés côté
   provider — inutiles en local llama.cpp).
