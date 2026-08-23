@@ -276,6 +276,12 @@ class Settings:
     # skills, protocole tool-calls natifs prouvé par le spike F-157 à -66 % tokens IN).
     # Valeur inconnue → repli smolagents + avertissement.
     coder_engine: str = "smolagents"
+    # Moteur du runner WEB du nœud Tester (F-162, plan migration pydantic-ai-harness
+    # phase 3.7) : 'smolagents' (défaut, historique) ou 'pydantic' (tester_pydantic.py :
+    # même socle que le Coder pydantic — gardes, compaction, vision, MCP DevTools +
+    # Puppeteer — modèle no_think 9B, prompt F-152 en instructions, sortie CoderOutput).
+    # Valeur inconnue → repli smolagents + avertissement.
+    tester_engine: str = "smolagents"
     # --- Garde anti-réécriture totale (F-126, post-mortem run 2026-08-19_1552) ---
     # Le 4B « corrigeait » un bug local (1 ligne) en réécrivant TOUT index.html
     # (600+ lignes, 3 fois, ~15 min de prefill chacune) → inondation du contexte
@@ -704,6 +710,7 @@ def load_settings() -> Settings:
         tester_inline_skill_resources=_get_bool("TESTER_INLINE_SKILL_RESOURCES", True),
         coder_max_steps=_get_int("CODER_MAX_STEPS", 40),
         coder_engine=_get_str("CODER_ENGINE", "smolagents"),
+        tester_engine=_get_str("TESTER_ENGINE", "smolagents"),
         coder_writefile_max_lines=_get_int("CODER_WRITEFILE_MAX_LINES", 100),
         # Prefill ````python (2026-08-22) : llama-server continue le dernier
         # message assistant incomplet → la réponse démarre DANS un bloc code
