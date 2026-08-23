@@ -2,9 +2,11 @@
 
 ## Objectif Actuel : Migration pydantic-ai-harness — phase 3 par étapes (F-158+, plan docs/PLAN_MIGRATION_PYDANTIC_HARNESS.md)
 > Exécution de la séquence recommandée du plan approuvé (PR #107) : 3.1-3.2 (parité
-> Coder) → 3.3-3.4 (gardes + compaction) → 3.5 (MCP) → 3.6-3.7 (vision + runner web
-> Tester) → E2E. Prérequis remplis : spike GO F-157 (PR #106), dépendances pinées
-> (pydantic-ai-harness==0.24.0), doc lue (F-157, règle §5 AGENTS.md).
+> Coder, F-158) → 3.3-3.4 (gardes + compaction, F-159) → 3.5 (MCP navigateur
+> & doc, F-160) → 3.6-3.7 (vision + runner web Tester) → E2E. Prérequis
+> remplis : spike GO F-157 (PR #106), dépendances pinées
+> (pydantic-ai-harness==0.24.0 + fastmcp-slim[client]), doc lue (F-157,
+> règle §5 AGENTS.md).
 
 ## Jalons de l'Itération (cycle F-158 — phase 3.1-3.2 : Coder pydantic en production)
 > Premier incrément PRODUCTION du plan : le socle commun × profil Coder derrière un
@@ -87,6 +89,63 @@
       pas la non-régression des gardes — arbitrage réel = Static Tester/Judge.
 - [x] F159-7 : État disque final (contract C505-C508, feature_list F-159
       completed, README §Hands, ce fichier) + DuckDB + commit + PR.
+
+## Jalons de l'Itération (cycle F-160 — phase 3.5 : MCP navigateur & doc)
+> Troisième incrément PRODUCTION du plan de migration : les serveurs MCP du
+> Coder (chrome-devtools + Context7) passent sur les seams officiels du
+> harness — MCPToolset/fastmcp remplace ToolCollection.from_mcp + le patch
+> mcpadapt, process_tool_call remplace le sous-classage Tool.
+
+- [x] F160-1 : Module `graph_orchestrator/coder_pydantic_mcp.py` —
+      `build_devtools_mcp_toolset` (StdioTransport npx délégué à
+      agent_server.mcp, init_timeout ≡ chrome_devtools_connect_timeout_s,
+      tool_error_behavior=retry) ; `build_context7_mcp_toolset` (HTTP +
+      header API + RenamedToolset tirets→underscores pour la parité
+      prompts/skills) ; `open_coder_mcp` (AsyncExitStack, dégradation
+      INDIVIDUELLE par serveur — miroir F-104).
+- [x] F160-2 : Transformations per-tool via `process_tool_call` (doc
+      mcp/client) — strip filePath/file_path de take_screenshot/take_snapshot
+      (F-50/F-90), sanitisation enum types de list_console_messages (F-127),
+      enrichissement console F-126 (stacks get_console_message bornées 4/8 +
+      directive read_file ciblée + anti-réécriture + état F-128
+      _update_console_pending réutilisé) — logique importée de
+      vision_callback (0 duplication).
+- [x] F160-3 : 12 helpers DOM (F-72/F-145/F-155) en FunctionToolset — corps
+      JS importés À L'IDENTIQUE de devtools_dom_tools (clampage, rejets
+      identifiants, interpolation __TOKEN__ F-155, défaut probe_sort 180000).
+- [x] F160-4 : Câblage — build_coder_agent accepte `toolsets=` ;
+      browser_tools_available DYNAMIQUE (skill devtools-preview re-précollé
+      sur tâche web, bloc LIVE VERIFICATION console-centrique avec caveat
+      « take_screenshot = confirmation texte, vision = 3.6 », URL file:///
+      absolue, critères visuels via sondes DOM + visual_check).
+- [x] F160-5 : **DÉCOUVERTE PROD** (isolation run1 NO-GO 400) : pydantic-ai
+      force `tool_choice='required'` → llama-server l'encode en GRAMMAIRE
+      GBNF d'union des tools, qui casse au-delà de ~45-60 outils (matrice
+      mesurée sur body capturé : 62 outils+required=400, 62+auto=OK,
+      45+required=OK — F-159 passait avec 17). Fix : `tool_choice='auto'`
+      quand des toolsets sont attachés (forçage comportemental conservé via
+      PROTOCOL + IdleBreaker F-159). Scripts diagnostic conservés
+      (diag_grammar_f160, replay_request_f160).
+- [x] F160-6 : Tests — **42 nouveaux 0-LLM/0-réseau PASS** (args ×5,
+      enrich console ×4, process_tool_call ×3, render ×4, toolsets ×5,
+      helpers ×11, instructions ×6, assemblage ×3 dont tool_choice auto
+      conditionné) ; suites voisines 197 passed ; **suite complète 1900
+      passed / 0 failed / 7 skipped** (baseline 1858, 0 régression) ; gate
+      F-103 29 surfaces 0 erreur (AGENTS.md sous hard limit, warning soft
+      préexistant) ; py_compile OK ; dépendance `fastmcp-slim[client]`
+      ajoutée (extra mcp absent du harness 0.24.0).
+- [x] F160-7 : Validation GPU isolation ×3 : run1 NO-GO → découverte
+      grammaire (400) → fix → run2 **CoderOutput success natif** (97,4k in /
+      5,6k out / 670 s, chrome-devtools + Context7 connectés, 7/8 contrôles
+      livrable — l'échec unique « JS strict mode » = variance 4B déjà
+      documentée F-159) → run3 mini-tâche INSTRUMENTÉE
+      (`debug/trace_mcp_calls_f160.py`) : le 4B exerce navigate_page →
+      take_snapshot ×2 → click ×2 → list_console_messages À TRAVERS le
+      toolset pydantic (success 157 s). Écart restant assumé : vision
+      multimodale (screenshots → contexte image) = phase 3.6. Artefacts
+      d'isolation détrackés de git (commit accidentel F-159). État disque
+      final (contract C509-C512, feature_list F-160, README §Hands, doc
+      notes §3, ce fichier) + DuckDB + commit + PR.
 
 ## Objectif Actuel : Sprint F-149 à F-155 (Élimination des frictions, allégement des rituels, sondes, initialisation robuste et déblocage du goulot Tester)
 - [x] F149 : Pré-injection directe du Draft dans le prompt Coder (suppression du DraftGate, Step 1 direct écriture).

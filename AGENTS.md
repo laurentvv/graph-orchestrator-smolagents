@@ -109,10 +109,11 @@ Un run E2E complet dure 30-40 min GPU-local ; valider la modif d'UN seul nœud (
 | `debug/isolation/run_linter.py` | Linter (déterministe, 0 LLM) | `uv run python debug/isolation/run_linter.py` |
 | `debug/validate_static_tester_live.py` | Static Tester (déterministe) | `uv run python debug/validate_static_tester_live.py` |
 | `debug/run_verify.py` | Vérif exécutable F-100 (recette + readiness HTTP, 0 LLM) | `uv run python debug/run_verify.py [dossier]` |
-| `debug/run_turn_checkpoint.py` | Checkpoint git par itération F-102 (snapshot sans contamination, 0 LLM) | `uv run python debug/run_turn_checkpoint.py` |
-| `debug/run_fs_safety.py` | Robustesse FS F-95 (transaction+crash-recovery, verrou cross-process, cloisonnement IO, 0 LLM) | `uv run python debug/run_fs_safety.py` |
-| `debug/test_mtp_spec.py` | Compatibilité/bench MTP spéculatif llama-server (A/B baseline vs `--spec-type draft-mtp`, 0 LLM) | `uv run python debug/test_mtp_spec.py [--only fast\|reasoning\|no_think] [--ctx N]` |
-| `debug/bench_prefill_flags.py` | Bench préfill flags FAST (`--cache-reuse`, `-ub`), charge agent multi-tours simulée (0 LLM) | `uv run python debug/bench_prefill_flags.py [--ctx N] [--turns N]` |
+| `debug/run_turn_checkpoint.py` | Checkpoint git par itération F-102 (0 LLM) | `uv run python debug/run_turn_checkpoint.py` |
+| `debug/run_fs_safety.py` | Robustesse FS F-95 (transaction+crash-recovery, verrou cross-process, 0 LLM) | `uv run python debug/run_fs_safety.py` |
+| `debug/test_mtp_spec.py` | Compat/bench MTP spéculatif llama-server (A/B `--spec-type draft-mtp`, 0 LLM) | `uv run python debug/test_mtp_spec.py [--only fast\|reasoning\|no_think] [--ctx N]` |
+| `debug/bench_prefill_flags.py` | Bench préfill flags FAST (`--cache-reuse`, `-ub`), multi-tours simulé (0 LLM) | `uv run python debug/bench_prefill_flags.py [--ctx N] [--turns N]` |
+| `debug/diag_grammar_f160.py` / `replay_request_f160.py` / `trace_mcp_calls_f160.py` | F-160 : grammaire llama-server vs `tool_choice`, rejeu variants, trace appels MCP | `uv run python debug/<script>.py` |
 
 Boucle : identifier le nœud impacté → lancer son script → observer le verdict → couper si erreur, corriger, relancer. Input ad hoc : scénario nommé (`debug/run_judge.py bug`), prompt en CLI (`debug/run_router.py "ma description"`), ou `@fichier`. Une fois le nœud validé isolément, relancer l'E2E complet (§7). Détail technique : les nœuds DSPy ignorent le paramètre `*_model` — le vrai modèle vient de `_run_dspy_node → model_lifecycle(spec)` qui spawn son propre llama-server ; les scripts reproduisent fidèlement ce comportement.
 

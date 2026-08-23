@@ -96,3 +96,4 @@ data/*.bak.*
 # Scratch de bench/tests locaux (F-126..F-128)
 temp_pytest/
 debug/coder_isolation_out_v1/
+debug/coder_pydantic_out/
