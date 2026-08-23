@@ -87,6 +87,21 @@ ou `{'tools': 3, 'output': 1}` ; par run : `agent.run(retries=…)`.
   `ProcessHistory` (reconstruire les parts en objets NEUFS — ce sont des
   dataclasses, `dataclasses.replace`, jamais de mutation in-place), cf.
   coder_pydantic_vision.py.
+  ✅ **Leçon F-162 (mesurée GPU ×6 runs, 2026-08-23 — profil Tester)** :
+  (1) **Budget requêtes ≠ steps smolagents** : 1 step CodeAgent enchaîne
+  PLUSIEURS tool calls dans un bloc Python ; 1 requête pydantic ≈ 1 tool call —
+  un budget 1:1 (request_limit=max_steps) épuise les 16 requêtes avant tout
+  verdict (768 s). Calibrer `request_limit = steps × 2` (+ wind-down reminder
+  à ≤6 restantes : verdict honnête sur preuves collectées > timeout silencieux).
+  (2) **Une capability DOIT sous-classer `AbstractCapability`** : le harness
+  APPELLE l'instance à l'enregistrement — un duck-typing avec juste les hooks
+  lève `TypeError: 'object' is not callable` au 1er run (invisible à la
+  construction ; un test d'exécution `TestModel` l'attrape 0-LLM).
+  (3) Le 9B no-think génère ~7 t/s (~65 s/requête sur le rituel test) : 32
+  requêtes ≈ 35 min > TESTER_TIMEOUT_S 1800 — plafond et budget requêtes doivent
+  être ALIGNÉS (1800 s ↔ ~24 requêtes, ou 32 requêtes ↔ 2700 s).
+  (4) Première requête : ligne « the browser starts on about:blank — any
+  interaction before navigate_page is void » (6 press_key perdus au run 3).
 - **Common/Native tools** : [common-tools](https://pydantic.dev/docs/ai/tools-toolsets/common-tools/),
   [native-tools](https://pydantic.dev/docs/ai/tools-toolsets/native-tools/) (exécutés côté
   provider — inutiles en local llama.cpp).

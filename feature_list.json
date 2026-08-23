@@ -1383,6 +1383,18 @@
       "dependencies": [
         "F-160"
       ]
+    },
+    {
+      "id": "F-162",
+      "name": "Migration Tester (runner web) pydantic-ai-harness — phase 3.7",
+      "description": "Le runner web du nœud Tester passe sur le MÊME socle pydantic que le Coder (F-158→F-161), par configuration : modèle no_think 9B, MCP chrome-devtools + helpers DOM + Puppeteer (repli) + Context7 (dégradation individuelle), custom tools lecture seule + fix_known_error (PAS de FileSystem en écriture), prompt compacté F-152 en instructions natif tool-calls (skills devtools-preview garanti + web-tester, checklist F-46/F-82 / re-test ciblé F-47/F-52), output_type=CoderOutput natif, gardes socle paramétrées (IdleBreaker hint Tester, WarnNearLimits ancré budget requêtes ×2, PAS de GoalGate, wind-down Tester ≤6 restantes), vision F-161 partagée, timeout wall-clock asyncio.wait_for + UsageLimitExceeded propre, tool_choice=auto (leçon grammaire F-160). Flag TESTER_ENGINE=pydantic (défaut smolagents) aiguillé dans WebTestRunner. Isolation debug/run_tester.py (scénarios ok/bug sur livrable parfait run #19). Validation E2E Bubble Sort complet = étape suivante du plan.",
+      "status": "completed",
+      "dependencies": [
+        "F-158",
+        "F-159",
+        "F-160",
+        "F-161"
+      ]
     }
   ]
 }

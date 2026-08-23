@@ -71,6 +71,9 @@ debug/isolation/_demo/
 debug/run6_20260801_200231/
 debug/run_gpu_20260801_204945/
 debug/tier3_validation/
+# F-162 : logs + livrables d'isolation régénérables (leçon F-160 — jamais commités).
+debug/isolation_*.log
+debug/tester_pydantic_out/
 
 # Binaires lourds bundlés (build CUDA llama.cpp, ~0,7-1 Go) — gitignoré.
 # llama_server.py détecte le GPU NVIDIA (nvidia-smi) et découvre automatiquement :

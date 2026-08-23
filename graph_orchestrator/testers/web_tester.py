@@ -30,6 +30,17 @@ class WebTestRunner:
     """Teste une application web (HTML/CSS/JS) via Chrome DevTools (MCP Puppeteer)."""
 
     async def run(self, task: dict, model, settings) -> Tuple[Optional[CoderOutput], Optional[NodeMetrics]]:
+        # F-162 (plan migration pydantic-ai-harness, phase 3.7) : moteur
+        # alternatif pydantic-ai-harness activé par TESTER_ENGINE=pydantic.
+        # L'aiguillage est le SEUL point de divergence — smolagents reste le
+        # défaut inchangé (miroir CODER_ENGINE dans execute_coder_node).
+        _engine = str(getattr(settings, "tester_engine", "smolagents") or "smolagents").lower()
+        if _engine == "pydantic":
+            from ..tester_pydantic import run_tester_pydantic
+
+            return await run_tester_pydantic(task, settings)
+        if _engine != "smolagents":
+            print(f"[!] TESTER_ENGINE inconnu '{_engine}' — repli smolagents.")
         # Imports locaux : MCP/smolagents sont lourds et le module doit rester
         # importable même si l'environnement web (Chrome/npx) n'est pas dispo
         # (ex: le runner Python n'en a pas besoin).

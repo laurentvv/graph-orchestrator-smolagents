@@ -372,12 +372,17 @@ class IdleBreakerCapability(AbstractCapability):
     répété (tour textuel qui gaspille des requêtes du budget).
     """
 
-    def __init__(self, state: CoderGuardState, *, threshold: int = 3):
+    def __init__(self, state: CoderGuardState, *, threshold: int = 3,
+                 action_hint: Optional[str] = None):
         self.id = None
         self.description = None
         self.defer_loading = False
         self._state = state
         self._threshold = max(2, threshold)
+        # F-162 (phase 3.7) : le hint d'action est paramétrable par profil —
+        # le nudge Coder cite write_file/search_replace, le Tester cite
+        # navigate/evaluate/final_result. Défaut None = texte Coder (rétrocompat).
+        self._action_hint = action_hint
 
     async def before_run(self, ctx) -> None:  # noqa: ANN001
         pass  # le reset d'état est porté par ToolGuardsCapability (état partagé)
@@ -391,10 +396,17 @@ class IdleBreakerCapability(AbstractCapability):
                 self._state.idle_count = 0
                 return response
             self._state.idle_count += 1
+            if self._action_hint:
+                action_line = f"Act now — {self._action_hint}."
+            else:
+                action_line = (
+                    "Act now — write_file / search_replace / check_js_syntax, or finish "
+                    "with final_result."
+                )
             self._state.idle_nudge = (
                 f"[IDLE] Turn without any tool call (#{self._state.idle_count}). PROTOCOL "
-                "rule 1: every turn MUST call at least one tool. Act now — write_file / "
-                "search_replace / check_js_syntax, or finish with final_result."
+                "rule 1: every turn MUST call at least one tool. "
+                + action_line
             )
             if self._state.idle_count >= self._threshold:
                 raise GuardAbort(
@@ -669,6 +681,56 @@ def build_guard_reminders(state: CoderGuardState, task: dict, settings, on_fire=
     )
 
 
+def build_tester_reminders(state: CoderGuardState, on_fire=None, max_requests: Optional[int] = None):
+    """SystemReminders du profil Tester (F-162, phase 3.7).
+
+    Variante de build_guard_reminders SANS les reminders Coder-spécifiques :
+    pas de checklist/wind-down F-114/F-131 (portés par visual_check, outil que
+    le Tester n'a pas — ses verdicts partent dans final_result.details).
+    GoalReanchor + les 4 nudges d'état (loop/stall/idle/browser) restent — le
+    pop-once et l'injection derrière CachePoint sont partagés.
+
+    ``max_requests`` (leçon run 3 F-162 : verdict attendu à ~1525 s sous un
+    timeout de 1800 s, 30 tours sans convergence) : ajoute un wind-down
+    TESTER — à ≤6 requêtes restantes, conclure sur les preuves déjà collectées
+    (verdict honnête par critère, N/A permis) et appeler final_result
+    IMMÉDIATEMENT. Un verdict partiel nourrit la boucle Coder ; un timeout
+    ne nourrit rien (Judge fail-closed).
+    """
+    from pydantic_ai_harness import SystemReminders
+    from pydantic_ai_harness.system_reminders import GoalReanchor
+
+    def _pop(attr: str) -> Optional[str]:
+        text = getattr(state, attr)
+        setattr(state, attr, None)
+        return text
+
+    def _wind_down(ctx):  # noqa: ANN001 — F-131 adapté au Tester
+        if not max_requests:
+            return None
+        remaining = int(max_requests) - int(getattr(ctx, "run_step", 0))
+        if remaining > 6 or remaining < 1:
+            return None
+        return (
+            f"[WIND-DOWN] Only {remaining} request(s) left. STOP collecting evidence: "
+            "give your verdict NOW from what you already observed — PASS/FAIL per "
+            "criterion (honest FAIL or 'not verified' is allowed), then call "
+            "final_result IMMEDIATELY. A partial verdict feeds the Coder; a timeout "
+            "feeds nothing."
+        )
+
+    reminders = [
+        GoalReanchor(),
+        lambda ctx: _pop("loop_nudge"),
+        lambda ctx: _pop("stall_nudge"),
+        lambda ctx: _pop("idle_nudge"),
+        lambda ctx: _pop("browser_nudge"),
+    ]
+    if max_requests:
+        reminders.append(_wind_down)
+    return SystemReminders(dynamic_reminders=reminders, on_fire=on_fire)
+
+
 # ============================================================
 # Compaction (F-116 → TieredCompaction officiel)
 # ============================================================
@@ -691,7 +753,7 @@ def read_file_key(call) -> Optional[str]:  # noqa: ANN001 — ToolCallPart
     return str(path) if path else None
 
 
-def build_compaction_capabilities(settings) -> list:
+def build_compaction_capabilities(settings, max_steps: Optional[int] = None) -> list:
     """Capabilities de compaction (§3.4) — assemblées, testables sans exécution.
 
     - DeduplicateFileReads STANDALONE (aucun trigger → chaque requête, quasi
@@ -702,7 +764,8 @@ def build_compaction_capabilities(settings) -> list:
       COMPACTION_LLM_ENABLED, opt-in comme en smolagents) sinon SlidingWindow
       (déterministe, ≡ soft reset : on garde la queue, pas d'LLM).
     - WarnNearLimits : wind-down officiel (URGENT à 70 %, CRITICAL à 3 restants)
-      en complément du reminder F-131 ciblé checklist.
+      en complément du reminder F-131 ciblé checklist. ``max_steps`` (F-162) :
+      borne du profil appelant — défaut coder_max_steps (rétrocompat Coder).
     """
     from pydantic_ai_harness import (
         ClampOversizedMessages,
@@ -714,6 +777,7 @@ def build_compaction_capabilities(settings) -> list:
         WarnNearLimits,
     )
 
+    steps = int(max_steps) if max_steps is not None else int(settings.coder_max_steps)
     last_tier = (
         SummarizingCompaction(max_messages=1, keep_messages=10)
         if getattr(settings, "compaction_llm_enabled", False)
@@ -730,7 +794,7 @@ def build_compaction_capabilities(settings) -> list:
             target_tokens=int(settings.compaction_preflight_budget_tokens),
         ),
         WarnNearLimits(
-            max_iterations=int(settings.coder_max_steps),
+            max_iterations=steps,
             max_context_tokens=int(settings.compaction_preflight_budget_tokens),
         ),
     ]

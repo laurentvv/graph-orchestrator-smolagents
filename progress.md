@@ -1,12 +1,16 @@
 # État d'Avancement du Sprint
 
 ## Objectif Actuel : Migration pydantic-ai-harness — phase 3 par étapes (F-158+, plan docs/PLAN_MIGRATION_PYDANTIC_HARNESS.md)
-> Exécution de la séquence recommandée du plan approuvé (PR #107) : 3.1-3.2 (parité
-> Coder, F-158) → 3.3-3.4 (gardes + compaction, F-159) → 3.5 (MCP navigateur
-> & doc, F-160) → 3.6-3.7 (vision + runner web Tester) → E2E. Prérequis
-> remplis : spike GO F-157 (PR #106), dépendances pinées
+> Exécution de la séquence recommandée du plan approuvé (PR #107) : 3.1-3.2
+> (parité Coder, F-158) → 3.3-3.4 (gardes + compaction, F-159) → 3.5 (MCP
+> navigateur & doc, F-160) → 3.6-3.7 (vision + runner web Tester, F-161/F-162)
+> → **E2E Bubble Sort complet (les DEUX moteurs pydantic) = prochaine étape**.
+> Prérequis remplis : spike GO F-157 (PR #106), dépendances pinées
 > (pydantic-ai-harness==0.24.0 + fastmcp-slim[client]), doc lue (F-157,
-> règle §5 AGENTS.md).
+> règle §5 AGENTS.md). Écart ouvert F-162 : TESTER_TIMEOUT_S 1800 s vs rituel
+> 9B 26-30 tours (~65 s/requête) — arbitrage E2E (monter le plafond OU
+> resserrer le rituel ; runs 5/6 convergent en 624-789 s quand le 9B
+> batch bien).
 
 ## Jalons de l'Itération (cycle F-158 — phase 3.1-3.2 : Coder pydantic en production)
 > Premier incrément PRODUCTION du plan : le socle commun × profil Coder derrière un
@@ -89,6 +93,73 @@
       pas la non-régression des gardes — arbitrage réel = Static Tester/Judge.
 - [x] F159-7 : État disque final (contract C505-C508, feature_list F-159
       completed, README §Hands, ce fichier) + DuckDB + commit + PR.
+
+## Jalons de l'Itération (cycle F-162 — phase 3.7 : runner web du Tester sur le socle pydantic)
+> Cinquième incrément PRODUCTION du plan de migration : le runner web du Tester
+> passe sur le MÊME socle que le Coder (F-158→F-161) par configuration fine —
+> pas une seconde migration. Les 4 premiers runs GPU ont produit 3 leçons
+> structurelles (budget requêtes ×2, AbstractCapability sous-classée,
+> wind-down Tester) avant les 2 GO finaux.
+
+- [x] F162-1 : Module `graph_orchestrator/tester_pydantic.py` — modèle
+      `no_think_spec` (Ornith 9B multimodal) ; `open_tester_mcp` (chrome-devtools
+      + 12 helpers DOM + **Puppeteer MCP** [repli documenté] + Context7,
+      dégradation INDIVIDUELLE par serveur) ; custom tools lecture seule
+      (read_file/list_directory) + fix_known_error F-133 déléguant aux
+      canoniques — PAS de FileSystem en écriture (le Tester teste, il ne
+      réécrit pas) ; prompt compacté F-152 en instructions natif tool-calls
+      (skills devtools-preview PRÉ-COLLÉ garanti + web-tester toujours +
+      budget F-103 + resources inlinées F-97 ; doc outils/vision/puppeteer
+      conditionnées aux flags réels) ; user prompt variable (spec OU re-test
+      ciblé F-47/F-52, checklist F-46 priorité critères Architect F-82, URLs
+      file:/// exactes sur le PREMIER fichier cible) ; `output_type=CoderOutput`
+      natif ; timeout wall-clock asyncio.wait_for + UsageLimitExceeded propre.
+- [x] F162-2 : Socle paramétré sans casser F-159 — IdleBreaker
+      `action_hint=` (vocabulaire Tester), WarnNearLimits ancré budget
+      requêtes (param `max_steps=`), `build_tester_reminders` (GoalReanchor +
+      4 nudges, SANS checklist/wind-down Coder ; wind-down TESTER ≤6 requêtes
+      restantes : verdict honnête > timeout) ; PAS de GoalGate (preuves F-99
+      sans objet pour un nœud qui ne produit pas de livrable) ; vision F-161
+      et ToolGuards partagés ; `_ProgressPrintCapability` (AbstractCapability)
+      imprime chaque tour (miroir verbosity smolagents).
+- [x] F162-3 : Aiguillage `TESTER_ENGINE=pydantic|smolagents` (défaut
+      smolagents) dans WebTestRunner.run + config + .env/.env.example ;
+      `debug/run_tester.py` isolation F-89 sur le livrable PARFAIT run #19
+      avec scénarios nommés `ok`/`bug` (mutation compteur figé = bug
+      historique F-110, invisible des gates déterministes).
+- [x] F162-4 : Tests — **39 nouveaux 0-LLM/0-réseau PASS** (instructions ×9,
+      user prompt ×5, custom tools ×4, processor Puppeteer ×2 [strippage
+      filePath des DEUX pilotes], open_tester_mcp ×2 [dégradation puppeteer
+      isolée], capabilities ×7 [sans GoalGate/FileSystem, hint idle, wind-down
+      budget], assembly ×5 dont EXÉCUTION réelle TestModel [leçon run 2 :
+      l'enregistrement des capabilities n'est prouvable qu'en exécutant],
+      aiguillage ×4, run ×3 [timeout propre, mode ciblé TARGETED_MAX_STEPS×2,
+      spawn mort]) ; suites voisines 218 passed ; **suite complète 1972
+      effectifs passed / 0 failed / 7 skipped** (baseline 1933, 0 régression ;
+      flaky minute-boundary test_e2e_resume_reuses_same_run_dir reproduit
+      PUIS repassé sur MAIN via worktree propre = préexistant, sans
+      interaction F-162) ; gate F-103 29 surfaces 0 erreur 0 warning.
+- [x] F162-5 : Validation GPU isolation ×6 (2026-08-23) — **run 5 `ok` GO
+      4/4** : CoderOutput success NATIF, 6/6 critères PASS avec preuves runtime
+      mesurées (elapsed=4501ms, comparingNow→sorted, steppedNotInstant,
+      startBtn disabled), 0 erreur console, 253 924 in / 1 758 out / 624 s /
+      tour 11 — pas de faux rejet ; **run 6 `bug` GO 4/4** : failure DÉTECTÉ
+      (compteur figé), zone mutée localisée script.js ~L78 (le marqueur
+      artificiel du scénario lu via read_file a guidé la localisation —
+      écart documenté : récit 9B fusionne compteur/swap, verdict + zone
+      corrects), fix_known_error exercé ×2 (no-fix, test continué), 444 529 in
+      / 2 080 out / 789 s / tour 19. Runs 1-4 = leçons : budget 1:1 épuisé
+      (→×2), TypeError capability duck-typée (→AbstractCapability + test
+      TestModel), timeout 1800 s sur exploration 26-30 tours à ~65 s/requête
+      (→wind-down + anti-about:blank + plafond VALIDATION 2700 s via env ;
+      .env production reste 1800 s — arbitrage E2E : monter le plafond OU
+      resserrer le rituel). Leçons consignées doc notes §3.
+- [x] F162-6 : État disque final (contract C517-C520, feature_list F-162,
+      README §Hands, doc notes §3 leçon F-162, ce fichier) + DuckDB + commit
+      + PR.
+- [ ] F162-7 : Validation E2E Bubble Sort complet (Tester+Security+Judge
+      enchaînés, CODER_ENGINE=pydantic + TESTER_ENGINE=pydantic) — étape
+      suivante du plan §3.7 (post-merge, comme F-158→F-161).
 
 ## Jalons de l'Itération (cycle F-161 — phase 3.6 : vision multimodale des screenshots)
 > Quatrième incrément PRODUCTION du plan de migration : take_screenshot retourne
