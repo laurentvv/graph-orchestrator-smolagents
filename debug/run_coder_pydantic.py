@@ -1,4 +1,4 @@
-"""Isolation F-158 : nœud Coder pydantic-ai-harness de PRODUCTION (phase 3.1-3.2).
+"""Isolation F-158/F-159 : nœud Coder pydantic-ai-harness de PRODUCTION.
 
 Appelle la VRAIE fonction ``graph_orchestrator.coder_pydantic.run_coder_pydantic``
 (convention F-89 : 0 mock) avec une tâche figée (Bubble Sort multi-fichiers, même
@@ -6,12 +6,18 @@ tâche que debug/run_coder.py pour un A/B honnête). Le flag CODER_ENGINE n'est 
 nécessaire : l'isolation appelle le module directement ; en E2E, c'est
 ``CODER_ENGINE=pydantic`` qui aiguille execute_coder_node.
 
-Contrôles (critères du plan phase 3, séquence 1 : « spike round 3 + CoderOutput
-validé ») :
+Phases couvertes :
+  - 3.1-3.2 (F-158) : CoderOutput natif, FileSystem, custom tools, skills.
+  - 3.3-3.4 (F-159) : gardes (LoopGuard v2, Stall, IdleBreaker, GoalGate,
+    ReviveRetry + revive llama-server) + SystemReminders + TieredCompaction —
+    actives par défaut (CODER_PYDANTIC_GUARDS=true ; false = baseline F-158).
+
+Contrôles :
   - sortie CoderOutput VALIDÉE nativement (output_type, pas de sauvetage DSPy) ;
   - livrable conforme : 3 fichiers non vides + câblage index.html + invariants JS ;
   - pas de boucle stérile (tool calls bornés) ;
-  - tokens & durée vs baseline smolagents (spike F-157 : 131,6k in / 594 s).
+  - tokens & durée vs baselines (spike F-157 : 131,6k in / 594 s ; F-158 run1 :
+    68,2k in / 7,1k out / 583 s).
 
 Usage :
     uv run python debug/run_coder_pydantic.py            # tâche Bubble Sort par défaut
@@ -112,8 +118,9 @@ def main() -> int:
 
     from graph_orchestrator.config import settings
 
-    print("[*] Isolation Coder pydantic-ai-harness — F-158 phase 3.1-3.2 (PRODUCTION)")
+    print("[*] Isolation Coder pydantic-ai-harness — F-158 3.1-3.2 + F-159 3.3-3.4 (PRODUCTION)")
     print(f"    Sortie isolée  : {os.path.abspath(OUT_DIR)}")
+    print(f"    gardes F-159   : {settings.coder_pydantic_guards}")
     print(f"    Modèle FAST    : {settings.fast_spec.model}")
     print(f"    tempér.        : {settings.coder_temperature} | retries sortie : {settings.worker_max_retries}")
     print(f"    max requests   : {settings.coder_max_steps}")

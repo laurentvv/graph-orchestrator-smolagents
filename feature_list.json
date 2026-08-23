@@ -1356,6 +1356,15 @@
       "dependencies": [
         "F-157"
       ]
+    },
+    {
+      "id": "F-159",
+      "name": "Coder pydantic — gardes & contrôle + contexte/mémoire (phases 3.3-3.4)",
+      "description": "Portage des gardes comportementales et de la compaction du Coder smolagents sur les seams officiels de pydantic-ai-harness (docs/PLAN_MIGRATION_PYDANTIC_HARNESS.md §3.3-3.4). Module coder_pydantic_guards.py : ToolGuardsCapability (LoopGuard v2 : fingerprint SHA-256 tool+args+RÉSULTAT, fenêtre 10, nudges 3/5, abort propre 8, exemptions observationnelles ; StallDetector F-88 via compute_material_fingerprint réutilisé + exemptions F-151 ; churn d'édition ; gels navigateur F-125/129 en détection générique), IdleBreakerCapability (F-61), GoalGateCapability (preuves disque/git F-99, continuation ModelRetry native 1× puis waive), ReviveRetryCapability (F-104 : classify_llm_error + revive llama-server + échange request_context.model). Nudges → SystemReminders dynamiques pop-once derrière CachePoint (GoalReanchor natif, wind-down F-131, checklist F-114) — plus d'accumulation dans message_history. Compaction → TieredCompaction 26k (Clamp→ClearToolResults→Summarizing|SlidingWindow selon COMPACTION_LLM_ENABLED) + DeduplicateFileReads standalone (remplace le nudge F-130) + WarnNearLimits. Bascule CODER_PYDANTIC_GUARDS (défaut true, false = F-158 exact). 39 nouveaux tests 0-LLM (FunctionModel : rejeu boucle d'édition stérile abort à 8 avec nudges 3/5 injectés avant), suite complète 1858 passed / 0 failed.",
+      "status": "completed",
+      "dependencies": [
+        "F-158"
+      ]
     }
   ]
 }

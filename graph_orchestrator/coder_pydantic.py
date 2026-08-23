@@ -21,9 +21,13 @@ Périmètre CE module (parité 3.1 + 3.2) :
     ``_select_coder_spec`` (itération ≥ 3) ; ClearToolResults + ToolOutputLimits
     du spike conservés (prouvés en isolation).
 
+Phases 3.3-3.4 (F-159, coder_pydantic_guards.py) : gardes comportementales
+(LoopGuard v2, StallDetector, IdleBreaker, GoalGate, ReviveRetry) + nudges
+SystemReminders dynamiques + compaction TieredCompaction — assemblées par
+``guards=True`` dans build_coder_agent (bascule ``CODER_PYDANTIC_GUARDS``).
+
 Hors périmètre (phases suivantes du plan) : MCP DevTools/Context7 + vision
-multimodale (3.5/3.6 → le protocole n'annonce PAS navigate_page/screenshot),
-gardes LoopGuard/Stall/Goal + SystemReminders (3.3), TieredCompaction (3.4).
+multimodale (3.5/3.6 → le protocole n'annonce PAS navigate_page/screenshot).
 Le graphe continue de fonctionner : la validation aval (Static Tester → Tester
 LLM → Judge) reste l'arbitre de la qualité du livrable.
 
@@ -457,26 +461,67 @@ def build_coder_user_prompt(task: dict) -> str:
 # Assemblage de l'Agent (testable 0-LLM : construire ≠ exécuter)
 # ============================================================
 
+def build_coder_capabilities(task: dict, settings, guards: bool = True,
+                              extra_capabilities: Optional[list] = None,
+                              on_reminder_fired=None) -> list:
+    """Liste ordonnée des capabilities du profil Coder (testable sans exécution).
+
+    Ordre : ``extra_capabilities`` EN TÊTE (wrap hooks : premier enregistré =
+    plus externe — ReviveRetry enveloppe les requêtes modèle au-delà des
+    reminders), puis FileSystem/ToolOutputLimits (production 3.1), puis selon
+    ``guards`` : soit l'arsenal F-159 (compaction + gardes + reminders), soit
+    le comportement F-158 exact (ClearToolResults standalone, A/B 3.1-3.2).
+    """
+    from pydantic_ai_harness import ClearToolResults, FileSystem, ToolOutputLimits
+
+    capabilities: list = list(extra_capabilities or [])
+    capabilities.append(FileSystem(root_dir="."))
+    capabilities.append(ToolOutputLimits())
+    if guards:
+        from .coder_pydantic_guards import (
+            CoderGuardState,
+            as_capabilities,
+            build_compaction_capabilities,
+            build_guard_reminders,
+        )
+
+        state = CoderGuardState()
+        capabilities.extend(build_compaction_capabilities(settings))
+        capabilities.extend(as_capabilities(state, task, settings))
+        capabilities.append(
+            build_guard_reminders(state, task, settings, on_fire=on_reminder_fired)
+        )
+    else:
+        capabilities.append(ClearToolResults(max_fraction=0.7))
+    return capabilities
+
+
 def build_coder_agent(model, task: dict, settings, coder_max_tokens: int,
-                      browser_tools_available: bool = True):
+                      browser_tools_available: bool = True, guards: bool = True,
+                      extra_capabilities: Optional[list] = None,
+                      on_reminder_fired=None):
     """Assemble l'Agent pydantic du profil Coder autour du modèle fourni.
 
     Séparé de run_coder_pydantic pour être testable sans GPU (construction
     seule, aucun appel réseau) et réutilisable par le profil Tester (3.7) —
     c'est le « socle commun » du plan : seule la liste tools/instructions/
-    output_type change d'un profil à l'autre.
+    output_type change d'un profil à l'autre. Voir build_coder_capabilities
+    pour la sémantique de ``guards`` / ``extra_capabilities``.
     """
     from pydantic_ai import Agent, ModelSettings
-    from pydantic_ai_harness import ClearToolResults, FileSystem, ToolOutputLimits
+
+    capabilities = build_coder_capabilities(
+        task,
+        settings,
+        guards=guards,
+        extra_capabilities=extra_capabilities,
+        on_reminder_fired=on_reminder_fired,
+    )
 
     return Agent(
         model,
         instructions=build_coder_instructions(task, browser_tools_available),
-        capabilities=[
-            FileSystem(root_dir="."),
-            ToolOutputLimits(),
-            ClearToolResults(max_fraction=0.7),
-        ],
+        capabilities=capabilities,
         tools=build_coder_custom_tools(),
         output_type=CoderOutput,
         # Retries niveau output-validation (pydantic-ai couche 4) ≡
@@ -502,8 +547,9 @@ async def run_coder_pydantic(
     Contrat identique au chemin smolagents (run_with_retry) : sortie validée ou
     None (échec propre — le graphe continue vers Linter/Static Tester).
     Les retries de sortie (validation CoderOutput) sont natifs pydantic-ai
-    (Agent.retries) ; les gardes comportementales (LoopGuard/Goal…) arrivent en
-    phase 3.3 — la validation aval du graphe reste l'arbitre.
+    (Agent.retries) ; les gardes 3.3-3.4 (F-159) : ReviveRetry enveloppe chaque
+    requête (revive llama-server au passage), GuardAbort (boucle stérile, idle)
+    → échec propre distinct d'un crash.
     """
     from pydantic_ai.models.openai import OpenAIChatModel, OpenAIModelProfile
     from pydantic_ai.providers.openai import OpenAIProvider
@@ -520,6 +566,8 @@ async def run_coder_pydantic(
     reset_read_supply()
     reset_write_proof()
     reset_visual_audit()
+
+    from .coder_pydantic_guards import GuardAbort
 
     coder_spec, coder_max_tokens, is_ultra = _select_coder_spec(task, settings)
     if is_ultra:
@@ -549,10 +597,43 @@ async def run_coder_pydantic(
             provider=OpenAIProvider(base_url=srv.api_base, api_key=srv.api_key),
             profile=profile,
         )
-        # Phase 3.1-3.2 : pas de MCP navigateur → devtools-preview non collé,
-        # vérification par check_js_syntax (flip à True en phase 3.5/3.6).
+
+        def _model_factory(api_base: str):
+            """Reconstruit le modèle après un revive sur un NOUVEAU port."""
+            return OpenAIChatModel(
+                srv.model_id,
+                provider=OpenAIProvider(base_url=api_base, api_key=srv.api_key),
+                profile=profile,
+            )
+
+        # F-159 ReviveRetry (F-104) : policy maison + revive llama-server.
+        revive_cap = None
+        if settings.llm_retry_enabled:
+            from .coder_pydantic_guards import ReviveRetryCapability
+            from .llm_retry import RetryPolicy
+
+            revive_cap = ReviveRetryCapability(
+                policy=RetryPolicy(
+                    max_retries=settings.llm_transport_retries,
+                    base_delay_s=settings.llm_retry_base_delay_s,
+                    max_delay_s=settings.llm_retry_max_delay_s,
+                    jitter_factor=settings.llm_retry_jitter,
+                ),
+                revive=srv.revive,
+                model_factory=_model_factory,
+                current_base=srv.api_base,
+            )
+
+        # Phase 3.5/3.6 à venir : pas de MCP navigateur → devtools-preview non
+        # collé, vérification par check_js_syntax.
         agent = build_coder_agent(
-            model, task, settings, coder_max_tokens, browser_tools_available=False
+            model,
+            task,
+            settings,
+            coder_max_tokens,
+            browser_tools_available=False,
+            guards=settings.coder_pydantic_guards,
+            extra_capabilities=[revive_cap] if revive_cap is not None else None,
         )
         print(f"[*] Coder (pydantic) — llama-server prêt : {srv.api_base}")
         try:
@@ -562,6 +643,16 @@ async def run_coder_pydantic(
                     request_limit=settings.coder_max_steps,
                     tool_calls_limit=settings.coder_max_steps * 3,
                 ),
+            )
+        except GuardAbort as exc:
+            duration = time.time() - t0
+            print(f"[-] Coder (pydantic) GARDÉ-ABORT propre ({exc})")
+            return None, NodeMetrics(
+                node=node_label,
+                model=str(coder_spec.model or ""),
+                duration_s=duration,
+                input_tokens=None,
+                output_tokens=None,
             )
         except Exception as exc:  # noqa: BLE001 — échec propre, le graphe continue
             duration = time.time() - t0
