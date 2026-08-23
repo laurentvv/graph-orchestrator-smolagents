@@ -375,6 +375,77 @@ class TestDomHelperToolset:
         assert args["function"].strip().startswith("(tag, textHint, attrHint) =>")
 
 
+class TestDevtoolsClientIntegration:
+    """Intégration 0-réseau (fermeture review Kilo PR #111) : serveur FastMCP
+    IN-PROCESS → VRAI MCPToolset → helpers déléguant via ``ts.client`` — prouve
+    que le chemin ``open_coder_mcp → state.devtools_client = devtools.client →
+    call_tool('evaluate_script', ...)`` est utilisable de bout en bout, pas
+    seulement avec le client factice des tests unitaires."""
+
+    def test_helpers_through_real_mcp_toolset_client(self):
+        # Serveur in-process du SDK officiel mcp (dépendance de prod — le côté
+        # serveur de fastmcp-slim[client] n'est pas installé) : même protocole.
+        from mcp.server.fastmcp import FastMCP
+
+        captured = {}
+
+        fake_devtools = FastMCP("fake-devtools")
+
+        @fake_devtools.tool()
+        def evaluate_script(function: str, args=None) -> str:  # noqa: ANN001
+            """Stand-in du vrai outil chrome-devtools (echo)."""
+            captured["function"] = function
+            captured["args"] = args
+            return "echo:" + function[:40]
+
+        async def scenario():
+            from graph_orchestrator.coder_pydantic_mcp import build_dom_helper_toolset
+            from pydantic_ai.mcp import MCPToolset
+
+            ts = MCPToolset(fake_devtools)
+            async with ts:
+                helpers = build_dom_helper_toolset(ts.client)
+                assert helpers is not None
+                return await helpers.tools["clean_dom"].function()
+
+        out = asyncio.run(scenario())
+        # Le helper a bien transité par le VRAI client fastmcp du toolset.
+        assert "cloneNode(true)" in captured["function"]
+        assert out.startswith("echo:")
+
+    def test_renamed_toolset_exposes_new_names(self):
+        """Sécurise la direction du name_map ({nouveau: original} — doc pydantic
+        « new names to original names » + source ``original_to_new = {v: k}``) :
+        la clé est le nom EXPOSÉ au modèle (revue Kilo PR #111 suggérait
+        l'inverse, ce qui casserait le renommage)."""
+        from pydantic_ai import Agent
+        from pydantic_ai.models.test import TestModel
+        from pydantic_ai.toolsets import FunctionToolset
+        from pydantic_ai.toolsets.renamed import RenamedToolset
+
+        async def dash_named_tool(query: str) -> str:
+            """fake c7."""
+            return "ok"
+
+        ts = RenamedToolset(
+            FunctionToolset([dash_named_tool]), {"underscore_name": "dash_named_tool"}
+        )
+        agent = Agent(TestModel(), toolsets=[ts])
+
+        async def scenario():
+            async with agent:
+                result = await agent.run("go")
+            return {
+                p.tool_name
+                for m in result.all_messages()
+                for p in getattr(m, "parts", [])
+                if hasattr(p, "tool_name")
+            }
+
+        names = asyncio.run(scenario())
+        assert names == {"underscore_name"}
+
+
 # ============================================================
 # Instructions — bloc LIVE VERIFICATION + tools browser + Context7
 # ============================================================

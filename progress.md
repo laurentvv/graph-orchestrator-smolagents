@@ -126,10 +126,13 @@
       quand des toolsets sont attachés (forçage comportemental conservé via
       PROTOCOL + IdleBreaker F-159). Scripts diagnostic conservés
       (diag_grammar_f160, replay_request_f160).
-- [x] F160-6 : Tests — **42 nouveaux 0-LLM/0-réseau PASS** (args ×5,
+- [x] F160-6 : Tests — **44 nouveaux 0-LLM/0-réseau PASS** (args ×5,
       enrich console ×4, process_tool_call ×3, render ×4, toolsets ×5,
       helpers ×11, instructions ×6, assemblage ×3 dont tool_choice auto
-      conditionné) ; suites voisines 197 passed ; **suite complète 1900
+      conditionné ; +2 review Kilo #111 : intégration helpers via VRAI
+      MCPToolset in-process + direction name_map RenamedToolset prouvée
+      par exécution — la suggestion inversée de Kilo a été réfutée par
+      source+test) ; suites voisines 197 passed ; **suite complète 1902
       passed / 0 failed / 7 skipped** (baseline 1858, 0 régression) ; gate
       F-103 29 surfaces 0 erreur (AGENTS.md sous hard limit, warning soft
       préexistant) ; py_compile OK ; dépendance `fastmcp-slim[client]`
