@@ -1395,6 +1395,20 @@
         "F-160",
         "F-161"
       ]
+    },
+    {
+      "id": "F-163",
+      "name": "Pool navigateur run-scoped — un seul MCP chrome-devtools/Chrome par run",
+      "description": "Décision user 2026-08-23 (E2E F-162) : le graphe spawnait 4 serveurs MCP navigateur par itération (Coder, Static Tester, Tester devtools, Tester puppeteer) et la fermeture stdio ne tuait JAMAIS l'arbre cmd→npx→node→Chrome sous Windows (2 Chromes orphelins observés, ~12 processus fuis par run, arbres tués manuellement). Fix : browser_pool.py singleton run-scoped à refcount — spawn unique (PID racine capturé par diff tasklist, 0 nouvelle dépendance), health-check avant chaque prêt + respawn si mort, taskkill /T /F de l'arbre au dernier release ; chrome_devtools_tools / open_coder_mcp / open_tester_mcp / static_tester deviennent des façades du pool (rétrocompatibles, bénéfice aux DEUX moteurs) ; élimine aussi les cold-starts Chrome ×4/itération.",
+      "status": "pending",
+      "dependencies": []
+    },
+    {
+      "id": "F-164",
+      "name": "Garde variables CSS cross-fichiers au Static Tester + règle de remplissage skill frontend-design",
+      "description": "Post-mortem visuel E2E F-162 (analyse user + sonde DOM) : (1) livrable rendu en Times New Roman — var(--font-body)/var(--font-display) référencées mais jamais définies dans :root ; la garde _css_undefined_vars_directive (tools.py) ne se déclenche que post-édition custom tools, or le Coder pydantic écrit via le write_file du FileSystem harness (écart déjà documenté pour write_proof F-159) et le Static Tester est passé à côté → brancher l'audit var() en Tier 1 du Static Tester (agnostique moteur) ; (2) board rempli à 48 % (barres 10px vs flex:1 au golden #19) → règle quantitative dans skills/frontend-design (barres/colonnes remplissent ≥80 % de la largeur conteneur, flex:1 ou width calculée, jamais max-width fixe étroit).",
+      "status": "pending",
+      "dependencies": []
     }
   ]
 }

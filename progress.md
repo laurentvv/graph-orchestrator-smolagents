@@ -4,13 +4,12 @@
 > Exécution de la séquence recommandée du plan approuvé (PR #107) : 3.1-3.2
 > (parité Coder, F-158) → 3.3-3.4 (gardes + compaction, F-159) → 3.5 (MCP
 > navigateur & doc, F-160) → 3.6-3.7 (vision + runner web Tester, F-161/F-162)
-> → **E2E Bubble Sort complet (les DEUX moteurs pydantic) = prochaine étape**.
-> Prérequis remplis : spike GO F-157 (PR #106), dépendances pinées
-> (pydantic-ai-harness==0.24.0 + fastmcp-slim[client]), doc lue (F-157,
-> règle §5 AGENTS.md). Écart ouvert F-162 : TESTER_TIMEOUT_S 1800 s vs rituel
-> 9B 26-30 tours (~65 s/requête) — arbitrage E2E (monter le plafond OU
-> resserrer le rituel ; runs 5/6 convergent en 624-789 s quand le 9B
-> batch bien).
+> → **E2E DEUX moteurs pydantic FAIT (F162-7 : GO migration / NO-GO temps —
+> arbitrage C520 résolu, TESTER_TIMEOUT_S=1800 suffit)**. Suite prioritaire :
+> F-163 pool navigateur run-scoped (fuite arbres MCP Windows + 4 spawns/
+> itération) puis F-164 (garde var() CSS au Static Tester + règle remplissage
+> barres) ; ensuite phase 4 du plan (PlaywrightBrowser A/B, FallbackModel,
+> TestModel CI, Media Stores, WarnOnCacheBusts).
 
 ## Jalons de l'Itération (cycle F-158 — phase 3.1-3.2 : Coder pydantic en production)
 > Premier incrément PRODUCTION du plan : le socle commun × profil Coder derrière un
@@ -157,9 +156,32 @@
 - [x] F162-6 : État disque final (contract C517-C520, feature_list F-162,
       README §Hands, doc notes §3 leçon F-162, ce fichier) + DuckDB + commit
       + PR.
-- [ ] F162-7 : Validation E2E Bubble Sort complet (Tester+Security+Judge
-      enchaînés, CODER_ENGINE=pydantic + TESTER_ENGINE=pydantic) — étape
-      suivante du plan §3.7 (post-merge, comme F-158→F-161).
+- [x] F162-7 : Validation E2E Bubble Sort complet (2026-08-23, run
+      2026-08-23_1959, LES DEUX moteurs pydantic, interrompu à l'entrée
+      itération 3 sur budget temps user — 1h25 vs objectif 30 min) — **GO
+      migration / NO-GO temps**. Chaîne parcourue ×2 itérations :
+      PromptRefiner→Router→Architect→Drafter→**Coder pydantic** (it.1 success
+      474 s / 317 k in ; it.2 correction 40/40 requêtes → garde UsageLimits →
+      échec PROPRE)→Linter→Static OK ×2→**Tester pydantic COMPLET it.1 :
+      failure avec VRAI bug** (`for (let i=0; i<i+1; i++)` ligne 99, valeurs
+      non triées observées, 633 k in / 1 342 s / tour 26)→Security→Judge
+      fail-closed→feedback→**Tester pydantic CIBLÉ it.2 : fix confirmé**
+      (« targeted fix works », boucle corrigée `i < n - 1`, isSorted=true) +
+      échec honnête sur violations restantes (393 k in / 1 099 s / tour 16).
+      **ARBITRAGE C520 RÉSOLU : TESTER_TIMEOUT_S=1800 SUFFIT** (les deux
+      verdicts ont convergé sous le plafond : 1 342 / 1 099 s — le 2 700 de
+      l'isolation était superflu ; aucune modif .env requise). Goulots temps :
+      Coder it.2 correction thrash 30 min (40 requêtes — problème rituel
+      correction 4B connu F-116), Tester complet 22 min. Découvertes
+      latérales consignées : **F-163** pool navigateur run-scoped (fuite
+      Windows des arbres npx/node/Chrome à chaque fermeture MCP — 4 spawns/
+      itération, 2 Chromes orphelins observés user, tués manuellement) ;
+      **F-164** garde variables CSS cross-fichiers au Static Tester (livrable
+      rendu en Times New Roman : var(--font-*) indéfinies, la garde tools.py
+      post-édition ne voit pas le write_file du FileSystem pydantic) + règle
+      de remplissage barres dans la skill frontend-design (board occupé à
+      48 % vs flex:1 au golden #19 — frontend-design ÉTAIT injectée, budget
+      3 k/16 k tokens : variance d'application 4B, pas un manque de skill).
 
 ## Jalons de l'Itération (cycle F-161 — phase 3.6 : vision multimodale des screenshots)
 > Quatrième incrément PRODUCTION du plan de migration : take_screenshot retourne
