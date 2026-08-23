@@ -599,10 +599,15 @@ def build_coder_capabilities(task: dict, settings, guards: bool = True,
     """
     from pydantic_ai_harness import ClearToolResults, FileSystem, ToolOutputLimits
 
+    from .coder_pydantic_guards import build_write_guardrail
     from .coder_pydantic_vision import build_vision_capabilities
 
     capabilities: list = list(extra_capabilities or [])
     capabilities.append(FileSystem(root_dir="."))
+    # F-164 : gardes d'écriture canoniques (F-10/F-126 + directive var() CSS)
+    # portées sur le write_file/edit_file du FileSystem — INCONDITIONNELLES
+    # (garde de sécurité ≡ io_guard, hors toggle CODER_PYDANTIC_GUARDS).
+    capabilities.append(build_write_guardrail(settings))
     capabilities.append(ToolOutputLimits())
     # F-161 : purge perte-zéro des images d'historique — INCONDITIONNELLE (elle
     # protège le contexte du nouveau flux image), y compris guards=False (A/B).

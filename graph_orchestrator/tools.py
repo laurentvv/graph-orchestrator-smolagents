@@ -338,16 +338,52 @@ def _collect_js_syntax_errors(path: str) -> list[str]:
     return all_errors
 
 
-def _css_undefined_vars_directive(path: str) -> str:
-    """Directive déterministe (post-mortem runs 12:37 & 15:40 du 2026-08-22) :
-    après une édition RÉUSSIE d'un fichier CSS, on vérifie que chaque
-    ``var(--x)`` SANS fallback est bien définie quelque part (le CSS lui-même,
-    un bloc ``<style>`` d'un HTML sibling, ou un ``setProperty`` JS sibling).
-    Une variable indéfinie = couleur/taille TRANSPARENTE à l'exécution —
-    exactement le bug « barres invisibles » qui a coûté 2×40 min au Coder 4B
-    (il ne peut PAS le diagnostiquer seul : le fichier est syntaxiquement
-    valide). On injecte donc le diagnostic + le bloc ``:root`` prêt à coller.
-    Fail-open total ; vide si le fichier est propre ou non-CSS.
+def _find_narrow_fixed_widths(css: str) -> list:
+    """Pure : liste les (sélecteur, largeur_px) des éléments de DATA-VIZ
+    (classes bar/column/point/cell/tile — PAS badge/dot/icon/btn/pill/thumb,
+    légitimement petits) dont le remplissage est défaillant :
+      - ``width: Npx`` fixe étroit (< 40) sans flex/calc (runs 2-4) ;
+      - ``max-width: Npx`` étroit (< 60) MÊME AVEC ``flex: 1`` (run 5 : le
+        modèle obéit à la lettre en gardant le cap — 10 barres × 40 px dans un
+        board de 816 px = 49 % vide mesuré). ``min-width`` est bénin (force un
+        minimum, ne cappe pas). Consommée par la directive post-écriture ET le
+        blocage pré-exécution du ToolGuardrail F-164.
+    """
+    suspects: list = []
+    for m in re.finditer(r"([^{}]+)\{([^{}]*)\}", css or ""):
+        selector, body = m.group(1).strip(), m.group(2)
+        if "." not in selector or selector.startswith("@"):
+            continue
+        classes = re.findall(r"\.([A-Za-z0-9_-]+)", selector)
+        if not any(re.search(r"(bar|column|col$|point|cell|tile)", c) for c in classes):
+            continue
+        if any(re.search(r"(badge|dot|icon|btn|pill|thumb)", c) for c in classes):
+            continue  # petits éléments légitimes
+        has_fill = bool(re.search(r"flex\s*:\s*1|flex-grow|width\s*:\s*calc", body))
+        # width FIXE étroite (min-width exclu : il ne cappe pas)
+        wm = re.search(r"(?<!min-)(?:^|[^-])width\s*:\s*(\d+)px", body) or re.search(
+            r"(?:^|\s)width\s*:\s*(\d+)px", body
+        )
+        if wm and int(wm.group(1)) < 40 and not has_fill:
+            suspects.append((selector.split(",")[0].strip(), int(wm.group(1))))
+            continue
+        # CAP étroit : défait flex:1 dès que n_bars × cap < largeur conteneur
+        cap = re.search(r"max-width\s*:\s*(\d+)px", body)
+        if cap and int(cap.group(1)) < 60:
+            suspects.append((selector.split(",")[0].strip(), int(cap.group(1))))
+    return suspects
+
+
+def narrow_fixed_width_directive(path: str) -> str:
+    """Directive déterministe (F-164, boucle isolation runs 2-3 : `.bar { width:
+    30px }` récidive 2/3 malgré la règle skill REMPLISSAGE — le prior du 4B est
+    plus fort que le texte seul). Après une écriture RÉUSSIE d'un CSS, détecte
+    les règles d'éléments de DATA-VIZ (sélecteur de classe contenant bar/column/
+    point/cell/tile — PAS badge/dot/icon/btn qui sont légitimement petits)
+    portant une LARGEUR FIXE étroite (``width``/``max-width: Npx``, N < 40) et
+    injecte le diagnostic + le correctif ``flex: 1`` prêt à coller. Fail-open
+    total, vide si propre ou non-CSS. Miroir de ``_css_undefined_vars_directive``
+    (même canal : résultat outil via le ToolGuardrail F-164).
     """
     try:
         if not str(path).lower().endswith(".css"):
@@ -356,18 +392,51 @@ def _css_undefined_vars_directive(path: str) -> str:
             css = f.read()
         if not css.strip():
             return ""
+        suspects = _find_narrow_fixed_widths(css)
+        if not suspects:
+            return ""
+        lines = "; ".join(f"{sel} (width: {w}px)" for sel, w in suspects[:5])
+        return (
+            f"\n\n[!] LARGEUR FIXE ÉTROITE détectée sur des éléments de données : {lines}.\n"
+            "  Des barres/colonnes de largeur fixe laissent le conteneur à moitié VIDE\n"
+            "  (mesuré : ~42-48 % de remplissage) — c'est un bug visuel, même sans erreur\n"
+            "  console. FIX par search_replace sur la règle : remplace `width: Npx` par\n"
+            "  `flex: 1;` (conteneur flex) ou `width: calc(100% / N);` — les éléments de\n"
+            "  données doivent REMPLIR la largeur de leur conteneur.\n"
+            "  (règle REMPLISSAGE de la skill frontend-design — F-164)"
+        )
+    except Exception:
+        return ""
+
+
+def find_undefined_css_vars(path: str) -> list:
+    """Liste les ``var(--x)`` FATALES (sans fallback interne) utilisées dans un
+    fichier CSS mais définies NULLE PART (ni dans le fichier, ni dans un
+    ``<style>``/``setProperty`` d'un sibling .html/.js). ``[]`` si propre ou
+    non-CSS. Extraction pure de ``_css_undefined_vars_directive`` (F-164 :
+    réutilisée par le Static Tester Tier 1 — agnostique moteur, elle attrape
+    les écritures du write_file FileSystem pydantic comme celles de tools.py).
+    Fail-open total.
+    """
+    try:
+        if not str(path).lower().endswith(".css"):
+            return []
+        with open(path, "r", encoding="utf-8", errors="replace") as f:
+            css = f.read()
+        if not css.strip():
+            return []
         # Usages FATAUX uniquement : var(--x) sans valeur de fallback.
         used = set(re.findall(r"var\(\s*(--[\w-]+)\s*(?<!,)\)", css))
         used -= set(re.findall(r"var\(\s*(--[\w-]+)\s*,", css))
         if not used:
-            return ""
+            return []
         # Définitions : toute déclaration `--x:` du fichier CSS compte
         # (le bloc :root est le cas standard, mais une portée réduite reste
         # une définition valide — on ne veut AUCUN faux positif).
         defined = set(re.findall(r"(--[\w-]+)\s*:", css))
         missing = sorted(v for v in used if v not in defined)
         if not missing:
-            return ""
+            return []
         # Anti-faux-positif cross-fichiers : le HTML sibling peut définir les
         # vars en inline <style>, le JS sibling via setProperty.
         try:
@@ -380,9 +449,27 @@ def _css_undefined_vars_directive(path: str) -> str:
                     missing = [v for v in missing
                                if not (v + ":" in blob or f"'{v}'" in blob or f'"{v}"' in blob)]
                     if not missing:
-                        return ""
+                        return []
         except OSError:
             pass
+        return missing
+    except Exception:
+        return []
+
+
+def _css_undefined_vars_directive(path: str) -> str:
+    """Directive déterministe (post-mortem runs 12:37 & 15:40 du 2026-08-22) :
+    après une édition RÉUSSIE d'un fichier CSS, on vérifie que chaque
+    ``var(--x)`` SANS fallback est bien définie quelque part (le CSS lui-même,
+    un bloc ``<style>`` d'un HTML sibling, ou un ``setProperty`` JS sibling).
+    Une variable indéfinie = couleur/taille TRANSPARENTE à l'exécution —
+    exactement le bug « barres invisibles » qui a coûté 2×40 min au Coder 4B
+    (il ne peut PAS le diagnostiquer seul : le fichier est syntaxiquement
+    valide). On injecte donc le diagnostic + le bloc ``:root`` prêt à coller.
+    Fail-open total ; vide si le fichier est propre ou non-CSS.
+    """
+    try:
+        missing = find_undefined_css_vars(path)
         if not missing:
             return ""
         # Palette sombre par défaut (thème demandé dans ~tous les cahiers des

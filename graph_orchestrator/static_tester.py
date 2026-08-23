@@ -1223,6 +1223,29 @@ def static_check_html(
     # F-110 (post-mortem run #6) : éléments DOM ajoutés dans un <canvas> —
     # jamais rendus (anti-pattern canvas/DOM mêlés, animation fantôme).
     errors.extend(_check_canvas_children(html, js))
+    # F-164 (E2E F-162 : livrable rendu en Times New Roman) : audit var() CSS
+    # cross-fichiers — chaque .css sibling doit définir toutes ses var(--x)
+    # fatales. Bug invisible des autres tiers : la page est « valide » mais
+    # chaque propriété dépendante d'une var indéfinie est INVALIDE à l'exécution
+    # (police serif par défaut, couleurs transparentes). AGNOSTIQUE MOTEUR :
+    # attrape le write_file du FileSystem pydantic comme les écritures
+    # smolagents (la garde post-édition tools.py ne voit que ces dernières).
+    try:
+        from .tools import find_undefined_css_vars
+
+        _folder = os.path.dirname(os.path.abspath(path)) or "."
+        for _sibling in sorted(os.listdir(_folder)):
+            if _sibling.lower().endswith(".css"):
+                _missing = find_undefined_css_vars(os.path.join(_folder, _sibling))
+                if _missing:
+                    errors.append(
+                        f"[CSS VARS] {_sibling} utilise {', '.join(_missing)} sans les "
+                        "définir (ni dans ce fichier, ni en <style>/setProperty sibling) — "
+                        "à l'exécution chaque propriété dépendante est INVALIDE "
+                        "(police par défaut / éléments transparents). Déclare-les dans :root."
+                    )
+    except Exception:
+        pass
     tier = "tier1"
 
     # Décision : si Tier 1 a déjà trouvé un bug SYNTAXE (page blanche garantie),
