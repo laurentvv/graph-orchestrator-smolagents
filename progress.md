@@ -2849,3 +2849,19 @@ Coder est appliquée correctement par Qwen3.5-9B.
 - [ ] F157-6 : PR du spike (scripts + fix + docs + AGENTS.md) → review Kilo.
 - [ ] F157-7 (phase 3, après merge) : portage gardes (hooks/capabilities), MCP
       vision (PlaywrightBrowser vs DevTools MCP), CoderOutput output_type, Web Tester.
+
+## Jalons de l'Itération (cycle maintenance F-98/F-123 — llama.cpp + paquets Python, 2026-08-23)
+
+> Branche `chore/dep-upgrade-2026-08-23`. Événement DuckDB #2392. Rapport versions :
+> `logs/upgrade_report_20260823_120602.md` (gitignoré, régénérable).
+
+- [x] llama.cpp nightly b10586 → b10590 (vendor CUDA 13.3, ~537 Mo téléchargés,
+      backup `llamacpp-cuda13-b10586.bak` conservé, flags critiques vérifiés au swap).
+- [x] Montée paquets Python latest : 16 MAJ + 5 ajouts (stack boto3, nouvelle
+      dépendance de litellm 1.98.0). 0 suppression.
+- [x] Validation non-régression : MTP baseline 20,85 tok/s ; tests cmd serveur
+      8/8 ; pytest complet **1819 passed / 7 skipped, exit 0** (9 min 40).
+- [x] Diagnostic spec-mtp ❌ : PRÉ-EXISTANT (log b10586 du 2026-08-22 identique) —
+      le GGUF Ornith-1.5 n'embarque pas de couches MTP (`nextn` absentes, contrairement
+      à Ornith-1.0-9B-MTP) et `REASONING_SPEC_MTP=false` en prod (VRAM 6 Go). Pas une
+      régression b10590 ; action optionnelle : repérer une variante -MTP d'Ornith-1.5.
