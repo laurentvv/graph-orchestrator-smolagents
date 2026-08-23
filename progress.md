@@ -1,15 +1,61 @@
 # État d'Avancement du Sprint
 
-## Objectif Actuel : Migration pydantic-ai-harness — phase 3 par étapes (F-158+, plan docs/PLAN_MIGRATION_PYDANTIC_HARNESS.md)
-> Exécution de la séquence recommandée du plan approuvé (PR #107) : 3.1-3.2
-> (parité Coder, F-158) → 3.3-3.4 (gardes + compaction, F-159) → 3.5 (MCP
-> navigateur & doc, F-160) → 3.6-3.7 (vision + runner web Tester, F-161/F-162)
-> → **E2E DEUX moteurs pydantic FAIT (F162-7 : GO migration / NO-GO temps —
-> arbitrage C520 résolu, TESTER_TIMEOUT_S=1800 suffit)**. Suite prioritaire :
-> F-163 pool navigateur run-scoped (fuite arbres MCP Windows + 4 spawns/
-> itération) puis F-164 (garde var() CSS au Static Tester + règle remplissage
-> barres) ; ensuite phase 4 du plan (PlaywrightBrowser A/B, FallbackModel,
-> TestModel CI, Media Stores, WarnOnCacheBusts).
+## Objectif Actuel : Migration pydantic-ai-harness — phase 3 TERMINÉE (F-158→F-164), suite = validation E2E post-merge puis phase 4 du plan
+> Exécution de la séquence recommandée du plan approuvé (PR #107) : 3.1-3.7
+> TOUTES LIVRÉES (Coder F-158, gardes F-159, MCP F-160, vision F-161, Tester
+> F-162, gardes d'écriture F-164) + **F-163 pool navigateur run-scoped FAIT**
+> (Chrome unique par run, fuites d'arbres Windows éliminées, GO live 12/12).
+> Suite prioritaire : **validation E2E post-merge** (F164-6 — F-163 en amont
+> est maintenant en place, la mesure ne sera plus entachée par les fuites MCP)
+> puis phase 4 du plan (PlaywrightBrowser A/B, FallbackModel, TestModel CI,
+> Media Stores, WarnOnCacheBusts).
+
+## Jalons de l'Itération (cycle F-163 — pool navigateur run-scoped : un seul Chrome par run)
+> Né de l'E2E F-162 (2026-08-23) : 4 serveurs MCP navigateur/itération, la
+> fermeture stdio ne tuait JAMAIS l'arbre cmd→npx→node→Chrome sous Windows
+> (2 Chromes orphelins, ~12 process fuis/run, tués à la main). Décision user
+> 2026-08-23. Contrainte structurante découverte : stdio = 1 session par
+> process → partager L'INSTANCE serveur entre mcpadapt (smolagents) et fastmcp
+> (pydantic) est impossible → le pool porte le CHROME (le coût froid/leaky),
+> tous les serveurs s'y connectent via `--browserUrl` (option officielle).
+
+- [x] F163-1 : `graph_orchestrator/browser_pool.py` — singleton ancré au run
+      (`configure_run` idempotent, supersède l'arbre précédent), Chrome unique
+      (port libre + user-data-dir temporaire ≡ --isolated), health /json/version
+      + respawn, PID racine au registre reaper F-140 (crash-safe), taskkill
+      /T /F + sweep automation (marqueur `--remote-debugging-pipe` jamais sur
+      le Chrome perso, baseline à la création, fail-safe PowerShell), shutdown
+      auto au dernier release en standalone (debug F-89), repli historique
+      exact si KO. 0 nouvelle dépendance.
+- [x] F163-2 : Façades DEUX moteurs — `build_chrome_devtools_params(browser_url)`
+      (--browserUrl ajouté, --isolated/--executable-path retirés),
+      `chrome_devtools_tools` (Coder smolagents + Static Tester + Tester
+      smolagents gratuits), `open_coder_mcp`/`open_tester_mcp` (lease spannant
+      le nœud, appels sans kwargs si inactif — compat stubs), `watch_spawn`
+      autour du repli puppeteer (lance son PROPRE Chrome → arbre capturé pour
+      le kill final).
+- [x] F163-3 : Câblage — `run_coding_workflow` wrapper try/finally (corps →
+      `_run_coding_workflow_inner`, ancrage après run_id, shutdown garanti sur
+      exception) ; config `BROWSER_POOL_ENABLED` (défaut 1) +
+      `BROWSER_POOL_SPAWN_TIMEOUT_S` (30) + .env/.env.example.
+- [x] F163-4 : Tests — **40 nouveaux 0-LLM/0-réseau PASS** (tests/
+      test_browser_pool.py : état ×12, primitives Windows ×9, gating pytest/
+      sweep ×3, params ×2, façades ×6, workflow ×2) ; 2 leçons de sûreté
+      payées en direct : (a) détection pytest À L'APPEL (à l'import
+      PYTEST_CURRENT_TEST n'existe pas → l'atexit sweep avait tué 3 arbres
+      réels à la sortie de la première suite — corrigé : sweep INTERDIT sous
+      pytest + baselines à la création) ; (b) bug réel trouvé par test :
+      root_pid posé AVANT kill dans le chemin « Chrome pas prêt » (sinon
+      fuite du spawn raté). Suite complète re-vérifiée post-compat (stubs
+      mono-arg des tests existants préservés) ; gate F-103 29 surfaces
+      0 erreur 0 warning.
+- [x] F163-5 : **Validation live `debug/run_browser_pool.py` — 12/12 PASS** :
+      spawn unique (port 53563) + health OK, façade smolagents 29 outils
+      lisant la page témoin SUR le Chrome du pool, re-lease SANS respawn
+      (Chrome chaud), façade pydantic --browserUrl lisant la MÊME page,
+      shutdown → PID racine mort + zéro chrome automation résiduel.
+- [x] F163-6 : État disque (contract C524-C526, feature_list F-163 completed,
+      ce fichier) + DuckDB + commit + PR.
 
 ## Jalons de l'Itération (cycle F-158 — phase 3.1-3.2 : Coder pydantic en production)
 > Premier incrément PRODUCTION du plan : le socle commun × profil Coder derrière un

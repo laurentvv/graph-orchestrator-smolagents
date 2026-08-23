@@ -28,6 +28,8 @@ For each subtask, a **Coder** node wakes up. It receives a clear order and a pow
 
 The **web Tester** runs on the same foundation (phase 3.7): reasoning 9B no-think model, DevTools + Puppeteer MCP, F-46/F-82 checklist or F-47 targeted re-test in the prompt, wall-clock timeout, guards calibrated to `tester_max_steps` — activate with `TESTER_ENGINE=pydantic` and isolate it via `uv run python debug/run_tester.py [ok|bug]` (scenario `bug` = frozen counter on the golden deliverable, expected FAILURE).
 
+All browser consumers (Coder, Static Tester, web Tester — both engines) share **one pool-owned Chrome per run** (`graph_orchestrator/browser_pool.py`, F-163): MCP servers connect to it via `--browserUrl` instead of each launching its own, the pool health-checks `/json/version` and respawns if it dies, and kills the whole process tree (`taskkill /T /F`) at run end — ending the Windows orphan-Chrome leaks and the ×4 cold-starts per iteration. Opt out with `BROWSER_POOL_ENABLED=0` (exact legacy behavior); validate live with `uv run python debug/run_browser_pool.py`.
+
 ### 3. 👀 Multimodal Visual Self-Correction
 Say goodbye to web interfaces with invisible buttons or overlapping divs. Our agents use the **MCP (Model Context Protocol)** to drive Chrome in the background. The agent takes a screenshot of its own code, analyzes it using its vision models, and fixes visual bugs on its own *before* you even see them.
 

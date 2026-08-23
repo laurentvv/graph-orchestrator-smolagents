@@ -55,7 +55,7 @@ def build_crawl4ai_params() -> Optional[Any]:
     )
 
 
-def build_chrome_devtools_params() -> Optional[Any]:
+def build_chrome_devtools_params(browser_url: Optional[str] = None) -> Optional[Any]:
     """Construit la config MCP pour chrome-devtools-mcp (stdio via npx). F-45.
 
     Chrome DevTools MCP : pilotage d'un Chrome live (Puppeteer sous le capot) pour
@@ -63,8 +63,16 @@ def build_chrome_devtools_params() -> Optional[Any]:
     visuelle du Coder (le modèle vision vérifie sa page avant final_answer) et au
     complément d'outils du WebTester (console structurée + Lighthouse).
 
+    Args:
+        browser_url: F-163 — URL du Chrome PARTAGÉ du pool navigateur
+            (ex: http://127.0.0.1:39217). Si fournie, le serveur S'Y CONNECTE
+            (--browserUrl) au lieu de lancer son PROPRE Chrome : pas de
+            --isolated (l'isolation vient du user-data-dir temporaire du pool),
+            pas de cold-start, pas d'arbre cmd→npx→node→Chrome à fuir.
+
     Options notables :
-      - `--isolated` : profil temporaire (cleanup auto, pas de pollution entre runs).
+      - `--isolated` (mode historique seulement) : profil temporaire (cleanup
+        auto, pas de pollution entre runs).
       - `--viewport 1280x800` : résolution réaliste (le défaut 800x600 tronque les
         layouts responsives — même correction que pour Puppeteer web_tester.py).
       - `--screenshot-format jpeg` : JPEG ~3-5x plus petit que PNG → économise le
@@ -84,14 +92,20 @@ def build_chrome_devtools_params() -> Optional[Any]:
     if os.getenv("CHROME_DEVTOOLS_ENABLED", "1").strip().lower() in {"0", "false", "no", "off"}:
         return None
 
-    args = ["-y", "chrome-devtools-mcp@latest", "--isolated", "--viewport", "1280x800",
+    args = ["-y", "chrome-devtools-mcp@latest", "--viewport", "1280x800",
             "--screenshot-format", "jpeg"]
+    if browser_url:
+        # F-163 : connexion au Chrome du pool (option officielle du serveur).
+        args += ["--browserUrl", browser_url]
+    else:
+        args.append("--isolated")
     # Headless optionnel (défaut : visible, utile pour débugger en dev).
     if os.getenv("CHROME_DEVTOOLS_HEADLESS", "0").strip().lower() in {"1", "true", "yes", "on"}:
         args.append("--headless")
     # Chemin Chrome optionnel (sinon le serveur détecte l'installation système).
+    # Ignoré en mode --browserUrl (le serveur ne lance rien).
     chrome_path = os.getenv("CHROME_PATH")
-    if chrome_path:
+    if chrome_path and not browser_url:
         args += ["--executable-path", chrome_path]
 
     return StdioServerParameters(

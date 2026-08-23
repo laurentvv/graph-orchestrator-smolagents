@@ -59,11 +59,11 @@ Ne te fie jamais uniquement à ta fenêtre de contexte pour suivre l'avancement 
 # PARTIE 2 : GUIDE D'UTILISATION POUR LE DÉVELOPPEUR
 
 ## 4. Banque de Prompts de Test (Prompt-Vault)
-Prompts de test classés par difficulté dans `references/Prompt-Vault/` (clone externe gitignoré — tout ajout : commité dans le clone ET reporté en copie trackée dans `prompts/`, sinon perdu au re-clone) : `Easy/`, `Medium/`, `Hard/`, `Advanced/` (un `.md` = un cahier des charges structuré, souvent « 1 fichier `index.html`, HTML+CSS+JS vanilla »). Sommaire : `references/Prompt-Vault/README.md`.
+Prompts classés par difficulté dans `references/Prompt-Vault/` (clone externe gitignoré — tout ajout : commité dans le clone ET reporté en copie trackée dans `prompts/`) : `Easy/`, `Medium/`, `Hard/`, `Advanced/` (un `.md` = un cahier des charges, souvent « 1 fichier `index.html`, HTML+CSS+JS vanilla »). Sommaire : `references/Prompt-Vault/README.md`.
 
 ## 5. Projets de Référence
-* **Code et audits** : `docs/references-audit/` (lié au code GitHub stocké dans `references/`) — implémentations production-éprouvées à réutiliser plutôt que de réinventer.
-* **Flags llama-server** : `docs/LLAMA_SERVER_FLAGS.md` — guide de décision pour intégrer un nouveau modèle GGUF (MTP spéculatif, KV quant, cache-reuse, flags écartés avec preuves, méthodologie de bench). À consulter AVANT de changer `<PREFIX>_*` dans le `.env`.
+* **Code et audits** : `docs/references-audit/` (lié au code GitHub dans `references/`) — implémentations production-éprouvées à réutiliser plutôt que réinventer.
+* **Flags llama-server** : `docs/LLAMA_SERVER_FLAGS.md` — guide AVANT de changer `<PREFIX>_*` dans le `.env` (MTP, KV quant, cache-reuse, flags écartés, méthodo bench).
 * **Cartographie Nœuds & Skills** : `docs/NODES_AND_SKILLS.md` — system prompts forcés par nœud, 11 skills, modes eager/lazy (F-57). À consulter pour savoir ce que voit chaque agent LLM à l'exécution.
 * **Refactoring automatique des skills (F-92)** : `scripts/refactor_skills.py` découpe les `SKILL.md` > 80 lignes (sections secondaires → `resources/`, chargement lazy via `view_file`). À exécuter dès qu'un skill devient volumineux.
 * **Doc Pydantic AI Harness en local (F-157, RÈGLE : SI UNE DOC EXISTE, LA LIRE AVANT DE CODER)** : `references/pydantic-ai-docs/` (gitignoré) contient la doc OFFICIELLE COMPLÈTE (262 pages) — `llms-full.txt` (5 Mo, markdown propre) + `INDEX.md` (titre → n° de ligne ; lecture ciblée : `sed -n '<début>,<fin>p' references/pydantic-ai-docs/llms-full.txt`) + crawl rendu. **Synthèse de lecture avec LIENS par page : `docs/PYDANTIC_AI_HARNESS_DOC_NOTES.md` (tracké) — à lire EN PREMIER** avant toute modif du Coder pydantic. Toute modif part de la page de doc concernée, pas d'hypothèses ; le site expose chaque page en `.md` direct (`https://pydantic.dev/docs/ai/<chemin>/index.md`) pour un re-fetch unitaire à jour.
@@ -114,6 +114,7 @@ Un run E2E complet dure 30-40 min GPU-local ; valider la modif d'UN seul nœud (
 | `debug/test_mtp_spec.py` | Compat/bench MTP spéculatif llama-server (A/B `--spec-type draft-mtp`, 0 LLM) | `uv run python debug/test_mtp_spec.py [--only fast\|reasoning\|no_think] [--ctx N]` |
 | `debug/bench_prefill_flags.py` | Bench préfill flags FAST (`--cache-reuse`, `-ub`), multi-tours simulé (0 LLM) | `uv run python debug/bench_prefill_flags.py [--ctx N] [--turns N]` |
 | `debug/diag_grammar_f160.py` / `replay_request_f160.py` / `trace_mcp_calls_f160.py` | F-160 : grammaire llama-server vs `tool_choice`, rejeu variants, trace appels MCP | `uv run python debug/<script>.py` |
+| `debug/run_browser_pool.py` | Pool navigateur F-163 (Chrome unique/run, 0 LLM) | `uv run python debug/run_browser_pool.py` |
 
 Boucle : identifier le nœud impacté → lancer son script → observer le verdict → couper si erreur, corriger, relancer. Input ad hoc : scénario nommé (`debug/run_judge.py bug`), prompt en CLI (`debug/run_router.py "ma description"`), ou `@fichier`. Une fois le nœud validé isolément, relancer l'E2E complet (§7). Détail technique : les nœuds DSPy ignorent le paramètre `*_model` — le vrai modèle vient de `_run_dspy_node → model_lifecycle(spec)` qui spawn son propre llama-server ; les scripts reproduisent fidèlement ce comportement.
 

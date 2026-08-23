@@ -426,7 +426,30 @@ async def run_coding_workflow(
     seed_tasks: List[dict],
     settings: Settings = default_settings,
 ) -> Tuple[Optional[dict], List[NodeMetrics]]:
-    """Mode coding : Architect -> Fan-out Coder -> Parallel Validation -> Judge (loop)."""
+    """Mode coding : Architect -> Fan-out Coder -> Parallel Validation -> Judge (loop).
+
+    F-163 (pool navigateur run-scoped) : garantie le shutdown du Chrome partagé
+    (taskkill arbre + sweep automation) même en cas d'exception — le corps réel
+    vit dans _run_coding_workflow_inner, qui ancre le pool au run_id.
+    """
+    from .browser_pool import get_browser_pool, pool_should_engage
+
+    _pool_on = pool_should_engage(settings)
+    try:
+        return await _run_coding_workflow_inner(seed_tasks, settings)
+    finally:
+        if _pool_on:
+            try:
+                get_browser_pool().shutdown_run(reason="fin de workflow coding")
+            except Exception as pool_err:  # noqa: BLE001 — fail-open
+                print(f"[-] Pool navigateur : shutdown en erreur ({pool_err}) — ignoré.")
+
+
+async def _run_coding_workflow_inner(
+    seed_tasks: List[dict],
+    settings: Settings = default_settings,
+) -> Tuple[Optional[dict], List[NodeMetrics]]:
+    """Corps du workflow coding (l'entrée publique est run_coding_workflow)."""
     reasoning_model = build_reasoning_model(settings)
     fast_model = build_fast_model(settings)
     all_metrics: List[NodeMetrics] = []
@@ -439,6 +462,18 @@ async def run_coding_workflow(
     _run_key = (seed_tasks[0].get("content", "") if seed_tasks else "").strip().lower()
     run_id = f"coding_{hashlib.sha1(_run_key.encode('utf-8')).hexdigest()[:16]}"
     print(f"[*] Knowledge Graph branché : {settings.kg_path}")
+
+    # F-163 : ancre le pool navigateur au run — UN seul Chrome pour tout le run
+    # (Coder, Static Tester, Tester devtools s'y connectent via --browserUrl) ;
+    # idempotent pour le même run_id (reprise checkpoint), remplace l'arbre d'un
+    # run précédent sinon. Le shutdown vit dans le wrapper run_coding_workflow.
+    try:
+        from .browser_pool import get_browser_pool, pool_should_engage as _engage
+
+        if _engage(settings):
+            get_browser_pool().configure_run(run_id)
+    except Exception as pool_err:  # noqa: BLE001 — fail-open
+        print(f"[-] Pool navigateur : ancrage impossible ({pool_err}) — mode historique.")
 
     print(f"\n{'='*60}")
     print(f"  CODING WORKFLOW (Multi-Agent Playbook) — run {run_id}")

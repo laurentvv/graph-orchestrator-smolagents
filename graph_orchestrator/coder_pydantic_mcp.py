@@ -214,16 +214,20 @@ def render_mcp_result(result: Any) -> str:
 # ============================================================
 
 
-def build_devtools_mcp_toolset(settings) -> Optional[Any]:
+def build_devtools_mcp_toolset(settings, browser_url: Optional[str] = None) -> Optional[Any]:
     """MCPToolset chrome-devtools (stdio npx), ou None si désactivé/indisponible.
 
     La commande npx/options vient de ``agent_server.mcp.build_chrome_devtools_params``
-    (source unique de vérité, déjà testée) : ``--isolated --viewport 1280x800
+    (source unique de vérité, déjà testée) : ``--viewport 1280x800
     --screenshot-format jpeg`` (+ CHROME_PATH / CHROME_DEVTOOLS_HEADLESS).
+
+    ``browser_url`` (F-163 pool navigateur) : URL du Chrome partagé du run —
+    le serveur s'y connecte (``--browserUrl``) au lieu de lancer son propre
+    Chrome ``--isolated``. None = mode historique.
     """
     from agent_server.mcp import build_chrome_devtools_params
 
-    params = build_chrome_devtools_params()
+    params = build_chrome_devtools_params(browser_url=browser_url)
     if params is None:
         return None
     from fastmcp.client.transports import StdioTransport
@@ -462,34 +466,52 @@ async def open_coder_mcp(settings):
     context7_tools) : chaque serveur indisponible (désactivé, timeout
     init_timeout, npx absent…) est SKIPPÉ avec un warning — le nœud tourne
     avec ce qui a pu s'ouvrir, jamais bloqué par un MCP (F-104).
+
+    F-163 (pool navigateur) : un lease spanne TOUTE la fonction — Chrome
+    partagé sain pendant le nœud, le serveur DevTools s'y connecte
+    (--browserUrl). Pool indisponible → browser_url None → mode historique.
     """
+    from contextlib import ExitStack
+
+    from . import browser_pool as _bp
+
     state = CoderMCP()
-    async with AsyncExitStack() as stack:
-        devtools = build_devtools_mcp_toolset(settings)
-        if devtools is not None:
-            try:
-                await stack.enter_async_context(devtools)
-                state.toolsets.append(devtools)
-                state.browser_tools_available = True
-                state.devtools_client = devtools.client
-                print("[MCP] chrome-devtools (pydantic) : connecté.")
-            except Exception as exc:  # noqa: BLE001 — dégradation, pas d'échec nœud
-                logger.warning("chrome-devtools indisponible (%s) — poursuite sans preview.", exc)
-                print(f"[MCP] chrome-devtools (pydantic) : indisponible ({exc}) — sans preview.")
+    with ExitStack() as _sync_stack:
+        browser_url = None
+        if _bp.pool_should_engage(settings):
+            browser_url = _sync_stack.enter_context(
+                _bp.get_browser_pool().lease("open_coder_mcp")
+            )
+        async with AsyncExitStack() as stack:
+            if browser_url:
+                devtools = build_devtools_mcp_toolset(settings, browser_url=browser_url)
+            else:
+                # Appel SANS kwargs : compat avec les stubs de test existants.
+                devtools = build_devtools_mcp_toolset(settings)
+            if devtools is not None:
+                try:
+                    await stack.enter_async_context(devtools)
+                    state.toolsets.append(devtools)
+                    state.browser_tools_available = True
+                    state.devtools_client = devtools.client
+                    print("[MCP] chrome-devtools (pydantic) : connecté.")
+                except Exception as exc:  # noqa: BLE001 — dégradation, pas d'échec nœud
+                    logger.warning("chrome-devtools indisponible (%s) — poursuite sans preview.", exc)
+                    print(f"[MCP] chrome-devtools (pydantic) : indisponible ({exc}) — sans preview.")
 
-        helpers = build_dom_helper_toolset(state.devtools_client)
-        if helpers is not None:
-            state.toolsets.append(helpers)
+            helpers = build_dom_helper_toolset(state.devtools_client)
+            if helpers is not None:
+                state.toolsets.append(helpers)
 
-        context7 = build_context7_mcp_toolset(settings)
-        if context7 is not None:
-            try:
-                await stack.enter_async_context(context7)
-                state.toolsets.append(context7)
-                state.context7_available = True
-                print("[MCP] context7 (pydantic) : connecté.")
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Context7 indisponible (%s) — poursuite sans doc.", exc)
-                print(f"[MCP] context7 (pydantic) : indisponible ({exc}) — sans doc.")
+            context7 = build_context7_mcp_toolset(settings)
+            if context7 is not None:
+                try:
+                    await stack.enter_async_context(context7)
+                    state.toolsets.append(context7)
+                    state.context7_available = True
+                    print("[MCP] context7 (pydantic) : connecté.")
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Context7 indisponible (%s) — poursuite sans doc.", exc)
+                    print(f"[MCP] context7 (pydantic) : indisponible ({exc}) — sans doc.")
 
-        yield state
+            yield state
