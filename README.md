@@ -23,8 +23,8 @@ The Graph Orchestrator breaks this ceiling by introducing the **"Brains vs Hands
 ### 1. 🧠 The Brains (DSPy) Handle the Architecture
 We delegate the heavy thinking to deep reasoning models. The **Architect**, the **Judge**, and the **Security Expert** never write a single line of code. They mathematically break down the requirements, generate ultra-strict JSON schemas, and ruthlessly evaluate the deliverables.
 
-### 2. 🛠️ The Hands (smolagents) Execute in the Field
-For each subtask, a **Coder** node wakes up. It receives a clear order and a powerful toolkit. It writes files, navigates the terminal, uses Git, and even has eyes to check UI elements visually before pushing code.
+### 2. 🛠️ The Hands Execute in the Field (smolagents → pydantic-ai-harness)
+For each subtask, a **Coder** node wakes up. It receives a clear order and a powerful toolkit. It writes files, navigates the terminal, uses Git, and even has eyes to check UI elements visually before pushing code. The engine is being migrated to **pydantic-ai-harness** (FileSystem tools, native `CoderOutput` structured output, skills — validated at **-82% input tokens** vs the smolagents baseline): set `CODER_ENGINE=pydantic` to switch nodes one at a time while `smolagents` remains the default (migration plan: `docs/PLAN_MIGRATION_PYDANTIC_HARNESS.md`).
 
 ### 3. 👀 Multimodal Visual Self-Correction
 Say goodbye to web interfaces with invisible buttons or overlapping divs. Our agents use the **MCP (Model Context Protocol)** to drive Chrome in the background. The agent takes a screenshot of its own code, analyzes it using its vision models, and fixes visual bugs on its own *before* you even see them.

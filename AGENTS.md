@@ -59,7 +59,7 @@ Ne te fie jamais uniquement à ta fenêtre de contexte pour suivre l'avancement 
 # PARTIE 2 : GUIDE D'UTILISATION POUR LE DÉVELOPPEUR
 
 ## 4. Banque de Prompts de Test (Prompt-Vault)
-Prompts de test classés par difficulté dans `references/Prompt-Vault/` (clone externe de `laurentvv/Prompt-Vault`, gitignoré — tout ajout : commité dans le clone ET reporté en copie trackée dans `prompts/`, sinon perdu au re-clone) : `Easy/` (Bubble_Sort_Visualizer, Color_Palette_Generator, ToDo_List), `Medium/` (Sorting_Visualization, Pixel_Art_Editor), `Hard/` (Kanban_Board, Markdown_Editor_Desktop, Local_OCR, Tetris_Modern_Game), `Advanced/` (LLM_Speedometer, Feed_Aggregator, Hantavirus_Simulation, File_Listing). Chaque `.md` = un cahier des charges structuré (souvent « 1 fichier `index.html`, HTML+CSS+JS vanilla »). Tableau récapitulatif : `references/Prompt-Vault/README.md`.
+Prompts de test classés par difficulté dans `references/Prompt-Vault/` (clone externe gitignoré — tout ajout : commité dans le clone ET reporté en copie trackée dans `prompts/`, sinon perdu au re-clone) : `Easy/`, `Medium/`, `Hard/`, `Advanced/` (un `.md` = un cahier des charges structuré, souvent « 1 fichier `index.html`, HTML+CSS+JS vanilla »). Sommaire : `references/Prompt-Vault/README.md`.
 
 ## 5. Projets de Référence
 * **Code et audits** : `docs/references-audit/` (lié au code GitHub stocké dans `references/`) — implémentations production-éprouvées à réutiliser plutôt que de réinventer.

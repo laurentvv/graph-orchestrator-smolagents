@@ -1287,6 +1287,16 @@ async def execute_coder_node(
     settings: Settings,
 ) -> Tuple[Optional[CoderOutput], Optional[NodeMetrics]]:
     """Nœud Coder : utilise des outils pour créer/éditer des fichiers et exécuter des commandes bash."""
+    # F-158 (plan migration pydantic-ai-harness, phase 3.1-3.2) : moteur
+    # alternatif pydantic-ai-harness activé par CODER_ENGINE=pydantic. L'aiguillage
+    # est le SEUL point de divergence — smolagents reste le défaut inchangé.
+    _engine = str(getattr(settings, "coder_engine", "smolagents") or "smolagents").lower()
+    if _engine == "pydantic":
+        from .coder_pydantic import run_coder_pydantic
+
+        return await run_coder_pydantic(task, settings)
+    if _engine != "smolagents":
+        print(f"[!] CODER_ENGINE inconnu '{_engine}' — repli smolagents.")
     from smolagents import DuckDuckGoSearchTool
     from .context7_tool import context7_tools
     from .chrome_devtools_tool import chrome_devtools_tools

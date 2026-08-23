@@ -1,0 +1,35 @@
+[*] Isolation Coder pydantic-ai-harness — F-158 phase 3.1-3.2 (PRODUCTION)
+    Sortie isolée  : D:\GIT\graph-orchestrator-smolagents\debug\coder_pydantic_out
+    Modèle FAST    : D:\GIT\graph-orchestrator-smolagents\models\qwen35-4b-mtp\Qwen3.5-4B-Q4_K_M.gguf
+    tempér.        : 0.2 | retries sortie : 3
+    max requests   : 40
+
+[*] llama-server : chargement Qwen3.5-4B-Q4_K_M.gguf (backend=cuda, port 50780, reasoning=off, ngl=auto-fit, flash=auto, mtp=off, kv=q8_0)...
+[*] llama-server : logs → D:\GIT\graph-orchestrator-smolagents\logs\llama-server\llama-20260823-020746-p50780-Qwen3.5-4B-Q.log
+[*] llama-server : prêt (port 50780)
+[*] Coder (pydantic) — llama-server prêt : http://127.0.0.1:50780/v1
+[+] Coder (pydantic) : status=success (68166 in / 7142 out, 583.1s)
+[~] llama-server : arrêté (port 50780, default) — VRAM libérée
+
+============================================================
+RÉSULTAT DE L'ISOLATION — Coder pydantic (production)
+============================================================
+CoderOutput VALIDÉ nativement : task_id=ts-pydantic-isolation
+  status=success linter_ok=True vision_ok=True
+  details: Visualiseur Bubble Sort complet créé avec 3 fichiers : index.html (structure + liens), styles.css (thème sombre responsive), script.js (logique JS vanilla). Fonctionnalités : bouton Démarrer/Pause, Réinitialiser, Étape par étape, curseurs vitesse/taille/comparaison/échange, compteurs comparaisons/éc
+  tokens in/out : 68166 / 7142
+  durée noeud   : 583.1s
+  durée totale  : 585.1s
+------------------------------------------------------------
+Livrable :
+  [✓] fichier index.html 3377 octets
+  [✓] fichier styles.css 7860 octets
+  [✓] fichier script.js 11205 octets
+  [✓] index.html référence styles.css 
+  [✓] index.html référence script.js 
+  [✓] JS init robuste (readyState/DOMContentLoaded) 
+  [✓] JS strict mode 
+  [✓] aucun placeholder TODO/… 
+------------------------------------------------------------
+VERDICT : GO (8/8 contrôles livrable)
+============================================================

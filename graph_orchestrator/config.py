@@ -270,6 +270,12 @@ class Settings:
     # #11 (018a5b6, cap d'époque 30-40) clôturait au step 29-30. 30 = golden + marge
     # rituel, sans retour au thrash de 48.
     coder_max_steps: int = 40
+    # Moteur d'exécution du nœud Coder (F-158, plan migration pydantic-ai-harness
+    # phase 3) : 'smolagents' (historique, défaut — zéro changement de comportement)
+    # ou 'pydantic' (coder_pydantic.py : FileSystem + output_type=CoderOutput +
+    # skills, protocole tool-calls natifs prouvé par le spike F-157 à -66 % tokens IN).
+    # Valeur inconnue → repli smolagents + avertissement.
+    coder_engine: str = "smolagents"
     # --- Garde anti-réécriture totale (F-126, post-mortem run 2026-08-19_1552) ---
     # Le 4B « corrigeait » un bug local (1 ligne) en réécrivant TOUT index.html
     # (600+ lignes, 3 fois, ~15 min de prefill chacune) → inondation du contexte
@@ -682,6 +688,7 @@ def load_settings() -> Settings:
         tester_max_steps=_get_int("TESTER_MAX_STEPS", 20),
         tester_inline_skill_resources=_get_bool("TESTER_INLINE_SKILL_RESOURCES", True),
         coder_max_steps=_get_int("CODER_MAX_STEPS", 40),
+        coder_engine=_get_str("CODER_ENGINE", "smolagents"),
         coder_writefile_max_lines=_get_int("CODER_WRITEFILE_MAX_LINES", 100),
         # Prefill ````python (2026-08-22) : llama-server continue le dernier
         # message assistant incomplet → la réponse démarre DANS un bloc code
