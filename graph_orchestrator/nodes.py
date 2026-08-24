@@ -426,7 +426,10 @@ def _select_coder_spec(task: dict, settings) -> tuple:
         and iteration >= 3
     )
     if ultra_ok:
-        return settings.no_think_spec, settings.reasoning_max_tokens, True
+        # F-168 : cap dédié no-think (4096) au lieu de reasoning_max_tokens
+        # (16384) — le 9B no-think à ~5 t/s rendait une réponse dégénérée
+        # interminable (run 1835 : 7172+ tokens, 25+ min, run tué).
+        return settings.no_think_spec, settings.no_think_max_tokens, True
     return settings.fast_spec, settings.fast_max_tokens, False
 
 

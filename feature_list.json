@@ -1441,6 +1441,17 @@
         "F-154",
         "F-166"
       ]
+    },
+    {
+      "id": "F-168",
+      "name": "Sauvetage verdict borné + cap no-think dédié (post-mortem run 1835)",
+      "description": "Run 1835 (E2E post-F-167, tué à 1h51) : sauvetage DSPy sans cap (génération en fuite 7172+ tokens/25 min) + ValidationError string_type (règle null vs champs requis) + JSONAdapter parse fail ; Tester pydantic et Coder ULTRA héritaient de REASONING_MAX_TOKENS=16384 sur le 9B no-think à ~5 t/s (pire cas ~50 min/réponse). Fix : dspy.LM du rescue borné (1200/300s/temp 0), signature fixed_json texte brut, passe déterministe _fill_required_defaults (Literal→failure fail-closed) AVANT le LLM, NO_THINK_MAX_TOKENS=4096 câblé Tester+ULTRA.",
+      "status": "completed",
+      "dependencies": [
+        "F-61",
+        "F-165",
+        "F-167"
+      ]
     }
   ]
 }

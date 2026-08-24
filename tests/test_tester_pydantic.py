@@ -472,11 +472,13 @@ class TestAgentAssembly:
         assert "tool_choice" not in agent_without.model_settings
 
     def test_model_settings_reasoning_profile(self):
-        """max_tokens = reasoning_max_tokens (le Tester tourne sur le 9B) et
-        PAS de température forcée (parité smolagents : défaut serveur)."""
+        """max_tokens = no_think_max_tokens (F-168 : cap dédié 4096 au spec
+        no-think — avant reasoning_max_tokens=16384 laissait une réponse
+        dégénérée courir ~50 min sur le 9B à 5 t/s, run 1835) et PAS de
+        température forcée (parité smolagents : défaut serveur)."""
         settings = load_settings()
         agent = self._agent(settings)
-        assert agent.model_settings["max_tokens"] == settings.reasoning_max_tokens
+        assert agent.model_settings["max_tokens"] == settings.no_think_max_tokens
         assert "temperature" not in agent.model_settings
 
     @pytest.mark.anyio

@@ -461,6 +461,8 @@ class TestCoderUltra:
             fast_spec=fast, no_think_spec=no_think,
             coder_ultra_correction=ultra,
             fast_max_tokens=4000, reasoning_max_tokens=8192,
+            # F-168 : cap dédié no-think lu par _select_coder_spec pour l'ULTRA.
+            no_think_max_tokens=4096,
         )
 
     def test_creation_iteration1_fast(self):

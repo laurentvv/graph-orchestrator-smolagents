@@ -9,7 +9,7 @@ import json
 import os
 import requests
 import re
-from typing import List, Optional, Any, Literal
+from typing import List, Optional, Any, Literal, get_args, get_origin
 from pydantic import BaseModel, Field, ValidationError
 
 
@@ -248,6 +248,37 @@ class FinalSynthesis(BaseModel):
 # Extraction / validation JSON robuste
 # ==========================================
 
+def _fill_required_defaults(data: dict, model_class: type[BaseModel]) -> dict:
+    """F-168 : remplit les champs Pydantic requis absents/None par un défaut typé.
+
+    Le sauvetage LLM répare la STRUCTURE (quotes/braces) ; sa règle historique
+    « mets null si un champ manque » violait les champs requis (str, Literal) →
+    ValidationError ``string_type`` DANS le sauvetage lui-même (run 1835,
+    Tester it.1). Un placeholder typé n'invente pas de contenu :
+    Literal→"failure" si présent (fail-closed), str→"", int→0, float→0.0,
+    bool→False. Les champs optionnels (None valide) et les annotations
+    inconnues ne sont pas touchés (l'erreur restera, comportement historique).
+    """
+    for name, field in model_class.model_fields.items():
+        if data.get(name) is not None:
+            continue
+        if not field.is_required():
+            continue  # optionnel : None est déjà valide
+        ann = field.annotation
+        if get_origin(ann) is Literal:
+            args = get_args(ann)
+            data[name] = "failure" if "failure" in args else args[0]
+        elif ann is str:
+            data[name] = ""
+        elif ann is int:
+            data[name] = 0
+        elif ann is float:
+            data[name] = 0.0
+        elif ann is bool:
+            data[name] = False
+    return data
+
+
 def extract_and_validate(response: Any, model_class: type[BaseModel], api_base: Optional[str] = None, model_id: Optional[str] = None) -> Optional[BaseModel]:
     """Extrait et valide le JSON, qu'il soit dict natif, string, ou encapsulé dans
     un bloc markdown ```json ... ```.
@@ -275,6 +306,20 @@ def extract_and_validate(response: Any, model_class: type[BaseModel], api_base: 
 
         return model_class.model_validate_json(raw_json)
     except (ValidationError, json.JSONDecodeError):
+        # F-168 : passe DÉTERMINISTE avant tout LLM. Les null sur champs requis
+        # (générés par les petits modèles dans final_answer) se réparent sans
+        # réseau : Literal→"failure" (fail-closed), str→"", numérique→0.
+        # 0 LLM, 0 latence — si le JSON est vraiment illisible, on continue
+        # vers le sauvetage LLM (structure quotes/braces).
+        try:
+            _det = json.loads(raw_json)
+            if isinstance(_det, dict):
+                return model_class.model_validate(
+                    _fill_required_defaults(_det, model_class)
+                )
+        except Exception:
+            pass
+
         # Garde anti-fuite d'abstraction : un test unitaire de parsing NE DOIT PAS
         # déclencher d'appel LLM (réseau, latence, hallucination). La variable
         # PYTEST_CURRENT_TEST est posée par pytest pendant l'exécution d'un test ;
@@ -289,12 +334,12 @@ def extract_and_validate(response: Any, model_class: type[BaseModel], api_base: 
             from graph_orchestrator.config import settings
             import logging
             logging.getLogger("dspy").setLevel(logging.CRITICAL)
-            
+
             # F-58 : provider openai/ contre llama-server (avant : ollama_chat/ → /api/chat Ollama).
             # api_base garde /v1 (llama-server expose /v1).
             use_api_base = api_base or settings.local_api_base
             use_model_id = model_id or settings.fast_model_id
-            
+
             # Fetch actual model ID from llama-server to avoid litellm NotFoundError
             try:
                 resp = requests.get(f"{use_api_base.rstrip('/')}/models", timeout=2)
@@ -304,27 +349,38 @@ def extract_and_validate(response: Any, model_class: type[BaseModel], api_base: 
                         use_model_id = models_data["data"][0]["id"]
             except Exception:
                 pass
-                
+
             if use_model_id == "default":
                 use_model_id = "llama"
-            
-            lm = dspy.LM(f"openai/{use_model_id}", api_base=use_api_base, api_key=settings.local_api_key)
+
+            # F-168 : BORNÉ. Le sauvetage ne répare que la STRUCTURE d'un JSON
+            # de verdict (quelques centaines de tokens) — avant : aucun cap ni
+            # timeout → génération en fuite de 25+ min observée (run 1835,
+            # serveur 9B à 5,4 t/s). max_tokens 1200 + timeout 300 s + temp 0.
+            lm = dspy.LM(
+                f"openai/{use_model_id}",
+                api_base=use_api_base,
+                api_key=settings.local_api_key,
+                max_tokens=1200,
+                timeout=300,
+                temperature=0.0,
+            )
             with dspy.context(lm=lm):
                 class JSONFixSignature(dspy.Signature):
                     """Récupère le JSON cassé en extrayant les champs du schéma cible depuis le texte.
 
                     RÈGLES DE FIDÉLITÉ STRICTE :
-                    1. N'invente JAMAIS une valeur absente du texte source — si un champ manque,
-                       mets ``null`` (ou la valeur par défaut du schéma), n'invente pas.
+                    1. N'invente JAMAIS une valeur absente du texte source — si un champ
+                       manque, mets la chaîne vide ``""`` (JAMAIS ``null`` : les champs
+                       du schéma sont requis), n'invente pas.
                     2. Ne corrige que la STRUCTURE (quotes/braces manquants, clés mal placées),
                        pas le SENS du contenu. Le texte d'origine est la seule source de vérité.
-                    3. Si le texte est totalement illisible (pas du tout du JSON), renvoie le
-                       défaut du schéma plutôt que d'inventer du contenu plausible.
+                    3. Si le texte est totalement illisible (pas du tout du JSON), renvoie ``{}``.
                     4. Préserve les chaînes exactes (ne « nettoie » pas, ne reformule pas).
                     """
                     broken_text: str = dspy.InputField(desc="Le texte JSON cassé/brisé à récupérer")
-                    fixed_data: model_class = dspy.OutputField(desc="L'objet typé reconstruit fidèlement, null sur les champs absents")
-                
+                    fixed_json: str = dspy.OutputField(desc="Le JSON réparé, en TEXTE BRUT (objet {...} valide, jamais null sur un champ)")
+
                 predictor = dspy.Predict(JSONFixSignature)
                 # F-61 (post-mortem run partiel 1h30) : tronquer le payload envoyé au
                 # sauvetage LLM. Le sauvetage ne répare que la STRUCTURE (quotes/braces
@@ -336,7 +392,16 @@ def extract_and_validate(response: Any, model_class: type[BaseModel], api_base: 
                 # Pydantic fail…). Limiter à 6000 chars casse la boucle.
                 _rescue_text = str(response)[:6000]
                 result = predictor(broken_text=_rescue_text)
-                return result.fixed_data
+                fixed_text = str(result.fixed_json or "").strip()
+                # Extraction défensive du {...} (le modèle peut encadrer de prose).
+                _m = re.search(r'(\{.*\})', fixed_text, re.DOTALL)
+                payload = _m.group(1).strip() if _m else fixed_text
+                _data = json.loads(payload)
+                if not isinstance(_data, dict):
+                    raise ValueError("le JSON réparé n'est pas un objet")
+                return model_class.model_validate(
+                    _fill_required_defaults(_data, model_class)
+                )
         except Exception as dspy_e:
             print(f"[-] Le sauvetage DSPy a échoué : {dspy_e}")
             return None
