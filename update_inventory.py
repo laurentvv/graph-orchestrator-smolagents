@@ -1153,11 +1153,75 @@ BYTECHEF_FILES = [
      "description": "Façade de gestion et de proxying pour les serveurs et outils du Model Context Protocol (MCP)."},
 ]
 
+# ---------------------------------------------------------------------------
+# 52 — AutoDesign : 19 entrées (méta-harnais, agents forked, claim graph, process supervision, rubrics, skills v2)
+# ---------------------------------------------------------------------------
+AUTODESIGN_BASE = "references/AutoDesign"
+AUTODESIGN_FILES = [
+    {"path": f"{AUTODESIGN_BASE}/README.md", "type": "doc", "reuse": "high",
+     "key_symbols": ["Meta-Harness Optimization", "DesignHarness", "PosterBench", "Paper All-in-One"],
+     "description": "Vue d'ensemble architecturale d'AutoDesign, boucle double d'optimisation sans modification de poids et Paper All-in-One."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/runner.py", "type": "code", "reuse": "high",
+     "key_symbols": ["PipelineRunner", "ToolContext", "_preflight_video_runtime", "run"],
+     "description": "PipelineRunner unifié orchestrant les 4 tracks d'artefacts (poster, deck, landing, video) avec injection de compétences, tokens d'annulation, et gestion de cache de pipeline."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/designer.py", "type": "code", "reuse": "high",
+     "key_symbols": ["DesignerLoop", "_MAX_REPEATED_VALIDATION_ERRORS", "_DOGFOOD_POST_COMPOSITE_THINKING_BUDGET", "TurnResponse"],
+     "description": "Boucle d'agent Designer multi-tours provider-agnostique (Claude / OpenAI / Kimi / DeepSeek) avec gestion des thinking budgets dynamiques, plafonnement des erreurs de validation consécutives et tokens d'annulation."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/candidate_assessment.py", "type": "code", "reuse": "high",
+     "key_symbols": ["DeliveryAssessment", "_QUALITY_ONLY_ISSUES", "AttemptSafetyState", "assess_candidate_delivery"],
+     "description": "Évaluation de livraison d'artefacts distinguant les hard blockers de sécurité / crash des simples diagnostics qualitatifs, empêchant les boucles de rejet infini."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/agents/critic_agent.py", "type": "code", "reuse": "high",
+     "key_symbols": ["CriticAgent", "CritiqueReport", "CritiqueIssue", "_CRITIC_TOOL_SCHEMAS", "report_verdict"],
+     "description": "Sous-agent de critique visuelle forké autonome (propre boucle LLM, budget de tours dédié, vision multi-modalité, outils de vérification read_slide_render et read_paper_section)."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/agents/claim_graph_extractor.py", "type": "code", "reuse": "high",
+     "key_symbols": ["ClaimGraphExtractor", "EXTRACT_FAIL_THESIS", "report_claim_graph", "lookup_paper_section"],
+     "description": "Sous-agent d'extraction de graphe de claims (tensions, mécanismes, preuves, implications) avec vérification de citation textuelle stricte et dégradation gracieuse en cas de timeout."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/agents/paper_memory_agent.py", "type": "code", "reuse": "high",
+     "key_symbols": ["PaperMemoryAgent", "report_paper_memory_dossier", "lookup_paper_memory"],
+     "description": "Agent de curation de mémoire de document produisant un dossier de preuves structuré avec chunks canoniques et attribution exacte."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/agents/atomic_artifact_promotion.py", "type": "code", "reuse": "high",
+     "key_symbols": ["publish_artifact_directory", "recover_artifact_promotion", "_UNCOMMITTED_PHASES", "_TRANSACTION_OWNER"],
+     "description": "Promotion atomique de livrables et de dossiers de staging vers final avec journal de transaction réversible (prepared -> backup_created -> final_installed -> committed)."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/process_supervision.py", "type": "code", "reuse": "high",
+     "key_symbols": ["ProcessIdentity", "ProcessRecord", "SpawnIntent", "LedgerSnapshot", "TerminationReport", "_configure_windows_api"],
+     "description": "Supervision durable de processus et terminaison d'arbre de sous-processus cross-platform (Windows Job Objects Win32 ctypes + POSIX process groups) sans processus orphelins."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/run_control.py", "type": "code", "reuse": "high",
+     "key_symbols": ["RunLifecycleState", "_ALLOWED_TRANSITIONS", "durable_replace_json", "CancellationToken", "RunCancelled"],
+     "description": "Machine à états finis du cycle de vie des runs (reserved -> queued -> running -> completing -> completed), verrous d'écriture logiques et annulation coopérative."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/attempt_selection.py", "type": "code", "reuse": "high",
+     "key_symbols": ["normal_promotion_lease", "_selection_lock", "AttemptPromotionRejected", "PromotionOutcome"],
+     "description": "Gestion transactionnelle et immuable des tentatives de génération avec baux d'exclusion mutuelle et journal de sélection d'essais."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/skills/registry.py", "type": "code", "reuse": "high",
+     "key_symbols": ["SkillManifest", "SkillResource", "SkillPack", "select_skills", "inject_skill_context"],
+     "description": "Registre de skills v2 avec chargement lazy des ressources (when_to_read, stages), budget de description (max 160 car.), validation de schémas et calcul de hash de contenu."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/evaluator/poster_rubric.py", "type": "code", "reuse": "high",
+     "key_symbols": ["DIMENSIONS", "RubricDimension", "GATE_DIMENSION_ID", "GATE_CEILING_SCORE", "DimensionOwner"],
+     "description": "Rubrique d'évaluation hybride 7 dimensions (déterministe, subjectif VLM, mixte) avec hard gates de rendu et plafonds de scores stricts."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/evaluator/runner.py", "type": "code", "reuse": "medium",
+     "key_symbols": ["evaluate_artifact", "write_report_files", "_markdown_report"],
+     "description": "Moteur d'évaluation orchestrant les snapshots, les métriques structurelles et la synthèse de findings standardisés."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/util/claim_graph_validator.py", "type": "code", "reuse": "high",
+     "key_symbols": ["validate_claim_graph", "_norm_ws"],
+     "description": "Validateur déterministe en Python pur vérifiant l'inclusion textuelle stricte des citations de preuves (raw_quote dans paper_raw_text) et l'intégrité référentielle des graphes de claims."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/util/poster_gate_audit.py", "type": "code", "reuse": "high",
+     "key_symbols": ["audit_authored_poster_gate", "_SNAPSHOT_JS", "_ROOT_SNAPSHOT_JS"],
+     "description": "Audit Playwright déterministe en lecture seule pour posters HTML (vérification écran et impression print, débordements, collisions de texte, ratios d'occupation)."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/util/provenance.py", "type": "code", "reuse": "high",
+     "key_symbols": ["validate_provenance", "ProvenanceReport", "ProvenanceFailure", "_NUMERIC_RE"],
+     "description": "Détecteur et vérificateur déterministe anti-hallucination numérique qui audite tous les tokens numériques et force l'ancrage sur citations de sources."},
+    {"path": f"{AUTODESIGN_BASE}/autodesign/util/artifact_browser_audit.py", "type": "code", "reuse": "high",
+     "key_symbols": ["audit_landing_html", "_LANDING_VIEWPORTS", "_snapshot_page"],
+     "description": "Audit Playwright de pages web et slides HTML sous conditions JavaScript activé/désactivé et blocage réseau."},
+    {"path": f"{AUTODESIGN_BASE}/agent_skills/autodesign-poster/SKILL.md", "type": "skill", "reuse": "high",
+     "key_symbols": ["autodesign-poster", "Agent-first PDF curation", "Poster DOM QA", "Output Contract"],
+     "description": "Skill autonome conforme agentskills.io implémentant le workflow agent-first v2 : inspection PDF, rognage de sources, plans revision-bound et audit DOM en lecture seule."},
+]
+
 def main() -> None:
     data = json.loads(INVENTORY.read_text(encoding="utf-8"))
 
-    data["projects_audited"] = 51
-    data["audit_date"] = "2026-08-20"
+    data["projects_audited"] = 52
+    data["audit_date"] = "2026-08-24"
 
     updated = []
     seen_ids = set()
@@ -1361,6 +1425,15 @@ def main() -> None:
                 "summary": "Plateforme d'intégration et d'automatisation open-source unifiant orchestration d'agents IA, workflows complexes et 180+ connecteurs (Java 21 / Spring Boot 3 / React, Apache-2.0). Richesse architecturale pour l'orchestrateur : (1) batterie exhaustive de 12 guardrails modulaires d'entrée/sortie (SecretKeyDetectorUtils, PiiDetectorUtils, TopicalAlignment, SanitizeTextAdvisor, CheckForViolationsAdvisor), (2) coordinateur d'état de tâches distribuées et worker execution policies (PlatformCoordinator, PlatformWorker), (3) façade MCP bidirectionnelle client/serveur, (4) isolation multi-locataires et contextuelle (TenantContext).",
                 "files": BYTECHEF_FILES,
             }
+        elif pid == "AutoDesign":
+            project = {
+                "id": "AutoDesign", "name": "AutoDesign",
+                "path": "references/AutoDesign",
+                "category": "meta-harness-optimization",
+                "reuse_rating": "high",
+                "summary": "Framework d'optimisation de méta-harnais et usine multi-agents pour la conception et génération d'artefacts éditables (Posters, Decks, Pages web, Vidéos narrées) à partir de PDF scientifiques (Python/uv/Pydantic/Playwright, MIT). Architecture double-boucle (Inner Loop Designer+Critic / Outer Loop MetaHarnessOptimizer) et Agent Skills autonomes Agent-first v2 (autodesign-poster). Gisement de premier plan pour : (1) CriticAgent forké autonome avec vision et budget indépendant (P6), (2) ClaimGraphExtractor et validate_claim_graph pour la validation stricte d'inclusion textuelle des faits (P0/P6), (3) Process supervision cross-platform avec Windows Job Objects Win32 ctypes et groupes POSIX anti-zombies (P8), (4) candidate_assessment distinguant hard blockers et diagnostics qualitatifs anti-boucle infinie (P3), (5) atomic_artifact_promotion avec journal réversible (P8-bis), (6) skills registry v2 avec chargement lazy Progressive Disclosure et budget description <= 160 car. (P10), (7) audits DOM Playwright déterministes en lecture seule pour posters et landing pages (P6).",
+                "files": AUTODESIGN_FILES,
+            }
         updated.append(project)
         seen_ids.add(pid)
 
@@ -1481,6 +1554,11 @@ def main() -> None:
                         "path": "references/bytechef",
                         "category": "agent-orchestration-platform", "reuse_rating": "medium",
                         "summary": "Plateforme d'intégration et d'automatisation open-source unifiant agents IA, workflows et 180+ connecteurs. 12 guardrails modulaires (secrets, PII, sanitization, topical alignment), coordinateur d'état de tâches et MCP.", "files": BYTECHEF_FILES})
+    if "AutoDesign" not in seen_ids:
+        updated.append({"id": "AutoDesign", "name": "AutoDesign",
+                        "path": "references/AutoDesign",
+                        "category": "meta-harness-optimization", "reuse_rating": "high",
+                        "summary": "Framework d'optimisation de méta-harnais et usine multi-agents pour la conception et génération d'artefacts éditables à partir de PDF scientifiques (Python/Playwright, MIT).", "files": AUTODESIGN_FILES})
 
     data["projects"] = updated
 
@@ -1494,7 +1572,7 @@ def main() -> None:
             by_reuse[r] = by_reuse.get(r, 0) + 1
     print(f"OK — {len(data['projects'])} projets, {total} entrées au total.")
     print(f"Répartition : {by_reuse}")
-    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi", "hermes-agent", "cloudflare-os", "browser-use", "TencentDB-Agent-Memory", "system-prompts-leaks", "OpenSandbox", "deepseek-harness", "kilocode", "ponytail", "obscura", "hunk", "bytechef"):
+    for new_id in ("loopx", "code-review-graph", "davidondrej-skills", "llm-council", "mattpocock-skills", "pi", "hermes-agent", "cloudflare-os", "browser-use", "TencentDB-Agent-Memory", "system-prompts-leaks", "OpenSandbox", "deepseek-harness", "kilocode", "ponytail", "obscura", "hunk", "bytechef", "AutoDesign"):
         proj = next(p for p in data["projects"] if p["id"] == new_id)
         print(f"  {new_id} : {len(proj['files'])} entrées (reuse_rating={proj['reuse_rating']})")
 
