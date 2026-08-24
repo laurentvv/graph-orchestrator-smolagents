@@ -3261,3 +3261,101 @@ Coder est appliquée correctement par Qwen3.5-9B.
       le GGUF Ornith-1.5 n'embarque pas de couches MTP (`nextn` absentes, contrairement
       à Ornith-1.0-9B-MTP) et `REASONING_SPEC_MTP=false` en prod (VRAM 6 Go). Pas une
       régression b10590 ; action optionnelle : repérer une variante -MTP d'Ornith-1.5.
+
+## Jalons de l'Itération (re-validation E2E F164-6 — intégrité enregistrement verdicts, 2026-08-24)
+
+> Post-merge PR #117 (F-165). Run E2E `bubble-sort-multifile-v6` démarré 08:57:05
+> (`logs/run-20260824_085705-coding-f165-revalidation.log`,
+> `runs/2026-08-24_0857_bubble_sort_multifile_v6/`). Branche doc :
+> `docs/golden-run-revalidation`. Monitoring 10 min : log + livrables + bases.
+
+- [x] Prérequis : GGUF Ornith-1.5 remplacé (téléchargement 08:49→08:56, ancien en
+      backup `_Ornith-1.5-9B-Q4_K_M.gguf`) ; premier run AVEC Ornith-1.5.
+- [x] Pipeline amont sain : Routeur HTML, 8 leçons injectées, plan Architect reçu.
+- [x] **GOLDEN RUN #19 INVALIDÉ (double constat, 2026-08-24)** :
+      (a) non-reproductible — retest même tâche : itération 1 en ÉCHEC (40 steps
+      `coder_max_steps`, 7 audits visuels KO « board vide », garde fail-closed,
+      itération 2 lancée ~09:37) vs 21 steps/approbation du 18/08. Cause candidate :
+      draft Ornith-1.5 3× plus court (intentions sans valeurs) → bugs mécaniques
+      du 4B : hauteur `(v/100)*100%` sans hauteur parent → board vide ;
+      `var(--*)` consommées sans `:root` → thème sombre mort.
+      (b) **bug intrinsèque du livrable golden** (test navigateur 2026-08-24,
+      serveur 8798 + mesure) : le compteur « comparaisons » compte les ÉCHANGES —
+      `comparisonCount++` dans le `if (arr[i] > arr[i+1])` (`script.js:77`) ;
+      tableau 30 éléments : compteur final **228** (= swaps) vs **551
+      comparaisons réelles**. Cahier des charges violé ; Judge du 18/08 avait
+      approuvé → **fausse approbation historique** (famille F164-6). Écart
+      secondaire : `.sorted` appliqué seulement à la fin (pas de vert progressif).
+      Le reste tient : 30 barres au chargement, tri croissant, thème sombre réel.
+      Noté dans AGENTS.md §10.
+- [x] Incident DuckDB pendant le run : `run_event` régressé 2972→2970 à 09:23
+      (WAL consommé sans rejeu) — perte de 2 événements assistant (#3165 `run_start`
+      08:51 + `rch` 09:18). Lecture fiable = copie+rejeu WAL ; **règle : aucune
+      écriture assistant dans event_stream.duckdb pendant un run**.
+- [x] KG `graph_orchestrator.db` = DuckDB, connexion rw longue tenue par le run
+      (`knowledge_graph.py:55`) → verrou exclusif, illisible de l'extérieur pendant
+      le run (analyse claims/réfutations/verdicts reportée à la fin).
+- [x] Fin de run (12:57, ~4 h) : **ÉCHEC PROPRE fail-closed** — `"status":
+      "failure", "reason": "Coder crash"`, checkpoint CONSERVÉ pour reprise,
+      pool navigateur shutdown, exit 0. 3 itérations Coder épuisées sur le
+      même piège (`\n` littéraux search_replace + doublon startBtn).
+- [x] **VERDICT RE-VALIDATION F164-6 (partiel)** :
+      ✅ TIENT — verdicts Judge intègres quand le Judge tourne (25 verdicts
+      historiques sous run_id `coding_d72dc8e…` : zéro doublon, feedbacks
+      complets non tronqués, format fidèle) ; claim #256 non dupliqué
+      (dedup_key unique), contenu complet ; checkpoint riche et fidèle.
+      ❌ RESTE À CORRIGER — (1) **claim #256 du 24/08 10:46 MENSONGER** :
+      décrit « DOM not updated after each swap, internal sort correct »
+      alors que la preuve (console lue par le graphe) est une SyntaxError
+      fatale → script jamais exécuté. Ticket fantôme relisable par les
+      runs suivants = famille exacte F164-6 (non-ancrage sur preuve).
+      (2) **run_id = hash de la TÂCHE, pas de l'exécution** : les 25
+      verdicts mélangent 9 jours de runs — impossible d'isoler une
+      exécution en base. (3) **Trou d'observabilité Coder** : 4 h de run
+      terminé en « Coder crash » → **0 événement** dans `run_event`
+      (canal muet tant que Judge/Tester ne passent pas ; échecs d'itération,
+      circuit breaker et crash non journalisés).
+- [ ] Événement DuckDB de clôture (run terminé, verrous libérés) + PR doc.
+
+### Décision utilisateur validée (2026-08-24, ~10:00) — future F-166
+
+> « Il faut donner l'auto-fixer au Coder et à tous les nœuds qui codent de la
+> logique » — doctrine §8.3 « code pur d'abord » confirmée par ce run :
+> ~80 steps LLM brûlés sur un fix mécanique (doublon `startBtn` + `\n`
+> littéraux dans `search_replace`) qu'un fixer déterministe fait en <1 s.
+
+Périmètre F-166 proposé (à planifier proprement après le run) :
+1. **Auto-décodage `\n` dans `search_replace`** (tools.py, garde F-132) :
+   l'outil décode lui-même `\n`/`\t` littéraux des old/new_string, réessaie
+   le match décodé avant de rejeter — sûreté par recherche de chaîne. Fix
+   immédiat du piège observé ×15 dans ce run (step 22 it2 : diagnostic bon,
+   encodage seul en cause).
+2. **Classe 3 auto-fixer** : `SyntaxError: Identifier 'X' has already been
+   declared` (redéclaration même scope) — nécessite parsing de scope (pas
+   regex pure), à évaluer.
+3. **Branchement F-133 au-delà du Tester** : rendre `apply_known_fixes`
+   appelable par le Coder (post-rejet F-132) et tout nœud qui écrit du code
+   (Drafter/Architect en durcissement amont du draft).
+
+Pépites déjà minées (vérifiées 2026-08-24 dans `docs/references-audit/
+CODE_PUR_ROADMAP.md` — minage 2026-08-20 des 44 projets, clones locaux) :
+- **P3-aider** `references/aider/aider/coders/search_replace.py:565`
+  `flexible_search_and_replace` — cascade de strategies (exact → strip
+  lignes vides → indentation relative `RelativeIndenter` → whitespace-
+  tolerant → élision `...` → diff-match-patch par lignes) À BRANCHER EN
+  AVAL de F-132 : edit raté pour raison d'encodage/indentation appliqué
+  mécaniquement au lieu de coûter un tour LLM. ⚠️ fuzzy SequenceMatcher
+  désactivé chez aider (:296) — à ne PAS porter sans garde. Notre
+  auto-décodage `\n` (point 1) = préprocesseur de tête de cette cascade.
+- **P2-kilocode** `apply_patch.ts:276-323` — après chaque édition : formatage
+  + diagnostics de parse INJECTÉS dans l'output de l'outil. Port : check
+  syntaxe JS déterministe (`node --check`) après write_file/search_replace
+  → la SyntaxError `startBtn` de ce run aurait été détectée à l'écriture
+  (09:03), pas 80 steps plus tard.
+- **P1-OpenKB** `deck/validator.py:128` — valideur HTML stdlib shift-left
+  (self-contained, ids dupliqués, `getElementById('x')` sans `id="x"`).
+- P4-deer-flow (repair `\n` fence-aware) : DÉJÀ porté dans F-133 (fichier) ;
+  F-166 l'étend aux ARGUMENTS d'outil.
+- Bonus second rang : coercition d'args par schéma (open-swe
+  `sanitize_tool_inputs.py:24`), repair nom d'outil (kilocode `llm.ts:371`),
+  `json_repair` (OpenKB `agent/compiler.py:540`).
