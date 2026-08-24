@@ -345,7 +345,8 @@ _TESTER_PASS_MARKERS = (
 _TESTER_TOOL_ERROR_MARKERS = (
     "mcp error", "nameerror", "interpretererror", "forbidden access",
     "forbidden function", "is not defined", "code parsing failed",
-    "invalid enum value", "error in generating model output", "access denied",
+    "code execution failed", "invalid enum value",
+    "error in generating model output", "access denied",
 )
 
 
@@ -472,10 +473,23 @@ def _tester_max_steps_fallback(steps, prompt: str):
         if obs:
             obs_blob += "\n" + str(obs)
             n_obs += 1
-        # Les erreurs d'outil (error) sont aussi du signal.
+        # Les erreurs d'outil (error) sont aussi du signal — mais ATOMIQUES :
+        # F-165-A, un step.error est un BLOC (en-tête « Code execution failed
+        # at line '…' » + écho de code + « due to: <Exception>… » multi-lignes).
+        # Si UNE ligne du bloc porte une signature d'erreur d'OUTIL du Tester,
+        # le bloc ENTIER est exclu du scan FAIL : filtré ligne par ligne,
+        # l'en-tête « …failed… » fuyait le filet F-127 et était classé
+        # « assertion en échec » de l'app (run 021543 : write_file interdit
+        # du Tester devenu bug fantôme du livrable, réfutation KG claim 255).
         err = getattr(step, "error", None)
         if err:
-            obs_blob += "\n" + str(err)
+            err_text = str(err)
+            if not any(
+                marker in ln.lower()
+                for ln in err_text.splitlines()
+                for marker in _TESTER_TOOL_ERROR_MARKERS
+            ):
+                obs_blob += "\n" + err_text
 
     # F-127 : on filtre les lignes = erreurs des OUTILS du Tester (probe sur ID
     # inexistant, MCP -32602, NameError sandbox...) — elles ne prouvent PAS un
@@ -504,13 +518,29 @@ def _tester_max_steps_fallback(steps, prompt: str):
 
     if has_fail:
         # Un échec explicite a été observé → verdict failure + feedback.
-        # Extrait un extrait de l'observation contenant le FAIL (pour guider le Coder).
-        snippet = ""
-        for line in app_lines:
-            ll = line.lower()
-            if any(marker in ll for marker in _TESTER_FAIL_MARKERS):
-                snippet = line.strip()[:300]
-                break
+        # F-165-B : le snippet doit porter le DIAGNOSTIC, pas un écho de code
+        # amputé. L'exception suit souvent l'écho sur la même ligne
+        # (« …')' due to: TypeError: … ») ou dans les lignes suivantes du bloc ;
+        # on capture le segment « due to: … » dans une fenêtre de 4 lignes à
+        # partir de la première ligne FAIL, sinon la ligne FAIL entière —
+        # cap 300 AVEC ellipsis explicite (le [:300] muet coupait mi-code et
+        # perdait la cause, claim KG 255 du run 021543).
+        fail_idx = next(
+            (
+                i for i, ln in enumerate(app_lines)
+                if any(marker in ln.lower() for marker in _TESTER_FAIL_MARKERS)
+            ),
+            None,
+        )
+        snippet = app_lines[fail_idx].strip() if fail_idx is not None else ""
+        if fail_idx is not None:
+            for ln in app_lines[fail_idx : fail_idx + 4]:
+                m = _re.search(r"due to:\s*(.+)", ln, flags=_re.IGNORECASE)
+                if m and m.group(1).strip():
+                    snippet = m.group(1).strip()
+                    break
+        if len(snippet) > 300:
+            snippet = snippet[:297].rstrip() + "…"
         return CoderOutput(
             task_id=task_id,
             status="failure",

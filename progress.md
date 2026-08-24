@@ -1,14 +1,49 @@
 # État d'Avancement du Sprint
 
-## Objectif Actuel : Migration pydantic-ai-harness — phase 3 TERMINÉE (F-158→F-164), suite = validation E2E post-merge puis phase 4 du plan
+## Objectif Actuel : F-165 (fixes enregistrement verdicts) livré — reprendre la validation E2E post-merge puis phase 4
 > Exécution de la séquence recommandée du plan approuvé (PR #107) : 3.1-3.7
 > TOUTES LIVRÉES (Coder F-158, gardes F-159, MCP F-160, vision F-161, Tester
-> F-162, gardes d'écriture F-164) + **F-163 pool navigateur run-scoped FAIT**
-> (Chrome unique par run, fuites d'arbres Windows éliminées, GO live 12/12).
-> Suite prioritaire : **validation E2E post-merge** (F164-6 — F-163 en amont
-> est maintenant en place, la mesure ne sera plus entachée par les fuites MCP)
-> puis phase 4 du plan (PlaywrightBrowser A/B, FallbackModel, TestModel CI,
-> Media Stores, WarnOnCacheBusts).
+> F-162, gardes d'écriture F-164) + F-163 pool navigateur FAIT. **F164-6
+> (validation E2E post-merge) TENTÉE le 2026-08-24 et INVALIDÉE** : run 021543
+> coupé — la réfutation KG lue par le Coder itér. 2 était dupliquée + tronquée
+> + mensongère (erreur d'outil du Tester classée « assertion en échec ») →
+> **F-165** (fixes A/B/C de l'enregistrement, 12 tests) LIVRÉ + règle AGENTS.md
+> §8.2 « base > log » (PR #116). Côtés positifs du run faussé : pool F-163
+> impeccable (1 Chrome/run, shutdown propre), garde CSS F-164 tenue (var()
+> avec fallback, remplissage OK). Suite prioritaire : **re-valider E2E
+> post-merge sur main mergé F-165**, puis phase 4 du plan (PlaywrightBrowser
+> A/B, FallbackModel, TestModel CI, Media Stores, WarnOnCacheBusts).
+
+## Jalons de l'Itération (cycle F-165 — intégrité de l'enregistrement des verdicts)
+> Né du post-mortem du run 021543 (F164-6) : le graphe a rejeté un livrable sur
+> un échec Tester ARTEFACT et lancé une correction aveugle. Chaîne prouvée en
+> base (règle base>log, AGENTS.md §8.2) : Tester step 5 code-mode →
+> `write_file(probe1.js)` interdit par l'interpréteur pydantic
+> (« InterpreterError: Forbidden function evaluation ») → max_steps sans verdict
+> structuré (Pydantic + sauvetage DSPy échoués) → fallback dont le scan FAIL
+> classait l'EN-TÊTE « Code execution failed… » comme assertion en échec de
+> l'app (absent des marqueurs F-127) → snippet `[:300]` amputé avant
+> l'exception → Judge fail-closed au feedback générique → wrapper workflows.py
+> ré-empilait des blocs déjà embarqués → réfutation KG claim 255 dupliquée.
+
+- [x] F165-1 : Fix A (nodes.py) — marqueur « code execution failed » ajouté à
+      `_TESTER_TOOL_ERROR_MARKERS` + exclusion PAR BLOC des `step.error` (si
+      une ligne du bloc porte une signature d'outil, tout le bloc sort du scan
+      FAIL ; sémantique atomique : une erreur = un événement d'outil).
+- [x] F165-2 : Fix B (nodes.py) — snippet du verdict failure = segment
+      « due to: … » extrait dans une fenêtre de 4 lignes depuis la première
+      ligne FAIL (même ligne ou lignes suivantes), sinon la ligne FAIL entière,
+      cap 300 AVEC ellipsis explicite.
+- [x] F165-3 : Fix C (feedback_utils.build_rejection_feedback + workflows.py)
+      — si final_feedback contient déjà 🎯 CAUSE RACINE + 🛠️ INSTRUCTION
+      (signature fail-closed dspy_nodes), passage tel quel ; sinon assemblage
+      historique (Judge LLM normal) ; None → message historique inchangé.
+- [x] F165-4 : Tests — **12 nouveaux 0-LLM PASS** (tests/
+      test_f165_recording_fixes.py) dont `test_run21543_write_file_block_not_
+      a_fail` reproduisant l'erreur EXACTE du run 021543 ; F-127 (16 tests) en
+      régression verte.
+- [x] F165-5 : État disque (contract C527-C529, feature_list F-165, ce
+      fichier) + DuckDB (#3030 feat, done à suivre) + commit + PR.
 
 ## Jalons de l'Itération (cycle F-163 — pool navigateur run-scoped : un seul Chrome par run)
 > Né de l'E2E F-162 (2026-08-23) : 4 serveurs MCP navigateur/itération, la
@@ -178,8 +213,13 @@
       d'isolation unifié sur _find_narrow_fixed_widths (DRY).
 - [x] F164-5 : État disque (contract C521-C523, feature_list F-164 completed,
       ce fichier) + DuckDB + commit + PR.
-- [ ] F164-6 : Validation E2E post-merge (avec F-163 pool navigateur en amont
-      de préférence — les fuites MCP entacheraient la mesure).
+- [x] F164-6 : Validation E2E post-merge — **TENTÉE 2026-08-24 (runs 0209/021543)
+      et INVALIDÉE** : essai 1 mort serveur mid-run (respawn OK côté serveur mais
+      5 retries client « Connection error » < latence 1ʳᵉ réponse post-revive) ;
+      essai 2 coupé sur décision user après découverte d'un run FAUSSÉ par le
+      maillon d'enregistrement (réfutation KG dupliquée/tronquée/mensongère →
+      correction aveugle) — voir F-165. Pool F-163 et garde CSS F-164 validés
+      positivement au passage. **Re-validation requise sur main mergé F-165.**
 
 ## Jalons de l'Itération (cycle F-162 — phase 3.7 : runner web du Tester sur le socle pydantic)
 > Cinquième incrément PRODUCTION du plan de migration : le runner web du Tester

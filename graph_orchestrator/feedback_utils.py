@@ -169,3 +169,46 @@ def _cap_chars(text: str, max_chars: int) -> str:
     dropped = len(text) - max_chars
     marker = _TRUNCATION_MARKER.format(dropped=dropped)
     return text[:head_budget] + "\n" + marker + "\n" + text[-tail_budget:]
+
+
+def build_rejection_feedback(judge_res) -> str:
+    """F-165-C : feedback de rejet SANS double embedding.
+
+    Le chemin fail-closed (dspy_nodes, Judge SKIPPÉ sur échec Tester) construit
+    déjà un final_feedback complet (« APPROBATION BLOQUÉE + 🎯 CAUSE RACINE +
+    🛠️ INSTRUCTION DE CORRECTION + Détails du Tester »). Le wrapper historique de
+    workflows.py ré-empilait root_cause/fix_instruction par-dessus → réfutation
+    KG dupliquée (claim 255, run 021543) → ticket de correction brouillé pour le
+    Coder de l'itération suivante.
+
+    Règle : si final_feedback contient déjà les blocs CAUSE RACINE et INSTRUCTION
+    (signature du fail-closed), il est renvoyé tel quel ; sinon on assemble les
+    blocs (verdict Judge LLM normal, feedback brut). Compatibilité stricte :
+    judge_res None → « Erreur système du juge. » (message historique).
+
+    Divergence délibérée vs l'ancien code inline (review Kilo PR #117) : un
+    judge_res présent mais TOTALEMENT vide (ni root_cause, ni fix_instruction,
+    ni final_feedback) renvoie « Erreur système du juge. » au lieu de "" —
+    l'ancien "" était stocké tel quel comme contenu de réfutation KG, dont le
+    dedup_key (SHA1 du contenu) devient CONSTANT : tous les tickets vides
+    suivants étaient ignorés silencieusement par la dédup (même piège que le
+    commentaire workflows.py sur la troncature À LA LECTURE). Un ticket vide
+    n'a jamais été un signal exploitable pour le Coder.
+    """
+    if judge_res is None:
+        return "Erreur système du juge."
+    fb = str(getattr(judge_res, "final_feedback", "") or "")
+    rc = str(getattr(judge_res, "root_cause", "") or "")
+    fi = str(getattr(judge_res, "fix_instruction", "") or "")
+    if ("🎯 CAUSE RACINE" in fb) and ("🛠️ INSTRUCTION DE CORRECTION" in fb):
+        return fb
+    if not (rc or fi):
+        return fb or "Erreur système du juge."
+    blocks = []
+    if rc:
+        blocks.append(f"🎯 CAUSE RACINE : {rc}")
+    if fi:
+        blocks.append(f"🛠️ INSTRUCTION DE CORRECTION : {fi}")
+    if fb:
+        blocks.append(f"📝 FEEDBACK : {fb}")
+    return "\n".join(blocks)

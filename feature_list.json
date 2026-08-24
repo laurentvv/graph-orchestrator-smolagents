@@ -1409,6 +1409,15 @@
       "description": "LIVRÉ (2026-08-24, boucle Coder ×6 runs GPU convergée) : (1) build_write_guardrail — ToolGuardrail officiel (doc harness/guardrails) câblé inconditionnellement : guard PRÉ-exécution block (F-10 vide/placeholder, F-126 anti-réécriture >100 lignes + orientation search_replace, remplissage data-viz : width fixe <40px sans flex/calc OU cap max-width <60px défaisant flex:1, min-width bénin) ; result_guard replace (directives var() CSS + remplissage sur résultats .css, logique canonique tools.py : find_undefined_css_vars + _find_narrow_fixed_widths extraites en pures). (2) Static Tester Tier 1 [CSS VARS] agnostique moteur (bug Times New Roman E2E F-162). (3) skill frontend-design : COMPLÉTUDE var() (fallback dans les parenthèses) + REMPLISSAGE quantitatif. Preuve finale run 6 : 97 % remplissage + Segoe UI mesurés DOM live (vs 42-49 % + Times avant gardes) ; hiérarchie leviers : skill 1/4 < soft 0/1 < blocage 2/2. 23 tests 0-LLM, suite complète verte, gate F-103 0 erreur. Variance 4B restante (strict mode/init robuste) documentée hors périmètre. E2E post-merge = F164-6.",
       "status": "completed",
       "dependencies": []
+    },
+    {
+      "id": "F-165",
+      "name": "Intégrité de l'enregistrement des verdicts — fallback Tester + feedback de rejet",
+      "description": "Né du post-mortem F164-6 (run 021543 coupé comme faussé) : la réfutation lue par le Coder en itération 2 (KG claim 255) était dupliquée, tronquée et mensongère — l'itération de correction chassait un bug fantôme. Trois fixes déterministes : (A) _TESTER_TOOL_ERROR_MARKERS gagne « code execution failed » (frère manquant de « code parsing failed ») et les step.error du fallback max_steps sont exclus PAR BLOC (si une ligne du bloc porte une signature d'erreur d'outil, le bloc entier sort du scan FAIL — l'en-tête « Code execution failed at line … » matchait le marqueur FAIL « failed » et fuyait le filet F-127 ligne-par-ligne) ; (B) le snippet du verdict failure extrait le segment « due to: … » (fenêtre 4 lignes depuis la première ligne FAIL) au lieu de [:300] de l'écho de code, cap 300 avec ellipsis ; (C) build_rejection_feedback (feedback_utils, pur) câblé dans workflows.py : le fail-closed dspy_nodes embarquant déjà CAUSE RACINE/INSTRUCTION dans final_feedback, plus de ré-empilage (réfutation KG dupliquée). 12 tests 0-LLM (tests/test_f165_recording_fixes.py) dont le cas EXACT du run 021543 ; F-127 (16 tests) en régression verte. Règle AGENTS.md §8.2 base>log ajoutée au passage (PR #116).",
+      "status": "completed",
+      "dependencies": [
+        "F-127"
+      ]
     }
   ]
 }
