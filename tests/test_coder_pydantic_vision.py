@@ -308,13 +308,15 @@ class TestInstructionsVision:
         assert "through DOM probes" in off
 
     def test_workflow_numbering_consistent(self):
-        """Numérotation automatique : chaque étape a un numéro strictement croissant."""
+        """Numérotation automatique : chaque étape a un numéro strictement croissant.
+        (F-166 : l'étape MECHANICAL ERRORS insérée après le step FIX décale la
+        numérotation aval d'une unité — 6→7 VISUAL CHECK, 7→8 ANIMATED.)"""
         on = build_coder_instructions(_base_task(), browser_tools_available=True)
-        assert "1. `navigate_page" in on and "6. VISUAL CHECK" in on and "7. ANIMATED" in on
+        assert "1. `navigate_page" in on and "7. VISUAL CHECK" in on and "8. ANIMATED" in on
         off = build_coder_instructions(
             _base_task(), browser_tools_available=True, vision_available=False
         )
-        assert "1. `navigate_page" in off and "6. ANIMATED" in off
+        assert "1. `navigate_page" in off and "7. ANIMATED" in off
 
 
 # ============================================================

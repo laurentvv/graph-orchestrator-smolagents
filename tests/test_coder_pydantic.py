@@ -190,7 +190,7 @@ class TestCustomToolsDelegation:
         assert names == {
             "search_replace", "multi_replace", "append_file", "check_js_syntax",
             "read_python_skeleton", "log_event", "visual_check", "check_run_state",
-            "load_skill",
+            "load_skill", "fix_known_error",
         }
 
     def test_search_replace_performs_surgical_edit(self, tmp_path, monkeypatch):

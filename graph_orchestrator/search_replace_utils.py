@@ -3,9 +3,9 @@
 Les petits LLM locaux (qwen3.5:4b, Gemma) corrompent les gros contenus passés
 en argument JSON d'un tool_call (cf. bug run #11 : HTML cassé). La solution est
 l'édition par bloc SEARCH/REPLACE : on ne demande au modèle que le fragment à
-remplacer et son substitut, ce qui limite la quantité de texte à générer dans un
-seul argument, et on tolère les imprécisions de formatage classiques des petits
-modèles (indentation, lignes vides, ellipses).
+remplacer et son substitut, ce qui limite la quantité de texte à générer dans
+un seul argument, et on tolère les imprécisions de formatage classiques des
+petits modèles (indentation, lignes vides, ellipses).
 
 Porté depuis references/aider/aider/coders/editblock_coder.py :
   - replace_most_similar_chunk (l.157) : orchestrateur des stratégies.
@@ -13,10 +13,26 @@ Porté depuis references/aider/aider/coders/editblock_coder.py :
   - try_dotdotdots (l.190) : gère les ellipses `...`.
   - find_similar_lines (adapté) : feedback "Did you mean..." en cas d'échec.
 
+F-166 (post-mortem run 0857 du 2026-08-24 : ~15 rejets F-132 + 80 steps LLM
+brûlés sur un fix mécanique) :
+  - CODE_SEPARATOR_NL_RE / decode_literal_escapes : domicile canonique de la
+    regex « \\n littéral en séparateur de code » (historiquement dupliquée
+    tools.py [garde F-132] + auto_fixer.py [repair F-133]) et décodeur des
+    arguments d'outil — le décodeur et la garde partagent LA MÊME définition.
+  - RelativeIndenter (port aider search_replace.py:18-171) : préprocesseur
+    d'indentation relative, exact-match insensible au décalage global
+    d'indentation à variation relative près.
+  - _fuzzy_line_window_replace : équivalent difflib stdlib de dmp_lines_apply
+    (:338), 0 nouvelle dépendance, en DERNIER recours avec gardes anti
+    mauvais-edit (ratio plancher + marge sur le second + longueur minimale).
+    Le fuzzy SequenceMatcher caractères d'aider (:296) — désactivé en amont
+    chez aider, mauvais edits — reste NON porté.
+
 Aide: https://aider.chat — licence MIT. Cette réimplémentation est volontairement
 allégée (pas de fuzzy edit-distance, qui est neutralisé dans aider lui-même).
 """
 
+import difflib
 import re
 from typing import Optional
 
@@ -24,6 +40,236 @@ from typing import Optional
 # replace_most_similar_chunk : en dessous, une occurrence unique est trop
 # probablement un aiguillage générique (identifiant court, ponctuation...).
 _SUBSTRING_MIN_LEN = 8
+
+# =============================================================================
+# F-166 : regex canonique « \n littéral en séparateur de code » + décodeur.
+# =============================================================================
+# Le 4B écrit parfois ses arguments d'outil tout-littéraux (effet r-string) :
+# `search_replace(..., new_string="foo();\nbar()")` où `\n` est backslash+n
+# (2 caractères). La garde F-132 (tools.py) rejette ces appels — le run 0857
+# en a essuyé ~15 d'affilée. F-166 décode ces séquences AU LIEU de rejeter :
+# même définition de part et d'autre, l'outil ne rejette jamais ce qu'il
+# décode. Un `\n` littéral interne à une chaîne affichée (ex: "a\nb" dans un
+# console.log) ne matche PAS la regex (pas en position séparateur) : il n'est
+# jamais touché.
+_NL_KEYWORDS = (
+    "const|let|var|function|return|if|else|for|while|switch|case|class|"
+    r"new\b|document\.|window\.|addEventListener|try|catch|import|export|"
+    r"async|await|def\b|print\("
+)
+CODE_SEPARATOR_NL_RE = re.compile(
+    r"(?:(?<=[;{}()\[\]])\\n|\\n(?=\s*(?:" + _NL_KEYWORDS + r")))"
+)
+
+# `\t` littéral en tête de ligne du texte décodé (indentation tabulée encodée
+# littéralement dans le scénario « bloc tout-littéral »).
+_LEADING_LITERAL_TABS_RE = re.compile(r"(?m)^(?:\\t)+")
+
+
+def decode_literal_escapes(text: str) -> tuple[str, int]:
+    """Décode les séquences échappées LITTÉRALES d'un argument d'outil (F-166).
+
+    Retourne (texte, n_remplacements). Ne décode QUE :
+      - `\\n` littéral en position de séparateur de code (MÊME regex que la
+        garde F-132 — cohérence garantie par le domicile canonique) ;
+      - `\\t` littéral en tête de ligne du résultat intermédiaire.
+    Si le texte ne contient aucun `\\n` séparateur, il est retourné INTACT
+    (un `\\n` légitime dans une chaîne affichée n'est jamais décodé).
+    """
+    if not text:
+        return text, 0
+    hits = CODE_SEPARATOR_NL_RE.findall(text)
+    if not hits:
+        return text, 0
+    decoded = CODE_SEPARATOR_NL_RE.sub("\n", text)
+    n_tabs = 0
+
+    def _tab(m: "re.Match[str]") -> str:
+        nonlocal n_tabs
+        n_tabs += len(m.group(0)) // 2
+        return "\t" * (len(m.group(0)) // 2)
+
+    decoded = _LEADING_LITERAL_TABS_RE.sub(_tab, decoded)
+    return decoded, len(hits) + n_tabs
+
+
+# =============================================================================
+# RelativeIndenter (port aider search_replace.py:18-171, F-166).
+# =============================================================================
+class RelativeIndenter:
+    """Réécrit un texte en indentation RELATIVE pour apparier des blocs dont
+    l'indentation globale diffère mais dont la structure relative coïncide.
+
+    Chaque ligne devient DEUX lignes : le delta d'indentation (nombre de
+    marqueurs ← pour un outdent) puis le contenu. make_absolute recompose.
+    Porté fidèlement d'aider (lic. MIT) ; ValueError en cas d'incohérence —
+    les appelants traitent l'exception comme un échec de stratégie (fail-closed).
+    """
+
+    def __init__(self, texts):
+        chars = set()
+        for text in texts:
+            chars.update(text)
+        arrow = "←"
+        if arrow not in chars:
+            self.marker = arrow
+        else:
+            self.marker = self._select_unique_marker(chars)
+
+    def _select_unique_marker(self, chars):
+        for codepoint in range(0x10FFFF, 0x10000, -1):
+            marker = chr(codepoint)
+            if marker not in chars:
+                return marker
+        raise ValueError("Could not find a unique marker")
+
+    def make_relative(self, text: str) -> str:
+        if self.marker in text:
+            raise ValueError(f"Text already contains the outdent marker: {self.marker}")
+        lines = text.splitlines(keepends=True)
+        output = []
+        prev_indent = ""
+        for line in lines:
+            line_without_end = line.rstrip("\n\r")
+            len_indent = len(line_without_end) - len(line_without_end.lstrip())
+            indent = line[:len_indent]
+            change = len_indent - len(prev_indent)
+            if change > 0:
+                cur_indent = indent[-change:]
+            elif change < 0:
+                cur_indent = self.marker * -change
+            else:
+                cur_indent = ""
+            output.append(cur_indent + "\n" + line[len_indent:])
+            prev_indent = indent
+        return "".join(output)
+
+    def make_absolute(self, text: str) -> str:
+        lines = text.splitlines(keepends=True)
+        output = []
+        prev_indent = ""
+        for i in range(0, len(lines), 2):
+            dent = lines[i].rstrip("\r\n")
+            non_indent = lines[i + 1]
+            if dent.startswith(self.marker):
+                len_outdent = len(dent)
+                cur_indent = prev_indent[:-len_outdent]
+            else:
+                cur_indent = prev_indent + dent
+            if not non_indent.rstrip("\r\n"):
+                out_line = non_indent  # on n'indente pas une ligne vide
+            else:
+                out_line = cur_indent + non_indent
+            output.append(out_line)
+            prev_indent = cur_indent
+        res = "".join(output)
+        if self.marker in res:
+            raise ValueError("Error transforming text back to absolute indents")
+        return res
+
+
+def _relative_indent_replace(whole: str, part: str, replace: str) -> Optional[str]:
+    """Exact-match sur les textes relativisés (préprocesseur aider P3, F-166).
+
+    Couvre le cas que _replace_part_with_missing_leading_whitespace rate : un
+    décalage global d'indentation NON uniforme en apparence mais à structure
+    relative identique (fichier 8/12/8, bloc 0/4/0). Subtilité du format aider
+    (docstring RelativeIndenter) : la dent de la PREMIÈRE ligne du bloc encode
+    son indentation absolue de départ, celle de la fenêtre cible encode un
+    delta — elles peuvent différer légitimement. On fait donc matcher la
+    structure INTERNE (lignes 2+) et on PRÉSERVE la dent cible dans le
+    remplacement (le bloc est ré-indenté au niveau de la cible). Les fenêtres
+    sont alignées sur les paires (dent, contenu) : index pair. Fail-closed :
+    toute ValueError de RelativeIndenter → None (stratégie suivante).
+    """
+    try:
+        ri = RelativeIndenter([whole, part, replace])
+        w = ri.make_relative(whole)
+        p = ri.make_relative(part)
+        r = ri.make_relative(replace)
+        w_lines = w.splitlines(keepends=True)
+        p_lines = p.splitlines(keepends=True)
+        r_lines = r.splitlines(keepends=True)
+        num = len(p_lines)
+        if num < 2 or len(w_lines) < num:
+            return None
+        # Structure interne du part (dent+contenu, lignes 2+).
+        p_inner = p_lines[1:]
+        for i in range(0, len(w_lines) - num + 1, 2):
+            if w_lines[i + 1 : i + num] != p_inner:
+                continue
+            # Dent cible préservée en tête du remplacement (ré-indentation).
+            new_r = [w_lines[i]] + r_lines[1:]
+            res = "".join(w_lines[:i] + new_r + w_lines[i + num :])
+            return ri.make_absolute(res)
+    except (ValueError, IndexError):
+        return None
+    return None
+
+
+# =============================================================================
+# Fallback diff par lignes (port difflib stdlib de dmp_lines_apply, F-166).
+# =============================================================================
+_FUZZY_MIN_NONBLANK = 4    # bloc trop court = aiguillage trop générique
+_FUZZY_MIN_RATIO = 0.75    # plancher : 3 lignes identiques sur 4 doit passer
+_FUZZY_MIN_MARGIN = 0.05   # écart exigé sur le 2e meilleur candidat
+
+
+def _reindent_into(replace_lines: list[str], base_indent: str, part_base_indent: str) -> list[str]:
+    """Réaligne l'indentation de base de replace_lines sur la fenêtre cible."""
+    out: list[str] = []
+    for r in replace_lines:
+        if not r.strip():
+            out.append(r if r.endswith("\n") else r + "\n")
+            continue
+        r_indent = r[: len(r) - len(r.lstrip())]
+        r_content = r.lstrip()
+        if r_indent.startswith(part_base_indent):
+            rel = r_indent[len(part_base_indent):]
+            reindented = base_indent + rel + r_content
+        else:
+            reindented = base_indent + r_indent + r_content
+        out.append(reindented if reindented.endswith("\n") else reindented + "\n")
+    return out
+
+
+def _fuzzy_line_window_replace(
+    whole_lines: list[str], part_lines: list[str], replace_lines: list[str]
+) -> Optional[tuple[str, float]]:
+    """Dernier recours (F-166, équivalent difflib de dmp_lines_apply :338) :
+    localise la fenêtre de lignes la plus similaire au bloc SEARCH (ratio
+    SequenceMatcher sur lignes strippées) et la remplace — les éditeurs
+    s'en tiennent aux diffs PAR LIGNES (jamais caractères). Gardes contre les
+    mauvais edits silencieux : bloc ≥ 4 lignes non vides, ratio ≥ 0.8, marge
+    ≥ 0.05 sur le second meilleur score. Retourne (nouveau_texte, ratio).
+    """
+    p_nonblank = [l for l in part_lines if l.strip()]
+    if len(p_nonblank) < _FUZZY_MIN_NONBLANK:
+        return None
+    n = len(part_lines)
+    p_stripped = [l.strip() for l in part_lines]
+    sm = difflib.SequenceMatcher(None, autojunk=False)
+    sm.set_seq2(p_stripped)
+    best_ratio, best_idx, second = 0.0, -1, 0.0
+    for i in range(len(whole_lines) - n + 1):
+        sm.set_seq1([l.strip() for l in whole_lines[i : i + n]])
+        r = sm.ratio()
+        if r > best_ratio:
+            second, best_ratio, best_idx = best_ratio, r, i
+        elif r > second:
+            second = r
+    if best_idx < 0 or best_ratio < _FUZZY_MIN_RATIO:
+        return None
+    if second > 0 and (best_ratio - second) < _FUZZY_MIN_MARGIN:
+        return None
+    target = whole_lines[best_idx : best_idx + n]
+    first_target = next((w for w in target if w.strip()), "")
+    base_indent = first_target[: len(first_target) - len(first_target.lstrip())]
+    first_part = next((p for p in part_lines if p.strip()), "")
+    part_base_indent = first_part[: len(first_part) - len(first_part.lstrip())]
+    new_replace = _reindent_into(replace_lines, base_indent, part_base_indent)
+    new_text = "".join(whole_lines[:best_idx] + new_replace + whole_lines[best_idx + n :])
+    return new_text, best_ratio
 
 
 def _prep(text: str) -> tuple[str, list[str]]:
@@ -201,9 +447,17 @@ def _try_dotdotdots(whole: str, part: str, replace: str) -> Optional[str]:
 
 def replace_most_similar_chunk(whole: str, part: str, replace: str) -> Optional[str]:
     """Recherche `part` dans `whole` et le remplace par `replace`, avec dégradation
-    gracieuse : match exact → tolérant indentation → ellipses → match stripped lines.
-    Renvoie le nouveau `whole` ou None si rien ne matche. Porté d'aider (l.157), sans fuzzy edit-distance.
+    gracieuse : match exact → tolérant indentation → ellipses → match stripped lines
+    → indentation relative (F-166) → sous-chaîne exacte → fenêtre floue par lignes
+    (F-166, dernier recours gardé). Renvoie le nouveau `whole` ou None si rien ne
+    matche. Porté d'aider (l.157), sans fuzzy edit-distance.
+
+    Attribut `last_note` (F-166) : description de la stratégie qui a matché quand
+    elle est « créative » (indentation relative, fenêtre floue) — l'appelant
+    (tools.py) la rend visible au modèle dans le message de succès pour qu'il
+    puisse vérifier l'édit appliqué. Vidé à chaque appel.
     """
+    replace_most_similar_chunk.last_note = ""
     whole, whole_lines = _prep(whole)
     part, part_lines = _prep(part)
     replace, replace_lines = _prep(replace)
@@ -250,7 +504,16 @@ def replace_most_similar_chunk(whole: str, part: str, replace: str) -> Optional[
         if res is not None:
             return res
 
-    # 6) sous-chaîne exacte (post-mortem run 2026-08-19, Tetris) : le 4B fournit
+    # 6) indentation relative (F-166, port aider RelativeIndenter :18-171) :
+    # décalage global d'indentation à structure relative près.
+    res = _relative_indent_replace(whole, part, replace)
+    if res is not None:
+        replace_most_similar_chunk.last_note = (
+            "matched via indentation relative (aider RelativeIndenter)"
+        )
+        return res
+
+    # 7) sous-chaîne exacte (post-mortem run 2026-08-19, Tetris) : le 4B fournit
     # souvent un bloc PARTIEL de ligne — ex. sans la virgule finale — présent mot
     # pour mot comme sous-chaîne du fichier. Les stratégies ligne à ligne (1-5)
     # échouent toutes sur un écart d'un caractère en bout de ligne, alors que le
@@ -264,7 +527,22 @@ def replace_most_similar_chunk(whole: str, part: str, replace: str) -> Optional[
     if len(needle) >= _SUBSTRING_MIN_LEN and whole.count(needle) == 1:
         return whole.replace(needle, replace.strip(), 1)
 
+    # 8) fenêtre floue par lignes (F-166, équivalent difflib de dmp_lines_apply
+    # :338) — DERNIER recours gardé : ratio plancher 0.8 + marge 0.05 sur le
+    # second + bloc ≥ 4 lignes non vides. L'application est signalée via
+    # last_note pour que le modèle vérifie l'édit.
+    fuzzy = _fuzzy_line_window_replace(whole_lines, part_lines, replace_lines)
+    if fuzzy is not None:
+        new_text, ratio = fuzzy
+        replace_most_similar_chunk.last_note = (
+            f"matched via fuzzy line window (ratio {ratio:.2f}) — VERIFIE le resultat"
+        )
+        return new_text
+
     return None
+
+
+replace_most_similar_chunk.last_note = ""  # attribut de fonction (F-166)
 
 
 def find_similar_lines(part: str, whole: str, threshold: float = 0.6) -> Optional[str]:

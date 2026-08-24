@@ -54,17 +54,11 @@ def _fix_const_reassignment(source: str, var: str) -> tuple[str, List[str]]:
     return decl.sub(_sub, source), changes
 
 
-# `\n` littéral en séparateur de code — MÊME regex que la garde F-132
-# (tools._CODE_SEPARATOR_NL_RE), recopiée ici pour éviter un import privé
-# croisé ; toute évolution doit rester synchronisée des deux côtés.
-_NL_KEYWORDS = (
-    "const|let|var|function|return|if|else|for|while|switch|case|class|"
-    r"new\b|document\.|window\.|addEventListener|try|catch|import|export|"
-    r"async|await|def\b|print\("
-)
-_CODE_SEPARATOR_NL_RE = re.compile(
-    r"(?:(?<=[;{}()\[\]])\\n|\\n(?=\s*(?:" + _NL_KEYWORDS + r")))"
-)
+# `\n` littéral en séparateur de code — F-166 : la regex vit désormais dans
+# search_replace_utils (domicile canonique partagé avec la garde F-132 de
+# tools.py et le décodeur d'arguments — une seule définition, plus de copie
+# à synchroniser).
+from .search_replace_utils import CODE_SEPARATOR_NL_RE as _CODE_SEPARATOR_NL_RE
 
 # Blocs de code fence (```…``` y compris dans <pre>) : leur contenu est
 # préservé tel quel par le repair \n (P4, port deer-flow).
