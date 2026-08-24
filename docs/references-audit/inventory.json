@@ -1,5 +1,5 @@
 {
-  "audit_date": "2026-08-20",
+  "audit_date": "2026-08-24",
   "scope": "filtered-useful (docs + code + specs; excludes .git/node_modules/media/fixtures/translated-READMEs)",
   "projects": [
     {
@@ -7202,7 +7202,7 @@
       "path": "references/ponytail",
       "category": "prompting-rules-skills",
       "reuse_rating": "high",
-      "summary": "Doctrine et framework anti-over-engineering pour agents de coding ('The lazy senior dev mode', MIT). Échelle YAGNI universelle en 7 échelons (YAGNI -> codebase -> stdlib -> platform -> installed deps -> one-line -> minimal code).",
+      "summary": "Doctrine et framework anti-over-engineering pour agents de coding ('The lazy senior dev mode', MIT). Échelle YAGNI universelle en 7 échelons (YAGNI -> codebase -> stdlib -> platform -> installed deps -> one-line -> minimal code). Prouvé sur benchmarks agentiques Claude Code sur FastAPI+React (-54% LOC, -22% tokens, -20% coût, -27% latence, 100% safe). Suite de skills spécialisés : ponytail-review (format 1 ligne/finding : delete/stdlib/native/yagni/shrink avec solde net de lignes pour le Judge), ponytail-audit (scan global de complexité/dette).",
       "files": [
         {
           "path": "references/ponytail/AGENTS.md",
@@ -7304,7 +7304,7 @@
       "path": "references/obscura",
       "category": "browser-automation",
       "reuse_rating": "high",
-      "summary": "Moteur de navigateur headless ultra-léger et furtif écrit en Rust (Apache-2.0, ~30 Mo RAM vs 200+ Mo Chromium, load time 85 ms). Serveur MCP avec identifiants d'éléments stables interactive_refs et plafond strict de tokens DEFAULT_TEXT_LIMIT = 4000.",
+      "summary": "Moteur de navigateur headless ultra-léger et furtif écrit en Rust (Apache-2.0, ~30 Mo RAM vs 200+ Mo Chromium, load time 85 ms, démarrage instantané). Intègre V8, un serveur CDP complet et un serveur MCP natif. Patterns critiques pour l'orchestrateur : table d'identifiants d'éléments stables (interactive_refs type e3, e4 évitant les sélecteurs CSS fragiles), plafond strict de texte DEFAULT_TEXT_LIMIT = 4000 anti-saturation de contexte LLM, BTreeMap tabs ordonnés déterministes, transport MCP SSE+HTTP, cycle de vie de page et rendu 2D pur (tiny-skia) sans GPU lourd.",
       "files": [
         {
           "path": "references/obscura/AGENTS.md",
@@ -7422,7 +7422,7 @@
       "path": "references/hunk",
       "category": "diff-viewer-tui",
       "reuse_rating": "high",
-      "summary": "Visualiseur et réviseur de diffs en terminal (TUI) conçu pour les changesets d'agents IA (OpenTUI + Pierre diffs, MIT). Modèle d'annotations IA inline, workspaceWriteGuard et session-broker daemon.",
+      "summary": "Visualiseur et réviseur de diffs en terminal (TUI) conçu spécifiquement pour les changesets d'agents IA (OpenTUI + Pierre diffs, MIT). Référence majeure pour : (1) modèle de données et géométrie des annotations d'agents IA inline (agentAnnotations.ts, agentNoteGeometry.ts) pour structurer les findings du Judge, (2) workspaceWriteGuard interdisant toute écriture sur le système de fichiers pendant les phases d'audit/review, (3) daemon session-broker pour coordonner et multiplexer les flux de review concurrents avec leases temporisés, (4) réconciliation et synchronisation des highlights et numéros de lignes lors de l'application de patchs (reconcile.ts).",
       "files": [
         {
           "path": "references/hunk/AGENTS.md",
@@ -7537,7 +7537,7 @@
       "path": "references/bytechef",
       "category": "agent-orchestration-platform",
       "reuse_rating": "medium",
-      "summary": "Plateforme d'intégration et d'automatisation open-source unifiant agents IA, workflows et 180+ connecteurs. 12 guardrails modulaires (secrets, PII, sanitization, topical alignment), coordinateur d'état de tâches et MCP.",
+      "summary": "Plateforme d'intégration et d'automatisation open-source unifiant orchestration d'agents IA, workflows complexes et 180+ connecteurs (Java 21 / Spring Boot 3 / React, Apache-2.0). Richesse architecturale pour l'orchestrateur : (1) batterie exhaustive de 12 guardrails modulaires d'entrée/sortie (SecretKeyDetectorUtils, PiiDetectorUtils, TopicalAlignment, SanitizeTextAdvisor, CheckForViolationsAdvisor), (2) coordinateur d'état de tâches distribuées et worker execution policies (PlatformCoordinator, PlatformWorker), (3) façade MCP bidirectionnelle client/serveur, (4) isolation multi-locataires et contextuelle (TenantContext).",
       "files": [
         {
           "path": "references/bytechef/AGENTS.md",
@@ -7633,7 +7633,245 @@
           "description": "Façade de gestion et de proxying pour les serveurs et outils du Model Context Protocol (MCP)."
         }
       ]
+    },
+    {
+      "id": "AutoDesign",
+      "name": "AutoDesign",
+      "path": "references/AutoDesign",
+      "category": "meta-harness-optimization",
+      "reuse_rating": "high",
+      "summary": "Framework d'optimisation de méta-harnais et usine multi-agents pour la conception et génération d'artefacts éditables à partir de PDF scientifiques (Python/Playwright, MIT).",
+      "files": [
+        {
+          "path": "references/AutoDesign/README.md",
+          "type": "doc",
+          "reuse": "high",
+          "key_symbols": [
+            "Meta-Harness Optimization",
+            "DesignHarness",
+            "PosterBench",
+            "Paper All-in-One"
+          ],
+          "description": "Vue d'ensemble architecturale d'AutoDesign, boucle double d'optimisation sans modification de poids et Paper All-in-One."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/runner.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "PipelineRunner",
+            "ToolContext",
+            "_preflight_video_runtime",
+            "run"
+          ],
+          "description": "PipelineRunner unifié orchestrant les 4 tracks d'artefacts (poster, deck, landing, video) avec injection de compétences, tokens d'annulation, et gestion de cache de pipeline."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/designer.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "DesignerLoop",
+            "_MAX_REPEATED_VALIDATION_ERRORS",
+            "_DOGFOOD_POST_COMPOSITE_THINKING_BUDGET",
+            "TurnResponse"
+          ],
+          "description": "Boucle d'agent Designer multi-tours provider-agnostique (Claude / OpenAI / Kimi / DeepSeek) avec gestion des thinking budgets dynamiques, plafonnement des erreurs de validation consécutives et tokens d'annulation."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/candidate_assessment.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "DeliveryAssessment",
+            "_QUALITY_ONLY_ISSUES",
+            "AttemptSafetyState",
+            "assess_candidate_delivery"
+          ],
+          "description": "Évaluation de livraison d'artefacts distinguant les hard blockers de sécurité / crash des simples diagnostics qualitatifs, empêchant les boucles de rejet infini."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/agents/critic_agent.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "CriticAgent",
+            "CritiqueReport",
+            "CritiqueIssue",
+            "_CRITIC_TOOL_SCHEMAS",
+            "report_verdict"
+          ],
+          "description": "Sous-agent de critique visuelle forké autonome (propre boucle LLM, budget de tours dédié, vision multi-modalité, outils de vérification read_slide_render et read_paper_section)."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/agents/claim_graph_extractor.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "ClaimGraphExtractor",
+            "EXTRACT_FAIL_THESIS",
+            "report_claim_graph",
+            "lookup_paper_section"
+          ],
+          "description": "Sous-agent d'extraction de graphe de claims (tensions, mécanismes, preuves, implications) avec vérification de citation textuelle stricte et dégradation gracieuse en cas de timeout."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/agents/paper_memory_agent.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "PaperMemoryAgent",
+            "report_paper_memory_dossier",
+            "lookup_paper_memory"
+          ],
+          "description": "Agent de curation de mémoire de document produisant un dossier de preuves structuré avec chunks canoniques et attribution exacte."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/agents/atomic_artifact_promotion.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "publish_artifact_directory",
+            "recover_artifact_promotion",
+            "_UNCOMMITTED_PHASES",
+            "_TRANSACTION_OWNER"
+          ],
+          "description": "Promotion atomique de livrables et de dossiers de staging vers final avec journal de transaction réversible (prepared -> backup_created -> final_installed -> committed)."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/process_supervision.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "ProcessIdentity",
+            "ProcessRecord",
+            "SpawnIntent",
+            "LedgerSnapshot",
+            "TerminationReport",
+            "_configure_windows_api"
+          ],
+          "description": "Supervision durable de processus et terminaison d'arbre de sous-processus cross-platform (Windows Job Objects Win32 ctypes + POSIX process groups) sans processus orphelins."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/run_control.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "RunLifecycleState",
+            "_ALLOWED_TRANSITIONS",
+            "durable_replace_json",
+            "CancellationToken",
+            "RunCancelled"
+          ],
+          "description": "Machine à états finis du cycle de vie des runs (reserved -> queued -> running -> completing -> completed), verrous d'écriture logiques et annulation coopérative."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/attempt_selection.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "normal_promotion_lease",
+            "_selection_lock",
+            "AttemptPromotionRejected",
+            "PromotionOutcome"
+          ],
+          "description": "Gestion transactionnelle et immuable des tentatives de génération avec baux d'exclusion mutuelle et journal de sélection d'essais."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/skills/registry.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "SkillManifest",
+            "SkillResource",
+            "SkillPack",
+            "select_skills",
+            "inject_skill_context"
+          ],
+          "description": "Registre de skills v2 avec chargement lazy des ressources (when_to_read, stages), budget de description (max 160 car.), validation de schémas et calcul de hash de contenu."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/evaluator/poster_rubric.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "DIMENSIONS",
+            "RubricDimension",
+            "GATE_DIMENSION_ID",
+            "GATE_CEILING_SCORE",
+            "DimensionOwner"
+          ],
+          "description": "Rubrique d'évaluation hybride 7 dimensions (déterministe, subjectif VLM, mixte) avec hard gates de rendu et plafonds de scores stricts."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/evaluator/runner.py",
+          "type": "code",
+          "reuse": "medium",
+          "key_symbols": [
+            "evaluate_artifact",
+            "write_report_files",
+            "_markdown_report"
+          ],
+          "description": "Moteur d'évaluation orchestrant les snapshots, les métriques structurelles et la synthèse de findings standardisés."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/util/claim_graph_validator.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "validate_claim_graph",
+            "_norm_ws"
+          ],
+          "description": "Validateur déterministe en Python pur vérifiant l'inclusion textuelle stricte des citations de preuves (raw_quote dans paper_raw_text) et l'intégrité référentielle des graphes de claims."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/util/poster_gate_audit.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "audit_authored_poster_gate",
+            "_SNAPSHOT_JS",
+            "_ROOT_SNAPSHOT_JS"
+          ],
+          "description": "Audit Playwright déterministe en lecture seule pour posters HTML (vérification écran et impression print, débordements, collisions de texte, ratios d'occupation)."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/util/provenance.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "validate_provenance",
+            "ProvenanceReport",
+            "ProvenanceFailure",
+            "_NUMERIC_RE"
+          ],
+          "description": "Détecteur et vérificateur déterministe anti-hallucination numérique qui audite tous les tokens numériques et force l'ancrage sur citations de sources."
+        },
+        {
+          "path": "references/AutoDesign/autodesign/util/artifact_browser_audit.py",
+          "type": "code",
+          "reuse": "high",
+          "key_symbols": [
+            "audit_landing_html",
+            "_LANDING_VIEWPORTS",
+            "_snapshot_page"
+          ],
+          "description": "Audit Playwright de pages web et slides HTML sous conditions JavaScript activé/désactivé et blocage réseau."
+        },
+        {
+          "path": "references/AutoDesign/agent_skills/autodesign-poster/SKILL.md",
+          "type": "skill",
+          "reuse": "high",
+          "key_symbols": [
+            "autodesign-poster",
+            "Agent-first PDF curation",
+            "Poster DOM QA",
+            "Output Contract"
+          ],
+          "description": "Skill autonome conforme agentskills.io implémentant le workflow agent-first v2 : inspection PDF, rognage de sources, plans revision-bound et audit DOM en lecture seule."
+        }
+      ]
     }
   ],
-  "projects_audited": 51
+  "projects_audited": 52
 }

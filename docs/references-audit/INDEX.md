@@ -8,10 +8,10 @@
 
 | Métrique | Valeur |
 |---|---|
-| **Date de l'audit** | 2026-08-20 |
-| **Projets/dossiers audités** | 51 |
-| **Entrées de fichiers inventoriées** | 668 (inventaire machine : [`inventory.json`](./inventory.json)) |
-| **Fichiers pertinents scannés** (base) | ~13 300 (hors `.git/`, `node_modules/`, médias, fixtures) |
+| **Date de l'audit** | 2026-08-24 |
+| **Projets/dossiers audités** | 52 |
+| **Entrées de fichiers inventoriées** | 687 (inventaire machine : [`inventory.json`](./inventory.json)) |
+| **Fichiers pertinents scannés** (base) | ~14 000 (hors `.git/`, `node_modules/`, médias, fixtures) |
 | **Périmètre** | docs (`.md`/`.mdx`) + code source (`.py/.ts/.go/.js/.html/.css/.rs/.java`) + JSON/YAML de spec/contrat |
 | **Exclusions** | `.git/` (~730 MB), `node_modules/`, médias (1 293 SVG, 16 mp4…), fixtures de tests, traductions de README (1 conservée/projet) |
 
@@ -19,7 +19,7 @@
 
 ---
 
-## 🧭 Navigation — les 51 fiches
+## 🧭 Navigation — les 52 fiches
 
 | # | Projet | Réutilisabilité | Fiche | Résumé en 1 ligne |
 |---|---|---|---|---|
@@ -74,6 +74,7 @@
 | 49 | **obscura** | 🟢 Haute | [49-obscura](./projects/49-obscura.md) | Navigateur headless Rust ultra-léger (~30 Mo RAM, 85 ms load) — serveur MCP avec identifiants stables `interactive_refs`, limite de tokens `DEFAULT_TEXT_LIMIT = 4000`, serveur CDP |
 | 50 | **hunk** | 🟢 Haute | [50-hunk](./projects/50-hunk.md) | Visualiseur/réviseur de diffs TUI pour agents IA (OpenTUI) — annotations inline IA pour le Judge (`agentAnnotations.ts`), `workspaceWriteGuard` et daemon `session-broker` |
 | 51 | **bytechef** | 🟡 Moyenne | [51-bytechef](./projects/51-bytechef.md) | Plateforme d'intégration & orchestration d'agents IA (Java/Spring Boot) — batterie de 12 guardrails modulaires (secrets, PII, sanitization, topical alignment), MCP et coordinateur de tâches |
+| 52 | **AutoDesign** | 🟢 Haute | [52-AutoDesign](./projects/52-AutoDesign.md) | Framework méta-harnais et usine multi-agents pour génération d'artefacts éditables (Posters, Slides, Web, Vidéos) depuis PDF — critic forké autonome (P6), claim graph strict (P0), process supervision Job Objects (P8) et skills v2 (P10) |
 
 ---
 
@@ -83,7 +84,7 @@
 `aider` (Python, mature), `crush` (Go), `nanocode` (Python, 1 fichier), `opencode` (TS, gigantesque), `openfox` (TS, local-LLM-first), `kilocode` (TS/SolidJS, multi-worktrees). → Valeur : edit-formats robustes (aider), anti-loop (crush), patterns d'outils minimaux (nanocode), specs de protocole (opencode), persistance event-sourcing (openfox), Agent Manager & worktrees isolés (kilocode).
 
 ### 2. 🔧 Frameworks d'orchestration d'agents (mixte code + docs)
-`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code), `loopx` (control plane — anti-loop déterministe + event sourcing + compaction, stdlib pure), `code-review-graph` (analyse d'impact + risk score composite), `pi` (agent stateful TS), `hermes-agent` (agent auto-amélioré Python Nous Research — compaction + SQLite FTS5 + skills + sécurité + middleware), `cloudflare-os` (architecture Gatekeepers, human in the loop asynchrone), `browser-use` (automatisation web Python), `deepseek-harness` (harness TS/Cordis « everything is a plugin » — anti-loop ralph + retry durable + compaction checkpoint + event log typé), `OpenSandbox` (plateforme de sandbox ex-Alibaba — transport retry Python + spec lifecycle snapshot/restore), `obscura` (navigateur headless Rust ultra-léger ~30 Mo + serveur MCP + CDP), `hunk` (diff viewer TUI agent-first + inline AI annotations + session broker), `bytechef` (plateforme d'orchestration & intégration d'entreprise + 12 guardrails modulaires). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm, pi, hermes-agent, browser-use, deepseek-harness, kilocode)**, **patterns harness Python natifs (learn-claude-code, hermes-agent)**, **anti-loop déterministe + event ledger (loopx, deepseek-harness)**, **isolation d'itérations par worktrees (kilocode)**, **annotations inline d'agents IA pour le Judge (hunk)**, **serveur MCP web ultra-léger avec identifiants stables (obscura)**, **batterie de 12 guardrails modulaires d'entrée/sortie (bytechef)**.
+`axon` + `RepoGraph` + `graphify` (knowledge graph de code, tree-sitter — **le trio le plus réutilisable**), `deer-flow` (super-agent ByteDance), `open-swe` (LangChain), `LlamaBot` (LangGraph Rails), `qm` (harnais TS — compaction/mémoire/queues portables), `learn-claude-code` (déconstruction Python pédagogique de Claude Code), `loopx` (control plane — anti-loop déterministe + event sourcing + compaction, stdlib pure), `code-review-graph` (analyse d'impact + risk score composite), `pi` (agent stateful TS), `hermes-agent` (agent auto-amélioré Python Nous Research — compaction + SQLite FTS5 + skills + sécurité + middleware), `cloudflare-os` (architecture Gatekeepers, human in the loop asynchrone), `browser-use` (automatisation web Python), `deepseek-harness` (harness TS/Cordis « everything is a plugin » — anti-loop ralph + retry durable + compaction checkpoint + event log typé), `OpenSandbox` (plateforme de sandbox ex-Alibaba — transport retry Python + spec lifecycle snapshot/restore), `obscura` (navigateur headless Rust ultra-léger ~30 Mo + serveur MCP + CDP), `hunk` (diff viewer TUI agent-first + inline AI annotations + session broker), `bytechef` (plateforme d'orchestration & intégration d'entreprise + 12 guardrails modulaires), `AutoDesign` (framework de méta-harnais double-boucle + vision critic forké + extraction stricte de claim graph + process supervision durable Win32/POSIX + skills v2 Progressive Disclosure). → Valeur : patterns d'orchestration, contrats de protocole, middlewares, plans/review cycles, agents de test, **compaction de contexte (qm, pi, hermes-agent, browser-use, deepseek-harness, kilocode)**, **patterns harness Python natifs (learn-claude-code, hermes-agent, AutoDesign)**, **anti-loop déterministe + event ledger (loopx, deepseek-harness, AutoDesign)**, **isolation d'itérations par worktrees (kilocode)**, **annotations inline d'agents IA pour le Judge (hunk)**, **serveur MCP web ultra-léger avec identifiants stables (obscura)**, **batterie de 12 guardrails modulaires d'entrée/sortie (bytechef)**, **supervision de sous-processus cross-platform et vision critic forké autonome (AutoDesign)**.
 
 ### 3. 📚 Ressources & outils
 `Prompt-Vault` (12 prompts de test), `RepoGraph` (recherche académique SWE-bench), `deer_flow_analysis.md` (synthèse orientante), `claude-code-unified-agents` (prompts de spécialisation), `system-prompts-and-models-of-ai-tools` (**bibliothèque de system prompts** d'outils commerciaux/open-source), `awesome-claude-skills` (**doctrine du format SKILL.md** + outillage), `davidondrej-skills` (denylist 27 regex + hooks anti-crash), `mattpocock-skills` (**doctrine d'authoring formelle** + engineering skills), `llm-council` (pattern council anonymisé), `ponytail` (**doctrine de concision anti-over-engineering** + échelle YAGNI 7 rungs + format 1 ligne/finding).
@@ -339,6 +340,20 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | `references/bytechef/server/libs/core/guardrails/guardrails-impl/src/main/java/com/bytechef/guardrails/advisor/CheckForViolationsAdvisor.java` | `CheckForViolationsAdvisor`, `validateInputOutput`, `collectViolations` | **Advisor d'interception d'invites/sorties** compilant l'ensemble des violations de sécurité |
 | `references/bytechef/server/ee/libs/platform/platform-mcp/platform-mcp-impl/src/main/java/com/bytechef/platform/mcp/McpServerFacade.java` | `McpServerFacade`, `listTools`, `executeTool` | **Façade MCP bidirectionnelle** pour consommation et exposition d'outils |
 
+### Méta-harnais, vision critic forké & process supervision (AutoDesign)
+> 🎨 **Architecture double-boucle d'optimisation de harnais, critique visuelle autonome et supervision de sous-processus robuste.**
+
+| Fichier | Symbole(s) clé(s) | Apport |
+|---|---|---|
+| `references/AutoDesign/autodesign/agents/critic_agent.py` | `CriticAgent`, `CritiqueReport`, `report_verdict` | **Sous-agent de critique visuelle forké autonome** avec propre boucle LLM, budget de tours indépendant et outils de vérification ciblés (`read_slide_render`, `read_paper_section`) (P6) |
+| `references/AutoDesign/autodesign/agents/claim_graph_extractor.py` | `ClaimGraphExtractor`, `EXTRACT_FAIL_THESIS`, `report_claim_graph` | **Extraction structurée de graphes de claims** avec citation textuelle obligatoire et dégradation gracieuse (P0/P6) |
+| `references/AutoDesign/autodesign/process_supervision.py` | `ProcessIdentity`, `ProcessRecord`, `SpawnIntent`, `_configure_windows_api` | **Supervision durable et terminaison d'arbre de processus** via Windows Job Objects (Win32 ctypes) et groupes POSIX sans orphelins (P8) |
+| `references/AutoDesign/autodesign/agents/atomic_artifact_promotion.py` | `publish_artifact_directory`, `recover_artifact_promotion` | **Promotion atomique crash-safe** de répertoires avec journal réversible et rollback (`prepared` -> `backup_created` -> `final_installed` -> `committed`) (P8-bis) |
+| `references/AutoDesign/autodesign/candidate_assessment.py` | `DeliveryAssessment`, `_QUALITY_ONLY_ISSUES`, `assess_candidate_delivery` | **Séparation formelle hard blockers vs diagnostics qualitatifs** anti-boucle de rejet infini (P3) |
+| `references/AutoDesign/autodesign/skills/registry.py` | `SkillManifest`, `SkillResource`, `SkillPack`, `select_skills` | **Registre de skills v2** avec chargement à la demande (`SkillResource`, `when_to_read`, `stages`) et budget description <= 160 car. (P10) |
+| `references/AutoDesign/autodesign/util/claim_graph_validator.py` | `validate_claim_graph`, `_norm_ws` | **Validateur déterministe d'inclusion textuelle stricte** anti-hallucination (`raw_quote` dans `paper_raw_text`) (P0-bis/P6) |
+| `references/AutoDesign/autodesign/util/provenance.py` | `validate_provenance`, `ProvenanceReport`, `_NUMERIC_RE` | **Audit déterministe anti-hallucination numérique** forçant l'ancrage sur citations de sources (P0-bis/P6) |
+
 ---
 
 ## 📊 Matrice réutilisabilité croisée
@@ -380,9 +395,10 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | **obscura** | **6** | **3** | **0** | 🟢 **Haute** |
 | **hunk** | **9** | **0** | **0** | 🟢 **Haute** |
 | **bytechef** | **6** | **2** | **0** | 🟡 **Moyenne** |
-| **Total** | **290** | **218** | **87** | — |
+| **AutoDesign** | **18** | **1** | **0** | 🟢 **Haute** |
+| **Total** | **308** | **219** | **87** | — |
 
-> ℹ️ Le total de la matrice (595 = 290+218+87) couvre les fiches 01-28 et 45-51. Les fiches 29-44 (ajout en masse du 2026-08-12) n'ont pas été intégrées à la matrice — leurs comptes par projet sont consultables programmatiquement dans [`inventory.json`](./inventory.json), qui fait foi : **668 entrées machine au total (338 H / 241 M / 87 L / 2 non classées)**.
+> ℹ️ Le total de la matrice (614 = 308+219+87) couvre les fiches 01-28 et 45-52. Les fiches 29-44 (ajout en masse du 2026-08-12) n'ont pas été intégrées à la matrice — leurs comptes par projet sont consultables programmatiquement dans [`inventory.json`](./inventory.json), qui fait foi : **687 entrées machine au total (356 H / 242 M / 87 L / 2 non classées)**.
 
 **Constats** :
 - **axon** (23 Haute) et **aider** (17 Haute) restent les mines d'or côté Python.
@@ -409,6 +425,7 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 - **obscura** (6 Haute, 🟢 **Haute** — 2026-08-20) : **moteur de navigateur headless ultra-léger (~30 Mo RAM vs 200+ Mo Chromium)** écrit en Rust avec V8. Apporte la table d'identifiants stables `interactive_refs` (`e3`, `e4`) évitant les sélecteurs CSS fragiles, le plafond strict `DEFAULT_TEXT_LIMIT = 4000` anti-saturation de contexte LLM, et le rendu 2D pur (tiny-skia) sans GPU.
 - **hunk** (9 Haute, 🟢 **Haute** — 2026-08-20) : **visualiseur et réviseur de diffs en terminal (TUI) conçu pour agents IA**. Apporte le standard de données d'annotations inline pour le Judge (`agentAnnotations.ts`), le verrouillage strict du workspace en lecture (`workspaceWriteGuard.ts`), et le daemon `session-broker` pour le multiplexage de flux de revue.
 - **bytechef** (6 Haute, 🟡 **Moyenne** — 2026-08-20) : **plateforme d'orchestration d'entreprise et 12 guardrails modulaires**. Apporte des détecteurs de pointe pour les clés d'API / secrets (`SecretKeyDetectorUtils`), les données PII (`PiiDetectorUtils`), l'alignement thématique (`TopicalAlignment`) et l'assainissement de texte (`SanitizeTextAdvisor`).
+- **AutoDesign** (18 Haute, 🟢 **Haute** — 2026-08-24) : **méta-harnais multi-agents, vision-critic forké autonome et supervision de processus robuste**. Apporte (1) le patron de **sous-agent forké CriticAgent** avec vision multi-modalité et budget de tours autonome (P6), (2) l'extraction et la **validation stricte d'inclusion textuelle des faits (ClaimGraphExtractor + validate_claim_graph + validate_provenance)** bannissant les hallucinations chiffrées (P0-bis/P6), (3) la **supervision durable de processus et terminaison d'arbre (process_supervision.py)** via Windows Job Objects Win32 ctypes et groupes POSIX anti-processus zombies (P8), (4) la **séparation formelle hard blockers vs diagnostics qualitatifs (candidate_assessment.py)** pour éviter les boucles de rejet infini (P3), (5) la **promotion atomique crash-safe de livrables (atomic_artifact_promotion.py)** avec journal réversible (P8-bis), et (6) le **registre de skills v2 (skills/registry.py)** avec Progressive Disclosure des ressources et contrainte budgétaire sur descriptions (P10). Cœur Python pur et Playwright directement exploitable.
 
 
 ---
@@ -515,6 +532,12 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 | Des **détecteurs de secrets/API keys et masquage PII** | Fiche **51-bytechef** → `SecretKeyDetectorUtils.java`, `PiiDetectorUtils.java` |
 | Un **advisor de vérification d'invites/sorties multi-violations** | Fiche **51-bytechef** → `CheckForViolationsAdvisor.java` (`validateInputOutput`, `collectViolations`) |
 | Une **façade MCP bidirectionnelle** (tools discovery + execution) | Fiche **51-bytechef** → `McpServerFacade.java` (`listTools`, `executeTool`) |
+| Un **sous-agent forké de critique visuelle** avec budget dédié | Fiche **52-AutoDesign** → `autodesign/agents/critic_agent.py` (`CriticAgent`, `CritiqueReport`) |
+| Une **extraction et validation stricte de faits/citations (anti-hallucination)** | Fiche **52-AutoDesign** → `autodesign/agents/claim_graph_extractor.py` + `util/claim_graph_validator.py` (`ClaimGraphExtractor`, `validate_claim_graph`, `validate_provenance`) |
+| Une **supervision durable de processus et terminaison d'arbre (Windows Job Objects + POSIX)** | Fiche **52-AutoDesign** → `autodesign/process_supervision.py` (`ProcessIdentity`, `ProcessRecord`, `SpawnIntent`) |
+| Une **publication atomique de répertoires avec journal réversible et rollback** | Fiche **52-AutoDesign** → `autodesign/agents/atomic_artifact_promotion.py` (`publish_artifact_directory`, `recover_artifact_promotion`) |
+| Un **registre de skills v2 avec Progressive Disclosure et budget description** | Fiche **52-AutoDesign** → `autodesign/skills/registry.py` (`SkillManifest`, `SkillResource`, `select_skills`) |
+| Une **séparation formelle hard blockers vs diagnostics qualitatifs** anti-boucle | Fiche **52-AutoDesign** → `autodesign/candidate_assessment.py` (`DeliveryAssessment`, `_QUALITY_ONLY_ISSUES`) |
 
 ---
 
@@ -524,8 +547,8 @@ Sélection des briques à plus forte valeur d'export directe pour le projet cibl
 docs/references-audit/
 ├── README.md              ← Mode d'emploi (start ici)
 ├── INDEX.md               ← CE DOCUMENT (navigation + synthèse + Hall of Fame)
-├── inventory.json         ← Inventaire machine-lisible (668 entrées, filtrable)
-└── projects/              ← 51 fiches détaillées (1 par projet)
+├── inventory.json         ← Inventaire machine-lisible (687 entrées, filtrable)
+└── projects/              ← 52 fiches détaillées (1 par projet)
     ├── 01-prompt-vault.md
     ├── 02-aider.md
     ├── ...
@@ -567,7 +590,8 @@ docs/references-audit/
     ├── 48-ponytail.md
     ├── 49-obscura.md
     ├── 50-hunk.md
-    └── 51-bytechef.md
+    ├── 51-bytechef.md
+    └── 52-AutoDesign.md
 ```
 
 **Pour recherche programmatique** : `inventory.json` est consommable directement :
