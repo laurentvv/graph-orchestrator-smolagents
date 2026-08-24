@@ -191,7 +191,15 @@ async def open_tester_mcp(settings):
     Puppeteer dispose d'un statut à part : son échec (timeout npx, Chrome
     absent) n'entame PAS le run — DevTools est le pilote primaire, on loggue
     simplement le repli.
+
+    F-163 (pool navigateur) : lease sur le Chrome partagé pour le toolset
+    DevTools (--browserUrl) + fenêtre watch_spawn autour de l'entrée Puppeteer
+    (ce repli lance son PROPRE Chrome, impossible à connecter au pool — on
+    capture son arbre pour le taskkill final au lieu de le fuir).
     """
+    from contextlib import ExitStack, nullcontext
+
+    from . import browser_pool as _bp
     from .coder_pydantic_mcp import (
         build_context7_mcp_toolset,
         build_devtools_mcp_toolset,
@@ -199,42 +207,54 @@ async def open_tester_mcp(settings):
     )
 
     state = TesterMCP()
-    async with AsyncExitStack() as stack:
-        devtools = build_devtools_mcp_toolset(settings)
-        if devtools is not None:
-            try:
-                await stack.enter_async_context(devtools)
-                state.toolsets.append(devtools)
-                state.browser_tools_available = True
-                print("[MCP] chrome-devtools (pydantic tester) : connecté.")
-            except Exception as exc:  # noqa: BLE001 — dégradation, pas d'échec nœud
-                print(f"[MCP] chrome-devtools (pydantic tester) : indisponible ({exc}) — pilote primaire ABSENT.")
+    pool_engaged = _bp.pool_should_engage(settings)
+    pool = _bp.get_browser_pool()
+    with ExitStack() as _sync_stack:
+        browser_url = None
+        if pool_engaged:
+            browser_url = _sync_stack.enter_context(pool.lease("open_tester_mcp"))
+        async with AsyncExitStack() as stack:
+            if browser_url:
+                devtools = build_devtools_mcp_toolset(settings, browser_url=browser_url)
+            else:
+                # Appel SANS kwargs : compat avec les stubs de test existants.
+                devtools = build_devtools_mcp_toolset(settings)
+            if devtools is not None:
+                try:
+                    await stack.enter_async_context(devtools)
+                    state.toolsets.append(devtools)
+                    state.browser_tools_available = True
+                    print("[MCP] chrome-devtools (pydantic tester) : connecté.")
+                except Exception as exc:  # noqa: BLE001 — dégradation, pas d'échec nœud
+                    print(f"[MCP] chrome-devtools (pydantic tester) : indisponible ({exc}) — pilote primaire ABSENT.")
 
-        helpers = build_dom_helper_toolset(getattr(devtools, "client", None) if devtools is not None else None)
-        if helpers is not None:
-            state.toolsets.append(helpers)
+            helpers = build_dom_helper_toolset(getattr(devtools, "client", None) if devtools is not None else None)
+            if helpers is not None:
+                state.toolsets.append(helpers)
 
-        puppeteer = build_puppeteer_mcp_toolset(settings)
-        if puppeteer is not None:
-            try:
-                await stack.enter_async_context(puppeteer)
-                state.toolsets.append(puppeteer)
-                state.puppeteer_available = True
-                print("[MCP] puppeteer (pydantic tester) : connecté (repli).")
-            except Exception as exc:  # noqa: BLE001
-                print(f"[MCP] puppeteer (pydantic tester) : indisponible ({exc}) — repli DevTools seul.")
+            puppeteer = build_puppeteer_mcp_toolset(settings)
+            if puppeteer is not None:
+                try:
+                    watch = pool.watch_spawn("puppeteer (pydantic tester)") if pool_engaged else nullcontext()
+                    with watch:
+                        await stack.enter_async_context(puppeteer)
+                    state.toolsets.append(puppeteer)
+                    state.puppeteer_available = True
+                    print("[MCP] puppeteer (pydantic tester) : connecté (repli).")
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[MCP] puppeteer (pydantic tester) : indisponible ({exc}) — repli DevTools seul.")
 
-        context7 = build_context7_mcp_toolset(settings)
-        if context7 is not None:
-            try:
-                await stack.enter_async_context(context7)
-                state.toolsets.append(context7)
-                state.context7_available = True
-                print("[MCP] context7 (pydantic tester) : connecté.")
-            except Exception as exc:  # noqa: BLE001
-                print(f"[MCP] context7 (pydantic tester) : indisponible ({exc}) — sans doc.")
+            context7 = build_context7_mcp_toolset(settings)
+            if context7 is not None:
+                try:
+                    await stack.enter_async_context(context7)
+                    state.toolsets.append(context7)
+                    state.context7_available = True
+                    print("[MCP] context7 (pydantic tester) : connecté.")
+                except Exception as exc:  # noqa: BLE001
+                    print(f"[MCP] context7 (pydantic tester) : indisponible ({exc}) — sans doc.")
 
-        yield state
+            yield state
 
 
 # ============================================================

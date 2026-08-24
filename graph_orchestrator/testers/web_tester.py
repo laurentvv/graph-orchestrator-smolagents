@@ -67,11 +67,19 @@ class WebTestRunner:
         # loggué. Le CM est déjà ouvert par le helper : fermeture par callback
         # direct __exit__ (pas de `with` — déjà consommé).
         from ..mcp_connect import open_mcp_with_timeout
-        from contextlib import ExitStack
+        from contextlib import ExitStack, nullcontext
 
-        puppeteer_cm, puppeteer_tools = open_mcp_with_timeout(
-            server_parameters, settings.puppeteer_connect_timeout_s, "puppeteer"
-        )
+        # F-163 (pool navigateur) : le repli Puppeteer lance son PROPRE Chrome
+        # (pas d'option de connexion à un Chrome existant) — on capture son
+        # arbre pendant la fenêtre de connexion pour le taskkill final.
+        from .. import browser_pool as _bp
+
+        _pool_on = _bp.pool_should_engage(settings)
+        _pool = _bp.get_browser_pool()
+        with (_pool.watch_spawn("puppeteer (web tester smolagents)") if _pool_on else nullcontext()):
+            puppeteer_cm, puppeteer_tools = open_mcp_with_timeout(
+                server_parameters, settings.puppeteer_connect_timeout_s, "puppeteer"
+            )
         if puppeteer_cm is None:
             puppeteer_tools = []
         with ExitStack() as _mcp_stack:

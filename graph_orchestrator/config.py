@@ -500,6 +500,16 @@ class Settings:
     context7_connect_timeout_s: float = 15.0
     puppeteer_connect_timeout_s: float = 25.0
 
+    # --- Pool navigateur run-scoped (F-163) ---
+    # UN seul Chrome par run : les serveurs MCP chrome-devtools s'y connectent
+    # (--browserUrl), health-check + respawn par le pool, taskkill /T /F de
+    # l'arbre au shutdown (fin des fuites cmd→npx→node→Chrome sous Windows).
+    # Opt-out BROWSER_POOL_ENABLED=0 → comportement historique exact (chaque
+    # serveur lance son Chrome --isolated). BROWSER_POOL_SPAWN_TIMEOUT_S borne
+    # l'attente de démarrage de Chrome (health HTTP /json/version).
+    browser_pool_enabled: bool = True
+    browser_pool_spawn_timeout_s: float = 30.0
+
     # --- Consolidation mémoire KG (Priorité 6-ter / F-68 Phase 1) ---
     # Le KG DuckDB grossit indéfiniment : dedup_key ne capte que les doublons
     # EXACTS, et rien n'oublie jamais. La consolidation (LLM-juge qm émettant
@@ -753,6 +763,8 @@ def load_settings() -> Settings:
         chrome_devtools_connect_timeout_s=_get_float("CHROME_DEVTOOLS_CONNECT_TIMEOUT_S", 25.0),
         context7_connect_timeout_s=_get_float("CONTEXT7_CONNECT_TIMEOUT_S", 15.0),
         puppeteer_connect_timeout_s=_get_float("PUPPETEER_CONNECT_TIMEOUT_S", 25.0),
+        browser_pool_enabled=_get_bool("BROWSER_POOL_ENABLED", True),
+        browser_pool_spawn_timeout_s=_get_float("BROWSER_POOL_SPAWN_TIMEOUT_S", 30.0),
         memory_consolidation_enabled=_get_bool("MEMORY_CONSOLIDATION_ENABLED", True),
         memory_consolidation_after=_get_int("MEMORY_CONSOLIDATION_AFTER", 10),
         memory_retention_days=_get_int("MEMORY_RETENTION_DAYS", 30),
