@@ -1166,17 +1166,12 @@ async def _run_coding_workflow_inner(
                     ))
                     return {"status": "success", "task_id": subtask.task_id}, sub_metrics
                 else:
-                    if judge_res and (judge_res.root_cause or judge_res.fix_instruction):
-                        blocks = []
-                        if judge_res.root_cause:
-                            blocks.append(f"🎯 CAUSE RACINE : {judge_res.root_cause}")
-                        if judge_res.fix_instruction:
-                            blocks.append(f"🛠️ INSTRUCTION DE CORRECTION : {judge_res.fix_instruction}")
-                        if judge_res.final_feedback:
-                            blocks.append(f"📝 FEEDBACK : {judge_res.final_feedback}")
-                        feedback = "\n".join(blocks)
-                    else:
-                        feedback = judge_res.final_feedback if judge_res else "Erreur système du juge."
+                    # F-165-C : assemblage dédoublonné — le chemin fail-closed
+                    # embarque déjà les blocs dans final_feedback ; l'ancien
+                    # wrap les ré-empilait (réfutation KG dupliquée, claim 255
+                    # run 021543 → ticket de correction brouillé).
+                    from .feedback_utils import build_rejection_feedback
+                    feedback = build_rejection_feedback(judge_res)
                     print(f"    [-] {subtask.task_id} REJETÉ. Sauvegarde du bug dans DuckDB...")
                     if obs_id:
                         kg.mark_status(obs_id, "rejected")
