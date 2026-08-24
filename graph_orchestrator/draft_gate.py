@@ -285,28 +285,159 @@ def _detect_instant_animation(md: str, spec_hint: str = "") -> List[DraftIssue]:
 def _detect_flex_column_bars(md: str) -> List[DraftIssue]:
     """Barres de visualiseur en flex-direction:column + flex:1 (run #14).
 
-    Signature exacte du bug : le draft prescrit un conteneur de barres en
+    Signature exacte du bug : le draft prescrit le CONTENEUR DE BARRES en
     colonne ET flex:1/flex-grow sur les enfants ET un contexte barres/chart.
-    Les 3 conditions ensemble sont quasi toujours fautrices — une mise en page
-    légitime en colonne (panneaux, cartes) n'a pas de contexte barres + flex:1
-    combinés. Rejet (le Coder part de zéro) : le corriger à la main dans le
-    draft laisserait la géométrie incohérente avec le reste du plan.
+    Affinage F-167 (faux positif run C) : la directive column doit appartenir
+    au MÊME BLOC que le contexte barres/chart/viz — une règle CSS (du sélecteur
+    à l'accolade fermante) ou une ligne de prose. C'est la forme réelle du bug
+    (« #viz { flex-direction: column } », run #14, ou « #viz (barres) : colonne »
+    en prose). Une colonne dans un AUTRE bloc (body en colonne pour empiler
+    header/contrôles/board) est légitime même quand les barres sont flex:1
+    dans un conteneur #board correctement en row + flex-end.
+    Rejet (le Coder part de zéro) : le corriger à la main dans le draft
+    laisserait la géométrie incohérente avec le reste du plan.
     """
-    if not (_FLEX_COLUMN_RE.search(md) and _FLEX_ONE_RE.search(md) and _BAR_CONTEXT_RE.search(md)):
+    if not _FLEX_ONE_RE.search(md):
+        return []
+    lines = md.splitlines()
+    i = 0
+    while i < len(lines):
+        # Bloc courant : règle CSS (ligne sélecteur → '}') ou ligne seule (prose).
+        if "{" in lines[i]:
+            j = i
+            while j < len(lines) and "}" not in lines[j]:
+                j += 1
+            block = "\n".join(lines[i:j + 1])
+            i = j + 1
+        else:
+            block = lines[i]
+            i += 1
+        if _FLEX_COLUMN_RE.search(block) and _BAR_CONTEXT_RE.search(block):
+            return [DraftIssue(
+                kind="flex_column_bars",
+                severity="critical",
+                description=(
+                    "Conteneur de barres en flex-direction:column avec flex:1 sur les "
+                    "barres : flex-basis:0 ÉCRASE style.height → N bandes horizontales "
+                    "égales pleine largeur (barres plates), au lieu de barres verticales "
+                    "proportionnelles. Géométrie correcte : conteneur flex ROW + "
+                    "align-items:flex-end + hauteurs px inline sur chaque barre (règle "
+                    "skill coding F-124). Le draft est rejeté : le Coder repart de zéro."
+                ),
+                action="reject",
+            )]
+    return []
+
+
+# --- Densité prescriptive (F-167) : draft creux = livrable creux ---------------
+# Leçon F164-6 + runs 0857/1448 (A/B F-167 : Ornith-1.0 ET 1.5 clonaient le même
+# draft creux de 1260 octets — cause racine : l'exemple de FORMAT DE SORTIE du
+# prompt Drafter, creux, copié à la lettre). Un draft « d'intentions » sans
+# valeurs produit un livrable creux : le Coder 4B suit le draft À LA LETTRE.
+# Deux signatures exactes, prouvées sur les runs réels :
+#   1. Variables CSS listées SANS valeurs (« --bg, --surface, --text ») → le
+#      Coder consomme var(--bg) dans styles.css mais n'écrit JAMAIS le bloc
+#      :root (aucune valeur à écrire) → thème sombre mort.
+#   2. Hauteurs de barres en % SANS hauteur fixe (px) du conteneur parent →
+#      pourcentage sans référent → hauteur 0 → board vide au chargement.
+# Les deux sont REJETÉS mais RETRYABLES : le workflow réinjecte le feedback du
+# gate au Drafter pour une 2e tentative (workflows.py, DENSITY_REJECT_KINDS)
+# avant de laisser le Coder partir de zéro.
+
+# Kinds de rejet « densité » : retryables par le workflow (feedback au Drafter),
+# contrairement aux rejets structurels (placeholder, doublons, géométrie) = zéro.
+DENSITY_REJECT_KINDS = frozenset({"css_vars_no_values", "pct_height_no_parent"})
+
+_CSS_VAR_TOKEN_RE = re.compile(r"--[\w-]+")
+_VAR_USAGE_RE = re.compile(r"var\(\s*--[\w-]+\s*\)")
+# Contexte hauteur en % : mot hauteur/height puis un % à <= 60 chars (couvre
+# « hauteur (v/100)*100% », « height: 75% », « hauteurs proportionnelles ... % »).
+_PCT_HEIGHT_CTX_RE = re.compile(r"(?:hauteur|height)[^\n]{0,60}%", re.IGNORECASE)
+# Hauteur fixe px : « height: 240px », « height 240px », « hauteur : 300px »
+# (en CSS ou en prose du plan — le référent du % est ce qui compte).
+_FIXED_PX_HEIGHT_RE = re.compile(r"(?:hauteur|height)\s*[:=]?\s*\d+\s*px", re.IGNORECASE)
+
+
+def _detect_css_vars_without_values(md: str) -> List[DraftIssue]:
+    """Variables CSS listées sans valeurs → REJECT (thème mort). F-167.
+
+    Signature exacte du run 1448 : une LIGNE qui mentionne >= 2 tokens ``--var``
+    (hors usages ``var(--x)``) dont au moins un n'est NI suivi de ``: valeur`` sur
+    la ligne NI défini avec valeur ailleurs dans le draft. Les définitions saines
+    (``--bg: #1a1a2e, --sorted: #10b981``) passent ; les références en prose à
+    des variables définies ailleurs (``Body : bg --bg, text --text``) passent ;
+    les usages (``color: var(--bg)``) sont exclus du comptage (référence ≠
+    définition) ; une ligne à token unique n'est pas une liste (tolérance).
+    Retourne au plus UNE issue (la première ligne fautive suffit).
+    """
+    # Pass 1 : variables réellement DÉFINIES avec valeur quelque part dans le draft.
+    defined = set()
+    for m in _CSS_VAR_TOKEN_RE.finditer(md):
+        if md[m.end():].lstrip().startswith(":"):
+            defined.add(m.group(0))
+    # Pass 2 : lignes-listes avec un token ni défini ni suivi de « : valeur ».
+    for line in md.splitlines():
+        line_wo_usage = _VAR_USAGE_RE.sub("", line)
+        tokens = _CSS_VAR_TOKEN_RE.findall(line_wo_usage)
+        if len(tokens) < 2:
+            continue
+        for m in _CSS_VAR_TOKEN_RE.finditer(line_wo_usage):
+            rest = line_wo_usage[m.end():].lstrip()
+            if not rest.startswith(":") and m.group(0) not in defined:
+                return [DraftIssue(
+                    kind="css_vars_no_values",
+                    severity="critical",
+                    description=(
+                        f"Variables CSS listées SANS valeurs (ex: {m.group(0)} dans "
+                        f"« {line.strip()[:80]} ») : le Coder consommera var(--…) "
+                        f"dans styles.css mais n'écrira JAMAIS le bloc :root — "
+                        f"thème mort. Réécris CHAQUE variable AVEC sa valeur exacte : "
+                        f"--bg: #0f172a; --text: #e2e8f0; …"
+                    ),
+                    action="reject",
+                )]
+    return []
+
+
+def _detect_pct_height_no_parent(md: str) -> List[DraftIssue]:
+    """Hauteurs en % sans hauteur fixe px du parent → REJECT (board vide). F-167.
+
+    Si le draft prescrit des hauteurs en % (contexte hauteur/height + %) mais
+    qu'AUCUNE hauteur fixe en px n'apparaît dans tout le plan, le pourcentage
+    n'a pas de référent → hauteur calculée 0 → board vide au chargement (le
+    « board vide » des runs 0857/1448, critère visuel 1 en échec).
+    """
+    if not _PCT_HEIGHT_CTX_RE.search(md):
+        return []
+    if _FIXED_PX_HEIGHT_RE.search(md):
         return []
     return [DraftIssue(
-        kind="flex_column_bars",
+        kind="pct_height_no_parent",
         severity="critical",
         description=(
-            "Conteneur de barres en flex-direction:column avec flex:1 sur les "
-            "barres : flex-basis:0 ÉCRASE style.height → N bandes horizontales "
-            "égales pleine largeur (barres plates), au lieu de barres verticales "
-            "proportionnelles. Géométrie correcte : conteneur flex ROW + "
-            "align-items:flex-end + hauteurs px inline sur chaque barre (règle "
-            "skill coding F-124). Le draft est rejeté : le Coder repart de zéro."
+            "Hauteurs prescrites en POURCENTAGE sans AUCUNE hauteur fixe en px du "
+            "conteneur parent dans le plan : un % sans référent = hauteur 0 = "
+            "board vide au chargement. Prescris la hauteur FIXE du conteneur "
+            "(ex: #board { height: 240px }) en plus des hauteurs % des barres."
         ),
         action="reject",
     )]
+
+
+def build_density_feedback(issues: List[DraftIssue]) -> str:
+    """Bloc de feedback retry F-167 à append à la sous-tâche du Drafter.
+
+    Vide si aucun issue de densité (les autres rejets ne se retentent pas :
+    placeholder/doublon/géométrie = draft structurellement inutilisable).
+    """
+    density = [i for i in issues if i.kind in DENSITY_REJECT_KINDS]
+    if not density:
+        return ""
+    lines = [
+        "### ⛔ DRAFTER GATE : ton draft précédent a été REJETÉ — corrige ces défauts",
+    ]
+    lines.extend(f"- {i.description}" for i in density)
+    return "\n".join(lines)
 
 
 def _fix_malformed_blocks(md: str) -> Tuple[str, List[DraftIssue]]:
@@ -381,6 +512,11 @@ def check_draft(draft_markdown: str, spec_hint: str = "") -> DraftCheck:
     result.issues.extend(_detect_placeholders(result.corrected_markdown))
     result.issues.extend(_detect_dup_definitions(result.corrected_markdown))
     result.issues.extend(_detect_flex_column_bars(result.corrected_markdown))
+
+    # 2bis. Détections REJECT densité prescriptive (F-167) — retryables par le
+    # workflow (feedback réinjecté au Drafter, cf. DENSITY_REJECT_KINDS).
+    result.issues.extend(_detect_css_vars_without_values(result.corrected_markdown))
+    result.issues.extend(_detect_pct_height_no_parent(result.corrected_markdown))
 
     # 3. Détections WARN (animation instantanée, 3 variantes génériques).
     result.issues.extend(

@@ -1,17 +1,69 @@
 # État d'Avancement du Sprint
 
-## Objectif Actuel : F-166 (auto-fixer au Coder) livré — PR en review, puis mission 2 (failles F164-6) à planifier
-> Décision user 2026-08-24 (~10:00, post-run 0857) : « donner l'auto-fixer au
-> Coder et à tous les nœuds qui codent de la logique » — doctrine §8.3 « code
-> pur d'abord » : ~80 steps LLM brûlés sur un fix mécanique (\n littéraux +
-> doublon startBtn) qu'un fixer déterministe fait en <1 s. **F-166 LIVRÉ sur
-> branche `feat/f-166-autofixer-coder`** : auto-décodage \n/\t littéraux en
-> amont des gardes F-132 (les 5 outils d'écriture), cascade aider P3 complétée
-> (RelativeIndenter + diff lignes difflib, 0 dépendance), directive P2 sur
-> append_file, fix_known_error exposé au Coder des 2 moteurs. Suite complète
-> 2079 passed ; validation isolation GO. SUITE : review Kilo de la PR puis
-> mission 2 F164-6 (claims ancrés sur preuve, run_id par exécution,
-> journalisation des échecs Coder) à planifier avec l'utilisateur.
+## Objectif Actuel : F-167 (densité prescriptive du Drafter) livré — PR en review
+> Mission « Debug du Drafter » (décision user 2026-08-24 post-run F-166 :
+> « c'est le levier n°1 pour la qualité des livrables »). **RENVERSEMENT
+> DIAGNOSTIQUE par A/B isolation** : Ornith-1.0 ET Ornith-1.5 avec le prompt
+> d'alors clonaient le MÊME draft creux de 1 260 o (variables :root sans
+> valeurs, hauteur % sans parent) — la cause racine était le FORMAT DE SORTIE
+> creux du `DrafterSignature` (introduit F-150/F-154 le 22/08, postérieur au
+> golden #19 du 18/08), PAS le GGUF Ornith-1.5 (attribution F164-6 fallacieuse
+> par coïncidence de calendrier). **F-167 LIVRÉ sur branche
+> `feat/f-167-drafter-density`** : (1) prompt durci (règle « prescription par
+> valeurs exactes » + exemple dense), (2) draft_gate F-91 étendu aux 2
+> signatures de creux (`css_vars_no_values`, `pct_height_no_parent`) + faux
+> positif F-124 corrigé (check par bloc), (3) retry Drafter unique avec
+> feedback déterministe. Validation A/B/C : creux rejeté (les 2 modèles),
+> dense (4851 o, `:root` hex, `height 240px`, compteur avant swap) PASSES le
+> gate. SUITE : review Kilo de la PR, puis run E2E de revalidation du golden
+> run (§10) avec le prompt durci.
+
+## Jalons de l'Itération (cycle F-167 — densité prescriptive du Drafter, 2026-08-24)
+
+- [x] F167-1 : Diagnostic A/B isolation (`debug/run_drafter.py`, sous-tâche
+      exacte du run 1448) : Ornith-1.5 (18,7 s) ET Ornith-1.0 (17,1 s) → draft
+      creux IDENTIQUE 1231 o ; vérifié rétroactivement : TOUS les runs depuis
+      2026-08-22 17:32 (Ornith-1.0, pré-1.5) clonent le même draft 1260 o.
+      Cause racine : FORMAT DE SORTIE creux de `DrafterSignature` copié à la
+      lettre par les 2 modèles. DuckDB #3247 (démarrage) + #3248 (diag).
+- [x] F167-2 : Prompt `DrafterSignature` durci (dspy_nodes.py) : RÈGLE
+      CRITIQUE n°4 « PRESCRIPTION PAR VALEURS EXACTES » (variables CSS
+      `nom: valeur` — liste de noms = thème mort ; hauteur % ⇒ parent px ;
+      hex/N/plages/délais ; sémantique d'incrément des compteurs), 2
+      anti-pièges nouveaux (% sans référent ; compteur = comparaisons ≠
+      échanges — encode le bug du golden #19 au niveau plan), FORMAT DE
+      SORTIE réécrit DENSE (`:root` avec valeurs, `height 240px`, `N = 30`,
+      `comparisons++` avant le test de swap). Docstring 73 lignes / 5228 c.
+- [x] F167-3 : `draft_gate.py` — 2 checks de densité (0 LLM) :
+      `css_vars_no_values` (ligne listant ≥2 `--var` dont une ni valuée sur la
+      ligne ni définie ailleurs ; usages `var()` exclus ; références prose à
+      des variables définies ailleurs tolérées) + `pct_height_no_parent`
+      (contexte hauteur/% sans AUCUN px dans le plan) ; kinds retryables via
+      `DENSITY_REJECT_KINDS` + `build_density_feedback`. Câblés dans
+      `check_draft` (§2bis).
+- [x] F167-4 : `workflows._drafter_with_density_retry` — un rejet de densité
+      réexécute le Drafter AU PLUS 1 fois avec le feedback appendé à une COPIE
+      de `sub_dict` (contenu du Coder jamais pollué) ; rejets structurels et
+      crash = zéro direct F-91 historique ; call site du workflow allégé.
+- [x] F167-5 : Faux positif `flex_column_bars` (F-124) corrigé — le draft
+      dense du run C (body en colonne + `#board` row/flex-end) était rejeté à
+      tort par le matching global (column + flex:1 + contexte barres n'importe
+      où). Check par BLOC désormais : règle CSS (sélecteur → `}`) ou ligne
+      prose ; la colonne doit partager le bloc du contexte barres.
+- [x] F167-6 : Tests — **18 nouveaux 0-LLM PASS** (`tests/test_f167_drafter_
+      density.py` ×16 : détection ×8 avec embeddings des drafts RÉELS 1448 +
+      golden #19, feedback ×3, retry ×5 via fake `execute_drafter_node`
+      (retry unique, non-pollution, crash, rejet structurel sans retry) ;
+      `tests/test_draft_gate.py` +2 : faux positif body-column/board-row +
+      variante prose du bug run #14). Suite complète verte (cf. DuckDB).
+- [x] F167-7 : Validation A/B/C isolation : C = Ornith-1.5 × prompt durci →
+      draft dense 4851 o / 56 lignes (`:root` complet hex, `#board height
+      240px` « référent des % », `comparisons++` SYNCHRO avant sleep, init
+      robuste) qui PASSE le gate. Artefacts : `debug/drafter_isolation_out/
+      f167_ab_{A,B}_*` + `f167_runC_ornith15_hardened.md` (913 s think+gén).
+- [x] F167-8 : État disque (contract C534-C537, feature_list F-167,
+      NODES_AND_SKILLS §2.1 ligne Drafter + note F-167, ce fichier) + DuckDB
+      + commit + PR → review Kilo.
 
 ## Jalons de l'Itération (cycle F-166 — auto-fixer au Coder, 2026-08-24)
 

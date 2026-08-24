@@ -422,6 +422,61 @@ def _plan_sanity_violations(architect_result) -> list:
         return []
 
 
+async def _drafter_with_density_retry(sub_dict, reasoning_model, settings, sub_metrics):
+    """Drafter + gate F-91 + retry F-167 sur rejet de densité (draft creux).
+
+    Retourne ``(draft_res, gate)`` :
+      - ``draft_res`` rejeté par le gate → le Coder part de zéro (sémantique F-91
+        historique, consommée par l'appelant via ``gate.should_reject``) ;
+      - ``draft_res=None`` + ``gate=None`` → Drafter crashé (pas de draft du tout).
+
+    Un rejet de DENSITÉ (``DENSITY_REJECT_KINDS`` : variables CSS listées sans
+    valeurs, hauteurs % sans parent px — leçons runs 0857/1448) donne AU PLUS UNE
+    seconde chance au Drafter : le feedback déterministe du gate est append à la
+    sous-tâche via une COPIE de ``sub_dict`` — le contenu vu par le Coder n'est
+    jamais pollué par le feedback. Rejets structurels (placeholder, doublons,
+    géométrie) : pas de retry, zéro direct.
+    """
+    from .dspy_nodes import execute_drafter_node
+    from .draft_gate import DENSITY_REJECT_KINDS, build_density_feedback, check_draft
+
+    draft_res, m_draft = await execute_drafter_node(sub_dict, reasoning_model, settings)
+    if m_draft:
+        sub_metrics.append(m_draft)
+    if draft_res is None:
+        return None, None
+    gate = check_draft(
+        draft_res.draft_markdown, spec_hint=sub_dict.get("original_content", "")
+    )
+    for _ in range(1):  # borné : 1 retry maximum
+        if not (
+            gate.should_reject
+            and any(i.kind in DENSITY_REJECT_KINDS for i in gate.issues)
+        ):
+            break
+        kinds = ", ".join(
+            i.kind for i in gate.issues if i.kind in DENSITY_REJECT_KINDS
+        )
+        print(f"    [!] F-167 Drafter Gate : draft creux ({kinds}) — "
+              f"retry du Drafter avec feedback déterministe du gate.")
+        retry_dict = dict(sub_dict)
+        retry_dict["content"] = (
+            sub_dict["content"] + "\n\n" + build_density_feedback(gate.issues)
+        )
+        draft_res, m_retry = await execute_drafter_node(
+            retry_dict, reasoning_model, settings
+        )
+        if m_retry:
+            sub_metrics.append(m_retry)
+        if draft_res is None:
+            return None, gate
+        gate = check_draft(
+            draft_res.draft_markdown,
+            spec_hint=sub_dict.get("original_content", ""),
+        )
+    return draft_res, gate
+
+
 async def run_coding_workflow(
     seed_tasks: List[dict],
     settings: Settings = default_settings,
@@ -850,9 +905,9 @@ async def _run_coding_workflow_inner(
 
                 # 0. Drafter (iteration 1 uniquement)
                 if iteration == 1:
-                    draft_res, m_draft = await execute_drafter_node(sub_dict, reasoning_model, settings)
-                    if m_draft:
-                        sub_metrics.append(m_draft)
+                    draft_res, gate = await _drafter_with_density_retry(
+                        sub_dict, reasoning_model, settings, sub_metrics
+                    )
                     if draft_res:
                         # 'os' est importé en tête de module (ligne 16). Un import local
                         # ici ferait de 'os' une variable locale à toute la fonction
@@ -861,18 +916,12 @@ async def _run_coding_workflow_inner(
                         # le fix LoopGuard qui a débloqué le chemin jusqu'aux audits.
                         draft_filename = f"draft_{subtask.task_id.replace('-', '_')}.md"
                         draft_path = os.path.join(run_output_dir, draft_filename)
-                        # F-91 : Drafter Gate — vérifie le draft pour les bugs connus
-                        # (animation instantanée, doublons, placeholders, blocs malformés)
-                        # AVANT de l'écrire sur disque et de l'injecter au Coder. Si un
-                        # bug critique est détecté (should_reject), le draft est jeté et
-                        # le Coder part de zéro. Sinon, avertissements ajoutés à
-                        # draft_instruction pour que le Coder soit vigilant. 0 LLM,
-                        # déterministe — miroir de static_tester.py / linter.py.
-                        from .draft_gate import check_draft
-                        gate = check_draft(
-                            draft_res.draft_markdown,
-                            spec_hint=sub_dict.get("original_content", ""),
-                        )
+                        # F-91 : Drafter Gate — le verdict a été calculé dans
+                        # _drafter_with_density_retry (bugs connus : animation
+                        # instantanée, doublons, placeholders, blocs malformés,
+                        # densité F-167) AVANT écriture/injection. Un rejet de
+                        # densité a déjà consommé son unique retry F-167 avec
+                        # feedback : ici, should_reject = Coder part de zéro.
                         if gate.should_reject:
                             print(f"    [!] F-91 Drafter Gate : draft REJETÉ "
                                   f"({len(gate.issues)} bug(s) critique(s)). "
