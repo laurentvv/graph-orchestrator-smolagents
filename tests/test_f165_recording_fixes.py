@@ -167,3 +167,15 @@ class TestFixCRejectionFeedback:
     def test_feedback_only_passthrough(self):
         judge = SimpleNamespace(root_cause="", fix_instruction="", final_feedback="seul feedback")
         assert build_rejection_feedback(judge) == "seul feedback"
+
+    def test_all_empty_fields_returns_system_message(self):
+        """Divergence délibérée vs l'ancien code inline (review Kilo PR #117).
+
+        Avant : judge_res vide → "" stocké comme contenu de réfutation KG →
+        dedup_key SHA1 CONSTANT → tout ticket vide suivant ignoré par la dédup.
+        Un ticket vide n'est pas un signal exploitable pour le Coder.
+        """
+        judge = SimpleNamespace(root_cause="", fix_instruction="", final_feedback="")
+        assert build_rejection_feedback(judge) == "Erreur système du juge."
+        judge_none_fb = SimpleNamespace(root_cause="", fix_instruction="", final_feedback=None)
+        assert build_rejection_feedback(judge_none_fb) == "Erreur système du juge."

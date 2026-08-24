@@ -185,6 +185,15 @@ def build_rejection_feedback(judge_res) -> str:
     (signature du fail-closed), il est renvoyé tel quel ; sinon on assemble les
     blocs (verdict Judge LLM normal, feedback brut). Compatibilité stricte :
     judge_res None → « Erreur système du juge. » (message historique).
+
+    Divergence délibérée vs l'ancien code inline (review Kilo PR #117) : un
+    judge_res présent mais TOTALEMENT vide (ni root_cause, ni fix_instruction,
+    ni final_feedback) renvoie « Erreur système du juge. » au lieu de "" —
+    l'ancien "" était stocké tel quel comme contenu de réfutation KG, dont le
+    dedup_key (SHA1 du contenu) devient CONSTANT : tous les tickets vides
+    suivants étaient ignorés silencieusement par la dédup (même piège que le
+    commentaire workflows.py sur la troncature À LA LECTURE). Un ticket vide
+    n'a jamais été un signal exploitable pour le Coder.
     """
     if judge_res is None:
         return "Erreur système du juge."
