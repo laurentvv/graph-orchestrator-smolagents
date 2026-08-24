@@ -77,11 +77,36 @@ partie "épaisse" qui pèse en tokens. Source : `graph_orchestrator/dspy_nodes.p
 | **Router** | `router` | 54 | 3633 | Mots-clés canoniques par langage + règle priorité extensions + anti-biais |
 | **PromptRefiner** | `prompt_refiner` | 54 | 3812 | Pipeline 4 étapes (clarté/contexte/formatage/complétion) + anti-hallucination |
 | **Architect** | `architect` | 96 | 6964 | Règle découpage (1 livrable = 1 sous-tâche) + stratégie F-29 (simple/incremental/multifile) + sections + préservation données |
+| **Drafter** | — | 73 | 5228 | Plan par fichier + **règle F-167 prescription par valeurs exactes** (variables CSS `nom: valeur`, % ⇒ parent px, hex/N/plages/délais, sémantique compteur) + anti-pièges + FORMAT DE SORTIE dense |
 | **Security** | `security` | 71 | 4919 | Patterns OWASP concrets (XSS/injection/crypto/misconfig) + discrimination input + rubric CVSS |
 | **Judge** | `judge` | 69 | 4896 | Procédure obligatoire 5 étapes + croisement test/code + rubric sévérité + localisation |
 | **Escalation** | `escalation` | 39 | 2662 | Post-mortem (cause racine + tentatives + leçon + severity) |
 
 **Total prompts forcés DSPy** : ~6 000 tokens de system prompt par nœud et par appel.
+
+#### F-167 — Densité prescriptive du Drafter (2026-08-24, leçons F164-6 + runs 0857/1448)
+
+A/B isolation (sous-tâche exacte du run 1448) : le FORMAT DE SORTIE creux du
+prompt (introduit F-150/F-154 le 22/08) faisait cloner à **Ornith-1.0 ET Ornith-1.5**
+le même draft creux de 1 260 octets — l'attribution F164-6 au passage GGUF 1.5
+était une corrélation fallacieuse de calendrier. Le Coder 4B suit le draft à la
+lettre : liste de variables sans valeurs = `:root` jamais écrit (thème mort),
+hauteur `%` sans parent px = board vide. Trois gardes :
+
+1. **Prompt durci** (`DrafterSignature`) : règle « PRESCRIPTION PAR VALEURS
+   EXACTES » (RÈGLE CRITIQUE n°4) + FORMAT DE SORTIE **dense** (`:root` avec
+   valeurs, `height 240px` parent, `N = 30`, `comparisons++` avant le test de
+   swap — encode aussi la sémantique du compteur du bug golden #19).
+2. **draft_gate F-91 étendu** (`DENSITY_REJECT_KINDS`) : `css_vars_no_values`
+   (ligne listant ≥2 `--var` dont une ni valuée ni définie ailleurs, usages
+   `var()` exclus) + `pct_height_no_parent` (contexte hauteur/% sans AUCUN px
+   dans le plan) — 0 LLM, rejet déterministe.
+3. **Retry unique** (`workflows._drafter_with_density_retry`) : un rejet de
+   densité réexécute le Drafter UNE fois avec le feedback du gate appendé à
+   une COPIE de la sous-tâche (le contenu du Coder n'est jamais pollué) ;
+   rejets structurels (placeholder/doublons/géométrie) et crash = zéro direct
+   F-91 historique. Tests : `tests/test_f167_drafter_density.py` (16, 0-LLM,
+   embeddings des drafts réels 1448/golden #19).
 
 ### 2.2 Nœuds smolagents (2) — `build_role_header(role)` + prompt f-string
 

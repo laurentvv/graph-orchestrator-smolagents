@@ -93,6 +93,24 @@ _LEGIT_COLUMN_LAYOUT = """# Plan
 """
 
 
+# Faux positif run C F-167 (draft dense généré par le prompt durci) : body en
+# colonne (page shell légitime) + #board en row/flex-end (géométrie F-124
+# CORRECTE pour les barres) + .bar flex:1. L'ancien check global (column +
+# flex:1 + contexte barres n'importe où dans le draft) rejetait à tort ce
+# pattern — la colonne doit concerner le CONTENEUR DE BARRES (même ligne).
+_BODY_COLUMN_BOARD_ROW = """## Fichier : styles.css
+- Thème sombre, bloc :root complet avec valeurs :
+  `--bg: #0f172a; --text: #e2e8f0; --default: #475569; --comparing: #3b82f6; --sorted: #22c55e;`
+- `body` : `background: var(--bg); color: var(--text); display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 24px;`.
+- `#board` : `display: flex; flex-direction: row; align-items: flex-end; height: 240px; gap: 4px;` (hauteur FIXE = référent des %).
+- `.bar` : `flex: 1; min-width: 4px; background: var(--default); transition: height .3s ease;`
+
+## Fichier : script.js
+- Variables : arr[], N = 30, maxVal = 100, comparisons = 0
+- draw() : bar.style.height = (valeur/maxVal)*100%, append à #board
+"""
+
+
 class TestFlexColumnBars:
     def test_rejete_draft_fautif_run14(self):
         """La signature exacte du run #14 (column + flex:1 + barres) → REJET."""
@@ -127,6 +145,28 @@ class TestFlexColumnBars:
         res = check_draft(_LEGIT_COLUMN_LAYOUT)
         assert not res.should_reject
         assert "flex_column_bars" not in [i.kind for i in res.issues]
+
+    def test_body_column_board_row_passe(self):
+        """Faux positif run C (F-167) : colonne sur `body` (empiler header /
+        contrôles / board) + #board en row/flex-end = géométrie correcte. La
+        directive column ne doit flagger QUE sur la ligne du conteneur de
+        barres — pas n'importe où dans un draft dense."""
+        res = check_draft(_BODY_COLUMN_BOARD_ROW)
+        assert not res.should_reject
+        assert "flex_column_bars" not in [i.kind for i in res.issues]
+
+    def test_colonne_sur_le_conteneur_de_barres_rejete(self):
+        """Variante prose (pas bloc de code) du bug run #14 : la ligne qui
+        décrit le conteneur de barres en colonne est rejetée même si le reste
+        du draft est dense (column + contexte barres sur la MÊME ligne)."""
+        draft = (
+            "## styles.css\n"
+            "- `#viz` (conteneur des barres) : flex-direction: column, gap 4px\n"
+            "- `.bar` : flex: 1, background: var(--default)\n"
+        )
+        res = check_draft(draft)
+        assert res.should_reject
+        assert "flex_column_bars" in [i.kind for i in res.issues]
 
     def test_draft_vide_noop(self):
         res = check_draft("")

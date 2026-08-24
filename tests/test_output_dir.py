@@ -156,6 +156,16 @@ def _mock_nodes_for_output_test(monkeypatch, coder_writes_file):
         ), None
     monkeypatch.setattr(dspy_mod, "execute_architect_node", fake_architect)
 
+    # Drafter mocké (F-167) : le helper mocke TOUS les nœuds LLM ; l'oubli du
+    # Drafter était masqué par des spawns llama-server qui échouaient vite en
+    # suite (timeout 1 s) — mais avec le GPU libre le VRAI serveur démarrait
+    # (~30 s/test, non-déterminisme : draft réel injecté ou pas selon l'état
+    # GPU). Retour (None, None) = « Drafter crashé » → pas de draft, chemin
+    # identique à l'historique de ces tests.
+    async def fake_drafter(sub, model, s):
+        return None, None
+    monkeypatch.setattr(dspy_mod, "execute_drafter_node", fake_drafter)
+
     async def fake_coder(sub, model, s):
         # Le Coder écrit un fichier RELATIF → doit atterrir dans le run dir (cwd courant).
         coder_writes_file(sub)

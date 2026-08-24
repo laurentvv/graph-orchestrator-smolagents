@@ -269,11 +269,26 @@ class DrafterSignature(dspy.Signature):
            (fonctions, algorithmes), et les edge cases à gérer.
         3. Sois PRÉCIS sur la logique algorithmique : étapes exactes, variables clés,
            conditions, boucles. Le Coder doit pouvoir implémenter sans ambiguïté.
-        4. Pour les visualiseurs/animations : précise le mécanisme de timing (await sleep,
+        4. PRESCRIPTION PAR VALEURS EXACTES (RÈGLE ABSOLUE — le Coder ne devine RIEN
+           et suit ton plan À LA LETTRE, F-167) : toute propriété que tu prescris doit
+           porter sa valeur exacte :
+           - Variables CSS : `--bg: #0f172a` (nom + valeur hex). Une liste de noms
+             seuls (« --bg, --surface, --text ») = variables JAMAIS définies =
+             thème mort (var() consommées, bloc :root absent).
+           - Hauteurs de barres en % : prescrire AUSSI la hauteur FIXE en px du
+             conteneur parent (`#board { height: 240px }`). Un % sans référent
+             px = hauteur 0 = board vide.
+           - Couleurs : hex exact (`#3b82f6`), pas seulement « bleu ». Effectifs :
+             N = 30. Plages : min/max. Délais : en ms.
+           - Compteurs : précise le moment exact de l'incrément (ex :
+             `comparisons++` à CHAQUE comparaison, AVANT le test d'échange —
+             jamais uniquement lors des swaps).
+        5. Pour les visualiseurs/animations : précise le mécanisme de timing (await sleep,
            requestAnimationFrame avec 1 itération/frame), la sync DOM après chaque opération
            (mettre à jour les hauteurs/couleurs des éléments après swap).
-        5. N'écris PAS de code complet — décris l'intention et la logique. Des snippets
-           courts (signature de fonction, structure HTML) sont OK, mais pas de fichiers entiers.
+        6. Pas de fichiers de code entiers — mais des snippets courts (signature de
+           fonction, bloc :root complet avec valeurs, structure HTML) sont OK et
+           ATTENDUS. « Décrire l'intention » ne signifie JAMAIS « omettre les valeurs ».
 
         ANTI-PIÈGES (leçons de prod — PRÉCISES dans ton plan) :
         - Canvas : fillRect(x, y, w, h) dessine depuis le coin HAUT-GAUCHE. y = canvas.height
@@ -282,25 +297,35 @@ class DrafterSignature(dspy.Signature):
           Utiliser await sleep(ms) avec UNE itération par appel asynchrone.
         - Sync DOM : après un swap de valeurs, TOUJOURS mettre à jour l'affichage
           (bar.style.height = newValue) avant de continuer.
+        - % sans référent : une hauteur en pourcentage n'a de sens QUE si la hauteur
+          FIXE (px) du conteneur parent est prescrite dans le même plan (F-167).
+        - Compteur de comparaisons : il mesure les COMPARAISONS (incrément à chaque
+          test de paire), pas les échanges — sinon il compte les swaps (F-167).
         - Init : le tableau doit être généré ET affiché au chargement (pas de barres vides).
           TOUJOURS prescrire l'initialisation robuste : `if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', init); } else { init(); }` ou un appel direct `init();` à la racine de script.js.
 
-        FORMAT DE SORTIE :
+        FORMAT DE SORTIE (l'exemple ci-dessous montre la DENSITÉ DE VALEURS attendue —
+        adapte les valeurs à TA spec, ne les recopie pas aveuglément) :
         ## Fichier : index.html
-        - Structure : container, h1, div#chart (ou canvas), boutons (ids), slider, compteur
+        - Structure : container, h1, div#chart, boutons (ids), slider, compteur
         - IDs DOM exacts : startBtn, resetBtn, speedRange, counter, chart
         - <link> vers styles.css, <script src="script.js">
 
         ## Fichier : styles.css
-        - Thème sombre avec bloc :root définissant toutes les variables (--bg, --surface, --text, --default, --sorted, --accent)
-        - Layout flex, .bar avec transition height et background
-        - 3 classes d'état : .comparing, .sorted, .default
+        - Thème sombre : bloc :root COMPLET avec valeurs :
+          `--bg: #0f172a; --text: #e2e8f0; --default: #64748b; --comparing: #3b82f6; --sorted: #22c55e;`
+        - #chart : display flex (row), align-items flex-end, height 240px (référent des
+          hauteurs % des barres), gap 4px
+        - .bar : flex 1, transition height .3s ease + background-color .3s ease
+        - 3 classes d'état : .comparing, .sorted, .default (chacune sa couleur hex)
 
         ## Fichier : script.js
-        - Variables : arr[], isSorting, speed, comparisons
-        - generateArray() : crée N valeurs aléatoires, appelle draw()
-        - draw() : pour chaque valeur, crée/met à jour un div.bar avec height proportionnelle en px
-        - bubbleSort() : async, boucle while(swapped) avec await sleep(speed) à chaque comparaison,
+        - Variables : arr[], N = 30, maxVal = 100, isSorting, speed = 50, comparisons = 0
+        - generateArray() : crée N valeurs aléatoires 1..maxVal, appelle draw()
+        - draw() : pour chaque valeur, div.bar avec height = (v/maxVal)*100% (le parent
+          #chart a une height fixe), classe .default
+        - bubbleSort() : async, boucle while(swapped) avec await sleep(speed) à chaque
+          comparaison, comparisons++ à CHAQUE paire testée AVANT l'éventuel swap,
           swap = échange valeurs + MAJ height du DOM (bar.style.height)
         - Event listeners : startBtn → bubbleSort, resetBtn → generateArray, speedRange → speed
         - Init : initialisation robuste immédiate (if document.readyState === 'loading' ... else init())

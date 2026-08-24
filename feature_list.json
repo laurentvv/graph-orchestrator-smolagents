@@ -1430,6 +1430,17 @@
         "F-137",
         "F-164"
       ]
+    },
+    {
+      "id": "F-167",
+      "name": "Densité prescriptive du Drafter — prompt à valeurs exactes + draft_gate + retry",
+      "description": "Cause racine des livrables creux (runs 0857/1448, F164-6) : le FORMAT DE SORTIE creux du prompt Drafter (F-150/F-154), cloné à la lettre par Ornith-1.0 ET 1.5 (A/B F-167 — l attribution au GGUF 1.5 était une corrélation fallacieuse). Fix 3 volets : (1) DrafterSignature durci (règle valeurs exactes + exemple dense), (2) draft_gate F-91 étendu aux 2 signatures de creux (variables CSS sans valeurs, hauteur % sans parent px), (3) retry Drafter unique avec feedback déterministe au rejet densité (workflows), le Coder partant de zéro en dernier recours.",
+      "status": "completed",
+      "dependencies": [
+        "F-91",
+        "F-154",
+        "F-166"
+      ]
     }
   ]
 }
