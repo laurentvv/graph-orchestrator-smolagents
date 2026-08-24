@@ -582,7 +582,10 @@ def build_tester_agent(model, task: dict, settings, tester_max_steps: int,
     )
 
     model_settings = ModelSettings(
-        max_tokens=settings.reasoning_max_tokens,
+        # F-168 : cap no-think dédié (4096) — le Tester tourne sur le 9B
+        # no-think (~5 t/s) ; reasoning_max_tokens (16384) laissait une
+        # réponse dégénérée courir ~50 min (run 1835, tué à 25 min/7172 toks).
+        max_tokens=settings.no_think_max_tokens,
         timeout=settings.llm_timeout_s,
     )
     if toolsets:

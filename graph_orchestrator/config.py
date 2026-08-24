@@ -680,6 +680,14 @@ class Settings:
     # Rétention des records d'idempotence en jours (défaut 14, aligné sur qm).
     idempotency_retention_days: int = 14
 
+    # F-168 : cap de génération dédié au spec no-think (9B sans thinking, ~5 t/s
+    # en local). Avant : le Tester pydantic et le Coder ULTRA héritaient de
+    # REASONING_MAX_TOKENS (16384) → une réponse dégénérée courait jusqu'à
+    # ~50 min (run 1835 : génération de 7172+ tokens en 25+ min, run tué).
+    # 4096 tokens ≈ 12 min pire cas — les sorties légitimes observées du
+    # Tester/ULTRA tiennent en 2-4k tokens.
+    no_think_max_tokens: int = 4096
+
 
 def load_settings() -> Settings:
     """Construit les settings depuis l'environnement (avec valeurs par défaut)."""
@@ -698,6 +706,7 @@ def load_settings() -> Settings:
         ),
         reasoning_max_tokens=_get_int("REASONING_MAX_TOKENS", 8192),
         fast_max_tokens=_get_int("FAST_MAX_TOKENS", 12000),
+        no_think_max_tokens=_get_int("NO_THINK_MAX_TOKENS", 4096),
         coder_temperature=_get_float("CODER_TEMPERATURE", 0.2),
         llm_timeout_s=_get_float("LLM_TIMEOUT_S", 600.0),
         judge_confidence_threshold=_get_float("JUDGE_CONFIDENCE_THRESHOLD", 0.7),

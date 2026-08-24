@@ -1,20 +1,47 @@
 # État d'Avancement du Sprint
 
-## Objectif Actuel : F-167 livré & mergé (PR #121) ; run de revalidation TUÉ à 1h51 — F-168 (convergence Tester + garde runaway) à planifier
-> **F-167 VALIDÉ en production** : PR #121 mergée (c09ceb5, Kilo PASS), puis run
-> E2E de 0 `bubble-sort-multifile-v6` (18:35) — draft **4 944 o gate PASS en 1re
-> passe** (vs 1 260 o creux), livrable avec `:root` COMPLET à valeurs et 14
-> `var()` définies : la pathologie « thème mort » (0857/1448) est ÉRADIQUÉE
-> jusqu'au livrable. **Mais le run a été tué à 20:26 (1h51) à la demande user,
-> sans verdict** : les échecs sont TOUS en aval du Drafter (candidats F-168) —
-> (1) Tester thrashé (16 steps evaluate_script, erreur JS, AUCUN final_answer),
-> (2) sauvetage DSPy cassé 2 façons (validation CoderOutput string_type PUIS
-> JSONAdapter parse fail) → fallback failure, (3) le 4B a laissé un crash JS au
-> clic (attrapé par le Static Tester — fail-closed a tenu), (4) escalade ULTRA
-> it.3 : contexte 1,16 M tokens/step puis **GÉNÉRATION EN FUIE** (7 172 tokens
-> en 25 min sur une seule réponse) → kill manuel. SUITE à planifier avec
-> l'utilisateur : F-168 = convergence Tester (sonde final_answer + fix rescue
-> DSPy ×2) + garde runaway (cap tokens/génération sans progression d'outil).
+## Objectif Actuel : F-168 (sauvetage borné + cap no-think) livré — PR en review, puis relance du run E2E
+> Né du post-mortem du run 1835 (F-167 validé en prod, run tué à 1h51) : les
+> échecs étaient TOUS en aval du Drafter. **F-168 sur branche
+> `feat/f-168-rescue-bounds-nothink-cap`** : (1) sauvetage verdict BORNÉ
+> (`max_tokens=1200`/`timeout=300`/temp 0 + signature `fixed_json` texte brut
+> — plus de génération en fuite ni JSONAdapter crash), (2) passe DÉTERMINISTE
+> pré-LLM `_fill_required_defaults` (null/absent sur requis → Literal
+> "failure" fail-closed — répare le string_type du run 1835 sans réseau),
+> (3) `NO_THINK_MAX_TOKENS=4096` (config + .env sync) câblé Tester pydantic ET
+> Coder ULTRA (avant : 16384 hérités → pire cas ~50 min/réponse dégénérée,
+> observé 25 min/7172 toks). 13 tests nouveaux + 2 au nouveau contrat.
+> SUITE : suite complète verte → commit/PR → review Kilo → run E2E de
+> revalidation à relancer (le livrable F-167 était sain, c'est l'aval qui a
+> brûlé le budget).
+
+## Jalons de l'Itération (cycle F-168 — sauvetage borné + cap no-think, 2026-08-24)
+
+- [x] F168-1 : Diagnostic post-mortem run 1835 — (a) rescue `models.py:311`
+      sans max_tokens NI timeout (serveur accepte l'infini) → génération en
+      fuite 7172+ tokens/25 min ; (b) règle « mets null si absent » viole les
+      champs requis str/Literal → ValidationError string_type DANS le
+      sauvetage ; (c) 2e mode d'échec JSONAdapter parse fail ; (d) Tester
+      pydantic + ULTRA à `REASONING_MAX_TOKENS=16384` sur le 9B no-think 5,4
+      t/s → pire cas ~50 min. DuckDB #3440 (post-mortem) + #3443 (feat).
+- [x] F168-2 : `models.py` — `_fill_required_defaults` (Literal→"failure"
+      fail-closed, str→"", int/float→0, bool→False ; optionnels et types
+      inconnus intacts) + passe déterministe AVANT le sauvetage LLM + `dspy.LM`
+      borné (1200/300 s/temp 0.0) + signature `fixed_json` texte brut avec
+      extraction défensive `{...}` + remplissage post-parsing.
+- [x] F168-3 : `config.py` setting `no_think_max_tokens` (défaut 4096) +
+      `load_settings` NO_THINK_MAX_TOKENS + `.env.example`/`.env` synchronisés
+      (règle §7) ; câblé `nodes.py:_select_coder_spec` (ULTRA) et
+      `tester_pydantic.py:build_tester_agent` (ModelSettings).
+- [x] F168-4 : Tests — 13 nouveaux (`tests/test_f168_rescue_bounds.py` :
+      remplissage ×4, passe déterministe ×3 dont le verdict EXACT du run 1835,
+      LM borné + fixed_json ×2 via fake dspy, cap ×4) + 2 historiques mis au
+      nouveau contrat (`test_extract.py` absent→récupéré/incompatible→None ;
+      `test_tester_pydantic.py` cap no_think).
+- [x] F168-5 : Suite complète **2111 passed / 7 skipped / 0 échec** (passe
+      finale, après mise au contrat du fixture ULTRA `test_coder_hardening` —
+      SimpleNamespace sans `no_think_max_tokens`) → état disque + DuckDB
+      (#3440, #3443, done) + commit + PR → review Kilo.
 
 ## Jalons de l'Itération (cycle F-167 — densité prescriptive du Drafter, 2026-08-24)
 

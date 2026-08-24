@@ -52,9 +52,24 @@ class TestExtractWorkerOutput:
         result = extract_and_validate("ceci n'est pas du json", WorkerOutput)
         assert result is None
 
-    def test_schema_mismatch_returns_none(self):
-        # manque un champ requis
+    def test_missing_required_fields_recovered_f168(self):
+        # F-168 : champ requis ABSENT → passe déterministe (défaut typé :
+        # str→"", float→0.0) — réparation sans LLM du pattern « null si
+        # absent » des petits modèles (run 1835). Avant : None → retry nœud
+        # complet avec plus de contexte (feedback loop documentée F-61).
         result = extract_and_validate('{"task_id": "t1"}', WorkerOutput)
+        assert isinstance(result, WorkerOutput)
+        assert result.task_id == "t1"
+        assert result.summary == ""
+
+    def test_schema_mismatch_returns_none(self):
+        # valeur INCOMPATIBLE avec le type du champ : la passe déterministe
+        # F-168 ne répare que les absents/null — un float attendu reçu en
+        # string non numérique reste un échec (pas d'invention de valeur).
+        result = extract_and_validate(
+            '{"task_id": "t1", "summary": "s", "confidence_score": "pas-un-nombre"}',
+            WorkerOutput,
+        )
         assert result is None
 
     def test_no_llm_rescue_under_pytest(self, monkeypatch):
