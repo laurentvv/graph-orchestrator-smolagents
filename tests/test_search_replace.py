@@ -250,9 +250,11 @@ def test_search_replace_noop_rejected(tmp_path):
     assert p.read_text(encoding="utf-8") == before
 
 
-def test_search_replace_literal_newline_rejected(tmp_path):
+def test_search_replace_literal_newline_decoded(tmp_path):
+    """F-166 : le \\n littéral (backslash-n texte) dans new_string n'est plus
+    REJETÉ — il est DÉCODÉ en vrais sauts de ligne et l'édit est appliqué
+    (run 0857 : ~15 rejets d'affilée sur ce piège ont brûlé 80 steps LLM)."""
     p = _make_file(tmp_path)
-    before = p.read_text(encoding="utf-8")
     # Séquence EXACTE du run 1203 : \n littéral (backslash-n texte) après ';'.
     broken = "function a() {\\n    return 2;\\n}"
     res = search_replace(
@@ -260,7 +262,24 @@ def test_search_replace_literal_newline_rejected(tmp_path):
         old_string="function a() {\n    return 1;\n}",
         new_string=broken,
     )
-    assert "garde anti-\\n" in res
+    assert "Successfully edited" in res
+    assert "auto-fix F-166" in res
+    fixed = p.read_text(encoding="utf-8")
+    assert "function a() {\n    return 2;\n}" in fixed
+    assert ";\\n" not in fixed
+
+
+def test_search_replace_decoded_still_noop_rejected(tmp_path):
+    """F-166 : old/new différents en brut mais IDENTIQUES une fois décodés →
+    rejet explicite (la « correction » du run 0857 était un no-op encodé)."""
+    p = _make_file(tmp_path)
+    before = p.read_text(encoding="utf-8")
+    res = search_replace(
+        path=str(p),
+        old_string="function a() {\n    return 1;\n}",
+        new_string="function a() {\\n    return 1;\\n}",
+    )
+    assert "F-166" in res and "NO-OP" in res
     assert p.read_text(encoding="utf-8") == before
 
 
@@ -304,12 +323,15 @@ def test_literal_newline_non_code_file_ignored(tmp_path):
     assert "Successfully edited" in res
 
 
-def test_write_file_literal_newline_rejected(tmp_path):
+def test_write_file_literal_newline_decoded(tmp_path):
+    """F-166 : le content tout-littéral est décodé puis écrit (rejet historique
+    remplacé par l'auto-fix)."""
     p = tmp_path / "game.js"
     res = write_file(path=str(p), content="const a = 1;\\nconst b = 2;\n")
-    assert "garde anti-\\n" in res
-    assert "'content'" in res
-    assert not p.exists()
+    assert "Successfully wrote" in res
+    assert "auto-fix F-166" in res
+    assert p.exists()
+    assert p.read_text(encoding="utf-8") == "const a = 1;\nconst b = 2;\n"
 
 
 def test_edit_file_noop_rejected(tmp_path):
@@ -321,27 +343,29 @@ def test_edit_file_noop_rejected(tmp_path):
     assert p.read_text(encoding="utf-8") == before
 
 
-def test_edit_file_literal_newline_rejected(tmp_path):
+def test_edit_file_literal_newline_decoded(tmp_path):
+    """F-166 : new_string littéral décodé au lieu d'être rejeté."""
     p = _make_file(tmp_path)
-    before = p.read_text(encoding="utf-8")
     res = edit_file(
         path=str(p),
         old_string="return 1;",
         new_string="return 2;\\n",
     )
-    assert "garde anti-\\n" in res
-    assert p.read_text(encoding="utf-8") == before
+    assert "Successfully updated" in res
+    assert "auto-fix F-166" in res
+    assert "return 2;\n" in p.read_text(encoding="utf-8")
 
 
-def test_multi_replace_literal_newline_rejected(tmp_path):
+def test_multi_replace_literal_newline_decoded(tmp_path):
+    """F-166 : bloc littéral décodé au lieu d'être rejeté."""
     p = _make_file(tmp_path)
-    before = p.read_text(encoding="utf-8")
     res = multi_replace(
         path=str(p),
         replacements=[{"old_string": "return 1;", "new_string": "return 2;\\n"}],
     )
-    assert "garde anti-\\n" in res
-    assert p.read_text(encoding="utf-8") == before
+    assert "1/1" in res
+    assert "auto-fix F-166" in res
+    assert "return 2;\n" in p.read_text(encoding="utf-8")
 
 
 def test_multi_replace_noop_rejected(tmp_path):

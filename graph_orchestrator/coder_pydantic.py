@@ -181,6 +181,25 @@ def check_run_state() -> str:
     return _tools.check_run_state()
 
 
+def fix_known_error(path: str, error_message: str) -> str:
+    """Applies a DETERMINISTIC fix for mechanically-known error classes (F-133/F-166).
+
+    Use when a console error has a PROVEN mechanical fix:
+      - "Assignment to constant variable 'X'" → all `const X =` become `let X =`;
+      - "SyntaxError / Unexpected token" caused by literal \\n separators in the
+        FILE (backslash-n text) → replaced by real newlines (fence-aware).
+    ALWAYS re-test after: navigate_page(reload) + list_console_messages. If no
+    known class matches, the tool says so — fix via search_replace instead.
+
+    Args:
+        path: The code file to fix (html/js/css/ts/py/vue/svelte only, relative).
+        error_message: The exact console error text (verbatim).
+    """
+    from . import tools as _tools
+
+    return _tools.fix_known_error(path=path, error_message=error_message)
+
+
 def load_skill(skill_name: str) -> str:
     """Loads the FULL content of a skill listed in the skills catalog.
 
@@ -207,6 +226,7 @@ def build_coder_custom_tools() -> list:
         visual_check,
         check_run_state,
         load_skill,
+        fix_known_error,
     ]
 
 
@@ -383,6 +403,9 @@ def _build_devtools_block(task: dict, vision_available: bool = True) -> str:
         "`discover_ui()` — learn the REAL DOM ids/dimensions; never guess a selector.",
         "UI FUZZING: `fuzz_click_all_buttons()` then `fuzz_keyboard_controls()`, then re-check `list_console_messages()`.",
         "If errors occur: FIX via `search_replace` (never rewrite the whole file), then re-test (navigate, console, fuzz).",
+        "MECHANICAL ERRORS (F-166): for PROVEN mechanical classes — \"Assignment to constant variable 'X'\" "
+        "or a SyntaxError caused by literal \\n separators in the FILE — call "
+        "`fix_known_error(path, error_message)` FIRST (deterministic, <1 s), then reload + re-check console.",
     ]
     if visual_step:
         steps.append(visual_step)

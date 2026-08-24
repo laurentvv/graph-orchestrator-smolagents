@@ -27,6 +27,9 @@ après chaque édition : lance le formateur (prettier pour .html/.css/.js,
 l'output de l'outil** (« LSP errors detected… please fix »). Le modèle apprend
 immédiatement qu'il a produit une syntaxe invalide → boucle d'itérations stériles
 coupée sans appel LLM supplémentaire.
+> ✅ PORTÉ (F-164 pour write/edit/search/multi + **F-166 pour append_file**, le
+> dernier gap : `_post_edit_syntax_directive` sur tous les outils d'écriture,
+> node --check + détecteurs statiques, sans le formateur prettier).
 
 ### P3 — Cascade de réparation des search/replace ratés
 **aider** `aider/coders/search_replace.py:565` `flexible_search_and_replace` —
@@ -37,6 +40,12 @@ cascade exact → strip lignes vides (:611) → **indentation relative**
 d'indentation est appliqué mécaniquement au lieu de coûter un tour LLM.
 ⚠️ Piège documenté : le fuzzy SequenceMatcher (:296) est **désactivé** chez aider
 (`return` mort :184) — mauvais edits. À ne pas porter sans garde.
+> ✅ PORTÉ (F-137 puis **F-166** : RelativeIndenter + fallback diff par lignes
+> en difflib stdlib [équivalent dmp_lines_apply, 0 dépendance, gardes ratio
+> ≥ 0.75 / marge 0.05 / ≥ 4 lignes] complètent la cascade existante ; fuzzy
+> SequenceMatcher caractères NON porté, conforme au piège). Le préprocesseur de
+> TÊTE est l'auto-décodeur `\n` littéraux F-166 (`decode_literal_escapes`,
+> domicile canonique de la regex F-132 partagé garde/décodeur/repair F-133).
 
 ### P4 — Upgrade fence-aware du repair `\n` (F-133)
 **deer-flow** `models/mindie_provider.py:154-164`

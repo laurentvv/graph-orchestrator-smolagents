@@ -92,6 +92,32 @@ Source : `graph_orchestrator/nodes.py` (Coder), `graph_orchestrator/testers/web_
 | **Coder** | `coder` | 28 | Règles critiques (7), format sortie Python, workflow (selon stratégie simple/incremental/multifile/correction), fichiers cibles, preview DevTools, doc outils, **skills (eager + catalogue)**, contenu tâche |
 | **WebTester** | `web_tester` | 29 | Skill web-tester (corps complet), cahier des charges complet, checklist fonctionnalités, targeted re-test |
 
+#### F-166 — Auto-fixers du Coder (2026-08-24, post-mortem run 0857)
+
+Le Coder (les DEUX moteurs, smolagents et pydantic) bénéficie de fixers
+déterministes TRANSPARENTS dans les outputs de ses outils d'écriture :
+
+1. **Auto-décodage `\n`/`\t` littéraux** (`search_replace_utils.decode_literal_escapes`
+   + `tools._f166_effective_args`) : les arguments tout-littéraux (effet
+   r-string) de `write_file`/`append_file`/`edit_file`/`search_replace`/
+   `multi_replace` sont DÉCODÉS au lieu d'être rejetés (garde F-132 → note
+   `[auto-fix F-166 : …]` dans le message de succès). Le brut reste prioritaire
+   (pattern de réparation F-133 : `old_string` cite une séquence fautive déjà
+   présente dans le fichier corrompu).
+2. **Cascade aider P3 complétée** (`replace_most_similar_chunk`) :
+   `RelativeIndenter` (exact-match insensible au décalage global
+   d'indentation) + fallback diff par lignes difflib (équivalent
+   `dmp_lines_apply`, 0 nouvelle dépendance, gardes ratio ≥ 0.75 / marge 0.05 /
+   ≥ 4 lignes non vides — le fuzzy SequenceMatcher caractères d'aider reste
+   NON porté).
+3. **Diagnostic syntaxe P2 sur `append_file`** : `_post_edit_syntax_directive`
+   désormais apposée aussi au retour d'append (le pattern
+   write_file(squelette)+append_file(JS) expose ses SyntaxError à la seconde).
+4. **Outil `fix_known_error`** (F-133, ex-Tester-only) : exposé au Coder des
+   deux moteurs + documenté dans les prompts de validation (classes
+   mécaniques prouvées : const réassignée, `\n` littéraux fichier).
+
+
 ---
 
 ## 3. Inventaire des skills (11)

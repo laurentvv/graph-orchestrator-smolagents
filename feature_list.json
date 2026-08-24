@@ -1418,6 +1418,18 @@
       "dependencies": [
         "F-127"
       ]
+    },
+    {
+      "id": "F-166",
+      "name": "Auto-fixer au Coder — décodage \n littéraux, cascade aider P3, diagnostics P2, fix_known_error",
+      "description": "Donner l'auto-fixer au Coder et aux nœuds codeurs (décision user 2026-08-24, doctrine §8.3 code pur d'abord) : (1) auto-décodage des \n/\t littéraux dans les arguments de write/append/edit/search/multi_replace en amont des rejets F-132 — le piège du run 0857 (~15 rejets, 80 steps LLM brûlés) ; (2) complétion de la cascade aider P3 : RelativeIndenter + fallback diff par lignes difflib (0 nouvelle dépendance, gardes anti-mauvais-edit, fuzzy SequenceMatcher NON porté) ; (3) diagnostic syntaxe P2 sur append_file (dernier outil d'écriture sans directive) ; (4) outil fix_known_error F-133 exposé au Coder des deux moteurs + documenté dans les prompts mode correction.",
+      "status": "completed",
+      "dependencies": [
+        "F-132",
+        "F-133",
+        "F-137",
+        "F-164"
+      ]
     }
   ]
 }

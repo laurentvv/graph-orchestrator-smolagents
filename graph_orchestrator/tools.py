@@ -6,7 +6,12 @@ from smolagents import tool
 from .idempotency import get_current_store, make_op_key
 from .io_guard import ensure_read_allowed, ensure_write_allowed
 from .path_utils import normalize_tool_path
-from .search_replace_utils import find_similar_lines, replace_most_similar_chunk
+from .search_replace_utils import (
+    find_similar_lines,
+    replace_most_similar_chunk,
+    decode_literal_escapes,
+    CODE_SEPARATOR_NL_RE,
+)
 
 # --- Mutex par fichier (anti race-condition) ---------------------------------
 # Sérialise les écritures concurrentes sur un MÊME fichier. Inspiré d'openfox
@@ -652,11 +657,24 @@ def write_file(path: str, content: str) -> str:
                 "ERROR: write_file 'content' looks like a placeholder, not real code. "
                 "Provide the COMPLETE implementation. The file was NOT created."
             )
-        # F-132 : \n littéral en séparateur de code dans le contenu écrit (même
-        # cause racine que search_replace : r-string → SyntaxError JS permanent).
-        _lit = _literal_newline_rejection(path, str(content))
+        # F-132/F-166 : \n littéral en séparateur de code dans le contenu écrit
+        # (même cause racine que search_replace : r-string → SyntaxError JS
+        # permanent). F-166 : on DÉCODE au lieu de rejeter — le rejet ne survit
+        # que si le contenu décodé porte encore des littéraux (double
+        # échappement), cas où aucun fix mécanique n'est sûr.
+        _content = str(content)
+        _autofix_note = ""
+        _lit = _literal_newline_rejection(path, _content)
         if _lit:
-            return _lit.replace("'new_string'", "'content'")
+            _decoded, _n = decode_literal_escapes(_content)
+            _lit_d = _literal_newline_rejection(path, _decoded)
+            if _lit_d:
+                return _lit_d.replace("'new_string'", "'content'")
+            content = _decoded
+            _autofix_note = (
+                f" [auto-fix F-166 : {_n} séquence(s) '\\n'/'\\t' littérale(s) "
+                f"décodée(s) en vrais caractères]"
+            )
         
         # Garde anti-squelette HTML (bug "incremental" des petits modèles distants).
         if bool(re.search(r"<body[^>]*>\s*(?:<!--.*?-->\s*)*</body>", stripped, re.IGNORECASE | re.DOTALL)) or (
@@ -719,7 +737,11 @@ def write_file(path: str, content: str) -> str:
         with open(path, 'w', encoding='utf-8') as f:
             f.write(content)
         mark_write_done(path)
-        return f"Successfully wrote to {path} ({len(content)} chars)" + _post_edit_syntax_directive(path)
+        return (
+            f"Successfully wrote to {path} ({len(content)} chars)"
+            + _autofix_note
+            + _post_edit_syntax_directive(path)
+        )
     except Exception as e:
         return f"Error writing to file {path}: {str(e)}"
 
@@ -755,6 +777,22 @@ def append_file(path: str, content: str) -> str:
             return (
                 "ERROR: append_file 'content' looks like a placeholder, not real "
                 "code. Provide the COMPLETE section to append. The file was NOT modified."
+            )
+
+        # F-166 : même auto-décodeur que write_file — le chunk appendé tout-
+        # littéral (r-string) est décodé au lieu d'être rejeté.
+        _content = str(content)
+        _autofix_note = ""
+        _lit = _literal_newline_rejection(path, _content)
+        if _lit:
+            _decoded, _n = decode_literal_escapes(_content)
+            _lit_d = _literal_newline_rejection(path, _decoded)
+            if _lit_d:
+                return _lit_d.replace("'new_string'", "'content'")
+            content = _decoded
+            _autofix_note = (
+                f" [auto-fix F-166 : {_n} séquence(s) '\\n'/'\\t' littérale(s) "
+                f"décodée(s) en vrais caractères]"
             )
 
         # Mutex par fichier (sérialise les appends concurrents, comme write_file/openfox).
@@ -829,9 +867,14 @@ def append_file(path: str, content: str) -> str:
             # Feedback riche (inspiration SWE-agent ACI : état visible pour le modèle).
             new_total = existing + content
             line_count = new_total.count("\n") + (0 if new_total.endswith("\n") else 1)
+            # P2 (F-166, gap du run 0857 : write_file(squelette) + append_file(JS)
+            # — la SyntaxError du JS appendé doit être détectée ICI, pas 80
+            # steps plus tard au Linter/Tester).
             return (
                 f"Appended {len(content)} chars to {path}. "
                 f"File now {len(new_total)} chars, {line_count} lines."
+                + _autofix_note
+                + _post_edit_syntax_directive(path)
             )
     except Exception as e:
         return f"Error appending to file {path}: {str(e)}"
@@ -854,23 +897,28 @@ def edit_file(path: str, old_string: str, new_string: str, replace_all: bool = F
     if _denied:
         return _denied
     try:
-        # F-132 : no-op exact + \n littéral en séparateur de code (voir search_replace).
+        # F-132 : no-op exact (le \n littéral est géré par le helper F-166
+        # après lecture — rejet uniquement si même décodé il est fautif).
         _noop = _noop_rejection(old_string, new_string)
         if _noop:
             return _noop
-        _lit = _literal_newline_rejection(path, new_string)
-        if _lit:
-            return _lit
         with open(path, 'r', encoding='utf-8') as f:
             content = f.read()
 
+        # F-166 : arguments effectifs après auto-décodage éventuel.
+        old_string, new_string, _autofix_note, _rej = _f166_effective_args(
+            path, old_string, new_string, content
+        )
+        if _rej:
+            return _rej
+
         if old_string not in content:
             return "Error: old_string not found exactly as written. Ensure indentation and line endings match."
-        
+
         occurrences = content.count(old_string)
         if occurrences > 1 and not replace_all:
             return f"Error: old_string appears {occurrences} times. Must be unique or set replace_all=True."
-        
+
         if replace_all:
             new_content = content.replace(old_string, new_string)
         else:
@@ -884,6 +932,7 @@ def edit_file(path: str, old_string: str, new_string: str, replace_all: bool = F
         # P2 : diagnostics de syntaxe immédiats.
         return (
             f"Successfully updated {path} ({'all ' + str(occurrences) if replace_all else '1'} occurrences replaced)."
+            + _autofix_note
             + _post_fix_directive()
             + _post_edit_syntax_directive(path)
         )
@@ -1018,16 +1067,13 @@ def _post_fix_directive() -> str:
 # sur ce schéma exact (ligne 143 du livrable 1203 : `;\n                const
 # shape` littéral, constaté dans Chrome).
 # =============================================================================
-# `\n` littéral utilisé comme SÉPARATEUR DE CODE : après un point-virgule /
-# accolade / parenthèse fermante, ou avant un mot-clé/identifiant JS attendu.
-_NL_KEYWORDS = (
-    "const|let|var|function|return|if|else|for|while|switch|case|class|"
-    r"new\b|document\.|window\.|addEventListener|try|catch|import|export|"
-    r"async|await|def\b|print\("
-)
-_CODE_SEPARATOR_NL_RE = re.compile(
-    r"(?:(?<=[;{}()\[\]])\\n|\\n(?=\s*(?:" + _NL_KEYWORDS + r")))"
-)
+# F-166 (2026-08-24, run 0857 : ~15 rejets de suite sur ce piège, 80 steps
+# LLM brûlés) : la garde ne REJETTE plus les appels décodables — elle les
+# DÉCODE (voir _f166_effective_args / decode_literal_escapes). Le rejet ne
+# subsiste que si même décodé l'édit est un no-op ou un encodage double.
+# La regex vit désormais dans search_replace_utils (domicile canonique F-166,
+# partagé avec le décodeur et le repair F-133 d'auto_fixer).
+_CODE_SEPARATOR_NL_RE = CODE_SEPARATOR_NL_RE  # alias historique (garde F-132)
 # Fichiers où la séquence est quasi-certainement un bug d'échappement (le
 # périmètre Prompt-Vault : web vanilla + python). Hors ces extensions, la
 # séquence peut être légitime (JSON, markdown, .env) → pas de garde.
@@ -1092,6 +1138,70 @@ def _noop_rejection(old_string: str, new_string: str) -> str | None:
         return None
 
 
+def _f166_effective_args(
+    path: str, old_string: str, new_string: str, original: str
+) -> tuple[str, str, str, str | None]:
+    """F-166 : arguments EFFECTIFS d'une édition après auto-décodage des
+    séquences échappées littérales (\\n/\\t backslash-n/t texte).
+
+    Retourne (old_eff, new_eff, note, rejection) :
+      - note : fragment de message décrivant l'auto-fix appliqué ("" si aucun) ;
+      - rejection : message de rejet à retourner IMMÉDIATEMENT, sinon None.
+
+    Le BRUT reste prioritaire (pattern de réparation F-133 : old_string cite
+    littéralement une séquence fautive DÉJÀ PRÉSENTE dans le fichier corrompu —
+    il faut pouvoir la trouver telle quelle). Chaque argument est donc décodé
+    INDÉPENDAMMENT, et seulement si nécessaire :
+      - old_string : décodé si absent du fichier et que sa version décodée y est ;
+      - new_string : décodé si la garde F-132 le juge fautif (\\n littéral en
+        séparateur de code — run 0857 : ~15 rejets d'affilée sur ce piège).
+    Après décodage, les gardes F-132 sont RÉÉVALUÉES sur les effectifs : un
+    no-op décodé ou des littéraux résiduels (double échappement) reçoivent un
+    rejet explicite — jamais d'édit silencieux dégradé.
+    """
+    lit_new = _literal_newline_rejection(path, new_string)
+    old_ok = bool(old_string) and old_string in original
+    if lit_new is None and (old_ok or not str(old_string).strip()):
+        return old_string, new_string, "", None
+
+    old_eff, new_eff, parts = old_string, new_string, []
+    if not old_ok and str(old_string).strip():
+        old_d, n_old = decode_literal_escapes(old_string)
+        if n_old and old_d in original:
+            old_eff = old_d
+            parts.append(f"{n_old} dans 'old_string'")
+    if lit_new is not None:
+        new_d, n_new = decode_literal_escapes(new_string)
+        if n_new:
+            noop_d = _noop_rejection(old_eff, new_d)
+            if noop_d:
+                return (
+                    old_string, new_string, "",
+                    "ERROR (F-166) : même après décodage automatique des séquences "
+                    "littérales backslash-n, ton édition reste un NO-OP ('old_string' "
+                    "et 'new_string' décodés sont identiques) — elle ne change RIEN. "
+                    "Réécris 'new_string' avec le VRAI contenu corrigé (différent de "
+                    "'old_string'). Le fichier n'a PAS été modifié.",
+                )
+            lit_d = _literal_newline_rejection(path, new_d)
+            if lit_d is not None:
+                return old_string, new_string, "", lit_d
+            new_eff = new_d
+            parts.append(f"{n_new} dans 'new_string'")
+
+    if old_eff == old_string and new_eff == new_string:
+        # Rien n'a pu être décodé : rejets historiques intacts.
+        if lit_new is not None:
+            return old_string, new_string, "", lit_new
+        return old_string, new_string, "", None
+
+    note = (
+        f" [auto-fix F-166 : {', '.join(parts)} — séquence(s) '\\n'/'\\t' "
+        f"littérale(s) décodée(s) en vrais caractères]"
+    )
+    return old_eff, new_eff, note, None
+
+
 @tool
 def search_replace(path: str, old_string: str, new_string: str, replace_all: bool = False) -> str:
     """Surgically edits a file by replacing the 'old_string' block with the 'new_string' block.
@@ -1131,19 +1241,26 @@ def search_replace(path: str, old_string: str, new_string: str, replace_all: boo
         _noop = _noop_rejection(old_string, new_string)
         if _noop:
             return _noop
-        # F-132 : \n littéral en séparateur de code dans le texte INSÉRÉ
-        # (old_string reste libre : il doit pouvoir cibler une séquence fautive
-        # déjà présente dans le fichier pour la RÉPARER).
-        _lit = _literal_newline_rejection(path, new_string)
-        if _lit:
-            return _lit
 
         lock = _file_lock(path)
         with lock:
             with open(path, "r", encoding="utf-8") as f:
                 original = f.read()
 
+            # F-166 : arguments effectifs après auto-décodage des \n/\t littéraux
+            # (run 0857 : ~15 rejets F-132 d'affilée sur ce piège — le rejet
+            # pédagogique ne débloquait PAS le 4B, le décodage mécanique oui).
+            # Les gardes F-132 (no-op, \n littéral) sont réévaluées sur les
+            # effectifs DANS le helper : le brut reste prioritaire (pattern de
+            # réparation F-133 : old cite la séquence fautive du fichier).
+            old_string, new_string, _autofix_note, _rej = _f166_effective_args(
+                path, old_string, new_string, original
+            )
+            if _rej:
+                return _rej
+
             # 'old_string' vide = ajout en fin de fichier (utile pour compléter un fichier).
+            _match_note = ""
             if not old_string.strip():
                 new_content = original
                 if new_content and not new_content.endswith("\n"):
@@ -1155,6 +1272,7 @@ def search_replace(path: str, old_string: str, new_string: str, replace_all: boo
                 new_content = original.replace(old_string, new_string)
             else:
                 new_content = replace_most_similar_chunk(original, old_string, new_string)
+                _match_note = replace_most_similar_chunk.last_note
 
             if new_content is None:
                 # Échec : feedback pédagogique avec les lignes les plus proches.
@@ -1184,6 +1302,8 @@ def search_replace(path: str, old_string: str, new_string: str, replace_all: boo
         # modèle sait à la seconde s'il a cassé la syntaxe.
         return (
             f"Successfully edited {path} via SEARCH/REPLACE."
+            + _autofix_note
+            + _match_note
             + _post_fix_directive()
             + _post_edit_syntax_directive(path)
         )
@@ -1223,24 +1343,31 @@ def multi_replace(path: str, replacements: list) -> str:
                 
             success_count = 0
             errors = []
+            notes = []
             
             for i, rep in enumerate(replacements):
                 old_str = rep.get("old_string", "")
                 new_str = rep.get("new_string", "")
-                
+
                 if _is_placeholder(new_str):
                     errors.append(f"Block {i}: 'new_string' is a placeholder. Skipping.")
                     continue
 
-                # F-132 : no-op exact + \n littéral en séparateur de code.
+                # F-132 : no-op exact (le \n littéral est géré par le helper
+                # F-166 après résolution des arguments effectifs).
                 _noop = _noop_rejection(old_str, new_str)
                 if _noop:
                     errors.append(f"Block {i}: no-op exact (old == new). {(_noop.splitlines() or [''])[0]}")
                     continue
-                _lit = _literal_newline_rejection(path, new_str)
-                if _lit:
-                    errors.append(f"Block {i}: {(_lit.splitlines() or [''])[0]}")
+                # F-166 : arguments effectifs après auto-décodage éventuel.
+                old_str, new_str, _note, _rej = _f166_effective_args(
+                    path, old_str, new_str, content
+                )
+                if _rej:
+                    errors.append(f"Block {i}: {(_rej.splitlines() or [''])[0]}")
                     continue
+                if _note:
+                    notes.append(f"Block {i}:{_note}")
 
                 if not old_str.strip():
                     # Append if old_string is empty
@@ -1272,6 +1399,8 @@ def multi_replace(path: str, replacements: list) -> str:
 
         # F-128 : rappel post-fix si des erreurs console attendent re-vérification.
         msg = f"Successfully applied {success_count}/{len(replacements)} replacements to {path}."
+        if notes:
+            msg += "\n".join([""] + notes)
         if errors:
             msg += "\nSome errors occurred:\n" + "\n".join(errors)
         return msg + _post_fix_directive() + _post_edit_syntax_directive(path)

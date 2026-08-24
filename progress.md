@@ -1,18 +1,83 @@
 # État d'Avancement du Sprint
 
-## Objectif Actuel : F-165 (fixes enregistrement verdicts) livré — reprendre la validation E2E post-merge puis phase 4
-> Exécution de la séquence recommandée du plan approuvé (PR #107) : 3.1-3.7
-> TOUTES LIVRÉES (Coder F-158, gardes F-159, MCP F-160, vision F-161, Tester
-> F-162, gardes d'écriture F-164) + F-163 pool navigateur FAIT. **F164-6
-> (validation E2E post-merge) TENTÉE le 2026-08-24 et INVALIDÉE** : run 021543
-> coupé — la réfutation KG lue par le Coder itér. 2 était dupliquée + tronquée
-> + mensongère (erreur d'outil du Tester classée « assertion en échec ») →
-> **F-165** (fixes A/B/C de l'enregistrement, 12 tests) LIVRÉ + règle AGENTS.md
-> §8.2 « base > log » (PR #116). Côtés positifs du run faussé : pool F-163
-> impeccable (1 Chrome/run, shutdown propre), garde CSS F-164 tenue (var()
-> avec fallback, remplissage OK). Suite prioritaire : **re-valider E2E
-> post-merge sur main mergé F-165**, puis phase 4 du plan (PlaywrightBrowser
-> A/B, FallbackModel, TestModel CI, Media Stores, WarnOnCacheBusts).
+## Objectif Actuel : F-166 (auto-fixer au Coder) livré — PR en review, puis mission 2 (failles F164-6) à planifier
+> Décision user 2026-08-24 (~10:00, post-run 0857) : « donner l'auto-fixer au
+> Coder et à tous les nœuds qui codent de la logique » — doctrine §8.3 « code
+> pur d'abord » : ~80 steps LLM brûlés sur un fix mécanique (\n littéraux +
+> doublon startBtn) qu'un fixer déterministe fait en <1 s. **F-166 LIVRÉ sur
+> branche `feat/f-166-autofixer-coder`** : auto-décodage \n/\t littéraux en
+> amont des gardes F-132 (les 5 outils d'écriture), cascade aider P3 complétée
+> (RelativeIndenter + diff lignes difflib, 0 dépendance), directive P2 sur
+> append_file, fix_known_error exposé au Coder des 2 moteurs. Suite complète
+> 2079 passed ; validation isolation GO. SUITE : review Kilo de la PR puis
+> mission 2 F164-6 (claims ancrés sur preuve, run_id par exécution,
+> journalisation des échecs Coder) à planifier avec l'utilisateur.
+
+## Jalons de l'Itération (cycle F-166 — auto-fixer au Coder, 2026-08-24)
+
+- [x] F166-1 : État disque amorcé (feature_list F-166 in_progress, contract
+      C530-C533) + branche `feat/f-166-autofixer-coder` + événement DuckDB
+      #3168 (aucun run actif — vérifié process).
+- [x] F166-2 : `search_replace_utils.py` — (a) `decode_literal_escapes` :
+      décode `\n` en position séparateur de code + `\t` en tête de ligne ;
+      `\n` légitime dans une chaîne affichée INTACT (regex séparateur ne
+      matche pas). (b) **Regex F-132 unifiée** : elle vivait en 3 copies
+      (tools.py garde + auto_fixer.py repair + …) → domicile canonique
+      `CODE_SEPARATOR_NL_RE` ici, les 2 modules importent — l'outil ne peut
+      pas rejeter ce que le décodeur décode. (c) **RelativeIndenter** (port
+      fidèle aider :18-171, marqueur ←) : subtilité découverte au test — la
+      dent de 1re ligne du bloc encode son indentation ABSOLUE, celle de la
+      cible un DELTA → joker sur la 1re dent + préservation de la dent cible
+      (ré-indentation correcte), fenêtres alignées sur les paires (index
+      pair). (d) `_fuzzy_line_window_replace` : équivalent difflib stdlib de
+      `dmp_lines_apply` (0 nouvelle dépendance), DERNIER recours gardé :
+      ratio ≥ 0.75 (3 lignes identiques sur 4 = vrai cas valide, 0.8 trop
+      strict), marge ≥ 0.05 sur le 2e meilleur, ≥ 4 lignes non vides ;
+      `last_note` (attribut de fonction) signale les stratégies créatives au
+      message de succès. Fuzzy SequenceMatcher caractères d'aider NON porté
+      (désactivé en amont chez aider, piège documenté).
+- [x] F166-3 : `tools.py` — `_f166_effective_args` : arguments EFFECTIFS par
+      édition, brut prioritaire (pattern de réparation F-133 : old cite la
+      séquence fautive du fichier corrompu — testé non-régressé), chaque arg
+      décodé INDÉPENDAMMENT seulement si nécessaire (old absent du fichier,
+      new fautif garde F-132), gardes réévaluées sur les effectifs (no-op
+      décodé → rejet explicite « même après décodage … NO-OP »). Câblé sur
+      search_replace/edit_file/multi_replace + write_file/append_file
+      (content décodé si la garde le jugeait fautif ; rejet résiduel = double
+      échappement). Directive P2 `_post_edit_syntax_directive` apposée au
+      retour d'append_file (dernier outil d'écriture sans diagnostic — le
+      pattern write_file(squelette)+append_file(JS) expose ses SyntaxError à
+      la seconde ; testé avec l'erreur EXACTE du run 0857 : « Identifier
+      'startBtn' has already been declared » détectée à l'append).
+- [x] F166-4 : `fix_known_error` (F-133, ex-Tester-only) exposé au Coder des
+      DEUX moteurs : liste `coder_tools` nodes.py + custom tools
+      coder_pydantic.py + étape « MECHANICAL ERRORS » dans les prompts de
+      validation (smolagents + pydantic). Effet de bord : numérotation des
+      steps pydantic décalée d'une unité — test F-161 mis à jour (documenté).
+- [x] F166-5 : Tests — **31 nouveaux 0-LLM PASS** (tests/
+      test_f166_coder_autofix.py : decode ×5, RelativeIndenter ×4, fuzzy ×6,
+      effective_args ×4, intégration outils ×8, exposition ×3) dont
+      `test_run0857_trap_decoded_and_applied` = le cas EXACT du run 0857. **4
+      tests F-132 mis à jour au nouveau contrat** (le littéral n'est plus
+      rejeté mais décodé+appliqué — changement volontaire C530) + 2 tests
+      no-op décodé ajoutés. Suite complète **2079 passed, 7 skipped, 0
+      échec**. Gate F-103 : **1 erreur PRÉEXISTANTE** AG001 (AGENTS.md 19 614
+      octets > limite 16 384 — apportée par la doc PR #119 §10 enrichie, NON
+      touchée par F-166 ; à traiter par un condensé dédié).
+- [x] F166-6 : **Validation isolation `debug/run_coder.py` GO** — exécution
+      1 (génération from scratch, ~54 min GPU, 33+ steps : 3 fichiers
+      index.html 1 866 o / styles.css 3 429 o / script.js 4 840 o, boucle de
+      correction CSS saine, AUCUN rejet de garde ni activation auto-fix
+      nécessaire — encodage propre cette fois, la non-régression est le
+      point) + exécution 2 MODE CORRECTION it.2 (215 s, 2 steps, visual_check
+      6/6, CoderOutput success natif, linter_ok/vision_ok True, stall
+      detector tiré mais final_answer valide → succès conservé F-88) ;
+      livrable vérifié : node --check OK, 0 var CSS orpheline ; pool
+      navigateur + llama-server shutdown propres (0 résiduel).
+- [x] F166-7 : État disque (contract C530-C533 cochés, feature_list F-166
+      completed, NODES_AND_SKILLS §2.2 « Auto-fixers du Coder », README
+      §guardrails, CODE_PUR_ROADMAP P2/P3 marqués PORTÉS) + DuckDB + commit +
+      PR → review Kilo.
 
 ## Jalons de l'Itération (cycle F-165 — intégrité de l'enregistrement des verdicts)
 > Né du post-mortem du run 021543 (F164-6) : le graphe a rejeté un livrable sur

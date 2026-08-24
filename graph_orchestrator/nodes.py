@@ -1294,6 +1294,10 @@ Validation Workflow (perform AFTER creating files, BEFORE final_answer):
 3. UI FUZZING: Run `fuzz_click_all_buttons()` to click all buttons and uncover hidden JS bugs.
 4. `list_console_messages()` — MANDATORY LAST. Check 0 JS errors (SyntaxError, undefined, Uncaught).
 5. If errors occur: FIX via `search_replace` (or `write_file` if needed), then re-test (navigate, screenshot, fuzz, console).
+   MECHANICAL ERRORS (F-166): for PROVEN mechanical classes — "Assignment to constant variable 'X'"
+   or a SyntaxError caused by literal `\\n` separators in the FILE — call
+   `fix_known_error(path, error_message)` FIRST (deterministic fix, <1 s), then reload + re-check
+   console. Reserve `search_replace` for everything else.
 6. GAME/ANIMATED CANVAS: A static screenshot does NOT prove animation — call `probe_canvas_activity()`
    and require ANIMATING status before final_answer.
 ⚠️ If `navigate_page` TIMEOUTS on your LOCAL page: the JS thread is frozen (infinite loop). Check your while loops.
@@ -1352,9 +1356,9 @@ async def execute_coder_node(
             read_file, write_file, append_file, list_directory,
             search_replace, multi_replace, edit_file,
             read_python_skeleton, check_js_syntax, check_run_state, log_event,
-            visual_check
+            visual_check, fix_known_error
         )
-        coder_tools = [list_directory, read_file, read_python_skeleton, check_js_syntax, write_file, append_file, edit_file, search_replace, multi_replace, check_run_state, log_event, visual_check, DuckDuckGoSearchTool()]
+        coder_tools = [list_directory, read_file, read_python_skeleton, check_js_syntax, write_file, append_file, edit_file, search_replace, multi_replace, check_run_state, log_event, visual_check, fix_known_error, DuckDuckGoSearchTool()]
         coder_tools.extend(c7_tools)
         # On redonne tous les outils web au coder, incluant vision (DevTools ON par
         # défaut — le feedback console est critique pour que le Coder corrige ses
