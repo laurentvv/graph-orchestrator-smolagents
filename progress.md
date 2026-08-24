@@ -1,22 +1,20 @@
 # État d'Avancement du Sprint
 
-## Objectif Actuel : F-167 (densité prescriptive du Drafter) livré — PR en review
-> Mission « Debug du Drafter » (décision user 2026-08-24 post-run F-166 :
-> « c'est le levier n°1 pour la qualité des livrables »). **RENVERSEMENT
-> DIAGNOSTIQUE par A/B isolation** : Ornith-1.0 ET Ornith-1.5 avec le prompt
-> d'alors clonaient le MÊME draft creux de 1 260 o (variables :root sans
-> valeurs, hauteur % sans parent) — la cause racine était le FORMAT DE SORTIE
-> creux du `DrafterSignature` (introduit F-150/F-154 le 22/08, postérieur au
-> golden #19 du 18/08), PAS le GGUF Ornith-1.5 (attribution F164-6 fallacieuse
-> par coïncidence de calendrier). **F-167 LIVRÉ sur branche
-> `feat/f-167-drafter-density`** : (1) prompt durci (règle « prescription par
-> valeurs exactes » + exemple dense), (2) draft_gate F-91 étendu aux 2
-> signatures de creux (`css_vars_no_values`, `pct_height_no_parent`) + faux
-> positif F-124 corrigé (check par bloc), (3) retry Drafter unique avec
-> feedback déterministe. Validation A/B/C : creux rejeté (les 2 modèles),
-> dense (4851 o, `:root` hex, `height 240px`, compteur avant swap) PASSES le
-> gate. SUITE : review Kilo de la PR, puis run E2E de revalidation du golden
-> run (§10) avec le prompt durci.
+## Objectif Actuel : F-167 livré & mergé (PR #121) ; run de revalidation TUÉ à 1h51 — F-168 (convergence Tester + garde runaway) à planifier
+> **F-167 VALIDÉ en production** : PR #121 mergée (c09ceb5, Kilo PASS), puis run
+> E2E de 0 `bubble-sort-multifile-v6` (18:35) — draft **4 944 o gate PASS en 1re
+> passe** (vs 1 260 o creux), livrable avec `:root` COMPLET à valeurs et 14
+> `var()` définies : la pathologie « thème mort » (0857/1448) est ÉRADIQUÉE
+> jusqu'au livrable. **Mais le run a été tué à 20:26 (1h51) à la demande user,
+> sans verdict** : les échecs sont TOUS en aval du Drafter (candidats F-168) —
+> (1) Tester thrashé (16 steps evaluate_script, erreur JS, AUCUN final_answer),
+> (2) sauvetage DSPy cassé 2 façons (validation CoderOutput string_type PUIS
+> JSONAdapter parse fail) → fallback failure, (3) le 4B a laissé un crash JS au
+> clic (attrapé par le Static Tester — fail-closed a tenu), (4) escalade ULTRA
+> it.3 : contexte 1,16 M tokens/step puis **GÉNÉRATION EN FUIE** (7 172 tokens
+> en 25 min sur une seule réponse) → kill manuel. SUITE à planifier avec
+> l'utilisateur : F-168 = convergence Tester (sonde final_answer + fix rescue
+> DSPy ×2) + garde runaway (cap tokens/génération sans progression d'outil).
 
 ## Jalons de l'Itération (cycle F-167 — densité prescriptive du Drafter, 2026-08-24)
 
