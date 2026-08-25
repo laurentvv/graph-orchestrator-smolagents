@@ -1462,6 +1462,15 @@
         "F-162",
         "F-168"
       ]
+    },
+    {
+      "id": "F-170",
+      "name": "Continuité graphe sur mort Coder + verdict arraché post-budget",
+      "description": "Run v4 (2026-08-25) : UsageLimitExceeded a 40 requetes tuait le run ENTIER avant Linter/Tester/Judge alors que le livrable etait ecrit. (alpha) _run_agent_with_budget_salvage (coder_pydantic.py) : sur budget epuise, historique capture via capture_run_messages rejoue dans un appel borne (request_limit=3 dedie, sans outil) qui arrache un CoderOutput honnete ; (epsilon) workflows.py : plus AUCUN return sur mort du Coder — CoderOutput synthetise si None, continuation commit/KG/Linter/Static/audits/Judge, refutation deterministe = relance Coder iteration suivante, epuisement = Escalade existante ; (obs) evenement DuckDB coder/error au crash + CODER_MAX_STEPS 40->60 (1 appel outil = 1 requete pydantic).",
+      "status": "completed",
+      "dependencies": [
+        "F-169"
+      ]
     }
   ]
 }

@@ -1,20 +1,63 @@
 # État d'Avancement du Sprint
 
-## Objectif Actuel : F-169 (moteur UNIQUE pydantic + gardiens DSPy) livré — PR à venir, puis 1er run 100 % pydantic
-> **Constat clé (vérif user, confirmé par marqueurs logs)** : les runs
-> 1835/2223 tournaient **100 % smolagents** (`CODER_ENGINE`/`TESTER_ENGINE`
-> commentés → défaut silencieux ; marqueurs pydantic absents des logs) — la
-> spirale de parsing du Tester était une pathologie de CE moteur. **F-169
-> (suite de session, même branche que F-168)** : (1) retrait total des
-> exécutions smolagents Coder/Tester (`execute_coder_node` -408 l.,
-> `web_tester.py` 409→32 l., settings ENGINE + PREFILL supprimés des
-> config/.env — plus rien à sélectionner), ToolCallingAgents exploration
-> intacts ; (2) gardiens DSPy `_dspy_structure_rescue` dans `_run_dspy_node`
-> (Judge/Architect/Security/Router/Drafter : parse-fail avec transport réussi
-> → cascade F-168 ; champ str unique = réponse entière sauvée). 13 tests
-> nouveaux + 7 re-pointés vers les sources pydantic. SUITE : PR → Kilo →
-> **relance du run E2E = premier 100 % harness pydantic** (wind-down,
-> IdleBreaker, timeout wall-clock).
+## Objectif Actuel : F-170 (le Coder n'a pas autorité pour arrêter un run) — codé + testé sur branche, PR à passer
+> **Mandat user (post-mortem run v4)** : « faut que ça tourne dans le graph,
+> le Coder n'a pas autorité pour stopper un run surtout, même crash ».
+> Branche `feat/f-170-coder-crash-continuity` (DuckDB #3645). **(α)** verdict
+> arraché post-budget : `_run_agent_with_budget_salvage` (coder_pydantic.py)
+> capture l'historique (`capture_run_messages`, API publique pydantic-ai) et
+> sur `UsageLimitExceeded` rejoue le tout dans un appel borné (budget DÉDIÉ
+> de 3 requêtes, hors contexte de capture — limite documentée) avec
+> `_BUDGET_SALVAGE_PROMPT` (verdict immédiat SANS outil, honnête sur les
+> vérifications non faites) ; GuardAbort/transport restent des échecs propres
+> sans sauvetage. **(ε)** workflows.py : le `return {"reason": "Coder crash"}`
+> est SUPPRIMÉ — CoderOutput synthétisé si None, continuation commit/KG/
+> Linter/Static/audits/Judge sur l'état disque, réfutation déterministe =
+> relance Coder à l'itération suivante, épuisement = Escalade existante ;
+> événement DuckDB `coder/error` au crash (base muette du run v4 comblée) ;
+> `CODER_MAX_STEPS` 40→60 (1 appel d'outil = 1 requête pydantic, rituel
+> visuel non batché). Tests `tests/test_f170_coder_continuity.py` ×10
+> (helper fake-agent ×6 + workflow E2E pattern test_escalation ×4).
+
+## Jalons de l'Itération (cycle F-170 — continuité graphe + verdict post-budget, 2026-08-25 après-midi)
+
+- [x] F170-1 : Branches + DuckDB #3645 ; lecture doc pydantic-ai usage
+      limits (règle F-157) : `capture_run_messages` capture même sur
+      exception (état partiel), `message_history` + `UsageLimits` frais par
+      appel — pattern sauvetage validé AVANT de coder.
+- [x] F170-2 : (α) coder_pydantic.py — `_BUDGET_SALVAGE_PROMPT` +
+      `_run_agent_with_budget_salvage` (helper testable) ; run_coder_pydantic
+      délègue, None propre si sauvetage raté ; imports redondants purgés.
+- [x] F170-3 : (ε) workflows.py — continuation sur mort Coder (synthèse
+      CoderOutput honnête, plus de return) + journalisation DuckDB
+      coder/error ; import CoderOutput en tête.
+- [x] F170-4 : (budget) CODER_MAX_STEPS 40→60 (config défaut + load_settings
+      + .env + .env.example, règle §7) ; test défaut mis au nouveau contrat.
+- [x] F170-5 : Tests ×10 PASS (11 s) + suites voisines 86 PASS ; contract
+      C545-C548 + feature_list F-170 + ce fichier.
+- [ ] F170-6 : Suite complète pytest → DuckDB + commit + PR → review Kilo →
+      STOP ; revalidation E2E (run v5) à la session suivante.
+
+## Jalons de l'Itération (run de revalidation v4 + post-mortem, 2026-08-25 midi)
+
+- [x] v4-1 : Lancement run E2E (DuckDB #3642) + vigie 5 min TOUT VERT :
+      marqueurs `Coder (pydantic)` présent / `LoggedOpenAIServerModel` absent,
+      draft 4 944 o gate F-91/F-167 PASS, caps F-168 jamais sollicités.
+- [x] v4-2 : Run terminé T+30 — ÉCHEC technique `UsageLimitExceeded`
+      (`CODER_MAX_STEPS=40` consommés en 27 min, 146 K tokens générés,
+      40 tours, contexte borné 8-12 K — aucune pathologie des runs 24/08).
+- [x] v4-3 : Post-mortem base>log (règle §8.2) — base MUETTE (0 evt),
+      diagnostic via log llama-server (40 prompt evals ; cycles 8→12 K =
+      rituel visuel ~5 tours répété) + lecture du livrable.
+- [x] v4-4 : Test navigateur du livrable (Chrome MCP + `http.server 8791`,
+      refermés — hygiène §7) : compteur 425 = comparaisons RÉELLES →
+      F-167 validé au niveau livrable (1re fois que le bug golden #19 ne
+      se reproduit pas) ; bug marquage `.sorted` confirmé en live.
+- [x] v4-5 : Fixes F-170 FAITS (cf. cycle F-170 ci-dessus) : (α) budget
+      Coder + verdict arraché ; (ε) continuation après mort Coder ;
+      observabilité coder/error ; compaction F-159 priorité BAISSÉE
+      (contexte borné naturellement sur chemin pydantic) ; run_id par
+      exécution (backlog a) restant ouvert.
 
 ## Jalons de l'Itération (cycle F-169 — moteur unique pydantic + gardiens DSPy, 2026-08-24 nuit)
 
@@ -41,8 +84,8 @@
       sources pydantic (web_tester_functional ×3, targeted_retest ×2,
       requirements ×1, plan_files ×1 — le prompt-building vit dans
       tester_pydantic/coder_pydantic).
-- [ ] F169-5 : Suite complète verte → DuckDB (#3594) + commit + PR → Kilo →
-      relance du run E2E (premier 100 % pydantic).
+- [x] F169-5 : Suite complète verte → DuckDB (#3594) + commit + PR #123 →
+      MERGÉE (Kilo PASS, 2026-08-25) → run E2E relancé (cf. run v4 ci-dessus).
 
 ## Jalons de l'Itération (cycle F-168 — sauvetage borné + cap no-think, 2026-08-24)
 
