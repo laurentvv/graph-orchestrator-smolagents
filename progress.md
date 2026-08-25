@@ -1,24 +1,20 @@
 # État d'Avancement du Sprint
 
-## Objectif Actuel : F-171 (vérificateurs déterministes du Coder) — branche feat/f-171-coder-verifier-hooks, puis run E2E v6 outillé
-> **Mandat user (session 2026-08-25 PM, post-run v5 arrêté)** : « GO F-171 et
-> relance un vrai run bien outillé ». Run v5 arrêté manuellement à T+71 min
-> (DuckDB #3739) : F-170 validé en live (crash Coder iter1 → continuation +
-> evt #3737), mais itération 2 en rituel visuel lent (40 pas, ctx 12,4 K)
-> sans verdict ; script.js iter2 portait le bug `init()` (récursion infinie →
-> `RangeError` au chargement — invisible au lint, prouvé en live via Chrome
-> headless stderr) ; finding d'assertion du Tester lossy partout.
-> **F-171 (GO user A+B après revue références)** : (A) capability
-> pydantic-ai `Hooks` `after_tool_execute` sur les outils d'écriture →
-> `lint_file`+`check_js_syntax` sur le seul fichier écrit, findings
-> CONSULTATIFS au retour d'outil (pattern aider `lint_edited`, Hooks NATIFS
-> confirmés dans pydantic-ai 2.33.0 installé) ; (B) smoke Chrome headless
-> `--dump-dom --enable-logging=stderr` (file://, 0 serveur, 0 LLM) au chemin
-> verdict F-170 : tour correctif borné 5 req (run réussi) + injection des
-> findings réels dans le sauvetage post-budget. Settings
-> `CODER_STATIC_VERIFY`/`CODER_SMOKE_VERDICT` (défaut on, fail-open).
-> SUITE : PR + merge → **run E2E v6 outillé** (revalidation golden #19 §10
-> toujours en attente — v5 n'a pas rendu de verdict).
+## Objectif Actuel : F-171 MERGÉ (PR #126, main 568e20d) — run E2E v6 outillé en cours (revalidation golden #19 §10)
+> **Mandat user (session 2026-08-25 PM)** : « stop le run, analyse son
+> résultat, mais surtout GO F-171 et relance un vrai run bien outillé ».
+> F-171 **MERGÉ** (GO user direct) : (A) Hooks pydantic-ai `after_tool_execute`
+> sur les outils d'écriture → findings statiques CONSULTATIFS au retour
+> d'outil ; (B) smoke Chrome headless au chemin verdict F-170 (tour correctif
+> borné 5 req + injection findings réels dans le sauvetage post-budget) ;
+> détecteur validé LIVE sur le bug `init()` du run v5. Run v5 arrêté T+71 min
+> sans verdict (DuckDB #3739). **Run v6 EN COURS** : vigie marqueurs
+> `[F-171]` (smoke verdict + advisory statique), verdict attendu <45 min ;
+> si approbation → test navigateur livrable (compteur comparaisons ~420-435,
+> :root hex, 30 barres, marquage .sorted) + MAJ §10/progress/DuckDB.
+> Backlog constaté : 2 échecs PRÉEXISTANTS test_static_tester (sonde
+> temporelle live Chrome, sans lien F-171 — stash-prouvé) + gate AG001
+> AGENTS.md 19276 o (préexistante main) → cycle dédié.
 
 ## Jalons de l'Itération (cycle F-171 — vérif déterministe post-écriture + smoke verdict, 2026-08-25 soir)
 
@@ -50,9 +46,20 @@
       advisory apposé/silencieux, live Chrome récursion flaggée, salvage ×6)
       + régression F-168/F-170/guards 62 PASS ; contract C549-C552 +
       feature_list F-171 + ce fichier.
-- [ ] F171-6 : Suite complète 0 échec → commit + PR → merge (GO user direct)
-      → **run E2E v6 outillé** (vigie : marqueurs `[F-171]`, verdict attendu
-      <45 min, test navigateur livrable si approbation → MAJ §10).
+- [x] F171-6 : Suite complète 2153 passed / 7 skipped / 2 échecs
+      PRÉEXISTANTS (test_static_tester sonde live Chrome — stash-prouvés sans
+      lien F-171) → commit 39118c6 + PR #126 → **MERGÉE (568e20d, GO user
+      direct)**, branche supprimée, retour main, DuckDB #3802.
+
+## Jalons de l'Itération (run E2E v6 outillé — revalidation golden #19, 2026-08-25 soir)
+
+- [ ] v6-1 : Lancement run E2E v6 (main 568e20d, DuckDB run_id f171) + vigie
+      5 min : marqueurs moteur F-169, draft dense F-167, NOUVEAUX marqueurs
+      `[F-171]` (smoke verdict, advisory statique post-écriture).
+- [ ] v6-2 : Surveillance périodique jusqu'au verdict (<45 min attendu).
+- [ ] v6-3 : Verdict → si approbation : test navigateur livrable (compteur
+      comparaisons ~420-435, :root hex, 30 barres, tri croissant, .sorted)
+      + MAJ §10 AGENTS.md/progress/DuckDB ; si rejet : post-mortem base>log.
 
 ## Jalons de l'Itération (cycle docs — refonte README + doc technique, 2026-08-25)
 
