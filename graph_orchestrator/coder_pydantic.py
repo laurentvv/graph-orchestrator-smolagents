@@ -252,6 +252,22 @@ When done, call the `final_result` tool with ALL fields:
 - linter_ok: true ONLY after a real syntax check (check_js_syntax / python skeleton) reported no error
 - vision_ok: true ONLY if you visually verified the rendered UI through a tool (screenshot); otherwise false"""
 
+# F-170 : verdict arraché après épuisement du budget de requêtes (run v4 :
+# 40 tours consommés par le rituel de vérification → UsageLimitExceeded →
+# None → le run entier mourait au Coder). L'historique capturé est rejoué ;
+# le modèle n'a plus LE DROIT d'appeler un outil — verdict honnête immédiat.
+_BUDGET_SALVAGE_PROMPT = (
+    "REQUEST BUDGET EXHAUSTED — FINAL VERDICT NOW, NO TOOLS.\n"
+    "Your request budget is over; any further tool call will fail this run. "
+    "Call the final_result tool IMMEDIATELY with an HONEST verdict based ONLY on "
+    "work already done: the files already written on disk are what counts (not "
+    "your intentions), and checks you did NOT perform must be reported as not "
+    "performed (linter_ok=false if no syntax check really ran, vision_ok=false "
+    "if the page was not really navigated and verified). status='failure' if "
+    "the deliverable is incomplete. The graph will audit the files on disk "
+    "regardless — claiming unperformed work buys nothing."
+)
+
 
 def _strategy_block(strategy: str, sections: list, iteration: int) -> str:
     """Bloc workflow par stratégie — parité nodes.py, adapté au moteur pydantic.
@@ -717,6 +733,63 @@ def build_coder_agent(model, task: dict, settings, coder_max_tokens: int,
 # Exécution du nœud (contrat identique à execute_coder_node smolagents)
 # ============================================================
 
+async def _run_agent_with_budget_salvage(agent, user_prompt: str, settings):
+    """Exécute l'agent Coder ; sur épuisement du budget de requêtes, arrache
+    un verdict final honnête (F-170 α).
+
+    Retourne le ``AgentRunResult`` ou None (échec propre : garde, crash
+    transport, ou sauvetage raté — le graphe continue alors sur l'état disque,
+    F-170 ε). Le budget épuisé n'est PAS une amnésie : l'historique complet
+    est capturé via ``capture_run_messages`` (API publique pydantic-ai, état
+    partiel inclus) puis rejoué dans un appel borné sans outils où l'agent
+    rend son CoderOutput final. Le sauvetage court HORS du contexte de
+    capture (limite documentée : une 2e exécution dans le même contexte n'y
+    serait pas capturée) avec son PROPRE budget de requêtes.
+    """
+    from pydantic_ai import capture_run_messages
+    from pydantic_ai.exceptions import UsageLimitExceeded
+    from pydantic_ai.usage import UsageLimits
+
+    from .coder_pydantic_guards import GuardAbort
+
+    result = None
+    budget_exhausted = False
+    with capture_run_messages() as run_messages:
+        try:
+            result = await agent.run(
+                user_prompt,
+                usage_limits=UsageLimits(
+                    request_limit=settings.coder_max_steps,
+                    tool_calls_limit=settings.coder_max_steps * 3,
+                ),
+            )
+        except GuardAbort as exc:
+            print(f"[-] Coder (pydantic) GARDÉ-ABORT propre ({exc})")
+            return None
+        except UsageLimitExceeded as exc:
+            budget_exhausted = True
+            print(f"[~] Coder (pydantic) : budget de requêtes épuisé ({exc}) "
+                  f"— arrachage du verdict final (F-170).")
+        except Exception as exc:  # noqa: BLE001 — échec propre, le graphe continue
+            print(f"[-] Coder (pydantic) ÉCHEC ({type(exc).__name__}: {exc})")
+            return None
+    if budget_exhausted:
+        try:
+            result = await agent.run(
+                _BUDGET_SALVAGE_PROMPT,
+                message_history=list(run_messages),
+                usage_limits=UsageLimits(request_limit=3),
+            )
+            salvaged = result.output if isinstance(result.output, CoderOutput) else None
+            print(f"[+] Coder (pydantic) : verdict post-budget arraché "
+                  f"(status={salvaged.status if salvaged else '?'}) — le graphe continue.")
+        except Exception as exc:  # noqa: BLE001 — le graphe continue sur l'état disque (F-170 ε)
+            print(f"[-] Coder (pydantic) : sauvetage post-budget échoué "
+                  f"({type(exc).__name__}: {exc}) — retour None, audits disque.")
+            return None
+    return result
+
+
 async def run_coder_pydantic(
     task: dict, settings
 ) -> Tuple[Optional[CoderOutput], Optional[NodeMetrics]]:
@@ -731,7 +804,6 @@ async def run_coder_pydantic(
     """
     from pydantic_ai.models.openai import OpenAIChatModel, OpenAIModelProfile
     from pydantic_ai.providers.openai import OpenAIProvider
-    from pydantic_ai.usage import UsageLimits
 
     from .llama_server import model_lifecycle
     from .nodes import _select_coder_spec  # import tardif : anti-circularité
@@ -744,8 +816,6 @@ async def run_coder_pydantic(
     reset_read_supply()
     reset_write_proof()
     reset_visual_audit()
-
-    from .coder_pydantic_guards import GuardAbort
 
     coder_spec, coder_max_tokens, is_ultra = _select_coder_spec(task, settings)
     if is_ultra:
@@ -822,27 +892,11 @@ async def run_coder_pydantic(
                 vision_available=settings.coder_pydantic_vision,
             )
             print(f"[*] Coder (pydantic) — llama-server prêt : {srv.api_base}")
-            try:
-                result = await agent.run(
-                    user_prompt,
-                    usage_limits=UsageLimits(
-                        request_limit=settings.coder_max_steps,
-                        tool_calls_limit=settings.coder_max_steps * 3,
-                    ),
-                )
-            except GuardAbort as exc:
+            result = await _run_agent_with_budget_salvage(agent, user_prompt, settings)
+            if result is None:
                 duration = time.time() - t0
-                print(f"[-] Coder (pydantic) GARDÉ-ABORT propre ({exc})")
-                return None, NodeMetrics(
-                    node=node_label,
-                    model=str(coder_spec.model or ""),
-                    duration_s=duration,
-                    input_tokens=None,
-                    output_tokens=None,
-                )
-            except Exception as exc:  # noqa: BLE001 — échec propre, le graphe continue
-                duration = time.time() - t0
-                print(f"[-] Coder (pydantic) ÉCHEC ({type(exc).__name__}: {exc})")
+                print("[-] Coder (pydantic) : pas de verdict final — échec propre, "
+                      "le graphe continue sur l'état disque (F-170).")
                 return None, NodeMetrics(
                     node=node_label,
                     model=str(coder_spec.model or ""),

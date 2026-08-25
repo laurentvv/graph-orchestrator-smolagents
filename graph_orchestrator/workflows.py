@@ -41,7 +41,7 @@ from .idempotency import IdempotencyStore, _scoped_idempotency
 from .validation_criteria import MAX_VISUAL_CRITERIA
 from .knowledge_graph import KnowledgeGraph
 from .logging_utils import NodeMetrics, render_observability_table
-from .models import ArchitectOutput, FinalSynthesis, WorkerOutput
+from .models import ArchitectOutput, CoderOutput, FinalSynthesis, WorkerOutput
 from .nodes import (
     aggregate_adversary_verdicts,
     build_fast_model,
@@ -1001,13 +1001,39 @@ async def _run_coding_workflow_inner(
                     sub_metrics.append(m1)
 
                 if not coder_res or coder_res.status == "failure":
+                    # F-170 : le Coder n'a PAS autorité pour arrêter le run
+                    # (mandat run v4 : un UsageLimitExceeded après 27 min tuait
+                    # TOUT le graphe alors que le livrable était écrit sur
+                    # disque). Le graphe CONTINUE sur l'état présent : commit git
+                    # → KG → Linter/Static Tester (gardes déterministes) →
+                    # audits LLM → Judge. Une réfutation déterministe relance
+                    # le Coder à l'itération suivante en mode correction
+                    # (mécanisme existant) ; l'échec technique n'est plus qu'un
+                    # signal (prev_coder_died F-111 + événement DuckDB ci-dessous).
                     ultra_signals["coder_died"] = True
-                    print(f"    [-] Le Coder a échoué techniquement sur {subtask.task_id}.")
+                    print(f"    [-] Le Coder a échoué techniquement sur {subtask.task_id} — "
+                          f"F-170 : le graphe CONTINUE (audits sur l'état disque).")
+                    if not coder_res:
+                        coder_res = CoderOutput(
+                            task_id=subtask.task_id,
+                            status="failure",
+                            details="Coder crash — aucun résultat (échec technique) ; "
+                                    "livrable non auto-vérifié, audits sur l'état disque (F-170).",
+                        )
                     _sync_plan_files(make_event(
                         subtask.task_id, iteration, "coder_failed",
-                        (coder_res.details if coder_res and coder_res.details else "aucun résultat"),
+                        coder_res.details,
                     ))
-                    return {"status": "failure", "reason": "Coder crash"}, sub_metrics
+                    # Journalisation DuckDB (post-mortem run v4 : la base était
+                    # muette sur une mort Coder — aucun nœud aval n'a tourné).
+                    try:
+                        from .event_stream import get_event_db
+                        get_event_db().log_event(
+                            run_id, "coder", "error",
+                            f"{subtask.task_id} iter{iteration} crash : {str(coder_res.details)[:300]}",
+                        )
+                    except Exception:
+                        pass
 
                 # F-48 : commit l'état post-Coder dans le git local du run. Permet
                 # d'extraire le diff (lignes modifiées) pour le Tester (re-test ciblé

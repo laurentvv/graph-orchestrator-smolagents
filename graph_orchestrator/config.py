@@ -269,7 +269,13 @@ class Settings:
     # tiennent plus → boucle de mort max-steps → checklist 0/N → retry. Le golden
     # #11 (018a5b6, cap d'époque 30-40) clôturait au step 29-30. 30 = golden + marge
     # rituel, sans retour au thrash de 48.
-    coder_max_steps: int = 40
+    # 40→60 (F-170, run v4 2026-08-25) : sur moteur pydantic, chaque appel
+    # d'outil = 1 requête ; l'écriture 3 fichiers (~12 req) + rituel visuel
+    # navigate/screenshot/visual_check ×5 critères non batché ont épuisé 40
+    # en 27 min SANS final_answer. 60 = build + ~2 cycles de vérification +
+    # marge ; l'épuisement n'est plus mortel de toute façon (verdict arraché
+    # F-170 α + continuation graphe F-170 ε).
+    coder_max_steps: int = 60
     # F-169 : le moteur d'exécution du Coder et du Web Tester est UNIQUEMENT
     # pydantic-ai-harness (décision user 2026-08-24 « enlève le CodeAgent de
     # smolagents ») — coder_pydantic.py / tester_pydantic.py. Les settings
@@ -721,7 +727,7 @@ def load_settings() -> Settings:
         feedback_max_chars=_get_int("FEEDBACK_MAX_CHARS", 2000),
         tester_max_steps=_get_int("TESTER_MAX_STEPS", 20),
         tester_inline_skill_resources=_get_bool("TESTER_INLINE_SKILL_RESOURCES", True),
-        coder_max_steps=_get_int("CODER_MAX_STEPS", 40),
+        coder_max_steps=_get_int("CODER_MAX_STEPS", 60),
         coder_writefile_max_lines=_get_int("CODER_WRITEFILE_MAX_LINES", 100),
         # Prefill ````python (2026-08-22) : llama-server continue le dernier
         # message assistant incomplet → la réponse démarre DANS un bloc code

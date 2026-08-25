@@ -56,12 +56,14 @@ def _make_idle_agent(name="CodeAgent"):
 # ==========================================
 
 class TestCoderMaxStepsConfig:
-    def test_default_is_40(self):
-        """Le défaut du champ coder_max_steps est 40."""
+    def test_default_is_60(self):
+        """Le défaut du champ coder_max_steps est 60 (F-170 : rituel visuel
+        pydantic non batché — 1 appel d'outil = 1 requête — épuisait 40 sans
+        final_answer, run v4 2026-08-25)."""
         import dataclasses
         from graph_orchestrator.config import Settings
         field = next(f for f in dataclasses.fields(Settings) if f.name == "coder_max_steps")
-        assert field.default == 40
+        assert field.default == 60
 
     def test_env_override(self, monkeypatch):
         """CODER_MAX_STEPS=25 dans l'env → valeur lue appliquée."""
