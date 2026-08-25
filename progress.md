@@ -24,6 +24,20 @@
 > <45 min ; si Judge approuve → test navigateur livrable (compteur
 > comparaisons §10) + MAJ §10/progress/DuckDB.
 
+## Jalons de l'Itération (cycle docs — refonte README + doc technique, 2026-08-25)
+
+- [x] Docs-1 : Point d'avancement complet (167 features : 148 completed /
+      17 cancelled / 2 pending F-87+F-119, 0 in_progress ; migration
+      pydantic F-169 TERMINÉE = moteur unique ; run E2E v5 lancé 13:53 EN
+      COURS en parallèle — non touché). README.md refondu (épuré : badges,
+      highlights tableau, quick start, pipeline Mermaid, golden runs
+      condensés + note d'honnêteté #19 invalidé/F-167, statut projet) ;
+      profondeur technique déplacée vers docs/TECHNICAL_DOCS.md (13
+      sections F-xxx : gardes, compaction v2/v3, F-170, MTP F-123, pool
+      F-163, KG F-68, migration pydantic, isolation) ; info périmée
+      CODER_ENGINE/TESTER_ENGINE retirée (moteur unique depuis F-169).
+      Branche feat/readme-refresh → PR.
+
 ## Jalons de l'Itération (cycle F-170 — continuité graphe + verdict post-budget, 2026-08-25 après-midi)
 
 - [x] F170-1 : Branches + DuckDB #3645 ; lecture doc pydantic-ai usage
