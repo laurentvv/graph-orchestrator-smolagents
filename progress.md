@@ -1,20 +1,28 @@
 # État d'Avancement du Sprint
 
-## Objectif Actuel : F-171 MERGÉ (PR #126, main 568e20d) — run E2E v6 outillé en cours (revalidation golden #19 §10)
-> **Mandat user (session 2026-08-25 PM)** : « stop le run, analyse son
-> résultat, mais surtout GO F-171 et relance un vrai run bien outillé ».
-> F-171 **MERGÉ** (GO user direct) : (A) Hooks pydantic-ai `after_tool_execute`
-> sur les outils d'écriture → findings statiques CONSULTATIFS au retour
-> d'outil ; (B) smoke Chrome headless au chemin verdict F-170 (tour correctif
-> borné 5 req + injection findings réels dans le sauvetage post-budget) ;
-> détecteur validé LIVE sur le bug `init()` du run v5. Run v5 arrêté T+71 min
-> sans verdict (DuckDB #3739). **Run v6 EN COURS** : vigie marqueurs
-> `[F-171]` (smoke verdict + advisory statique), verdict attendu <45 min ;
-> si approbation → test navigateur livrable (compteur comparaisons ~420-435,
-> :root hex, 30 barres, marquage .sorted) + MAJ §10/progress/DuckDB.
-> Backlog constaté : 2 échecs PRÉEXISTANTS test_static_tester (sonde
-> temporelle live Chrome, sans lien F-171 — stash-prouvé) + gate AG001
-> AGENTS.md 19276 o (préexistante main) → cycle dédié.
+## Objectif Actuel : runs v5/v6 arrêtés sans verdict — priorité aux fixes structurels des délais (F-172 pageId, rituel visuel borné, Tester vs animation)
+> **Décision user (2026-08-25 17:21)** : « stop le run, le reste pas important
+> vu les délais, on voit bien les problèmes ». Run v6 (outillé F-171) arrêté
+> à T+~1h50 en itération 3/3 (Tester en vol) — 3e run consécutif sans verdict
+> final (v4 crash 30 min, v5 stop 71 min, v6 stop 110 min). DuckDB #3803
+> (lancement), #3806 (arrêt + post-mortem complet).
+> **Validé en live par v6** : F-170 α (verdict arraché post-budget it1),
+> F-171 B smoke (3 tirs : post-budget it1 + verdict it2/it3, tous « console
+> propre »), livrable **sain dès T+11** (compteur comparaisons réel+live, pas
+> de récursion init(), :root hex) — le meilleur livrable v4/v5/v6.
+> **Les 3 problèmes structurels des délais** (constatés en base>log) :
+> (1) rituel visuel Coder : 60 req / 63 min en it1 alors que le livrable est
+> complet à T+11 ; (2) `evaluate_script` sans `pageId` tue Coder v5-it1 ET
+> Tester v6-it1 (3 occurrences du jour — candidat **F-172** : défaut pageId
+> dans le bridge, pattern F-50 filePath) ; (3) Tester rejète 2× un livrable
+> console-propre avec finding LOSSY en base (famille F164-6 — probable
+> sémantique .sorted cosmétique ou impatience vs animation 3,5 min @500 ms)
+> → chaque rejet = 15-25 min de boucle. FIX : F-172 + borne rituel visuel +
+> Tester slider→max avant assertions + critère .sorted tranché dans
+> l'Architect. Revalidation golden #19 §10 TOUJOURS en attente d'un verdict.
+> Backlog : 2 échecs PRÉEXISTANTS test_static_tester (sonde temporelle live
+> Chrome, sans lien F-171 — stash-prouvés) + gate AG001 AGENTS.md 19276 o
+> (préexistante main) → cycle dédié.
 
 ## Jalons de l'Itération (cycle F-171 — vérif déterministe post-écriture + smoke verdict, 2026-08-25 soir)
 
@@ -53,13 +61,23 @@
 
 ## Jalons de l'Itération (run E2E v6 outillé — revalidation golden #19, 2026-08-25 soir)
 
-- [ ] v6-1 : Lancement run E2E v6 (main 568e20d, DuckDB run_id f171) + vigie
-      5 min : marqueurs moteur F-169, draft dense F-167, NOUVEAUX marqueurs
-      `[F-171]` (smoke verdict, advisory statique post-écriture).
-- [ ] v6-2 : Surveillance périodique jusqu'au verdict (<45 min attendu).
-- [ ] v6-3 : Verdict → si approbation : test navigateur livrable (compteur
-      comparaisons ~420-435, :root hex, 30 barres, tri croissant, .sorted)
-      + MAJ §10 AGENTS.md/progress/DuckDB ; si rejet : post-mortem base>log.
+- [x] v6-1 : Lancement run E2E v6 (main 568e20d, DuckDB #3803) + vigie 5 min
+      TOUT VERT : marqueurs moteur F-169, draft dense F-167 (4 944 o, pas de
+      rejet gate), livrables 3/3 écrits dès T+11 (record v4/v5/v6), contexte
+      borné (3,7 K), qualité code vérifiée (compteur réel+live, PAS de
+      récursion init, :root hex, cleanup .comparing sans swap).
+- [x] v6-2 : Surveillance jusqu'à l'arrêt user (T+~1h50, DuckDB #3806) :
+      it1 budget 60 req rituel visuel → **F-170 α verdict arraché live** +
+      **F-171 B smoke post-budget « console propre »** ; Tester it1 MORT sur
+      evaluate_script (pageId, 3e occurrence du jour) → fail-closed ; it2
+      Coder 6,6 min + **smoke verdict normal « console propre »** + Tester
+      failure (finding lossy) → rejet ; it3 Coder 18,5 min verdict success +
+      smoke propre → Tester en vol À L'ARRÊT. Zéro fausse approbation,
+      zéro mort de run.
+- [x] v6-3 : ARRÊT USER (« trop long ») — pas de verdict final (3e run
+      consécutif). Post-mortem base>log intégré à l'Objectif Actuel : les 3
+      problèmes structurels identifiés + fixes candidats (F-172 pageId,
+      rituel visuel borné, Tester vs animation/.sorted).
 
 ## Jalons de l'Itération (cycle docs — refonte README + doc technique, 2026-08-25)
 
