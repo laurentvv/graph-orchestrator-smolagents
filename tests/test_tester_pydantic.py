@@ -501,26 +501,16 @@ class TestAgentAssembly:
 
 
 # ============================================================
-# Aiguillage TESTER_ENGINE
+# Moteur UNIQUE pydantic (F-169 — retrait du CodeAgent smolagents)
 # ============================================================
 
-class TestTesterEngineDispatch:
-    def test_config_default_smolagents(self, monkeypatch):
-        monkeypatch.delenv("TESTER_ENGINE", raising=False)
-        settings = load_settings()
-        assert settings.tester_engine == "smolagents"
-
-    def test_config_env_override_pydantic(self, monkeypatch):
-        monkeypatch.setenv("TESTER_ENGINE", "pydantic")
-        settings = load_settings()
-        assert settings.tester_engine == "pydantic"
-
+class TestTesterEnginePydanticOnly:
     @pytest.mark.anyio
-    async def test_webtestrunner_dispatches_to_pydantic(self, monkeypatch):
-        """TESTER_ENGINE=pydantic → WebTestRunner.run délègue à
-        run_tester_pydantic (lazy import → patch au niveau module)."""
-        import dataclasses
-
+    async def test_webtestrunner_delegates_to_pydantic_always(self, monkeypatch):
+        """F-169 : WebTestRunner.run délègue TOUJOURS à run_tester_pydantic —
+        l'exécution smolagents (CompactingCodeAgent + MCP Puppeteer) est
+        retirée du runner web (décision user 2026-08-24). Plus de setting
+        TESTER_ENGINE : rien à sélectionner."""
         import graph_orchestrator.tester_pydantic as tp
         from graph_orchestrator.testers.web_tester import WebTestRunner
 
@@ -531,34 +521,21 @@ class TestTesterEngineDispatch:
             return None, None
 
         monkeypatch.setattr(tp, "run_tester_pydantic", _fake_run)
-        settings = dataclasses.replace(load_settings(), tester_engine="pydantic")
-        await WebTestRunner().run(_base_task(), model=None, settings=settings)
+        await WebTestRunner().run(_base_task(), model=None, settings=load_settings())
         assert len(calls) == 1
         assert calls[0]["id"] == "bs-001"
 
-    @pytest.mark.anyio
-    async def test_unknown_engine_falls_back_with_warning(self, monkeypatch, capsys):
-        """Valeur inconnue → avertissement + chemin smolagents (on intercepte
-        AVANT la connexion MCP pour rester 0-réseau)."""
-        import dataclasses
-        import types
+    def test_smolagents_codeagent_absent_du_runner(self):
+        """Le corps de WebTestRunner.run ne référence PLUS CompactingCodeAgent
+        ni run_with_retry — source vérifiée, pas runtime."""
+        import inspect
+        from graph_orchestrator.testers import web_tester
 
-        from graph_orchestrator.testers.web_tester import WebTestRunner
+        body = inspect.getsource(web_tester.WebTestRunner.run)
+        assert "CompactingCodeAgent" not in body
+        assert "run_with_retry" not in body
+        assert "run_tester_pydantic" in body
 
-        settings = dataclasses.replace(load_settings(), tester_engine="turbo")
-        fake_mcp = types.ModuleType("mcp")
-
-        def _getattr(name):
-            if name == "StdioServerParameters":
-                raise RuntimeError("SMOLAGENTS_PATH_REACHED")
-            raise AttributeError(name)
-
-        fake_mcp.__getattr__ = _getattr
-        monkeypatch.setitem(sys.modules, "mcp", fake_mcp)
-
-        with pytest.raises(RuntimeError, match="SMOLAGENTS_PATH_REACHED"):
-            await WebTestRunner().run(_base_task(), model=None, settings=settings)
-        assert "TESTER_ENGINE inconnu" in capsys.readouterr().out
 
 
 # ============================================================

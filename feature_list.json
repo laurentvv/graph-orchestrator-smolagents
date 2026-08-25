@@ -1452,6 +1452,16 @@
         "F-165",
         "F-167"
       ]
+    },
+    {
+      "id": "F-169",
+      "name": "Moteur UNIQUE pydantic-ai-harness + gardiens structure DSPy",
+      "description": "Constat runs 1835/2223 : 100% moteur smolagents (marqueurs pydantic absents, ENGINE commenté → défaut silencieux) — spirale parsing CodeAgent du Tester = pathologie de CE moteur. Retrait : execute_coder_node et WebTestRunner.run deviennent pydantic-only (-408 l. / 409→32 l.), settings CODER_ENGINE/TESTER_ENGINE supprimés, .env purgés (PREFILL inclus). Gardiens DSPy : _dspy_structure_rescue (cascade miroir F-168) dans _run_dspy_node pour Judge/Architect/Security/Router/Drafter — sortie non parsée avec transport réussi = structure réparée (champ pydantic via extract_and_validate, champ str unique = section DSPI/réponse entière), échec → exception d origine.",
+      "status": "completed",
+      "dependencies": [
+        "F-162",
+        "F-168"
+      ]
     }
   ]
 }

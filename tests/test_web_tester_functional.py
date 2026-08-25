@@ -74,10 +74,16 @@ class TestSkillWebTester:
 # ==========================================
 
 class TestTesterPromptPropagation:
+    """F-169 : le prompt-building vit dans tester_pydantic (moteur UNIQUE) —
+    WebTestRunner.run n'est plus qu'une délégation. On inspecte les VRAIES
+    sources du moteur pydantic."""
+
     def test_run_accepte_original_content(self):
-        """WebTestRunner.run doit lire task['original_content'] (propagation de la spec).
-        On vérifie la signature/lecture sans lancer de navigateur (source inspection)."""
-        source = inspect.getsource(WebTestRunner.run)
+        """Le prompt du Tester doit lire task['original_content'] (propagation
+        de la spec) — sans lancer de navigateur (source inspection)."""
+        import graph_orchestrator.tester_pydantic as tp
+
+        source = inspect.getsource(tp.build_tester_user_prompt)
         # Le code doit référencer original_content (avec fallback sur content).
         assert "original_content" in source
         assert "full_requirements" in source
@@ -85,18 +91,21 @@ class TestTesterPromptPropagation:
         assert "COMPREHENSIVE SPECIFICATION" in source
 
     def test_run_mentionne_functional_logic_testing(self):
-        """Le prompt doit rappeler les assertions fonctionnelles dynamiques (ex-étape 4
-        'Functional Logic Testing', rewordée EN par F-152)."""
-        source = inspect.getsource(WebTestRunner.run)
+        """Le prompt doit rappeler les assertions fonctionnelles dynamiques
+        (ex-étape 4 'Functional Logic Testing', rewordée EN par F-152)."""
+        import graph_orchestrator.tester_pydantic as tp
+
+        source = inspect.getsource(tp)
         assert "functional assertions" in source.lower()
 
     def test_run_max_steps_adaptatif(self):
-        """Le tester a un max_steps ADAPTATIF (F-47) : 6 en mode ciblé (re-test bugs),
-        12 en mode complet. borne le temps d'investigation (GPU-local, anti-explosion
-        de contexte ToolCallingAgent observée à 24 steps — 405k tokens)."""
-        source = inspect.getsource(WebTestRunner.run)
-        # max_steps est maintenant dynamique (tester_max_steps), pas en dur.
-        assert "max_steps=tester_max_steps" in source
+        """Le tester a un max_steps ADAPTATIF (F-47) : TARGETED en mode ciblé
+        (re-test bugs), tester_max_steps en mode complet — borne le temps
+        d'investigation (anti-explosion de contexte observée à 24 steps)."""
+        import graph_orchestrator.tester_pydantic as tp
+
+        source = inspect.getsource(tp.run_tester_pydantic)
+        assert "tester_max_steps" in source
         assert "TARGETED_MAX_STEPS" in source  # mode ciblé (6 steps)
 
 

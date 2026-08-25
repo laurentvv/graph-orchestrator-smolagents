@@ -303,26 +303,15 @@ class TestBuildCoderAgent:
 
 
 # ============================================================
-# Aiguillage CODER_ENGINE
+# Moteur UNIQUE pydantic (F-169 — retrait du CodeAgent smolagents)
 # ============================================================
 
-class TestCoderEngineDispatch:
-    def test_config_default_smolagents(self, monkeypatch):
-        monkeypatch.delenv("CODER_ENGINE", raising=False)
-        settings = load_settings()
-        assert settings.coder_engine == "smolagents"
-
-    def test_config_env_override_pydantic(self, monkeypatch):
-        monkeypatch.setenv("CODER_ENGINE", "pydantic")
-        settings = load_settings()
-        assert settings.coder_engine == "pydantic"
-
+class TestCoderEnginePydanticOnly:
     @pytest.mark.anyio
-    async def test_execute_coder_node_dispatches_to_pydantic(self, monkeypatch, capsys):
-        """CODER_ENGINE=pydantic → execute_coder_node délègue à
-        run_coder_pydantic (lazy import → patch au niveau module)."""
-        import dataclasses
-
+    async def test_execute_coder_node_delegates_to_pydantic_always(self, monkeypatch):
+        """F-169 : execute_coder_node délègue TOUJOURS à run_coder_pydantic —
+        l'exécution smolagents CodeAgent est retirée du graphe (décision user
+        2026-08-24). Plus de setting CODER_ENGINE : rien à sélectionner."""
         import graph_orchestrator.coder_pydantic as cp
         from graph_orchestrator import nodes
 
@@ -333,35 +322,30 @@ class TestCoderEngineDispatch:
             return None, None
 
         monkeypatch.setattr(cp, "run_coder_pydantic", _fake_run)
-        settings = dataclasses.replace(load_settings(), coder_engine="pydantic")
-        await nodes.execute_coder_node(_base_task(), fast_model=None, settings=settings)
+        await nodes.execute_coder_node(_base_task(), fast_model=None, settings=load_settings())
         assert len(calls) == 1
         assert calls[0]["id"] == "ts-001"
 
-    @pytest.mark.anyio
-    async def test_unknown_engine_falls_back_with_warning(self, monkeypatch, capsys):
-        """Valeur inconnue → avertissement + chemin smolagents (on intercepte
-        AVANT la connexion MCP pour rester 0-réseau)."""
-        import dataclasses
-        import types
-
+    def test_smolagents_codeagent_absent_du_noeud(self):
+        """Le corps d'execute_coder_node ne référence PLUS CompactingCodeAgent
+        ni les callbacks vision smolagents — source vérifiée, pas runtime."""
+        import inspect
         from graph_orchestrator import nodes
 
-        settings = dataclasses.replace(load_settings(), coder_engine="turbo")
+        body = inspect.getsource(nodes.execute_coder_node)
+        # On vise les CONSTRUCTIONS exécutables, pas la prose du docstring
+        # (qui documente le retrait F-169).
+        assert "local_coder = CompactingCodeAgent" not in body
+        assert "make_screenshot_callback" not in body.replace(
+            "callbacks vision smolagents", ""
+        )
+        assert "return await run_coder_pydantic" in body
 
-        # On simule l'entrée du chemin smolagents : l'import lazy
-        # `from smolagents import DuckDuckGoSearchTool` est patché pour faire
-        # échouer vite (avant toute connexion MCP).
-        fake_smolagents = types.ModuleType("smolagents")
+    def test_settings_engine_retire(self):
+        """CODER_ENGINE/TESTER_ENGINE n'existent plus dans Settings (F-169)."""
+        import dataclasses
+        from graph_orchestrator.config import Settings
 
-        def _getattr(name):
-            if name == "DuckDuckGoSearchTool":
-                raise RuntimeError("SMOLAGENTS_PATH_REACHED")
-            raise AttributeError(name)
-
-        fake_smolagents.__getattr__ = _getattr
-        monkeypatch.setitem(sys.modules, "smolagents", fake_smolagents)
-
-        with pytest.raises(RuntimeError, match="SMOLAGENTS_PATH_REACHED"):
-            await nodes.execute_coder_node(_base_task(), fast_model=None, settings=settings)
-        assert "repli smolagents" in capsys.readouterr().out
+        names = {f.name for f in dataclasses.fields(Settings)}
+        assert "coder_engine" not in names
+        assert "tester_engine" not in names

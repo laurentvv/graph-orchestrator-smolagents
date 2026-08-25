@@ -263,11 +263,12 @@ class TestWritePlanFiles:
 
 class TestBranchementPromptCoder:
     def test_prompt_coder_reference_plan_anchor(self):
-        """Le f-string du prompt Coder (nodes.py) doit référencer plan_anchor —
-        sinon l'anchor serait calculé par workflows.py mais jamais injecté."""
-        import graph_orchestrator.nodes as nodes_mod
+        """F-169 : le prompt du Coder vit dans coder_pydantic (moteur UNIQUE)
+        et doit référencer plan_anchor — sinon l'anchor serait calculé par
+        workflows.py mais jamais injecté."""
+        import graph_orchestrator.coder_pydantic as cp_mod
 
-        assert "task.get('plan_anchor', '')" in inspect.getsource(nodes_mod)
+        assert "task.get('plan_anchor', '')" in inspect.getsource(cp_mod)
 
 
 # ==========================================

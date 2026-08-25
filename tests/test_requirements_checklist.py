@@ -154,11 +154,12 @@ class TestBuildChecklistBlock:
 
 class TestTesterInjection:
     def test_web_tester_importe_le_module(self):
-        """Le web_tester.py importe requirements_checklist (pas de cycle d'import)."""
+        """F-169 : le checklist requirements vit dans tester_pydantic (moteur
+        UNIQUE) — pas de cycle d'import."""
         import inspect
 
-        from graph_orchestrator.testers.web_tester import WebTestRunner
-        source = inspect.getsource(WebTestRunner.run)
+        import graph_orchestrator.tester_pydantic as tp
+        source = inspect.getsource(tp)
         assert "extract_functionalities" in source
         assert "build_checklist_block" in source
         assert "checklist_block" in source

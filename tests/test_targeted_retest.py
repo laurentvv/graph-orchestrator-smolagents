@@ -116,23 +116,25 @@ class TestBuildTargetedRetestBlock:
 
 class TestWebTesterIntegration:
     def test_web_tester_importe_targeted_retest(self):
-        """web_tester.py importe le module targeted_retest (pas de cycle d'import)."""
+        """F-169 : le re-test ciblé vit dans tester_pydantic (moteur UNIQUE) —
+        WebTestRunner.run n'est plus qu'une délégation. Pas de cycle d'import."""
         import inspect
-        from graph_orchestrator.testers.web_tester import WebTestRunner
-        source = inspect.getsource(WebTestRunner.run)
+        import graph_orchestrator.tester_pydantic as tp
+
+        source = inspect.getsource(tp.run_tester_pydantic)
         assert "should_use_targeted_retest" in source
-        assert "extract_bug_points" in source
-        assert "build_targeted_retest_block" in source
         assert "use_targeted" in source
         assert "tester_max_steps" in source
 
     def test_max_steps_adaptatif_dans_source(self):
-        """Le max_steps est dynamique (TARGETED_MAX_STEPS ou 12 selon le mode)."""
+        """Le max_steps est dynamique (TARGETED_MAX_STEPS ou tester_max_steps
+        selon le mode) — dans le moteur pydantic (F-169)."""
         import inspect
-        from graph_orchestrator.testers.web_tester import WebTestRunner
-        source = inspect.getsource(WebTestRunner.run)
+        import graph_orchestrator.tester_pydantic as tp
+
+        source = inspect.getsource(tp.run_tester_pydantic)
         assert "TARGETED_MAX_STEPS" in source
-        assert "max_steps=tester_max_steps" in source
+        assert "tester_max_steps" in source
 
 
 # ==========================================

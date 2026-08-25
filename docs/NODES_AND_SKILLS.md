@@ -117,10 +117,38 @@ Source : `graph_orchestrator/nodes.py` (Coder), `graph_orchestrator/testers/web_
 | **Coder** | `coder` | 28 | Règles critiques (7), format sortie Python, workflow (selon stratégie simple/incremental/multifile/correction), fichiers cibles, preview DevTools, doc outils, **skills (eager + catalogue)**, contenu tâche |
 | **WebTester** | `web_tester` | 29 | Skill web-tester (corps complet), cahier des charges complet, checklist fonctionnalités, targeted re-test |
 
+#### F-169 — Moteur UNIQUE pydantic-ai-harness + gardiens DSPy (2026-08-24 soir)
+
+**Retrait du CodeAgent smolagents** (décision user) : les exécutions
+smolagents du Coder (`execute_coder_node`, -408 lignes) et du Web Tester
+(`web_tester.py`, 409 → 32 lignes) sont supprimées — délégation unique à
+`coder_pydantic.run_coder_pydantic` / `tester_pydantic.run_tester_pydantic`.
+Les settings `CODER_ENGINE`/`TESTER_ENGINE` (et `CODER_PREFILL_CODE`) sont
+retirés de config + `.env` : plus rien à sélectionner. Constat déclencheur :
+les runs 1835/2223 tournaient 100 % smolagents (marqueurs pydantic absents —
+ENGINE commenté → défaut silencieux) et leurs pathologies (spirale de parsing
+CodeAgent du Tester, 17 steps sans verdict) étaient propres à ce moteur ; le
+harness pydantic porte déjà les gardes de convergence (wind-down « verdict
+NOW » à ≤6 requêtes, IdleBreaker, GoalReanchor, timeout wall-clock
+`tester_timeout_s`). Les ToolCallingAgents smolagents du mode EXPLORATION
+restent (workers/judge exploration — pas des CodeAgents).
+
+**Gardiens DSPy** (`_dspy_structure_rescue` dans `_run_dspy_node`) : quand le
+transport réussit mais que l'adaptateur (JSONAdapter) ne parse pas la sortie
+(Judge, Architect, Security, Router, Drafter), cascade miroir F-168 — champ
+pydantic → `extract_and_validate` (déterministe puis LLM borné 1200/300 s),
+champ scalaire `str` unique → la section DSPy `[[ ## field ## ]]` ou la
+réponse entière EST la valeur (un draft Drafter non parsé reste un plan
+valide). Échec → exception d'origine (comportement historique). La fenêtre
+`lm.history[hist_before:]` distingue parse-fail (appel réussi → sauvetage) et
+erreur transport (rien de nouveau → pas de sauvetage).
+
 #### F-166 — Auto-fixers du Coder (2026-08-24, post-mortem run 0857)
 
-Le Coder (les DEUX moteurs, smolagents et pydantic) bénéficie de fixers
-déterministes TRANSPARENTS dans les outputs de ses outils d'écriture :
+Le Coder (historiquement les DEUX moteurs ; moteur pydantic seul depuis
+F-169 — les fixers vivent dans `search_replace_utils`/`tools`, partagés)
+bénéficie de fixers déterministes TRANSPARENTS dans les outputs de ses outils
+d'écriture :
 
 1. **Auto-décodage `\n`/`\t` littéraux** (`search_replace_utils.decode_literal_escapes`
    + `tools._f166_effective_args`) : les arguments tout-littéraux (effet

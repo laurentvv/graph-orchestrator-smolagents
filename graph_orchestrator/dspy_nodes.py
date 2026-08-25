@@ -14,6 +14,7 @@ un bac à sable d'exécution interactif (navigateur MCP, bash).
 """
 
 import asyncio
+import json
 import re
 import time
 from typing import List, Optional, Tuple, Any
@@ -552,6 +553,98 @@ def _no_think_model_id(settings: Settings) -> str:
     return settings.reasoning_no_think_model_id or settings.reasoning_model_id
 
 
+def _last_raw_completion(lm, hist_before: int) -> Optional[str]:
+    """Texte brut de la dernière completion (F-169) — None si indisponible.
+
+    Seules les entrées APPENDÉES après ``hist_before`` comptent : une erreur de
+    transport (connexion) ne produit PAS de nouvelle entrée → pas de sauvetage
+    possible (ce n'est pas un défaut de structure). Une erreur de PARSING
+    (JSONAdapter) arrive APRÈS un appel réussi → l'entrée existe.
+    """
+    try:
+        for entry in reversed(lm.history[hist_before:]):
+            resp = getattr(entry, "response", None)
+            choices = getattr(resp, "choices", None) or []
+            if not choices:
+                continue
+            content = getattr(getattr(choices[0], "message", None), "content", None)
+            if isinstance(content, str) and content.strip():
+                return content
+            if isinstance(content, list):  # parts multimodales
+                text = " ".join(str(p) for p in content if isinstance(p, str))
+                if text.strip():
+                    return text
+    except Exception:
+        pass
+    return None
+
+
+def _extract_dspy_section(raw: str, name: str) -> str:
+    """Extrait la valeur d'un champ du format sections DSPy (``[[ ## name ## ]]``),
+    sinon le texte entier (champ mono / réponse nue)."""
+    m = re.search(
+        rf"\[\[\s*##\s*{re.escape(name)}\s*##\s*\]\](.*?)(?=\[\[\s*##|\Z)",
+        raw, re.DOTALL,
+    )
+    return m.group(1).strip() if m else raw.strip()
+
+
+def _dspy_structure_rescue(signature, raw: str, api_base, model_id):
+    """Gardien structure DSPy (F-169) : répare une sortie que l'adaptateur
+    (JSONAdapter) n'a pas pu parser — miroir de la cascade F-168 de models.py.
+
+    Avant : exception → nœud None → dégradation générique (« Judge sans
+    signal » = itération de correction aveugle). Maintenant, quand le transport
+    a RÉUSSI mais le format a cassé : (1) champs scalaires str → le texte de la
+    section DSPy ou la réponse entière ; (2) champs pydantic → cascade
+    extract_and_validate (déterministe puis sauvetage LLM borné). Échec →
+    None → l'exception d'origine remonte (comportement historique).
+    """
+    if not raw or not raw.strip():
+        return None
+    from pydantic import BaseModel
+
+    from .models import extract_and_validate
+
+    output_fields = dict(getattr(signature, "output_fields", {}) or {})
+    if not output_fields:
+        return None
+
+    # Cas mono-champ str (ex: Drafter.draft_markdown) : la réponse EST la valeur.
+    if len(output_fields) == 1:
+        (name, finfo), = output_fields.items()
+        if finfo.annotation is str:
+            text = _extract_dspy_section(raw, name)
+            return dspy.Prediction(**{name: text})
+
+    fields = {}
+    scalar_payload: Optional[dict] = None
+    for name, finfo in output_fields.items():
+        ann = finfo.annotation
+        if isinstance(ann, type) and issubclass(ann, BaseModel):
+            obj = extract_and_validate(raw, ann, api_base=api_base, model_id=model_id)
+            if obj is None:
+                return None
+            fields[name] = obj
+        else:
+            if scalar_payload is None:
+                m = re.search(r"(\{.*\})", raw, re.DOTALL)
+                if not m:
+                    return None
+                try:
+                    scalar_payload = json.loads(m.group(1))
+                except Exception:
+                    return None
+                if not isinstance(scalar_payload, dict):
+                    return None
+            if name not in scalar_payload:
+                return None
+            fields[name] = scalar_payload[name]
+    if not fields:
+        return None
+    return dspy.Prediction(**fields)
+
+
 async def _run_dspy_node(signature, predictor_kwargs: dict, settings: Settings, spec, think: bool = False, model_override: Optional[str] = None, module_class=None, tools: list = None, module_kwargs: dict = None) -> Any:
     """Helper pour exécuter un nœud DSPy avec le cycle de vie du modèle."""
     with model_lifecycle(spec) as srv:
@@ -568,7 +661,24 @@ async def _run_dspy_node(signature, predictor_kwargs: dict, settings: Settings, 
                     predictor = module_class(signature, **mkwargs)
             else:
                 predictor = dspy.ChainOfThought(signature, **mkwargs)
-            return await asyncio.to_thread(predictor, **predictor_kwargs)
+            hist_before = len(lm.history)
+            try:
+                return await asyncio.to_thread(predictor, **predictor_kwargs)
+            except Exception:
+                # F-169 gardien structure : le transport a réussi (nouvelle
+                # entrée history) mais l'adaptateur n'a pas parsé (JSON cassé,
+                # prose, tags manquants). La cascade répare la STRUCTURE sans
+                # réexécuter la logique du nœud ; échec → exception d'origine.
+                try:
+                    raw = _last_raw_completion(lm, hist_before)
+                    rescued = _dspy_structure_rescue(signature, raw, _base, _mid)
+                except Exception:
+                    rescued = None
+                if rescued is not None:
+                    print("[~] F-169 gardien DSPy : sortie non parsée par "
+                          "l'adaptateur — STRUCTURE réparée (cascade F-168).")
+                    return rescued
+                raise
 
 
 async def execute_router_node(task_content: str, fast_model, settings: Settings) -> Tuple[Optional[RouterOutput], Optional[NodeMetrics]]:
