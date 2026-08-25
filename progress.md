@@ -1,10 +1,11 @@
 # État d'Avancement du Sprint
 
-## Objectif Actuel : F-170 (le Coder n'a pas autorité pour arrêter un run) — codé + testé sur branche, PR à passer
+## Objectif Actuel : F-170 MERGÉ (PR #124, main 197854c) — relancer le run E2E v5 (revalidation golden #19, premier run à continuité totale)
 > **Mandat user (post-mortem run v4)** : « faut que ça tourne dans le graph,
 > le Coder n'a pas autorité pour stopper un run surtout, même crash ».
-> Branche `feat/f-170-coder-crash-continuity` (DuckDB #3645). **(α)** verdict
-> arraché post-budget : `_run_agent_with_budget_salvage` (coder_pydantic.py)
+> Branche `feat/f-170-coder-crash-continuity` (DuckDB #3645) **MERGÉE le
+> 2026-08-25 (PR #124, merge 197854c, feu vert user direct — Kilo non
+> sollicité)**. **(α)** verdict arraché post-budget : `_run_agent_with_budget_salvage` (coder_pydantic.py)
 > capture l'historique (`capture_run_messages`, API publique pydantic-ai) et
 > sur `UsageLimitExceeded` rejoue le tout dans un appel borné (budget DÉDIÉ
 > de 3 requêtes, hors contexte de capture — limite documentée) avec
@@ -15,9 +16,13 @@
 > Linter/Static/audits/Judge sur l'état disque, réfutation déterministe =
 > relance Coder à l'itération suivante, épuisement = Escalade existante ;
 > événement DuckDB `coder/error` au crash (base muette du run v4 comblée) ;
-> `CODER_MAX_STEPS` 40→60 (1 appel d'outil = 1 requête pydantic, rituel
-> visuel non batché). Tests `tests/test_f170_coder_continuity.py` ×10
-> (helper fake-agent ×6 + workflow E2E pattern test_escalation ×4).
+> `CODER_MAX_STEPS` 40→60 (1 appel d'outil = 1 requête pydantic). Tests
+> `tests/test_f170_coder_continuity.py` ×10 + suite complète **2131 passed /
+> 7 skipped / 0 échec**. SUITE session suivante : **run E2E v5**
+> (bubble-sort-multifile-v6 déjà dans tasks.json) — surveillance détaillée,
+> marqueurs F-170 (`coder/error` si crash + continuation), verdict attendu
+> <45 min ; si Judge approuve → test navigateur livrable (compteur
+> comparaisons §10) + MAJ §10/progress/DuckDB.
 
 ## Jalons de l'Itération (cycle F-170 — continuité graphe + verdict post-budget, 2026-08-25 après-midi)
 
@@ -35,8 +40,10 @@
       + .env + .env.example, règle §7) ; test défaut mis au nouveau contrat.
 - [x] F170-5 : Tests ×10 PASS (11 s) + suites voisines 86 PASS ; contract
       C545-C548 + feature_list F-170 + ce fichier.
-- [ ] F170-6 : Suite complète pytest → DuckDB + commit + PR → review Kilo →
-      STOP ; revalidation E2E (run v5) à la session suivante.
+- [x] F170-6 : Suite complète 2131 passed / 0 échec (580 s) → DuckDB #3733
+      + commit 212f55d + PR #124 → **MERGÉE (197854c, feu vert user direct)**,
+      branche supprimée, retour main. Revalidation E2E (run v5) : session
+      suivante.
 
 ## Jalons de l'Itération (run de revalidation v4 + post-mortem, 2026-08-25 midi)
 
