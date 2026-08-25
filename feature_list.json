@@ -1471,6 +1471,15 @@
       "dependencies": [
         "F-169"
       ]
+    },
+    {
+      "id": "F-171",
+      "name": "Vérificateurs déterministes du Coder (statique post-écriture + smoke navigateur au verdict)",
+      "description": "Mandat run v5 (2026-08-25) : les vérifs étaient opt-in (outils que le modèle oublie d'appeler) ou a posteriori (audits LLM ~10 min/itération). (A) capability pydantic-ai Hooks after_tool_execute sur les outils d'écriture : lint_file + check_js_syntax sur le SEUL fichier écrit, findings CONSULTATIFS apposés au retour d'outil (pattern aider lint_edited), DuckDB coder/verify, fail-open, CODER_STATIC_VERIFY. (B) Chrome headless jetable charge les cibles HTML (file://) et collecte les erreurs JS critiques au chargement (familles Uncaught/RangeError… validées LIVE sur le bug init() du run v5) : tour correctif borné 5 req après un run réussi, injection des findings réels dans le sauvetage post-budget F-170 ; CODER_SMOKE_VERDICT.",
+      "status": "in_progress",
+      "dependencies": [
+        "F-170"
+      ]
     }
   ]
 }

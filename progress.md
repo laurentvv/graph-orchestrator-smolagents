@@ -1,28 +1,58 @@
 # État d'Avancement du Sprint
 
-## Objectif Actuel : F-170 MERGÉ (PR #124, main 197854c) — relancer le run E2E v5 (revalidation golden #19, premier run à continuité totale)
-> **Mandat user (post-mortem run v4)** : « faut que ça tourne dans le graph,
-> le Coder n'a pas autorité pour stopper un run surtout, même crash ».
-> Branche `feat/f-170-coder-crash-continuity` (DuckDB #3645) **MERGÉE le
-> 2026-08-25 (PR #124, merge 197854c, feu vert user direct — Kilo non
-> sollicité)**. **(α)** verdict arraché post-budget : `_run_agent_with_budget_salvage` (coder_pydantic.py)
-> capture l'historique (`capture_run_messages`, API publique pydantic-ai) et
-> sur `UsageLimitExceeded` rejoue le tout dans un appel borné (budget DÉDIÉ
-> de 3 requêtes, hors contexte de capture — limite documentée) avec
-> `_BUDGET_SALVAGE_PROMPT` (verdict immédiat SANS outil, honnête sur les
-> vérifications non faites) ; GuardAbort/transport restent des échecs propres
-> sans sauvetage. **(ε)** workflows.py : le `return {"reason": "Coder crash"}`
-> est SUPPRIMÉ — CoderOutput synthétisé si None, continuation commit/KG/
-> Linter/Static/audits/Judge sur l'état disque, réfutation déterministe =
-> relance Coder à l'itération suivante, épuisement = Escalade existante ;
-> événement DuckDB `coder/error` au crash (base muette du run v4 comblée) ;
-> `CODER_MAX_STEPS` 40→60 (1 appel d'outil = 1 requête pydantic). Tests
-> `tests/test_f170_coder_continuity.py` ×10 + suite complète **2131 passed /
-> 7 skipped / 0 échec**. SUITE session suivante : **run E2E v5**
-> (bubble-sort-multifile-v6 déjà dans tasks.json) — surveillance détaillée,
-> marqueurs F-170 (`coder/error` si crash + continuation), verdict attendu
-> <45 min ; si Judge approuve → test navigateur livrable (compteur
-> comparaisons §10) + MAJ §10/progress/DuckDB.
+## Objectif Actuel : F-171 (vérificateurs déterministes du Coder) — branche feat/f-171-coder-verifier-hooks, puis run E2E v6 outillé
+> **Mandat user (session 2026-08-25 PM, post-run v5 arrêté)** : « GO F-171 et
+> relance un vrai run bien outillé ». Run v5 arrêté manuellement à T+71 min
+> (DuckDB #3739) : F-170 validé en live (crash Coder iter1 → continuation +
+> evt #3737), mais itération 2 en rituel visuel lent (40 pas, ctx 12,4 K)
+> sans verdict ; script.js iter2 portait le bug `init()` (récursion infinie →
+> `RangeError` au chargement — invisible au lint, prouvé en live via Chrome
+> headless stderr) ; finding d'assertion du Tester lossy partout.
+> **F-171 (GO user A+B après revue références)** : (A) capability
+> pydantic-ai `Hooks` `after_tool_execute` sur les outils d'écriture →
+> `lint_file`+`check_js_syntax` sur le seul fichier écrit, findings
+> CONSULTATIFS au retour d'outil (pattern aider `lint_edited`, Hooks NATIFS
+> confirmés dans pydantic-ai 2.33.0 installé) ; (B) smoke Chrome headless
+> `--dump-dom --enable-logging=stderr` (file://, 0 serveur, 0 LLM) au chemin
+> verdict F-170 : tour correctif borné 5 req (run réussi) + injection des
+> findings réels dans le sauvetage post-budget. Settings
+> `CODER_STATIC_VERIFY`/`CODER_SMOKE_VERDICT` (défaut on, fail-open).
+> SUITE : PR + merge → **run E2E v6 outillé** (revalidation golden #19 §10
+> toujours en attente — v5 n'a pas rendu de verdict).
+
+## Jalons de l'Itération (cycle F-171 — vérif déterministe post-écriture + smoke verdict, 2026-08-25 soir)
+
+- [x] F171-1 : Post-mortem v5 (base>log, DuckDB #3739) + revue références —
+      pydantic-ai 2.33.0 a des Hooks NATIFS (`after_tool_execute` filtre
+      `tools=`+`timeout=`, modifie le résultat) ; aider : `lint_edited`
+      (auto-lint ON par défaut, fichiers édités seulement, erreurs
+      réinjectées) + `auto_test=False` par défaut (coûteux) → design A+B
+      validé ; open-swe/opencode : rien d'exploitable.
+- [x] F171-2 : Validation LIVE du détecteur B avant de coder — Chrome
+      headless stderr sur le livrable buggé v5 : `Uncaught RangeError …
+      (script.js:25)` capté en 1,8 s ; page saine silencieuse (1,0 s) ;
+      `file://` OK sans serveur HTTP.
+- [x] F171-3 : `graph_orchestrator/coder_verifier.py` — (A) `build_verifier_hooks`
+      (Hooks, filtre append_file/search_replace/multi_replace, timeout 15 s,
+      sync=worker thread, DuckDB coder/verify, fail-open) + `run_static_verify`
+      (lint_file + check_js_syntax, cap 5×220 c) ; (B) `run_smoke_check`
+      (Chrome jetable user-data-dir temp, virtual-time-budget 4 s, parser
+      console 2 formats CONSOLE:25/CONSOLE(0), familles critiques seules,
+      dedup) + `resolve_smoke_targets` (même normalize_tool_path que les
+      écritures).
+- [x] F171-4 : Câblage — `build_coder_agent` appose la capability ;
+      `_run_agent_with_budget_salvage` gère le smoke aux 2 chemins de verdict
+      (tour correctif `_SMOKE_FEEDBACK_PROMPT` borné 5 req + injection
+      `_BUDGET_SALVAGE_PROMPT`) ; `run_coder_pydantic` résout les cibles ;
+      config `coder_static_verify`/`coder_smoke_verdict` + .env/.env.example.
+- [x] F171-5 : Tests `tests/test_f171_coder_verifier.py` **24 PASS**
+      (parser ×5 dont ligne EXACTE run v5, intégration RÉELLE FunctionModel
+      advisory apposé/silencieux, live Chrome récursion flaggée, salvage ×6)
+      + régression F-168/F-170/guards 62 PASS ; contract C549-C552 +
+      feature_list F-171 + ce fichier.
+- [ ] F171-6 : Suite complète 0 échec → commit + PR → merge (GO user direct)
+      → **run E2E v6 outillé** (vigie : marqueurs `[F-171]`, verdict attendu
+      <45 min, test navigateur livrable si approbation → MAJ §10).
 
 ## Jalons de l'Itération (cycle docs — refonte README + doc technique, 2026-08-25)
 
