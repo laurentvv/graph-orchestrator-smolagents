@@ -1,19 +1,48 @@
 # État d'Avancement du Sprint
 
-## Objectif Actuel : F-168 (sauvetage borné + cap no-think) livré — PR en review, puis relance du run E2E
-> Né du post-mortem du run 1835 (F-167 validé en prod, run tué à 1h51) : les
-> échecs étaient TOUS en aval du Drafter. **F-168 sur branche
-> `feat/f-168-rescue-bounds-nothink-cap`** : (1) sauvetage verdict BORNÉ
-> (`max_tokens=1200`/`timeout=300`/temp 0 + signature `fixed_json` texte brut
-> — plus de génération en fuite ni JSONAdapter crash), (2) passe DÉTERMINISTE
-> pré-LLM `_fill_required_defaults` (null/absent sur requis → Literal
-> "failure" fail-closed — répare le string_type du run 1835 sans réseau),
-> (3) `NO_THINK_MAX_TOKENS=4096` (config + .env sync) câblé Tester pydantic ET
-> Coder ULTRA (avant : 16384 hérités → pire cas ~50 min/réponse dégénérée,
-> observé 25 min/7172 toks). 13 tests nouveaux + 2 au nouveau contrat.
-> SUITE : suite complète verte → commit/PR → review Kilo → run E2E de
-> revalidation à relancer (le livrable F-167 était sain, c'est l'aval qui a
-> brûlé le budget).
+## Objectif Actuel : F-169 (moteur UNIQUE pydantic + gardiens DSPy) livré — PR à venir, puis 1er run 100 % pydantic
+> **Constat clé (vérif user, confirmé par marqueurs logs)** : les runs
+> 1835/2223 tournaient **100 % smolagents** (`CODER_ENGINE`/`TESTER_ENGINE`
+> commentés → défaut silencieux ; marqueurs pydantic absents des logs) — la
+> spirale de parsing du Tester était une pathologie de CE moteur. **F-169
+> (suite de session, même branche que F-168)** : (1) retrait total des
+> exécutions smolagents Coder/Tester (`execute_coder_node` -408 l.,
+> `web_tester.py` 409→32 l., settings ENGINE + PREFILL supprimés des
+> config/.env — plus rien à sélectionner), ToolCallingAgents exploration
+> intacts ; (2) gardiens DSPy `_dspy_structure_rescue` dans `_run_dspy_node`
+> (Judge/Architect/Security/Router/Drafter : parse-fail avec transport réussi
+> → cascade F-168 ; champ str unique = réponse entière sauvée). 13 tests
+> nouveaux + 7 re-pointés vers les sources pydantic. SUITE : PR → Kilo →
+> **relance du run E2E = premier 100 % harness pydantic** (wind-down,
+> IdleBreaker, timeout wall-clock).
+
+## Jalons de l'Itération (cycle F-169 — moteur unique pydantic + gardiens DSPy, 2026-08-24 nuit)
+
+- [x] F169-1 : Vérification moteurs réels des runs du jour (marqueurs
+      uniques `[T] Tester (pydantic)` / `Coder (pydantic)` vs
+      `LoggedOpenAIServerModel`) : 1835 et 2223 = 100 % smolagents ; le
+      print « Tester mode: » existait des deux côtés (faux signal corrigé).
+- [x] F169-2 : `execute_coder_node` (nodes.py) → délégation unique
+      `run_coder_pydantic` (branche smolagents CodeAgent SUPPRIMÉE, -408
+      lignes) ; `WebTestRunner.run` (web_tester.py) → délégation unique
+      `run_tester_pydantic` (409 → 32 lignes) ; settings `coder_engine`/
+      `tester_engine` retirés de Settings + load_settings ; `.env`/
+      `.env.example` purgés (ENGINE + CODER_PREFILL_CODE).
+- [x] F169-3 : Gardiens DSPy (`dspy_nodes.py`) : `_last_raw_completion`
+      (fenêtre `lm.history[hist_before:]` : parse-fail ≠ transport) +
+      `_extract_dspy_section` + `_dspy_structure_rescue` (champ pydantic →
+      cascade `extract_and_validate` F-168 ; champ str unique → section ou
+      réponse entière — un draft Drafter non parsé reste un plan valide) ;
+      câblés dans `_run_dspy_node` en except → rescued ou raise.
+- [x] F169-4 : Tests — `tests/test_f169_engine_guards.py` ×13 (rescue ×6,
+      sections ×2, history ×3, retrait moteur ×2) + classes dispatch
+      réécrites (`TestCoderEnginePydanticOnly` ×3,
+      `TestTesterEnginePydanticOnly` ×2) + 7 tests re-pointés vers les
+      sources pydantic (web_tester_functional ×3, targeted_retest ×2,
+      requirements ×1, plan_files ×1 — le prompt-building vit dans
+      tester_pydantic/coder_pydantic).
+- [ ] F169-5 : Suite complète verte → DuckDB (#3594) + commit + PR → Kilo →
+      relance du run E2E (premier 100 % pydantic).
 
 ## Jalons de l'Itération (cycle F-168 — sauvetage borné + cap no-think, 2026-08-24)
 
