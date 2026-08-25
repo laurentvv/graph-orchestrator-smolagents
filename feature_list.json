@@ -1480,6 +1480,27 @@
       "dependencies": [
         "F-170"
       ]
+    },
+    {
+      "id": "F-172",
+      "name": "Défaut pageId sur evaluate_script (bridge MCP chrome-devtools)",
+      "description": "3 occurrences le 2026-08-25 : les modèles locaux (Coder 4B run v5-it1, Tester 9B run v6-it1 ×2 retries) appellent evaluate_script SANS l'argument pageId requis → erreur MCP -32602 → retry → mort du nœud. FIX pattern F-50 (vision_callback strippait filePath) : intercepter l'appel dans le bridge et injecter le pageId par défaut = page active (list_pages → première page) quand absent. Pur code, 0 LLM.",
+      "status": "pending",
+      "dependencies": []
+    },
+    {
+      "id": "F-173",
+      "name": "Rituel visuel Coder borné (poste n°1 des délais)",
+      "description": "Run v6-it1 : livrable complet à T+11 mais 60 requêtes/63 min brûlées dans le rituel navigate/screenshot/visual_check répété (cap F-82 à 5 critères insuffisant). Pistes : batch obligatoire des visual_check restants dès N tours sans progression (IdleBreaker/LoopGuard tuning), seuil de tours dédiés au rituel (ex. 15 req max au-delà du build), ou visual_check consolidé en 1 appel multi-critères.",
+      "status": "pending",
+      "dependencies": []
+    },
+    {
+      "id": "F-174",
+      "name": "Tester : assertions vs animation + sémantique .sorted + findings non-lossy",
+      "description": "Run v6 : Tester rejète 2× un livrable console-propre (smoke F-171 OK, analyse code OK) — finding d'assertion LOSSY en base (tronqué après '- c', famille F164-6 : correction aveugle sur bug possiblement fantôme). 3 volets : (a) le Tester passe le slider vitesse à max AVANT d'assertionner l'état final (animation 3,5 min @500ms par défaut) ; (b) critère de marquage .sorted tranché noir sur blanc dans les critères Architect (queue triée après passe vs au swap) pour arrêter les rejets cosmétiques ; (c) persister le final_result COMPLET du Tester (DuckDB/KG, pas de troncature du finding).",
+      "status": "pending",
+      "dependencies": []
     }
   ]
 }
