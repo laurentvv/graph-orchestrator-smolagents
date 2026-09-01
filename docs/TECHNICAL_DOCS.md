@@ -124,7 +124,7 @@ Debugging one node used to require the full 30–40 min graph. The `debug/` fold
 | `debug/run_consolidation.py` | Consolidation | 3 scenarios | KG dedup/merge + forgetting (F-68 Ph1) |
 | `debug/run_lesson_recall.py` | Lesson Recall | 3 scenarios | cross-run recall (F-68 Ph2) |
 
-Full convention (manual methodologies + golden files): [`debug/isolation/README.md`](../debug/isolation/README.md). The complete table also lives in [`AGENTS.md` §9](../AGENTS.md).
+Full convention (manual methodologies + golden files): [`debug/isolation/README.md`](../debug/isolation/README.md). The complete table also lives in [`docs/DEBUG_SCRIPTS.md`](DEBUG_SCRIPTS.md).
 
 ## 12. Reference Runs & Post-Mortems
 
