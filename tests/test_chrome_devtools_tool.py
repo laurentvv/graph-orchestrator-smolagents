@@ -44,8 +44,9 @@ class TestBuildParams:
         params = mcp_module.build_chrome_devtools_params()
         assert params is not None
         assert params.command == "npx"
-        # L'arg principal doit contenir chrome-devtools-mcp@latest
-        assert any("chrome-devtools-mcp@latest" in a for a in params.args)
+        # L'arg principal doit contenir la version épinglée chrome-devtools-mcp@1.8.0
+        # (F-172 : @latest a activé pageIdRouting par défaut → 3 breaks en série)
+        assert any("chrome-devtools-mcp@1.8.0" in a for a in params.args)
         # Options par défaut : isolated + viewport + screenshot-format
         assert "--isolated" in params.args
         assert "1280x800" in params.args

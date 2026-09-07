@@ -18,9 +18,15 @@ Contenu :
         (valeurs inventées → MCP -32602 → step perdu) ;
       * F-126 : enrichissement console — les stacks complètes de
         ``get_console_message(msgid)`` sont appendues au retour de
-        list_console_messages + directive read_file ciblée (le 4B soupçonne les
-        mauvaises fonctions sans localisation : 3 réécritures complètes, run
+        list_console_messages + directive read_file ciblée (le 4B soupçonne
+        les mauvaises fonctions sans localisation : 3 réécritures complètes, run
         2026-08-19_1552) ;
+      * F-172 : fallback pageId — chrome-devtools-mcp ≥1.8 exige ``pageId`` sur
+        les outils page-scoped (pageIdRouting par défaut) ; l'échec « Required
+        at pageId » (ou « No page found » avec pageId=0) déclenche une
+        résolution list_pages → page sélectionnée → retentative unique
+        (``call_tool_with_page_id_fallback``, aussi utilisée par les helpers
+        DOM et l'enrichissement console) ;
   - 12 helpers DOM (F-72/F-145/F-155) : FunctionToolset de fonctions asynchrones
     déléguant à ``evaluate_script`` via le client fastmcp — corps JS réutilisés
     À L'IDENTIQUE depuis devtools_dom_tools (0 changement comportemental) ;
@@ -47,6 +53,7 @@ CHROME_DEVTOOLS_HEADLESS restent les réglages existants.
 from __future__ import annotations
 
 import logging
+import re
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from typing import Any, Optional
@@ -56,6 +63,83 @@ logger = logging.getLogger(__name__)
 # Outils DevTools dont le paramètre filePath est strippé (F-50/F-90 — cf.
 # vision_callback._FILEPATH_TOOLS : même liste).
 _FILEPATH_STRIPPED_TOOLS = frozenset({"take_screenshot", "take_snapshot"})
+
+
+# ============================================================
+# F-172 — défaut pageId (pageIdRouting chrome-devtools-mcp ≥ 1.8)
+# ============================================================
+# chrome-devtools-mcp 1.8.0 (résolue par npx ``@latest``) active ``pageIdRouting``
+# PAR DÉFAUT : 27 outils page-scoped (evaluate_script, navigate_page, click,
+# take_screenshot, list_console_messages, get_console_message…) exigent
+# l'argument ``pageId`` (vérifié live, sonde debug/f172_probe_pageid.py). Les
+# modèles locaux ne connaissent pas les ids de pages — et l'erreur MCP -32602
+# « Required at pageId » ne les liste pas — → boucle de retries → mort du nœud
+# (3 occurrences 2026-08-25 : Coder v5-it1 ToolError, Tester v6-it1 retries
+# épuisés). Fix pattern F-50 (le bridge strippait filePath) : fallback RÉACTIF —
+# l'échec « Required at pageId » (pageId absent) ou « No page found » avec
+# pageId=0 (hallucination fréquente : les ids réels commencent à 1) déclenche
+# UNE résolution list_pages → page SÉLECTIONNÉE (marqueur [selected], sinon
+# première listée) → UNE retentative avec le pageId injecté. Pur code, 0 LLM,
+# 0 surcoût en nominal (les appels sains ne paient rien).
+
+_PAGE_ID_REQUIRED_MARKER = "Required at pageId"
+_NO_PAGE_MARKER = "No page found"
+_PAGE_ID_SELECTED_RE = re.compile(r"^\s*(\d+):\s*\S[^\n]*\[selected\]", re.MULTILINE)
+_PAGE_ID_ANY_RE = re.compile(r"^\s*(\d+):", re.MULTILINE)
+
+
+def parse_selected_page_id(list_pages_text: str) -> Optional[int]:
+    """Id de page à cibler par défaut, extrait du texte de ``list_pages``.
+
+    Format 1.8.0 : ``## Pages\\n1: about:blank [selected]\\n2: http://…``.
+    Priorité à la page marquée ``[selected]`` (la page ACTIVE du navigateur —
+    pas la première listée, qui peut être un onglet doublon laissé ouvert) ;
+    repli sur la première page. None si rien n'est parsable (l'appelant
+    laisse alors remonter l'erreur serveur d'origine au modèle).
+    """
+    text = list_pages_text or ""
+    m = _PAGE_ID_SELECTED_RE.search(text) or _PAGE_ID_ANY_RE.search(text)
+    return int(m.group(1)) if m else None
+
+
+async def call_tool_with_page_id_fallback(call_tool, name: str, args: dict) -> Any:
+    """Appelle un outil MCP DevTools en injectant le pageId manquant (F-172).
+
+    Réactif : un appel sain ne paie RIEN (pas de list_pages préventif, pas de
+    liste statique d'outils à maintenir). En cas d'échec ``Required at
+    pageId`` (pageId absent) ou ``No page found`` avec pageId=0, résout la
+    page sélectionnée via ``list_pages`` et retente UNE fois avec le pageId
+    injecté. Tout autre échec — ou résolution impossible — laisse remonter
+    l'exception d'ORIGINE telle quelle (le modèle voit l'erreur réelle du
+    serveur, sémantique inchangée hors cas pathologique).
+    """
+    args = dict(args or {})
+    try:
+        return await call_tool(name, args)
+    except Exception as exc:  # noqa: BLE001 — détection par marqueur uniquement
+        msg = str(exc)
+        missing = _PAGE_ID_REQUIRED_MARKER in msg and not args.get("pageId")
+        zero = _NO_PAGE_MARKER in msg and args.get("pageId") in (None, 0)
+        if not (missing or zero):
+            raise
+        page_id: Optional[int] = None
+        try:
+            pages_result = await call_tool("list_pages", {})
+            page_id = parse_selected_page_id(render_mcp_result(pages_result))
+        except Exception as exc2:  # noqa: BLE001 — fail-open total
+            logger.debug(
+                "F-172 : résolution list_pages KO (%s) — erreur d'origine conservée.", exc2
+            )
+        if page_id is None:
+            raise
+        fixed = dict(args)
+        fixed["pageId"] = page_id
+        logger.info(
+            "F-172 : pageId=%s injecté pour %s (page sélectionnée via list_pages).",
+            page_id,
+            name,
+        )
+        return await call_tool(name, fixed)
 
 
 # ============================================================
@@ -168,7 +252,11 @@ def make_process_tool_call(vision: bool = True):
 
     async def process_tool_call(ctx, call_tool, name: str, tool_args: dict) -> Any:  # noqa: ANN001
         args = _prepare_tool_args(name, tool_args)
-        result = await call_tool(name, args)
+        # F-172 : fallback pageId (pageIdRouting chrome-devtools-mcp ≥1.8) —
+        # l'échec « Required at pageId » est intercepté ICI, avant la barrière
+        # tool_error_behavior="retry" qui le transformerait en boucle de
+        # retries mortelle pour les modèles locaux.
+        result = await call_tool_with_page_id_fallback(call_tool, name, args)
         text, images = split_tool_result(result)
         if images:
             return make_image_tool_return(text, images, vision=vision)
@@ -181,7 +269,12 @@ def make_process_tool_call(vision: bool = True):
         details: list = []
         for msgid in msgids:
             try:
-                detail = await call_tool("get_console_message", {"msgid": msgid})
+                # F-172 : get_console_message est AUSSI page-scoped (pageId
+                # requis en 1.8.0) — même fallback, sinon l'enrichissement
+                # F-126 échouait silencieusement à chaque fois.
+                detail = await call_tool_with_page_id_fallback(
+                    call_tool, "get_console_message", {"msgid": msgid}
+                )
                 details.append(render_mcp_result(detail))
             except Exception as exc:  # noqa: BLE001 — fail-open total
                 logger.debug("coder_pydantic_mcp: get_console_message(%s) KO (%s)", msgid, exc)
@@ -320,7 +413,12 @@ def build_dom_helper_toolset(devtools_client) -> Optional[Any]:
         call_args = {"function": function}
         if args is not None:
             call_args["args"] = args
-        result = await devtools_client.call_tool("evaluate_script", call_args)
+        # F-172 : evaluate_script exige pageId depuis chrome-devtools-mcp 1.8.0
+        # (pageIdRouting par défaut) — fallback réactif, sinon les 12 helpers
+        # DOM étaient morts (call_tool direct, hors process_tool_call).
+        result = await call_tool_with_page_id_fallback(
+            devtools_client.call_tool, "evaluate_script", call_args
+        )
         return render_mcp_result(result)
 
     async def clean_dom() -> str:

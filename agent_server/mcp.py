@@ -79,8 +79,13 @@ def build_chrome_devtools_params(browser_url: Optional[str] = None) -> Optional[
         contexte du petit LLM vision (gemma-4-E4B). Crucial pour ne pas saturer.
       - `--executable-path` : chemin Chrome (si non set, le serveur cherche lui-même).
 
-    Transport : stdio via `npx -y chrome-devtools-mcp@latest`. Si la connexion
-    échoue, le context manager chrome_devtools_tools() yield [] (dégradation gracieuse).
+    Transport : stdio via `npx -y chrome-devtools-mcp@1.8.0`. Version ÉPINGLÉE
+    (F-172) : `@latest` a cassé le run 3 fois en série (F-50 filePath, F-127
+    enum, F-172 pageIdRouting par défaut → pageId requis sur 27 outils) — le pont
+    applicatif (coder_pydantic_mcp.call_tool_with_page_id_fallback) couvre le
+    runtime, l'épinglage fige la surface d'outils documentée dans les skills.
+    Si la connexion échoue, le context manager chrome_devtools_tools() yield []
+    (dégradation gracieuse).
 
     Config env :
       - CHROME_DEVTOOLS_ENABLED=0 : désactive totalement (opt-out global).
@@ -92,7 +97,7 @@ def build_chrome_devtools_params(browser_url: Optional[str] = None) -> Optional[
     if os.getenv("CHROME_DEVTOOLS_ENABLED", "1").strip().lower() in {"0", "false", "no", "off"}:
         return None
 
-    args = ["-y", "chrome-devtools-mcp@latest", "--viewport", "1280x800",
+    args = ["-y", "chrome-devtools-mcp@1.8.0", "--viewport", "1280x800",
             "--screenshot-format", "jpeg"]
     if browser_url:
         # F-163 : connexion au Chrome du pool (option officielle du serveur).

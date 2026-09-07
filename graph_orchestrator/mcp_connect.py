@@ -10,8 +10,8 @@ Problème initial : ``ToolCollection.from_mcp`` délègue à mcpadapt dont le
 ``connect_timeout`` par défaut est de 30 s — 30 s pendant lesquelles le thread
 appelant ET l'event loop async (``execute_coder_node`` entre directement dans
 le context manager) restent figés, pour FINIR par une exception. Un npx qui
-télécharge son paquet à froid (chrome-devtools-mcp@latest, puppeteer) peut
-facilement dépasser.
+télécharge son paquet à froid (chrome-devtools-mcp — version épinglée F-172 —,
+puppeteer) peut facilement dépasser.
 
 ``open_mcp_with_timeout`` borne l'attente :
 - connexion dans le délai → ``(cm, tools)`` — le CM est DÉJÀ ouvert, l'appelant
