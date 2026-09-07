@@ -276,6 +276,16 @@ class Settings:
     # marge ; l'épuisement n'est plus mortel de toute façon (verdict arraché
     # F-170 α + continuation graphe F-170 ε).
     coder_max_steps: int = 60
+    # F-171 : vérificateurs déterministes autour du Coder (0 LLM).
+    # (A) statique post-écriture : capability Hooks after_tool_execute sur les
+    # outils d'écriture — lint_file + check_js_syntax sur le SEUL fichier
+    # écrit, findings CONSULTATIFS apposés au retour d'outil (pattern aider
+    # lint_edited, auto-lint ON). (B) smoke navigateur au verdict : Chrome
+    # headless sur les cibles HTML, erreurs JS critiques au chargement →
+    # tour correctif borné (run réussi) ou injection dans le sauvetage
+    # post-budget (F-170). Fail-open sur les deux ; opt-out unitaire.
+    coder_static_verify: bool = True
+    coder_smoke_verdict: bool = True
     # F-169 : le moteur d'exécution du Coder et du Web Tester est UNIQUEMENT
     # pydantic-ai-harness (décision user 2026-08-24 « enlève le CodeAgent de
     # smolagents ») — coder_pydantic.py / tester_pydantic.py. Les settings
@@ -728,6 +738,8 @@ def load_settings() -> Settings:
         tester_max_steps=_get_int("TESTER_MAX_STEPS", 20),
         tester_inline_skill_resources=_get_bool("TESTER_INLINE_SKILL_RESOURCES", True),
         coder_max_steps=_get_int("CODER_MAX_STEPS", 60),
+        coder_static_verify=_get_bool("CODER_STATIC_VERIFY", True),
+        coder_smoke_verdict=_get_bool("CODER_SMOKE_VERDICT", True),
         coder_writefile_max_lines=_get_int("CODER_WRITEFILE_MAX_LINES", 100),
         # Prefill ````python (2026-08-22) : llama-server continue le dernier
         # message assistant incomplet → la réponse démarre DANS un bloc code

@@ -1,28 +1,83 @@
 # État d'Avancement du Sprint
 
-## Objectif Actuel : F-170 MERGÉ (PR #124, main 197854c) — relancer le run E2E v5 (revalidation golden #19, premier run à continuité totale)
-> **Mandat user (post-mortem run v4)** : « faut que ça tourne dans le graph,
-> le Coder n'a pas autorité pour stopper un run surtout, même crash ».
-> Branche `feat/f-170-coder-crash-continuity` (DuckDB #3645) **MERGÉE le
-> 2026-08-25 (PR #124, merge 197854c, feu vert user direct — Kilo non
-> sollicité)**. **(α)** verdict arraché post-budget : `_run_agent_with_budget_salvage` (coder_pydantic.py)
-> capture l'historique (`capture_run_messages`, API publique pydantic-ai) et
-> sur `UsageLimitExceeded` rejoue le tout dans un appel borné (budget DÉDIÉ
-> de 3 requêtes, hors contexte de capture — limite documentée) avec
-> `_BUDGET_SALVAGE_PROMPT` (verdict immédiat SANS outil, honnête sur les
-> vérifications non faites) ; GuardAbort/transport restent des échecs propres
-> sans sauvetage. **(ε)** workflows.py : le `return {"reason": "Coder crash"}`
-> est SUPPRIMÉ — CoderOutput synthétisé si None, continuation commit/KG/
-> Linter/Static/audits/Judge sur l'état disque, réfutation déterministe =
-> relance Coder à l'itération suivante, épuisement = Escalade existante ;
-> événement DuckDB `coder/error` au crash (base muette du run v4 comblée) ;
-> `CODER_MAX_STEPS` 40→60 (1 appel d'outil = 1 requête pydantic). Tests
-> `tests/test_f170_coder_continuity.py` ×10 + suite complète **2131 passed /
-> 7 skipped / 0 échec**. SUITE session suivante : **run E2E v5**
-> (bubble-sort-multifile-v6 déjà dans tasks.json) — surveillance détaillée,
-> marqueurs F-170 (`coder/error` si crash + continuation), verdict attendu
-> <45 min ; si Judge approuve → test navigateur livrable (compteur
-> comparaisons §10) + MAJ §10/progress/DuckDB.
+## Objectif Actuel : runs v5/v6 arrêtés sans verdict — priorité aux fixes structurels des délais (F-172 pageId, rituel visuel borné, Tester vs animation)
+> **Décision user (2026-08-25 17:21)** : « stop le run, le reste pas important
+> vu les délais, on voit bien les problèmes ». Run v6 (outillé F-171) arrêté
+> à T+~1h50 en itération 3/3 (Tester en vol) — 3e run consécutif sans verdict
+> final (v4 crash 30 min, v5 stop 71 min, v6 stop 110 min). DuckDB #3803
+> (lancement), #3806 (arrêt + post-mortem complet).
+> **Validé en live par v6** : F-170 α (verdict arraché post-budget it1),
+> F-171 B smoke (3 tirs : post-budget it1 + verdict it2/it3, tous « console
+> propre »), livrable **sain dès T+11** (compteur comparaisons réel+live, pas
+> de récursion init(), :root hex) — le meilleur livrable v4/v5/v6.
+> **Les 3 problèmes structurels des délais** (constatés en base>log) :
+> (1) rituel visuel Coder : 60 req / 63 min en it1 alors que le livrable est
+> complet à T+11 ; (2) `evaluate_script` sans `pageId` tue Coder v5-it1 ET
+> Tester v6-it1 (3 occurrences du jour — candidat **F-172** : défaut pageId
+> dans le bridge, pattern F-50 filePath) ; (3) Tester rejète 2× un livrable
+> console-propre avec finding LOSSY en base (famille F164-6 — probable
+> sémantique .sorted cosmétique ou impatience vs animation 3,5 min @500 ms)
+> → chaque rejet = 15-25 min de boucle. FIX : F-172 + borne rituel visuel +
+> Tester slider→max avant assertions + critère .sorted tranché dans
+> l'Architect. Revalidation golden #19 §10 TOUJOURS en attente d'un verdict.
+> Backlog : 2 échecs PRÉEXISTANTS test_static_tester (sonde temporelle live
+> Chrome, sans lien F-171 — stash-prouvés) + gate AG001 AGENTS.md 19276 o
+> (préexistante main) → cycle dédié.
+
+## Jalons de l'Itération (cycle F-171 — vérif déterministe post-écriture + smoke verdict, 2026-08-25 soir)
+
+- [x] F171-1 : Post-mortem v5 (base>log, DuckDB #3739) + revue références —
+      pydantic-ai 2.33.0 a des Hooks NATIFS (`after_tool_execute` filtre
+      `tools=`+`timeout=`, modifie le résultat) ; aider : `lint_edited`
+      (auto-lint ON par défaut, fichiers édités seulement, erreurs
+      réinjectées) + `auto_test=False` par défaut (coûteux) → design A+B
+      validé ; open-swe/opencode : rien d'exploitable.
+- [x] F171-2 : Validation LIVE du détecteur B avant de coder — Chrome
+      headless stderr sur le livrable buggé v5 : `Uncaught RangeError …
+      (script.js:25)` capté en 1,8 s ; page saine silencieuse (1,0 s) ;
+      `file://` OK sans serveur HTTP.
+- [x] F171-3 : `graph_orchestrator/coder_verifier.py` — (A) `build_verifier_hooks`
+      (Hooks, filtre append_file/search_replace/multi_replace, timeout 15 s,
+      sync=worker thread, DuckDB coder/verify, fail-open) + `run_static_verify`
+      (lint_file + check_js_syntax, cap 5×220 c) ; (B) `run_smoke_check`
+      (Chrome jetable user-data-dir temp, virtual-time-budget 4 s, parser
+      console 2 formats CONSOLE:25/CONSOLE(0), familles critiques seules,
+      dedup) + `resolve_smoke_targets` (même normalize_tool_path que les
+      écritures).
+- [x] F171-4 : Câblage — `build_coder_agent` appose la capability ;
+      `_run_agent_with_budget_salvage` gère le smoke aux 2 chemins de verdict
+      (tour correctif `_SMOKE_FEEDBACK_PROMPT` borné 5 req + injection
+      `_BUDGET_SALVAGE_PROMPT`) ; `run_coder_pydantic` résout les cibles ;
+      config `coder_static_verify`/`coder_smoke_verdict` + .env/.env.example.
+- [x] F171-5 : Tests `tests/test_f171_coder_verifier.py` **24 PASS**
+      (parser ×5 dont ligne EXACTE run v5, intégration RÉELLE FunctionModel
+      advisory apposé/silencieux, live Chrome récursion flaggée, salvage ×6)
+      + régression F-168/F-170/guards 62 PASS ; contract C549-C552 +
+      feature_list F-171 + ce fichier.
+- [x] F171-6 : Suite complète 2153 passed / 7 skipped / 2 échecs
+      PRÉEXISTANTS (test_static_tester sonde live Chrome — stash-prouvés sans
+      lien F-171) → commit 39118c6 + PR #126 → **MERGÉE (568e20d, GO user
+      direct)**, branche supprimée, retour main, DuckDB #3802.
+
+## Jalons de l'Itération (run E2E v6 outillé — revalidation golden #19, 2026-08-25 soir)
+
+- [x] v6-1 : Lancement run E2E v6 (main 568e20d, DuckDB #3803) + vigie 5 min
+      TOUT VERT : marqueurs moteur F-169, draft dense F-167 (4 944 o, pas de
+      rejet gate), livrables 3/3 écrits dès T+11 (record v4/v5/v6), contexte
+      borné (3,7 K), qualité code vérifiée (compteur réel+live, PAS de
+      récursion init, :root hex, cleanup .comparing sans swap).
+- [x] v6-2 : Surveillance jusqu'à l'arrêt user (T+~1h50, DuckDB #3806) :
+      it1 budget 60 req rituel visuel → **F-170 α verdict arraché live** +
+      **F-171 B smoke post-budget « console propre »** ; Tester it1 MORT sur
+      evaluate_script (pageId, 3e occurrence du jour) → fail-closed ; it2
+      Coder 6,6 min + **smoke verdict normal « console propre »** + Tester
+      failure (finding lossy) → rejet ; it3 Coder 18,5 min verdict success +
+      smoke propre → Tester en vol À L'ARRÊT. Zéro fausse approbation,
+      zéro mort de run.
+- [x] v6-3 : ARRÊT USER (« trop long ») — pas de verdict final (3e run
+      consécutif). Post-mortem base>log intégré à l'Objectif Actuel : les 3
+      problèmes structurels identifiés + fixes candidats (F-172 pageId,
+      rituel visuel borné, Tester vs animation/.sorted).
 
 ## Jalons de l'Itération (cycle docs — refonte README + doc technique, 2026-08-25)
 

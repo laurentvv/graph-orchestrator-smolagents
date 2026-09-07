@@ -268,6 +268,19 @@ _BUDGET_SALVAGE_PROMPT = (
     "regardless — claiming unperformed work buys nothing."
 )
 
+# F-171 B : tour correctif borné après un smoke navigateur négatif (erreurs JS
+# réelles au chargement, détectées déterministement — famille RangeError du
+# run v5). UN seul tour, budget dédié, outils AUTORISÉS (search_replace).
+_SMOKE_FEEDBACK_PROMPT = (
+    "[DETERMINISTIC SMOKE TEST — F-171] A headless browser just loaded your "
+    "deliverable page(s) and reported CRITICAL JavaScript errors at load time:\n"
+    "{findings}\n"
+    "These are REAL runtime errors measured on the actual files on disk (file "
+    "and line given). Fix them NOW with small targeted search_replace edits, "
+    "verify with check_js_syntax, then give your final_result. Do NOT rewrite "
+    "everything from scratch — only the faulty parts. Budget: strictly limited."
+)
+
 
 def _strategy_block(strategy: str, sections: list, iteration: int) -> str:
     """Bloc workflow par stratégie — parité nodes.py, adapté au moteur pydantic.
@@ -697,6 +710,14 @@ def build_coder_agent(model, task: dict, settings, coder_max_tokens: int,
         on_reminder_fired=on_reminder_fired,
     )
 
+    # F-171 A : vérif statique déterministe post-écriture, consultative —
+    # findings apposés au retour d'outil (pattern aider lint_edited).
+    from .coder_verifier import build_verifier_hooks
+
+    verifier_hooks = build_verifier_hooks(settings)
+    if verifier_hooks is not None:
+        capabilities.append(verifier_hooks)
+
     model_settings = ModelSettings(
         temperature=settings.coder_temperature,
         max_tokens=coder_max_tokens,
@@ -733,9 +754,10 @@ def build_coder_agent(model, task: dict, settings, coder_max_tokens: int,
 # Exécution du nœud (contrat identique à execute_coder_node smolagents)
 # ============================================================
 
-async def _run_agent_with_budget_salvage(agent, user_prompt: str, settings):
+async def _run_agent_with_budget_salvage(agent, user_prompt: str, settings,
+                                         smoke_html_paths=None):
     """Exécute l'agent Coder ; sur épuisement du budget de requêtes, arrache
-    un verdict final honnête (F-170 α).
+    un verdict final honnête (F-170 α) ; smoke navigateur au verdict (F-171 B).
 
     Retourne le ``AgentRunResult`` ou None (échec propre : garde, crash
     transport, ou sauvetage raté — le graphe continue alors sur l'état disque,
@@ -745,12 +767,39 @@ async def _run_agent_with_budget_salvage(agent, user_prompt: str, settings):
     rend son CoderOutput final. Le sauvetage court HORS du contexte de
     capture (limite documentée : une 2e exécution dans le même contexte n'y
     serait pas capturée) avec son PROPRE budget de requêtes.
+
+    F-171 B (``smoke_html_paths``) : chargement Chrome headless déterministe
+    des cibles HTML — (1) après un run RÉUSSI, des erreurs JS critiques
+    déclenchent UN tour correctif borné (5 requêtes, outils autorisés) ;
+    (2) au sauvetage post-budget, les findings RÉELS sont injectés dans le
+    prompt (le verdict arraché cesse d'être aveugle sur l'état disque).
+    Fail-open : smoke indisponible = ignoré silencieusement.
     """
     from pydantic_ai import capture_run_messages
     from pydantic_ai.exceptions import UsageLimitExceeded
     from pydantic_ai.usage import UsageLimits
 
     from .coder_pydantic_guards import GuardAbort
+
+    def _smoke(label: str):
+        """Smoke courant ou None si désactivé/sans cible. Log + print."""
+        if not smoke_html_paths:
+            return None
+        if not getattr(settings, "coder_smoke_verdict", True):
+            return None
+        from .coder_verifier import run_smoke_check
+
+        res = run_smoke_check(smoke_html_paths)
+        if res.skipped:
+            print(f"[F-171] smoke {label} : ignoré ({res.skipped}).")
+            return res
+        if res.findings:
+            print(f"[F-171] smoke {label} : {len(res.findings)} erreur(s) JS "
+                  f"critique(s) au chargement ({', '.join(res.checked)}).")
+        else:
+            print(f"[F-171] smoke {label} : console propre "
+                  f"({', '.join(res.checked)}).")
+        return res
 
     result = None
     budget_exhausted = False
@@ -773,10 +822,41 @@ async def _run_agent_with_budget_salvage(agent, user_prompt: str, settings):
         except Exception as exc:  # noqa: BLE001 — échec propre, le graphe continue
             print(f"[-] Coder (pydantic) ÉCHEC ({type(exc).__name__}: {exc})")
             return None
+
+    # F-171 B (1) : run réussi → smoke → UN tour correctif borné si erreurs.
+    if result is not None and not budget_exhausted:
+        smoke = _smoke("verdict")
+        if smoke is not None and smoke.findings:
+            from .coder_verifier import format_smoke_findings
+
+            try:
+                result = await agent.run(
+                    _SMOKE_FEEDBACK_PROMPT.format(
+                        findings=format_smoke_findings(smoke.findings)
+                    ),
+                    message_history=list(run_messages),
+                    usage_limits=UsageLimits(request_limit=5),
+                )
+                print("[F-171] tour correctif post-smoke rendu (budget 5 req).")
+            except Exception as exc:  # noqa: BLE001 — verdict initial conservé
+                print(f"[F-171] tour correctif post-smoke échoué "
+                      f"({type(exc).__name__}: {exc}) — verdict initial conservé.")
+        return result
+
     if budget_exhausted:
+        salvage_prompt = _BUDGET_SALVAGE_PROMPT
+        # F-171 B (2) : le verdict arraché voit l'ÉTAT RÉEL du disque.
+        smoke = _smoke("post-budget")
+        if smoke is not None and smoke.findings:
+            from .coder_verifier import format_smoke_findings
+
+            salvage_prompt += (
+                "\n\n[SMOKE TEST F-171 — measured on disk just now] Critical JS "
+                "errors at page load:\n" + format_smoke_findings(smoke.findings)
+            )
         try:
             result = await agent.run(
-                _BUDGET_SALVAGE_PROMPT,
+                salvage_prompt,
                 message_history=list(run_messages),
                 usage_limits=UsageLimits(request_limit=3),
             )
@@ -892,7 +972,14 @@ async def run_coder_pydantic(
                 vision_available=settings.coder_pydantic_vision,
             )
             print(f"[*] Coder (pydantic) — llama-server prêt : {srv.api_base}")
-            result = await _run_agent_with_budget_salvage(agent, user_prompt, settings)
+            # F-171 : cibles HTML du smoke verdict (résolues comme les
+            # écritures du Coder — même workspace par construction).
+            from .coder_verifier import resolve_smoke_targets
+
+            smoke_html_paths = resolve_smoke_targets(task)
+            result = await _run_agent_with_budget_salvage(
+                agent, user_prompt, settings, smoke_html_paths=smoke_html_paths
+            )
             if result is None:
                 duration = time.time() - t0
                 print("[-] Coder (pydantic) : pas de verdict final — échec propre, "

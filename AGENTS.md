@@ -95,36 +95,10 @@ Boucle de feedback hybride Humain + IA :
 7. **Application** : durcir code, prompts ou skills selon validation.
 
 ## 9. Tests Rapides par Nœud (Isolation LLM — F-89)
-Un run E2E complet dure 30-40 min GPU-local ; valider la modif d'UN seul nœud (prompt, skill, config, logique) se fait en **secondes/minutes** via le script d'isolation du dossier `debug/` : chacun appelle la VRAIE fonction de production (0 mock) avec des entrées figées. C'est la boucle de debug itérative recommandée, AVANT tout run E2E. Convention complète : `debug/isolation/README.md`.
-
-| Script | Nœud testé | Commande |
-|---|---|---|
-| `debug/run_router.py` | Router (classification langage) | `uv run python debug/run_router.py` |
-| `debug/run_prompt_refiner.py` | PromptRefiner (meta-prompt) | `uv run python debug/run_prompt_refiner.py` |
-| `debug/run_architect.py` | Architect (découpage + stratégie) | `uv run python debug/run_architect.py` |
-| `debug/run_drafter.py` | Drafter (logique pure) | `uv run python debug/run_drafter.py` |
-| `debug/run_security.py` | Security (audit OWASP) | `uv run python debug/run_security.py` |
-| `debug/run_judge.py` | Judge (verdict final) | `uv run python debug/run_judge.py` |
-| `debug/run_coder.py` | Coder (génération code) | `uv run python debug/run_coder.py` |
-| `debug/run_web_tester_standalone.py` | Web Tester (assertions) | `uv run python debug/run_web_tester_standalone.py` |
-| `debug/isolation/run_linter.py` | Linter (déterministe, 0 LLM) | `uv run python debug/isolation/run_linter.py` |
-| `debug/validate_static_tester_live.py` | Static Tester (déterministe) | `uv run python debug/validate_static_tester_live.py` |
-| `debug/run_verify.py` | Vérif exécutable F-100 (recette + readiness HTTP, 0 LLM) | `uv run python debug/run_verify.py [dossier]` |
-| `debug/run_turn_checkpoint.py` | Checkpoint git par itération F-102 (0 LLM) | `uv run python debug/run_turn_checkpoint.py` |
-| `debug/run_fs_safety.py` | Robustesse FS F-95 (transaction+crash-recovery, verrou cross-process, 0 LLM) | `uv run python debug/run_fs_safety.py` |
-| `debug/test_mtp_spec.py` | Compat/bench MTP spéculatif llama-server (A/B `--spec-type draft-mtp`, 0 LLM) | `uv run python debug/test_mtp_spec.py [--only fast\|reasoning\|no_think] [--ctx N]` |
-| `debug/bench_prefill_flags.py` | Bench préfill flags FAST (`--cache-reuse`, `-ub`), multi-tours simulé (0 LLM) | `uv run python debug/bench_prefill_flags.py [--ctx N] [--turns N]` |
-| `debug/diag_grammar_f160.py` / `replay_request_f160.py` / `trace_mcp_calls_f160.py` | F-160 : grammaire llama-server vs `tool_choice`, rejeu variants, trace appels MCP | `uv run python debug/<script>.py` |
-| `debug/run_browser_pool.py` | Pool navigateur F-163 (Chrome unique/run, 0 LLM) | `uv run python debug/run_browser_pool.py` |
-
-Boucle : identifier le nœud impacté → lancer son script → observer le verdict → couper si erreur, corriger, relancer. Input ad hoc : scénario nommé (`debug/run_judge.py bug`), prompt en CLI (`debug/run_router.py "ma description"`), ou `@fichier`. Une fois le nœud validé isolément, relancer l'E2E complet (§7). Détail technique : les nœuds DSPy ignorent le paramètre `*_model` — le vrai modèle vient de `_run_dspy_node → model_lifecycle(spec)` qui spawn son propre llama-server ; les scripts reproduisent fidèlement ce comportement.
+Un run E2E complet dure 30-40 min GPU-local ; valider la modif d'UN seul nœud (prompt, skill, config, logique) se fait en **secondes/minutes** via le script d'isolation du dossier `debug/` (VRAIE fonction de production, 0 mock, entrées figées) — boucle de debug itérative recommandée AVANT tout run E2E. Convention complète : `debug/isolation/README.md` ; **tableau des 17 scripts (nœud testé → commande) et mode d'emploi : `docs/DEBUG_SCRIPTS.md`**.
 
 ## 10. Runs de Référence (Golden Runs)
-- **Run historique Bubble Sort** : `debug/reference_run_qwen4b_bubble_sort/` — 1768 s GPU local, Coder 2 itérations, Qwen-4B + Ornith-9B.
-- **Première approbation E2E (2026-08-17, run #11)** : `debug/reference_run_2026-08-17_first_e2e_approval/` — Tester LLM détecte un bug, correction chirurgicale du 4B, Judge approuve (~23 min, 14,3 M tokens).
-- **Livrable parfait en une itération (2026-08-18, run #19)** : `debug/reference_run_2026-08-18_run19_perfect_deliverable/` — 100 % conforme en une itération (~14 min, 21 steps), préservation artefacts F-120 (`plan.md`, `task.md`, `draft.md`). Leçon : le 4B suit le plan à la lettre, un prompt/draft sain vaut mieux que des corrections aval.
-  - ⚠️ **INVALIDÉ le 2026-08-24 (retest E2E, run 0857)** : même tâche, itération 1 en ÉCHEC — 40 steps brûlés, 7 audits visuels échoués (board vide), `var(--*)` consommées mais `:root` jamais écrit. **Cause racine corrigée par A/B F-167 (soir)** : Ornith-1.0 ET 1.5 clonaient le même draft creux — le FORMAT DE SORTIE creux du prompt Drafter (F-150/F-154, 22/08), PAS le GGUF. Corrigé par F-167 (prompt dense à valeurs exactes + draft_gate densité + retry avec feedback) ; à revalider par run E2E post-F-167. Positif : les gardes ont tenu (fail-closed, aucune fausse approbation).
-  - 🐛 **Bug intrinsèque du livrable golden (détecté 2026-08-24, test navigateur)** : le compteur « comparaisons » compte en réalité les **échanges** — `comparisonCount++` est dans le `if (arr[i] > arr[i+1])` (`script.js:77`). Mesure : tableau 30 éléments → compteur final 228 (= swaps) vs **551 comparaisons réelles**. Le cahier des charges (« nombre de comparaisons effectuées ») et le critère Architect « increments by exactly 1 on every comparison » sont violés. Le Judge du 18/08 l'avait approuvé et la validation humaine avait loué l'incrément « en direct » sans vérifier la sémantique → **fausse approbation historique** (famille F164-6). Écart secondaire : marquage `.sorted` appliqué à toutes les barres seulement à la fin (pas de vert progressif après swap). Le reste tient : 30 barres au chargement, tri croissant vérifié, thème sombre réel.
+**Détail complet (runs historiques, invalidations, bugs) : `docs/GOLDEN_RUNS.md`.** À retenir en permanence : le run #19 « livrable parfait » (2026-08-18) est **INVALIDÉ** (retest 2026-08-24 : draft creux, cause racine corrigée par F-167, revalidation E2E en attente) et son livrable portait un bug sémantique (compteur « comparaisons » = échanges en réalité) que le Judge avait approuvé à tort — famille F164-6, cf. l'exigence §8 (vérifier la base ET le livrable, jamais le log seul).
 
 ## 11. Maintenance Régulière des Dépendances et de Python (F-98)
 1. **Exécution** : à la demande de l'utilisateur ou lors des cycles de maintenance, monter les dépendances via `uv lock --upgrade` + `uv sync` (ou `scripts/upgrade_stack.py`).
