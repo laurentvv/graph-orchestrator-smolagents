@@ -109,8 +109,9 @@ def chrome_devtools_tools():
             return
 
         # F-104 (crush) : attente de connexion BORNÉE par serveur — un npx pendu
-        # (téléchargement à froid de chrome-devtools-mcp@latest) ne fige plus le
-        # nœud 30 s : timeout → dégradation (yield []), le run continue.
+        # (téléchargement à froid de chrome-devtools-mcp, version épinglée F-172)
+        # ne fige plus le nœud 30 s : timeout → dégradation (yield []), le run
+        # continue.
         try:
             cm, tools = open_mcp_with_timeout(
                 params, _settings.chrome_devtools_connect_timeout_s, "chrome-devtools"

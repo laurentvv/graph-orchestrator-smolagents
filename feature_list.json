@@ -1484,8 +1484,8 @@
     {
       "id": "F-172",
       "name": "Défaut pageId sur evaluate_script (bridge MCP chrome-devtools)",
-      "description": "3 occurrences le 2026-08-25 : les modèles locaux (Coder 4B run v5-it1, Tester 9B run v6-it1 ×2 retries) appellent evaluate_script SANS l'argument pageId requis → erreur MCP -32602 → retry → mort du nœud. FIX pattern F-50 (vision_callback strippait filePath) : intercepter l'appel dans le bridge et injecter le pageId par défaut = page active (list_pages → première page) quand absent. Pur code, 0 LLM.",
-      "status": "pending",
+      "description": "3 occurrences le 2026-08-25 : les modèles locaux appellent evaluate_script (et 26 autres outils page-scoped) SANS le pageId requis par chrome-devtools-mcp 1.8.0 (pageIdRouting activé PAR DÉFAUT, 3e break du @latest flottant) → MCP -32602 « Required at pageId » → boucle de retries → mort du nœud (Coder v5-it1, Tester v6-it1). FIX pattern F-50 : fallback RÉACTIF call_tool_with_page_id_fallback dans le bridge — échec « Required at pageId » (absent) ou « No page found » (pageId=0 halluciné) → UNE résolution list_pages → page [selected] → UNE retentative ; erreurs d'origine préservées sinon. Câblé sur process_tool_call (Coder+Tester, avant la barrière retry), le détail console F-126 (get_console_message) et les 12 helpers DOM (_eval). Bonus durcissement : version serveur ÉPINGLÉE chrome-devtools-mcp@1.8.0 (reproductibilité, surface d'outils figée). 21 tests dédiés + validation live sonde debug/f172_probe_pageid.py 3/3.",
+      "status": "completed",
       "dependencies": []
     },
     {

@@ -1,28 +1,61 @@
 # État d'Avancement du Sprint
 
-## Objectif Actuel : runs v5/v6 arrêtés sans verdict — priorité aux fixes structurels des délais (F-172 pageId, rituel visuel borné, Tester vs animation)
-> **Décision user (2026-08-25 17:21)** : « stop le run, le reste pas important
-> vu les délais, on voit bien les problèmes ». Run v6 (outillé F-171) arrêté
-> à T+~1h50 en itération 3/3 (Tester en vol) — 3e run consécutif sans verdict
-> final (v4 crash 30 min, v5 stop 71 min, v6 stop 110 min). DuckDB #3803
-> (lancement), #3806 (arrêt + post-mortem complet).
-> **Validé en live par v6** : F-170 α (verdict arraché post-budget it1),
-> F-171 B smoke (3 tirs : post-budget it1 + verdict it2/it3, tous « console
-> propre »), livrable **sain dès T+11** (compteur comparaisons réel+live, pas
-> de récursion init(), :root hex) — le meilleur livrable v4/v5/v6.
-> **Les 3 problèmes structurels des délais** (constatés en base>log) :
-> (1) rituel visuel Coder : 60 req / 63 min en it1 alors que le livrable est
-> complet à T+11 ; (2) `evaluate_script` sans `pageId` tue Coder v5-it1 ET
-> Tester v6-it1 (3 occurrences du jour — candidat **F-172** : défaut pageId
-> dans le bridge, pattern F-50 filePath) ; (3) Tester rejète 2× un livrable
-> console-propre avec finding LOSSY en base (famille F164-6 — probable
-> sémantique .sorted cosmétique ou impatience vs animation 3,5 min @500 ms)
-> → chaque rejet = 15-25 min de boucle. FIX : F-172 + borne rituel visuel +
-> Tester slider→max avant assertions + critère .sorted tranché dans
-> l'Architect. Revalidation golden #19 §10 TOUJOURS en attente d'un verdict.
+## Objectif Actuel : F-172 TERMINÉ — priorité suivante aux fixes structurels restants (F-173 rituel visuel borné, F-174 Tester vs animation)
+> **Run v7 arrêté par user (2026-09-07 11:12, T+~17 min, sans verdict)** : Coder
+> it1 encore en 1re génération (0 tour complété, ~6,5 t/s — GPU lent). ACQUIS :
+> démarrage sain, **passé le point de mort v5** (MCP connectés, zéro ToolError
+> pageId) ; F-172 pas encore exercé in-run (aucun appel navigateur émis —
+> validé seulement via sonde live 3/3). DuckDB #3868/#3869. Revalidation E2E à
+> relancer après merge PR #130, idéalement post F-173/F-174.
+> **F-172 clos (2026-09-07)** : cause racine = chrome-devtools-mcp **1.8.0**
+> (résolue par `@latest` flottant) active `pageIdRouting` **par défaut** →
+> `pageId` REQUIS sur **27 outils page-scoped** (pas seulement
+> evaluate_script — vérifié live). Fix pattern F-50 : fallback réactif
+> `call_tool_with_page_id_fallback` (échec « Required at pageId »/« No page
+> found »+pageId=0 → list_pages → page [selected] → une retentative), câblé
+> sur process_tool_call (Coder+Tester), le détail console F-126 et les 12
+> helpers DOM ; version serveur **épinglée @1.8.0**. 21 tests + voisines
+> 114 PASS, validation live 3/3 (DuckDB #3813). PR en review.
+> **Restent les 2 problèmes de délais** (constatés base>log run v6) : (1)
+> rituel visuel Coder : 60 req / 63 min en it1 alors que le livrable est
+> complet à T+11 → **F-173** ; (2) Tester rejète un livrable console-propre
+> avec finding LOSSY en base (famille F164-6 — sémantique .sorted cosmétique
+> ou impatience vs animation 3,5 min @500 ms) → **F-174** (slider→max avant
+> assertions + critère .sorted tranché dans l'Architect). Revalidation golden
+> #19 §10 TOUJOURS en attente d'un verdict (à relancer APRÈS F-173/F-174,
+> sinon le run refera ~1h50).
 > Backlog : 2 échecs PRÉEXISTANTS test_static_tester (sonde temporelle live
 > Chrome, sans lien F-171 — stash-prouvés) + gate AG001 AGENTS.md 19276 o
 > (préexistante main) → cycle dédié.
+
+## Jalons de l'Itération (cycle F-172 — défaut pageId bridge chrome-devtools, 2026-09-07)
+
+- [x] F172-1 : Diagnostic outillé — erreurs exactes v5/v6 localisées
+      (`MCP error -32602 … Required at pageId` → Coder v5-it1 mort sur
+      ToolError, Tester v6-it1 mort sur retries épuisés) ; npx cache =
+      chrome-devtools-mcp 1.8.0 ; lecture du schéma serveur : `pageIdRouting`
+      PAR DÉFAUT, `pageIdSchema` SANS `.optional()` → requis. Sonde live
+      (`debug/f172_probe_pageid.py`) : **27 outils** exigent pageId, format
+      `list_pages` = `## Pages\n1: url [selected]` (ids ≥ 1), piège pageId=0
+      → « No page found ».
+- [x] F172-2 : Implémentation — `parse_selected_page_id` (page [selected]
+      prioritaire, repli première) + `call_tool_with_page_id_fallback`
+      (réactif : marqueurs « Required at pageId » sans pageId / « No page
+      found » avec pageId=0 → UNE résolution list_pages → UNE retentative ;
+      erreurs d'origine préservées sinon, fail-open total) ; câblé sur les 3
+      chemins (process_tool_call AVANT la barrière retry, get_console_message
+      F-126, helpers _eval) ; **pin `chrome-devtools-mcp@1.8.0`**
+      (agent_server/mcp.py — 3e break du @latest après F-50/F-127).
+- [x] F172-3 : Tests `tests/test_f172_pageid_bridge.py` **21 PASS** (parseur
+      ×6, fallback ×9 dont erreurs d'origine et args=None, process_tool_call
+      ×3 dont enrichissement console sauvé, helpers DOM ×2, pin ×1) + suites
+      voisines 114 PASS (coder_pydantic_mcp, chrome_devtools_tool,
+      coder_pydantic_vision, mcp_connect) + contrat C553-C556 +
+      feature_list F-172 completed.
+- [x] F172-4 : Validation live du fix de production (sonde phase 2, serveur
+      1.8.0 épinglé spawné comme en prod) : navigate_page + evaluate_script
+      sans pageId ET pageId=0 → **3/3 sauvés**, page ciblée correcte
+      (title « f172-ok », 6*7=42), zéro Chrome orphelin résiduel.
 
 ## Jalons de l'Itération (cycle F-171 — vérif déterministe post-écriture + smoke verdict, 2026-08-25 soir)
 
