@@ -1,6 +1,12 @@
 # État d'Avancement du Sprint
 
 ## Objectif Actuel : F-172 TERMINÉ — priorité suivante aux fixes structurels restants (F-173 rituel visuel borné, F-174 Tester vs animation)
+> **Run v7 arrêté par user (2026-09-07 11:12, T+~17 min, sans verdict)** : Coder
+> it1 encore en 1re génération (0 tour complété, ~6,5 t/s — GPU lent). ACQUIS :
+> démarrage sain, **passé le point de mort v5** (MCP connectés, zéro ToolError
+> pageId) ; F-172 pas encore exercé in-run (aucun appel navigateur émis —
+> validé seulement via sonde live 3/3). DuckDB #3868/#3869. Revalidation E2E à
+> relancer après merge PR #130, idéalement post F-173/F-174.
 > **F-172 clos (2026-09-07)** : cause racine = chrome-devtools-mcp **1.8.0**
 > (résolue par `@latest` flottant) active `pageIdRouting` **par défaut** →
 > `pageId` REQUIS sur **27 outils page-scoped** (pas seulement
