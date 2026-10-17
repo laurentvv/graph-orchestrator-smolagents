@@ -101,3 +101,5 @@ temp_pytest/
 debug/coder_isolation_out_v1/
 debug/coder_pydantic_out/
 .agent/*.duckdb.wal
+# Agent local state (ledger, installed skills) - kept on disk, never committed
+.agent/
