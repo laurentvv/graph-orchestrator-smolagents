@@ -93,7 +93,10 @@ def build_chrome_devtools_params(browser_url: Optional[str] = None) -> Optional[
         return None
 
     args = ["-y", "chrome-devtools-mcp@latest", "--viewport", "1280x800",
-            "--screenshot-format", "jpeg"]
+            "--screenshot-format", "jpeg",
+            # Servers >= 1.8 require pageId on page-scoped tools by default; the
+            # agents here drive a single page, so keep the historical contract.
+            "--no-page-id-routing"]
     if browser_url:
         # F-163 : connexion au Chrome du pool (option officielle du serveur).
         args += ["--browserUrl", browser_url]
